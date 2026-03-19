@@ -184,7 +184,7 @@ def _agrupar_por_produto_ano(df_vols: pl.DataFrame) -> tuple[pl.DataFrame, pl.Da
     # 5.1. Pegar a descrição mais longa/comum para cada chave_produto
     df_meta = (
         df_vols.group_by("chave_produto")
-        .agg(pl.col("descricao").sort_by(pl.col("descricao").str.len(), descending=True).first().alias("descricao"))
+        .agg(pl.col("descricao").sort_by(pl.col("descricao").str.len_chars(), descending=True).first().alias("descricao"))
     )
 
     # 6. Unidade de Referência: Maior volume total no ano
