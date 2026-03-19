@@ -342,6 +342,7 @@ class ServicoAgregacao:
         Calcula tot_v_entradas e tot_v_saidas para cada chave_produto + unidade.
         """
         import sys
+        from pathlib import Path
         if str(FUNCOES_ROOT / "funcoes_auxiliares") not in sys.path:
             sys.path.append(str(FUNCOES_ROOT / "funcoes_auxiliares"))
         from aux_leitura_notas import ler_nfe_nfce, ler_c170
