@@ -1,3 +1,10 @@
+/*
+   CONSULTA NFe COM COMENTÁRIOS EXPLICATIVOS
+   Base conceitual: MOC 7.0 - Anexo I (Leiaute e Regras de Validação da NF-e/NFC-e).
+   Observação: os comentários foram alinhados aos campos equivalentes do MOC quando a correspondência foi clara.
+   Campos auxiliares/normalizados do BI foram identificados como internos/técnicos.
+*/
+
 WITH parametros AS (
     SELECT
         :cnpj AS cnpj_filtro
@@ -20,220 +27,220 @@ SELECT
             '1 - SAIDA'
         ELSE
             'INDEFINIDO'
-    END AS tipo_operacao,
-    d.co_destinatario,
-    d.co_emitente,
-    p.cnpj_filtro,
-    d.nsu,
-    d.chave_acesso,
-    d.prod_nitem,
-    d.ide_co_cuf,
-    d.ide_co_indpag,
-    d.ide_co_mod,
-    d.ide_serie,
-    d.nnf,
-    d.dhemi,
-    d.dhsaient,
-    d.co_tp_nf,
-    d.co_iddest,
-    d.co_cmun_fg,
-    d.co_tpemis,
-    d.co_finnfe,
-    d.co_indfinal,
-    d.co_indpres,
-    d.xnome_emit,
-    d.xfant_emit,
-    d.co_uf_emit,
-    d.co_cad_icms_emit,
-    d.co_cad_icms_st,
-    d.co_crt,
-    d.xlgr_emit,
-    d.nro_emit,
-    d.xcpl_emit,
-    d.xbairro_emit,
-    d.co_cmun_emit,
-    d.xmun_emit,
-    d.cep_emit,
-    d.cpais_emit,
-    d.fone_emit,
-    d.xpais_emit,
-    d.cnae_emit,
-    d.xnome_dest,
-    d.co_uf_dest,
-    d.co_indiedest,
-    d.co_cad_icms_dest,
-    d.nro_dest,
-    d.xlgr_dest,
-    d.xcpl_dest,
-    d.xbairro_dest,
-    d.co_cmun_dest,
-    d.xmun_dest,
-    d.cep_dest,
-    d.cpais_dest,
-    d.xpais_dest,
-    d.fone_dest,
-    d.prod_cprod,
-    d.prod_cean,
-    d.prod_xprod,
-    d.prod_ncm,
-    d.prod_cest,
-    d.prod_extipi,
-    d.co_cfop,
-    d.prod_ucom,
-    d.prod_qcom,
-    d.prod_vuncom,
-    d.prod_vprod,
-    d.prod_ceantrib,
-    d.prod_utrib,
-    d.prod_qtrib,
-    d.prod_vuntrib,
-    d.prod_vfrete,
-    d.prod_vseg,
-    d.prod_vdesc,
-    d.prod_voutro,
-    d.prod_indtot,
-    d.icms_csosn,
-    d.icms_cst,
-    d.icms_modbc,
-    d.icms_modbcst,
-    d.icms_motdesicms,
-    d.icms_orig,
-    d.icms_pbcop,
-    d.icms_pcredsn,
-    d.icms_pdif,
-    d.icms_picms,
-    d.icms_picmsst,
-    d.icms_pmvast,
-    d.icms_predbc,
-    d.icms_predbcst,
-    d.icms_ufst,
-    d.icms_vbc,
-    d.icms_vbcst,
-    d.icms_vbcstdest,
-    d.icms_vbcstret,
-    d.icms_vcredicmssn,
-    d.icms_vicms,
-    d.icms_vicmsdeson,
-    d.icms_vicmsdif,
-    d.icms_vicmsop,
-    d.icms_vicmsst,
-    d.icms_vicmsstdest,
-    d.icms_vicmsstret,
-    d.ipi_clenq,
-    d.ipi_cnpjprod,
-    d.ipi_cselo,
-    d.ipi_qselo,
-    d.ipi_cenq,
-    d.ipi_cst,
-    d.ipi_vbc,
-    d.ipi_pipi,
-    d.ipi_qunid,
-    d.ipi_vunid,
-    d.ipi_vipi,
-    d.ii_vbc,
-    d.ii_vdespadu,
-    d.ii_vii,
-    d.ii_viof,
-    d.veic_prod_tpop,
-    d.veic_prod_chassi,
-    d.veic_prod_ccor,
-    d.veic_prod_xcor,
-    d.veic_prod_pot,
-    d.veic_prod_cilin,
-    d.veic_prod_pesol,
-    d.veic_prod_pesob,
-    d.veic_prod_nserie,
-    d.veic_prod_tpcomb,
-    d.veic_prod_nmotor,
-    d.veic_prod_cmt,
-    d.veic_prod_anomod,
-    d.veic_prod_anofab,
-    d.veic_prod_dist,
-    d.veic_prod_tppint,
-    d.veic_prod_tpveic,
-    d.veic_prod_espveic,
-    d.veic_prod_vin,
-    d.veic_prod_condveic,
-    d.veic_prod_cmod,
-    d.veic_prod_ccordenatran,
-    d.veic_prod_lota,
-    d.veic_prod_tprest,
-    d.comb_cprodanp,
-    d.comb_pmixgn,
-    d.comb_codif,
-    d.comb_qtemp,
-    d.comb_ufcons,
-    d.tot_vbc,
-    d.tot_vicms,
-    d.tot_vicmsdeson,
-    d.tot_vbcst,
-    d.tot_vst,
-    d.tot_vprod,
-    d.tot_vfrete,
-    d.tot_vseg,
-    d.tot_vdesc,
-    d.tot_vii,
-    d.tot_vipi,
-    d.tot_vpis,
-    d.tot_vcofins,
-    d.tot_voutro,
-    d.tot_vnf,
-    d.tot_vtottrib,
-    d.infprot_cstat,
-    d.versao,
-    d.prod_indescala,
-    d.prod_cnpjfab,
-    d.prod_cbenef,
-    d.icms_vbcfcp,
-    d.icms_pfcp,
-    d.icms_vfcp,
-    d.icms_vbcfcpst,
-    d.icms_pfcpst,
-    d.icms_vfcpst,
-    d.icms_vbcufdest,
-    d.icms_vbcfcpufdest,
-    d.icms_pfcpufdest,
-    d.icms_picmsufdest,
-    d.icms_picmsinter,
-    d.icms_picmsinterpart,
-    d.icms_vfcpufdest,
-    d.icms_vicmsufdest,
-    d.icms_vicmsufremet,
-    d.icms_pst,
-    d.icms_vbcfcpstret,
-    d.icms_pfcpstret,
-    d.icms_vfcpstret,
-    d.icms_predbcefet,
-    d.icms_vbcefet,
-    d.icms_picmsefet,
-    d.icms_vicmsefet,
-    d.med_cprodanvisa,
-    d.med_vpmc,
-    d.tot_vfcpufdest,
-    d.tot_vicmsufdest,
-    d.tot_vicmsufremet,
-    d.tot_vfcp,
-    d.tot_vfcpst,
-    d.tot_vfcpstret,
-    d.tot_vipidevol,
-    d.icms_cst_a,
-    d.icms_csosn_a,
-    d.dt_gravacao,
-    d.seq_nitem,
-    d.cofins_vcofins,
-    d.cofins_vbc,
-    d.cofins_pcofins,
-    d.pis_vpis,
-    d.pis_vbc,
-    d.pis_ppis,
-    d.dhemi_hora,
-    d.status_carga_campo_fcp,
-    d.status_carga_campo_rem_dest,
-    d.in_versao,
-    d.email_dest,
-    d.co_indiedest_,
-    d.fone_dest_a8,
-    d.ibscbs
+    END AS tipo_operacao, -- Campo derivado da consulta: classifica a operação como entrada/saída para o CNPJ filtrado
+    d.co_destinatario, -- CNPJ/CPF do destinatário da NF-e (campo BI correspondente ao grupo dest)
+    d.co_emitente, -- CNPJ/CPF do emitente da NF-e (campo BI correspondente ao grupo emit)
+    p.cnpj_filtro, -- Parâmetro de entrada da consulta: CNPJ analisado
+    d.nsu, -- NSU do documento/processamento no ambiente de origem (campo interno do BI)
+    d.chave_acesso, -- Chave de acesso da NF-e (44 dígitos)
+    d.prod_nitem, -- nItem: número sequencial do item no detalhamento da NF-e
+    d.ide_co_cuf, -- cUF: código da UF do emitente do documento fiscal
+    d.ide_co_indpag, -- indPag: indicador da forma de pagamento (campo excluído do leiaute 4.0)
+    d.ide_co_mod, -- mod: código do modelo do documento fiscal (55=NF-e, 65=NFC-e)
+    d.ide_serie, -- serie: série do documento fiscal
+    d.nnf, -- nNF: número do documento fiscal
+    d.dhemi, -- dhEmi: data e hora de emissão do documento fiscal
+    d.dhsaient, -- dhSaiEnt: data e hora de saída/entrada da mercadoria
+    d.co_tp_nf, -- tpNF: tipo de operação da NF-e (0=entrada, 1=saída)
+    d.co_iddest, -- idDest: identificador do local de destino da operação
+    d.co_cmun_fg, -- cMunFG: código do município de ocorrência do fato gerador
+    d.co_tpemis, -- tpEmis: tipo de emissão da NF-e
+    d.co_finnfe, -- finNFe: finalidade de emissão da NF-e
+    d.co_indfinal, -- indFinal: indica se a operação é com consumidor final
+    d.co_indpres, -- indPres: indicador de presença do comprador no momento da operação
+    d.xnome_emit, -- xNome: razão social/nome do emitente
+    d.xfant_emit, -- xFant: nome fantasia do emitente
+    d.co_uf_emit, -- UF: sigla da UF do emitente
+    d.co_cad_icms_emit, -- IE: inscrição estadual do emitente
+    d.co_cad_icms_st, -- IEST: inscrição estadual do substituto tributário
+    d.co_crt, -- CRT: código de regime tributário do emitente
+    d.xlgr_emit, -- xLgr: logradouro do emitente
+    d.nro_emit, -- nro: número do endereço do emitente
+    d.xcpl_emit, -- xCpl: complemento do endereço do emitente
+    d.xbairro_emit, -- xBairro: bairro do emitente
+    d.co_cmun_emit, -- cMun: código do município do emitente
+    d.xmun_emit, -- xMun: nome do município do emitente
+    d.cep_emit, -- CEP: CEP do emitente
+    d.cpais_emit, -- cPais: código do país do emitente
+    d.fone_emit, -- fone: telefone do emitente
+    d.xpais_emit, -- xPais: nome do país do emitente
+    d.cnae_emit, -- CNAE: CNAE fiscal do emitente
+    d.xnome_dest, -- xNome: razão social/nome do destinatário
+    d.co_uf_dest, -- UF: sigla da UF do destinatário
+    d.co_indiedest, -- indIEDest: indicador da IE do destinatário
+    d.co_cad_icms_dest, -- IE: inscrição estadual do destinatário
+    d.nro_dest, -- nro: número do endereço do destinatário
+    d.xlgr_dest, -- xLgr: logradouro do destinatário
+    d.xcpl_dest, -- xCpl: complemento do endereço do destinatário
+    d.xbairro_dest, -- xBairro: bairro do destinatário
+    d.co_cmun_dest, -- cMun: código do município do destinatário
+    d.xmun_dest, -- xMun: nome do município do destinatário
+    d.cep_dest, -- CEP: CEP do destinatário
+    d.cpais_dest, -- cPais: código do país do destinatário
+    d.xpais_dest, -- xPais: nome do país do destinatário
+    d.fone_dest, -- fone: telefone do destinatário
+    d.prod_cprod, -- cProd: código do produto ou serviço
+    d.prod_cean, -- cEAN: GTIN do produto (antigo EAN/código de barras)
+    d.prod_xprod, -- xProd: descrição do produto ou serviço
+    d.prod_ncm, -- NCM: código NCM com 8 dígitos
+    d.prod_cest, -- CEST: código especificador da substituição tributária
+    d.prod_extipi, -- EXTIPI: código EX da TIPI
+    d.co_cfop, -- CFOP: código fiscal de operações e prestações do item
+    d.prod_ucom, -- uCom: unidade comercial do produto
+    d.prod_qcom, -- qCom: quantidade comercial
+    d.prod_vuncom, -- vUnCom: valor unitário de comercialização
+    d.prod_vprod, -- vProd: valor total bruto do item
+    d.prod_ceantrib, -- cEANTrib: GTIN da unidade tributável
+    d.prod_utrib, -- uTrib: unidade tributável
+    d.prod_qtrib, -- qTrib: quantidade tributável
+    d.prod_vuntrib, -- vUnTrib: valor unitário de tributação
+    d.prod_vfrete, -- vFrete: valor do frete do item
+    d.prod_vseg, -- vSeg: valor do seguro do item
+    d.prod_vdesc, -- vDesc: valor do desconto do item
+    d.prod_voutro, -- vOutro: outras despesas acessórias do item
+    d.prod_indtot, -- indTot: indica se o valor do item compõe o total da NF-e
+    d.icms_csosn, -- CSOSN: código de situação da operação do Simples Nacional
+    d.icms_cst, -- CST: código de situação tributária do ICMS
+    d.icms_modbc, -- modBC: modalidade de determinação da base de cálculo do ICMS
+    d.icms_modbcst, -- modBCST: modalidade de determinação da base de cálculo do ICMS ST
+    d.icms_motdesicms, -- motDesICMS: motivo da desoneração do ICMS
+    d.icms_orig, -- orig: origem da mercadoria
+    d.icms_pbcop, -- pBCOp: percentual da base de cálculo da operação própria
+    d.icms_pcredsn, -- pCredSN: alíquota aplicável ao crédito do Simples Nacional
+    d.icms_pdif, -- pDif: percentual do diferimento do ICMS
+    d.icms_picms, -- pICMS: alíquota do ICMS
+    d.icms_picmsst, -- pICMSST: alíquota do ICMS ST
+    d.icms_pmvast, -- pMVAST: percentual da margem de valor agregado do ICMS ST
+    d.icms_predbc, -- pRedBC: percentual de redução da base de cálculo do ICMS
+    d.icms_predbcst, -- pRedBCST: percentual de redução da base de cálculo do ICMS ST
+    d.icms_ufst, -- UFST: UF para a qual é devido o ICMS ST
+    d.icms_vbc, -- vBC: valor da base de cálculo do ICMS
+    d.icms_vbcst, -- vBCST: valor da base de cálculo do ICMS ST
+    d.icms_vbcstdest, -- vBCSTDest: valor da base de cálculo do ICMS ST para a UF de destino
+    d.icms_vbcstret, -- vBCSTRet: valor da base de cálculo do ICMS ST retido anteriormente
+    d.icms_vcredicmssn, -- vCredICMSSN: valor do crédito de ICMS do Simples Nacional
+    d.icms_vicms, -- vICMS: valor do ICMS
+    d.icms_vicmsdeson, -- vICMSDeson: valor do ICMS desonerado
+    d.icms_vicmsdif, -- vICMSDif: valor do ICMS diferido
+    d.icms_vicmsop, -- vICMSOp: valor do ICMS da operação
+    d.icms_vicmsst, -- vICMSST: valor do ICMS ST
+    d.icms_vicmsstdest, -- vICMSSTDest: valor do ICMS ST para a UF de destino
+    d.icms_vicmsstret, -- vICMSSTRet: valor do ICMS ST retido anteriormente
+    d.ipi_clenq, -- clEnq: classe de enquadramento do IPI para cigarros e bebidas
+    d.ipi_cnpjprod, -- CNPJProd: CNPJ do produtor da mercadoria
+    d.ipi_cselo, -- cSelo: código do selo de controle do IPI
+    d.ipi_qselo, -- qSelo: quantidade de selos de controle
+    d.ipi_cenq, -- cEnq: código de enquadramento legal do IPI
+    d.ipi_cst, -- CST: código de situação tributária do IPI
+    d.ipi_vbc, -- vBC: valor da base de cálculo do IPI
+    d.ipi_pipi, -- pIPI: alíquota do IPI
+    d.ipi_qunid, -- qUnid: quantidade total na unidade padrão para tributação do IPI
+    d.ipi_vunid, -- vUnid: valor por unidade tributável do IPI
+    d.ipi_vipi, -- vIPI: valor do IPI
+    d.ii_vbc, -- vBC: valor da base de cálculo do Imposto de Importação
+    d.ii_vdespadu, -- vDespAdu: valor das despesas aduaneiras
+    d.ii_vii, -- vII: valor do Imposto de Importação
+    d.ii_viof, -- vIOF: valor do IOF na importação
+    d.veic_prod_tpop, -- tpOp: tipo da operação com veículo novo
+    d.veic_prod_chassi, -- chassi: chassi/VIN do veículo
+    d.veic_prod_ccor, -- cCor: código da cor do veículo
+    d.veic_prod_xcor, -- xCor: descrição da cor do veículo
+    d.veic_prod_pot, -- pot: potência do motor em CV
+    d.veic_prod_cilin, -- cilin: cilindradas
+    d.veic_prod_pesol, -- pesoL: peso líquido do veículo
+    d.veic_prod_pesob, -- pesoB: peso bruto do veículo
+    d.veic_prod_nserie, -- nSerie: serial/série do veículo
+    d.veic_prod_tpcomb, -- tpComb: tipo de combustível do veículo
+    d.veic_prod_nmotor, -- nMotor: número do motor
+    d.veic_prod_cmt, -- CMT: capacidade máxima de tração
+    d.veic_prod_anomod, -- anoMod: ano-modelo de fabricação
+    d.veic_prod_anofab, -- anoFab: ano de fabricação
+    d.veic_prod_dist, -- dist: distância entre eixos
+    d.veic_prod_tppint, -- tpPint: tipo de pintura
+    d.veic_prod_tpveic, -- tpVeic: tipo de veículo
+    d.veic_prod_espveic, -- espVeic: espécie do veículo
+    d.veic_prod_vin, -- VIN: condição do chassi/VIN
+    d.veic_prod_condveic, -- condVeic: condição do veículo
+    d.veic_prod_cmod, -- cMod: código da marca/modelo do veículo
+    d.veic_prod_ccordenatran, -- cCorDENATRAN: código da cor segundo o DENATRAN
+    d.veic_prod_lota, -- lota: capacidade máxima de lotação
+    d.veic_prod_tprest, -- tpRest: restrição do veículo
+    d.comb_cprodanp, -- cProdANP: código ANP do combustível
+    d.comb_pmixgn, -- pMixGN: percentual de gás natural para mistura
+    d.comb_codif, -- CODIF: código de autorização/codificação fiscal do combustível
+    d.comb_qtemp, -- qTemp: quantidade faturada à temperatura ambiente
+    d.comb_ufcons, -- UFCons: UF de consumo do combustível
+    d.tot_vbc, -- vBC: base de cálculo total do ICMS
+    d.tot_vicms, -- vICMS: valor total do ICMS
+    d.tot_vicmsdeson, -- vICMSDeson: valor total do ICMS desonerado
+    d.tot_vbcst, -- vBCST: base de cálculo total do ICMS ST
+    d.tot_vst, -- vST: valor total do ICMS ST
+    d.tot_vprod, -- vProd: valor total dos produtos e serviços
+    d.tot_vfrete, -- vFrete: valor total do frete
+    d.tot_vseg, -- vSeg: valor total do seguro
+    d.tot_vdesc, -- vDesc: valor total do desconto
+    d.tot_vii, -- vII: valor total do Imposto de Importação
+    d.tot_vipi, -- vIPI: valor total do IPI
+    d.tot_vpis, -- vPIS: valor total do PIS
+    d.tot_vcofins, -- vCOFINS: valor total da COFINS
+    d.tot_voutro, -- vOutro: total de outras despesas acessórias
+    d.tot_vnf, -- vNF: valor total da NF-e
+    d.tot_vtottrib, -- vTotTrib: valor aproximado total dos tributos
+    d.infprot_cstat, -- cStat: código do resultado de processamento/autorização da NF-e
+    d.versao, -- versao: versão do leiaute/XML da NF-e
+    d.prod_indescala, -- indEscala: produção em escala relevante (S/N)
+    d.prod_cnpjfab, -- CNPJFab: CNPJ do fabricante da mercadoria
+    d.prod_cbenef, -- cBenef: código de benefício fiscal aplicado ao item
+    d.icms_vbcfcp, -- vBCFCP: base de cálculo do FCP
+    d.icms_pfcp, -- pFCP: percentual do FCP
+    d.icms_vfcp, -- vFCP: valor do FCP
+    d.icms_vbcfcpst, -- vBCFCPST: base de cálculo do FCP retido por ST
+    d.icms_pfcpst, -- pFCPST: percentual do FCP retido por ST
+    d.icms_vfcpst, -- vFCPST: valor do FCP retido por ST
+    d.icms_vbcufdest, -- vBCUFDest: base de cálculo do ICMS para a UF de destino
+    d.icms_vbcfcpufdest, -- vBCFCPUFDest: base de cálculo do FCP na UF de destino
+    d.icms_pfcpufdest, -- pFCPUFDest: percentual do FCP na UF de destino
+    d.icms_picmsufdest, -- pICMSUFDest: alíquota interna do ICMS na UF de destino
+    d.icms_picmsinter, -- pICMSInter: alíquota interestadual do ICMS
+    d.icms_picmsinterpart, -- pICMSInterPart: percentual de partilha do ICMS interestadual
+    d.icms_vfcpufdest, -- vFCPUFDest: valor do FCP para a UF de destino
+    d.icms_vicmsufdest, -- vICMSUFDest: valor do ICMS para a UF de destino
+    d.icms_vicmsufremet, -- vICMSUFRemet: valor do ICMS para a UF do remetente
+    d.icms_pst, -- pST: alíquota suportada pelo consumidor final
+    d.icms_vbcfcpstret, -- vBCFCPSTRet: base de cálculo do FCP retido anteriormente
+    d.icms_pfcpstret, -- pFCPSTRet: percentual do FCP retido anteriormente por ST
+    d.icms_vfcpstret, -- vFCPSTRet: valor do FCP retido anteriormente por ST
+    d.icms_predbcefet, -- pRedBCEfet: percentual de redução da base de cálculo efetiva
+    d.icms_vbcefet, -- vBCEfet: valor da base de cálculo efetiva
+    d.icms_picmsefet, -- pICMSEfet: alíquota do ICMS efetiva
+    d.icms_vicmsefet, -- vICMSEfet: valor do ICMS efetivo
+    d.med_cprodanvisa, -- cProdANVISA: código de produto da ANVISA
+    d.med_vpmc, -- vPMC: preço máximo ao consumidor
+    d.tot_vfcpufdest, -- vFCPUFDest: valor total do FCP para a UF de destino
+    d.tot_vicmsufdest, -- vICMSUFDest: valor total do ICMS para a UF de destino
+    d.tot_vicmsufremet, -- vICMSUFRemet: valor total do ICMS para a UF do remetente
+    d.tot_vfcp, -- vFCP: valor total do FCP
+    d.tot_vfcpst, -- vFCPST: valor total do FCP retido por ST
+    d.tot_vfcpstret, -- vFCPSTRet: valor total do FCP retido anteriormente por ST
+    d.tot_vipidevol, -- vIPIDevol: valor total do IPI devolvido
+    d.icms_cst_a, -- Campo auxiliar do BI: CST ICMS em formato alternativo/ajustado
+    d.icms_csosn_a, -- Campo auxiliar do BI: CSOSN em formato alternativo/ajustado
+    d.dt_gravacao, -- Campo interno do BI: data/hora de gravação do registro
+    d.seq_nitem, -- Campo interno do BI: sequência técnica do item
+    d.cofins_vcofins, -- vCOFINS: valor da COFINS
+    d.cofins_vbc, -- vBC: base de cálculo da COFINS
+    d.cofins_pcofins, -- pCOFINS: alíquota da COFINS
+    d.pis_vpis, -- vPIS: valor do PIS
+    d.pis_vbc, -- vBC: base de cálculo do PIS
+    d.pis_ppis, -- pPIS: alíquota do PIS
+    d.dhemi_hora, -- Campo derivado: componente hora da data/hora de emissão
+    d.status_carga_campo_fcp, -- Campo interno do BI: status de carga dos campos de FCP
+    d.status_carga_campo_rem_dest, -- Campo interno do BI: status de carga dos campos de remessa/destino
+    d.in_versao, -- Campo interno do BI: indicador/versão de ingestão
+    d.email_dest, -- email: e-mail informado para recepção da NF-e pelo destinatário
+    d.co_indiedest_, -- Campo interno do BI: variação/normalização do indIEDest
+    d.fone_dest_a8, -- Campo interno do BI: telefone do destinatário em formato auxiliar
+    d.ibscbs -- Campo interno/legado local: informação adicional não prevista no MOC 7.0
 FROM
     bi.fato_nfe_detalhe    d,
     parametros             p

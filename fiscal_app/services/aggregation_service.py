@@ -335,7 +335,7 @@ class ServicoAgregacao:
     def recalcular_valores_totais(self, cnpj: str) -> bool:
         """
         Calcula tot_v_entradas e tot_v_saidas para cada chave_produto + unidade.
-        Filtra CFOP por sisaudit_estoque == 'X'.
+        Filtra CFOP por operacao_mercantil == 'X' (campo sisaudit_estoque).
         """
         from aux_leitura_notas import ler_nfe_nfce, ler_c170
         

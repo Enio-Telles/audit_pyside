@@ -161,8 +161,7 @@ def ler_fatores_manuais(arquivo_excel: Path) -> pl.DataFrame | None:
         print(f"Erro ao ler planilha de fatores manuais ({arquivo_excel}): {e}")
         return None
 
-def _agrupar_por_produto_ano(df_vols: pl.DataFrame) -> tuple[pl.DataFrame, pl.DataFrame]:
-    """Agrupa por produto, unidade e ano. Eleição da Unid Ref pela maior soma de quantidades."""
+    # 5. Agrupar por produto, unidade e ano
     df_aggr = (
         df_vols
         .group_by(["chave_produto", "unidade", "ano", "unid_padrao_escolhida"])
@@ -176,9 +175,14 @@ def _agrupar_por_produto_ano(df_vols: pl.DataFrame) -> tuple[pl.DataFrame, pl.Da
         .with_columns([
             (pl.col("v_ent") / pl.col("q_ent")).fill_nan(0).alias("preco_med_ent"),
             (pl.col("v_sai") / pl.col("q_sai")).fill_nan(0).alias("preco_med_sai"),
-            # Volume total absoluto para eleição da Unid Ref
             (pl.col("q_ent").abs() + pl.col("q_sai").abs()).alias("volume_total")
         ])
+    )
+
+    # 5.1. Pegar a descrição mais longa/comum para cada chave_produto
+    df_meta = (
+        df_vols.group_by("chave_produto")
+        .agg(pl.col("descricao").sort_by(pl.col("descricao").str.len(), descending=True).first().alias("descricao"))
     )
 
     # 6. Unidade de Referência: Maior volume total no ano
@@ -188,7 +192,7 @@ def _agrupar_por_produto_ano(df_vols: pl.DataFrame) -> tuple[pl.DataFrame, pl.Da
         .agg(pl.col("unidade").sort_by("volume_total", descending=True).first().alias("unid_padrao_auto"))
     )
 
-    df_fator_pre = df_aggr.join(df_unid_padrao_auto, on=["chave_produto", "ano"])
+    df_fator_pre = df_aggr.join(df_unid_padrao_auto, on=["chave_produto", "ano"]).join(df_meta, on="chave_produto")
     df_fator = df_fator_pre.with_columns(
         pl.coalesce(["unid_padrao_escolhida", "unid_padrao_auto"]).alias("unid_padrao")
     )
@@ -246,7 +250,7 @@ def _calcular_fator_final(df_fator: pl.DataFrame, df_aggr: pl.DataFrame) -> pl.D
               .alias("fator_conversao")
         ])
         .select([
-            "chave_produto", "ano", "unidade", "unid_padrao",
+            "chave_produto", "descricao", "ano", "unidade", "unid_padrao",
             "v_ent", "q_ent", "preco_med_ent",
             "v_sai", "q_sai", "preco_med_sai",
             "fator_conversao"
