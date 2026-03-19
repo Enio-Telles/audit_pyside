@@ -333,6 +333,8 @@ class MainWindow(QMainWindow):
         top_layout = QVBoxLayout(top_box)
         
         toolbar = QHBoxLayout()
+        self.btn_open_editable_table = QPushButton("Abrir tabela editável _2")
+        self.btn_execute_aggregation = QPushButton("Agregar Descrições (da seleção)")
         self.btn_recalc_defaults = QPushButton("♻️  Recalcular Padrões (Geral)")
         self.btn_recalc_totals = QPushButton("💰  Recalcular Totais")
         
