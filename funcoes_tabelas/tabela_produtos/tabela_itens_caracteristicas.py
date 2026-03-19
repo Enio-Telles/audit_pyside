@@ -46,10 +46,6 @@ except ImportError as e:
 CAMPOS_CHAVE = ["codigo", "descricao", "descr_compl", "tipo_item", "ncm", "cest", "gtin"]
 
 
-def _md5_row(values: list) -> str:
-    """Gera um hash MD5 a partir de uma lista de valores (normalizados)."""
-    partes = [str(v).strip().upper() if v is not None else "" for v in values]
-    return hashlib.md5("|".join(partes).encode("utf-8")).hexdigest()
 
 
 def _normalizar(df: pl.DataFrame) -> pl.DataFrame:
@@ -61,7 +57,7 @@ def _normalizar(df: pl.DataFrame) -> pl.DataFrame:
 
 
 def _gerar_chave(df: pl.DataFrame) -> pl.DataFrame:
-    """Adiciona a coluna chave_item_individualizado (MD5 dos campos chave)."""
+    """Adiciona a coluna chave_item_individualizado usando hash nativo."""
     # Normaliza cada campo chave para string uppercase sem espaços laterais
     exprs_norm = [
         pl.when(pl.col(c).is_null())
@@ -76,11 +72,14 @@ def _gerar_chave(df: pl.DataFrame) -> pl.DataFrame:
 
     df = df.with_columns(
         pl.concat_str(key_cols, separator="|")
-          .map_elements(_md5_row, return_dtype=pl.String)
+          .hash(seed=42)
+          .cast(pl.String)
+          .str.encode("hex")
           .alias("chave_item_individualizado")
     ).drop(key_cols)
 
     return df
+
 
 
 def _aplicar_normalizacao(df: pl.DataFrame) -> pl.DataFrame:
