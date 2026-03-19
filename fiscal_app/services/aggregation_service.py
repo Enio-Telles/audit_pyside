@@ -256,26 +256,31 @@ class ServicoAgregacao:
             
         df_novo.write_parquet(destino, compression="snappy")
 
-        self._registrar_log(cnpj=cnpj, destino=destino, originais=linhas_selecionadas, agregada=linha_agregada)
-        return ResultadoAgregacao(caminho_destino=destino, linha_agregada=linha_agregada, chaves_removidas=chaves_removidas)
+        # Recalcular totais após agregação (para a tabela inteira, garantindo integridade)
+        self.recalcular_valores_totais(cnpj)
 
-    def _registrar_log(self, cnpj: str, destino: Path, originais: list[dict[str, Any]], agregada: dict[str, Any]) -> None:
-        payload = {
-            "timestamp": datetime.now().isoformat(timespec="seconds"),
+        # Buscar linha atualizada do item agregado para o log (com os totais novos)
+        df_final = pl.read_parquet(destino)
+        agregada_com_totais = df_final.filter(pl.col("chave_produto") == linha_agregada["chave_produto"]).to_dicts()[0]
+
+        self._registrar_log(cnpj=cnpj, originais=linhas_selecionadas, agregada=agregada_com_totais)
+        return ResultadoAgregacao(caminho_destino=destino, linha_agregada=agregada_com_totais, chaves_removidas=chaves_removidas)
+
+    def _registrar_log(self, cnpj: str, originais: list[dict[str, Any]], agregada: dict[str, Any]) -> None:
+        # 4. Log
+        log_entry = {
+            "timestamp": datetime.now().isoformat(),
             "cnpj": cnpj,
-            "arquivo_destino": str(destino),
-            "linhas_origem": [
-                {
-                    "descricao": r.get("descricao"),
-                    "chave_produto": r.get("chave_produto"),
-                    "codigo_padrao": r.get("codigo_padrao"),
-                }
-                for r in originais
-            ],
-            "resultado": agregada,
+            "chave_produto": agregada["chave_produto"],
+            "descricao": agregada["descricao"],
+            "unidade": agregada.get("unid_padrao"), # Assuming unid_padrao is the relevant unit
+            "ncm": agregada.get("ncm_padrao"),
+            "tot_v_entradas": agregada.get("tot_v_entradas"),
+            "tot_v_saidas": agregada.get("tot_v_saidas"),
+            "itens_unificados": len(originais)
         }
         with self.arquivo_log.open("a", encoding="utf-8") as f:
-            f.write(json.dumps(payload, ensure_ascii=False) + "\n")
+            f.write(json.dumps(log_entry, ensure_ascii=False) + "\n")
 
     def recalcular_todos_padroes(self, cnpj: str) -> bool:
         """
