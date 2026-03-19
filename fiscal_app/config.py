@@ -25,6 +25,7 @@ MAX_DOCX_ROWS = 500
 CNPJ_ROOT = FUNCOES_ROOT / "CNPJ"
 CONSULTAS_FONTE_DIR = FUNCOES_ROOT / "consultas_fonte"
 TABELA_PRODUTOS_DIR = FUNCOES_ROOT / "funcoes_tabelas" / "tabela_produtos"
+CFOP_BI_PATH = FUNCOES_ROOT / "referencias" / "cfop" / "cfop_bi.parquet"
 
 for path in [DATA_ROOT, CONSULTAS_ROOT, APP_STATE_ROOT, SQL_DIR, CNPJ_ROOT]:
     path.mkdir(parents=True, exist_ok=True)
