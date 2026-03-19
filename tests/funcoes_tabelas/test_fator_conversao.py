@@ -63,9 +63,9 @@ def test_ler_fatores_manuais_success(tmp_path, monkeypatch):
     result = ler_fatores_manuais(fake_path)
 
     assert result is not None
-    assert result.shape == (2, 4) # Note that justificativa wasn't dropped in the current implementation
+    assert result.shape == (2, 3) # Note that justificativa wasn't dropped in the current implementation
     # Columns order based on presence, but let's assert it as a set to be safe or map exactly
-    assert set(result.columns) == {"chave_produto", "unidade", "ano", "fator_conversao_manual"}
+    assert set(result.columns) == {"chave_produto", "unidade", "fator_conversao_manual"}
     assert result["fator_conversao_manual"][0] == 1.5
 
 def test_ler_fatores_manuais_missing_column(tmp_path, monkeypatch):

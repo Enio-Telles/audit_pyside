@@ -1132,7 +1132,7 @@ class MainWindow(QMainWindow):
         if ret == QMessageBox.StandardButton.No: return
         
         try:
-            ok = self.aggregation_service.recalcular_todos_padroes(cnpj)
+            ok = self.servico_agregacao.recalcular_todos_padroes(cnpj)
             if ok:
                 self.atualizar_tabelas_agregacao()
                 QMessageBox.information(self, "Sucesso", "Valores padrão recalculados com sucesso para toda a tabela.")
