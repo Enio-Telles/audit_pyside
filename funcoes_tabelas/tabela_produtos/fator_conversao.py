@@ -273,6 +273,17 @@ def _calcular_fator_final(df_fator: pl.DataFrame, df_aggr: pl.DataFrame) -> pl.D
     # Aplica detector de erros
     df_final = _detectar_erros_conversao(df_final)
     
+    # Filtrar: Só manter produtos que possuem MAIS DE UMA unidade (onde a conversão é necessária)
+    df_counts = (
+        df_final.group_by("chave_produto")
+        .agg(pl.len().alias("_qtd_unids_produto"))
+    )
+    df_final = (
+        df_final.join(df_counts, on="chave_produto")
+        .filter(pl.col("_qtd_unids_produto") > 1)
+        .drop("_qtd_unids_produto")
+    )
+
     return df_final.sort(["chave_produto", "unidade"])
 
 
