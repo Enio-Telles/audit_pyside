@@ -8,6 +8,7 @@ baseado na média de preços das entradas (C170) e saídas (NFe/NFCe).
 import sys
 from pathlib import Path
 from collections import Counter
+import polars as pl
 
 from rich import print as rprint
 
@@ -111,8 +112,8 @@ def _gerar_chave(df: pl.DataFrame) -> pl.DataFrame:
 
 
 def gerar_template_fatores_manuais(pasta_saida: Path) -> bool:
-    """Gera um template Excel vazio para insercao manual de fatores de conversao."""
-    cols = ["chave_produto", "codigo", "descricao", "unidade", "ano", "fator_conversao_manual", "justificativa"]
+    """Gera um template Excel conforme documentação: ano, codigo_produto_ajustado, unid, fator, unid_ref."""
+    cols = ["ano", "codigo_produto_ajustado", "unid", "fator", "unid_ref", "justificativa"]
     df_template = pl.DataFrame(schema={c: pl.String for c in cols})
     arquivo_saida = pasta_saida / "template_fatores_manuais.xlsx"
     try:
@@ -125,18 +126,25 @@ def gerar_template_fatores_manuais(pasta_saida: Path) -> bool:
 
 
 def ler_fatores_manuais(arquivo_excel: Path) -> pl.DataFrame | None:
-    """Lê a planilha de fatores de conversão manuais, se existir."""
+    """Lê a planilha de fatores de conversão manuais: ano, codigo_produto_ajustado, unid, fator."""
     if not arquivo_excel.exists():
         return None
     try:
         df_manual = pl.read_excel(arquivo_excel)
-        # Garantir colunas essenciais
-        cols_essenciais = ["chave_produto", "unidade", "ano", "fator_conversao_manual"]
-        for col in cols_essenciais:
-            if col not in df_manual.columns:
-                print(f"Planilha manual não contém a coluna obrigatória: {col}")
-                return None
-
+        # Mapeamento de colunas internas
+        mapping = {
+            "ano": "ano",
+            "codigo_produto_ajustado": "chave_produto",
+            "unid": "unidade",
+            "fator": "fator_conversao_manual"
+        }
+        cols_presentes = [c for c in mapping.keys() if c in df_manual.columns]
+        if len(cols_presentes) < 4:
+            print(f"Planilha manual incompleta. Faltam: {set(mapping.keys()) - set(cols_presentes)}")
+            return None
+            
+        df_manual = df_manual.select(cols_presentes).rename({c: mapping[c] for c in cols_presentes})
+        
         # Tipar e filtrar nulos
         df_manual = df_manual.with_columns([
             pl.col("chave_produto").cast(pl.String),
@@ -149,10 +157,12 @@ def ler_fatores_manuais(arquivo_excel: Path) -> pl.DataFrame | None:
     except Exception as e:
         print(f"Erro ao ler planilha de fatores manuais ({arquivo_excel}): {e}")
         return None
+    except Exception as e:
+        print(f"Erro ao ler planilha de fatores manuais ({arquivo_excel}): {e}")
+        return None
 
 def _agrupar_por_produto_ano(df_vols: pl.DataFrame) -> tuple[pl.DataFrame, pl.DataFrame]:
-    """Agrupa os volumes por produto, unidade e ano para calcular médias e definir unidade padrão."""
-    # 5. Agrupar por (chave_produto, unidade, ano) para calcular médias
+    """Agrupa por produto, unidade e ano. Eleição da Unid Ref pela maior soma de quantidades."""
     df_aggr = (
         df_vols
         .group_by(["chave_produto", "unidade", "ano", "unid_padrao_escolhida"])
@@ -166,26 +176,57 @@ def _agrupar_por_produto_ano(df_vols: pl.DataFrame) -> tuple[pl.DataFrame, pl.Da
         .with_columns([
             (pl.col("v_ent") / pl.col("q_ent")).fill_nan(0).alias("preco_med_ent"),
             (pl.col("v_sai") / pl.col("q_sai")).fill_nan(0).alias("preco_med_sai"),
+            # Volume total absoluto para eleição da Unid Ref
+            (pl.col("q_ent").abs() + pl.col("q_sai").abs()).alias("volume_total")
         ])
     )
 
-    # 6. Unidade Padrão: usar a escolhida na tabela de descrições, ou a moda se vazia
+    # 6. Unidade de Referência: Maior volume total no ano
     df_unid_padrao_auto = (
         df_aggr
         .group_by(["chave_produto", "ano"])
-        .agg(pl.col("unidade").sort_by("ocorrencias", descending=True).first().alias("unid_padrao_auto"))
+        .agg(pl.col("unidade").sort_by("volume_total", descending=True).first().alias("unid_padrao_auto"))
     )
 
     df_fator_pre = df_aggr.join(df_unid_padrao_auto, on=["chave_produto", "ano"])
-
     df_fator = df_fator_pre.with_columns(
         pl.coalesce(["unid_padrao_escolhida", "unid_padrao_auto"]).alias("unid_padrao")
     )
     return df_aggr, df_fator
 
 
+def _detectar_erros_conversao(df_final: pl.DataFrame) -> pl.DataFrame:
+    """
+    Monitora anomalias conforme documentação:
+    - Fator Extremo: < 0.001 ou > 1000
+    - Valor Inválido: <= 0
+    - Fragmentação: > 5 unidades para o mesmo item
+    - Volatilidade: CV alto (não implementado aqui, mas pode ser via df_aggr)
+    """
+    # Fragmentação: conta unidades por (chave_produto, ano)
+    df_frag = (
+        df_final.group_by(["chave_produto", "ano"])
+        .agg(pl.len().alias("_num_unid"))
+    )
+    
+    df_final = df_final.join(df_frag, on=["chave_produto", "ano"], how="left")
+    
+    df_final = df_final.with_columns([
+        pl.when(pl.col("fator_conversao") <= 0)
+          .then(pl.lit("Erro: Fator <= 0"))
+          .when((pl.col("fator_conversao") > 1000) | (pl.col("fator_conversao") < 0.001))
+          .then(pl.lit("Alerta: Fator Extremo"))
+          .when(pl.col("_num_unid") > 5)
+          .then(pl.lit("Alerta: Fragmentação"))
+          .otherwise(pl.lit("OK"))
+          .alias("status_qualidade")
+    ]).drop("_num_unid")
+    
+    return df_final
+
+
 def _calcular_fator_final(df_fator: pl.DataFrame, df_aggr: pl.DataFrame) -> pl.DataFrame:
-    """Calcula o fator de conversão em relação à unidade padrão escolhida/calculada."""
+    """Calcula o fator de conversão: Factor = Price_Unit / Price_Ref."""
     # 7. Join para calcular fator em relação à unid_padrao
     df_precos_padrao = (
         df_aggr
@@ -196,7 +237,7 @@ def _calcular_fator_final(df_fator: pl.DataFrame, df_aggr: pl.DataFrame) -> pl.D
     df_final = (
         df_fator.join(df_precos_padrao, on=["chave_produto", "ano", "unid_padrao"], how="left")
         .with_columns([
-            # Cálculo do fator
+            # Cálculo do fator: Preço Unidade Atual / Preço Unidade Referência
             pl.when(pl.col("preco_padrao_ent") > 0)
               .then(pl.col("preco_med_ent") / pl.col("preco_padrao_ent"))
               .when((pl.col("preco_padrao_ent").is_null() | (pl.col("preco_padrao_ent") == 0)) & (pl.col("preco_padrao_sai") > 0))
@@ -210,10 +251,12 @@ def _calcular_fator_final(df_fator: pl.DataFrame, df_aggr: pl.DataFrame) -> pl.D
             "v_sai", "q_sai", "preco_med_sai",
             "fator_conversao"
         ])
-        .sort(["chave_produto", "ano", "unidade"])
     )
 
-    return df_final
+    # Aplica detector de erros
+    df_final = _detectar_erros_conversao(df_final)
+    
+    return df_final.sort(["chave_produto", "ano", "unidade"])
 
 
 def calcular_fator_conversao(cnpj: str, pasta_cnpj: Path | None = None) -> bool:

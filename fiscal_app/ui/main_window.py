@@ -1092,20 +1092,27 @@ class MainWindow(QMainWindow):
 
         try:
             df_excel = pl.read_excel(path)
-            # Validação mínima
-            colunas_obrigatorias = ["chave_produto", "unidade", "fator_conversao"]
-            if not all(c in df_excel.columns for c in colunas_obrigatorias):
-                raise ValueError(f"O Excel deve conter as colunas: {colunas_obrigatorias}")
+            # Validação conforme documentação: ano, codigo_produto_ajustado, unid, fator
+            mapping = {
+                "ano": "ano",
+                "codigo_produto_ajustado": "chave_produto",
+                "unid": "unidade",
+                "fator": "fator_conversao"
+            }
+            cols_obrigatorias = list(mapping.keys())
+            if not all(c in df_excel.columns for c in cols_obrigatorias):
+                raise ValueError(f"O Excel deve conter as colunas: {cols_obrigatorias}")
 
             pasta_produtos = CNPJ_ROOT / cnpj / "analises" / "produtos"
             nome_saida = f"fator_conversao_{cnpj}.parquet"
             
-            # Garante tipos corretos
-            df_excel = df_excel.with_columns([
+            # Renomeia para colunas internas e garante tipos
+            df_imp = df_excel.select(cols_obrigatorias).rename({c: mapping[c] for c in cols_obrigatorias})
+            df_imp = df_imp.with_columns([
                 pl.col("fator_conversao").cast(pl.Float64)
             ])
 
-            df_excel.write_parquet(pasta_produtos / nome_saida)
+            df_imp.write_parquet(pasta_produtos / nome_saida)
             self.atualizar_aba_conversao()
             QMessageBox.information(self, "Sucesso", "Fatores de conversão importados com sucesso.")
         except Exception as e:
