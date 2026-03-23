@@ -1,6 +1,63 @@
-# Fiscal Parquet Analyzer
+# Fiscal Parquet Analyzer (Refatorado)
 
-Projeto em Python com interface gráfica usando PySide6, voltado para manipulação, extração de dados e processamento de arquivos de alta performance (Parquet) e banco de dados Oracle.
+Solução de alta performance para análise, extração e transformação de dados fiscais (Oracle -> Parquet) com interface gráfica moderna em **PySide6**.
+
+## 🛠️ Requisitos do Sistema
+
+- **Python 3.9+**
+- **Oracle Instant Client** (necessário para extração via `oracledb`)
+- Espaço em disco para armazenamento de arquivos Parquet (otimizados com compressão Snappy)
+
+## 📦 Instalação
+
+Recomenda-se o uso de um ambiente virtual (venv). Instale as dependências básicas:
+
+```bash
+pip install polars PySide6 openpyxl python-docx python-dotenv rich oracledb
+```
+
+## 🚀 Como Inicializar
+
+Para abrir a interface gráfica, execute o lançador na raiz do projeto:
+
+```bash
+python app.py
+```
+
+O `app.py` configura automaticamente o ambiente as pastas necessárias (`workspace/`, `CNPJ/`, etc.) e garante que os módulos internos sejam carregados corretamente.
+
+## 🏗️ Nova Arquitetura de Transformação (5 Módulos)
+
+O projeto foi refatorado para seguir um fluxo lógico de "Plano Físico", garantindo total rastreabilidade dos dados:
+
+1.  **Movimentações por Unidade (`produtos_unidades`)**: Consolida C170, NFe e NFCe com granularidade de unidade de medida.
+2.  **Registro de Produtos (`produtos`)**: Deduplicação por descrição normalizada e atribuição de IDs únicos.
+3.  **Agrupamento e Padrões (`produtos_agrupados`)**: Interface para agregação manual e definição automática de NCM/CEST padrão (via moda estatística).
+4.  **Produtos Final (`produtos_final`)**: Integra `produtos` + `produtos_agrupados` em uma visão final recalculável.
+5.  **Fatores de Conversão (`fatores_conversao`)**: Cálculo de multiplicadores entre unidades baseado em preço médio consolidado.
+
+### Regras de Mapeamento (Produtos)
+
+- `cest` é um campo próprio (`cest` / `prod_cest`) e não deve ser misturado com código de barras.
+- `gtin` (código de barras) vem de `cod_barra` (SPED) ou `prod_ceantrib` / `prod_cean` (NFe/NFCe, com fallback).
+- Quando não há preço médio de compra por unidade, o cálculo usa fallback de venda e registra logs em:
+  `log_sem_preco_medio_compra_<cnpj>.parquet` e `log_sem_preco_medio_compra_<cnpj>.json`.
+
+## 📁 Estrutura de Pastas
+
+- `src/interface_grafica`: Código da UI (PySide6), modelos e serviços.
+- `src/transformacao`: Os 4 módulos do "Plano Físico".
+- `src/extracao`: Lógica de interface com Oracle e geração de tabelas brutas.
+- `src/utilitarios`: Funções compartilhadas de texto, data e exportação.
+- `CNPJ/`: Onde residem os dados processados organizados por contribuinte.
+
+## 🧪 Testes
+
+Execute os testes unitários via `pytest`:
+
+```bash
+python -m pytest
+```
 
 ## Funcionalidades Principais
 

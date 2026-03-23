@@ -2,27 +2,31 @@
 Lançador principal do Fiscal Parquet Analyzer.
 
 Executa a interface gráfica a partir da raiz do projeto c:\\funcoes,
-configurando o sys.path para encontrar o pacote fiscal_app
-dentro de sistema_monitoramento.
+configurando o sys.path para encontrar os pacotes dentro de src/.
 """
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
-# Diretório atual (c:\funcoes) já contém o pacote fiscal_app
-SISTEMA_MONITORAMENTO = Path(__file__).parent
-if str(SISTEMA_MONITORAMENTO) not in sys.path:
-    sys.path.insert(0, str(SISTEMA_MONITORAMENTO))
+# Adiciona o diretório src ao sys.path para permitir pacotes como interface_grafica, extracao, etc.
+ROOT_DIR = Path(__file__).parent
+SRC_DIR = ROOT_DIR / "src"
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
+
+# Garante que os utilitários também estejam acessíveis
+UTILITARIOS_DIR = SRC_DIR / "utilitarios"
+if str(UTILITARIOS_DIR) not in sys.path:
+    sys.path.insert(0, str(UTILITARIOS_DIR))
 
 from PySide6.QtWidgets import QApplication
-from fiscal_app.ui.main_window import MainWindow
-from fiscal_app.services.aggregation_service import ServicoAgregacao
-
+from interface_grafica.ui.main_window import MainWindow
 
 def main() -> int:
     app = QApplication(sys.argv)
-    app.setApplicationName("Fiscal Parquet Analyzer")
+    app.setApplicationName("Fiscal Parquet Analyzer (Refatorado)")
     window = MainWindow()
     window.show()
     return app.exec()
@@ -30,3 +34,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

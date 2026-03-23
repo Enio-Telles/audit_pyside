@@ -1,0 +1,27 @@
+{
+  "ultimas_consultas": [
+    "c:\\funcoes - Copia\\sql\\bloco_h.sql",
+    "c:\\funcoes - Copia\\sql\\c100.sql",
+    "c:\\funcoes - Copia\\sql\\c170.sql",
+    "c:\\funcoes - Copia\\sql\\c176.sql",
+    "c:\\funcoes - Copia\\sql\\c176_mensal.sql",
+    "c:\\funcoes - Copia\\sql\\c176_verificacao.sql",
+    "c:\\funcoes - Copia\\sql\\dados_cadastrais.sql",
+    "c:\\funcoes - Copia\\sql\\Fisconforme_malha_cnpj.sql",
+    "c:\\funcoes - Copia\\sql\\NFCe.sql",
+    "c:\\funcoes - Copia\\sql\\NFe.sql",
+    "c:\\funcoes - Copia\\sql\\reg_0000.sql"
+  ],
+  "ultimas_tabelas": [
+    "tb_documentos",
+    "item_unidades",
+    "itens",
+    "descricao_produtos",
+    "produtos_final",
+    "fontes_produtos",
+    "fatores_conversao",
+    "c170_xml",
+    "c176_xml",
+    "movimentacao_estoque"
+  ]
+}
