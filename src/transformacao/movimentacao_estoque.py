@@ -13,10 +13,15 @@ CNPJ_ROOT = DADOS_DIR / "CNPJ"
 if str(UTILITARIOS_DIR) not in sys.path:
     sys.path.insert(0, str(UTILITARIOS_DIR))
 
+# Ensure src is in sys.path to import from transformacao.auxiliares
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
+
 try:
     from salvar_para_parquet import salvar_para_parquet
     from co_sefin_class import enriquecer_co_sefin_class
     from text import remove_accents
+    from transformacao.auxiliares.logs import log_exception
 except ImportError as e:
     rprint(f"[red]Erro ao importar modulos:[/red] {e}")
     sys.exit(1)
@@ -958,7 +963,5 @@ if __name__ == "__main__":
             c = input("CNPJ: ")
             gerar_movimentacao_estoque(c)
     except Exception as e:
-        import traceback
-        with open(r"c:\funcoes - Copia\traceback.txt", "w") as f:
-            traceback.print_exc(file=f)
+        log_exception(e)
         raise
