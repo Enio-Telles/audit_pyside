@@ -26,19 +26,16 @@ from rich import print as rprint
 
 ROOT_DIR        = Path(r"c:\funcoes - Copia")
 SRC_DIR         = ROOT_DIR / "src"
-UTILITARIOS_DIR = SRC_DIR / "utilitarios"
 SQL_DIR         = ROOT_DIR / "sql"
 DADOS_DIR       = ROOT_DIR / "dados"
 CNPJ_ROOT       = DADOS_DIR / "CNPJ"
 
-if str(UTILITARIOS_DIR) not in sys.path:
-    sys.path.insert(0, str(UTILITARIOS_DIR))
 
 try:
-    from conectar_oracle import conectar
-    from ler_sql import ler_sql
-    from salvar_para_parquet import salvar_para_parquet
-    from validar_cnpj import validar_cnpj
+    from utilitarios.conectar_oracle import conectar
+    from utilitarios.ler_sql import ler_sql
+    from utilitarios.salvar_para_parquet import salvar_para_parquet
+    from utilitarios.validar_cnpj import validar_cnpj
 except ImportError as e:
     rprint(f"[red]Erro ao importar módulos utilitários:[/red] {e}")
     sys.exit(1)

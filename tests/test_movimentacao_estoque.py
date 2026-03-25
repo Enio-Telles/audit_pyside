@@ -184,3 +184,26 @@ def test_flags_de_devolucao_em_texto_nao_quebram_o_calculo():
 
     assert result["saldo_estoque_anual"].to_list() == [10.0, 12.0]
     assert result["custo_medio_anual"][1] == pytest.approx(124.0 / 12.0)
+
+
+def test_linha_neutralizada_nao_altera_saldo_omissao_ou_custo():
+    df = pl.DataFrame(
+        {
+            "__q_conv_sinal__": [10.0, 0.0, -2.0],
+            "q_conv": [10.0, 0.0, 2.0],
+            "preco_item": [100.0, 999.0, 999.0],
+            "Tipo_operacao": ["1 - ENTRADA", "1 - ENTRADA", "2 - SAIDAS"],
+            "__qtd_decl_final_audit__": [0.0, 0.0, 0.0],
+            "finnfe": ["1", "1", "1"],
+            "dev_simples": [False, False, False],
+            "dev_venda": [False, False, False],
+            "dev_compra": [False, False, False],
+            "dev_ent_simples": [False, False, False],
+        }
+    )
+
+    result = _calcular_saldo_estoque_anual(df)
+
+    assert result["saldo_estoque_anual"].to_list() == [10.0, 10.0, 8.0]
+    assert result["entr_desac_anual"].to_list() == [0.0, 0.0, 0.0]
+    assert result["custo_medio_anual"].to_list() == [10.0, 10.0, 10.0]

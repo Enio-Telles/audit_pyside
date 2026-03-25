@@ -10,64 +10,61 @@ ROOT_DIR = Path(r"c:\funcoes - Copia")
 SRC_DIR = ROOT_DIR / "src"
 DADOS_DIR = ROOT_DIR / "dados"
 CNPJ_ROOT = DADOS_DIR / "CNPJ"
-TRANSFORMACAO_DIR = SRC_DIR / "transformacao"
 
-if str(TRANSFORMACAO_DIR) not in sys.path:
-    sys.path.insert(0, str(TRANSFORMACAO_DIR))
 
 try:
-    from produtos_agrupados import calcular_atributos_padrao
+    from transformacao.produtos_agrupados import calcular_atributos_padrao
 except ImportError:
     calcular_atributos_padrao = None
     
 
 try:
-    from produtos_final_v2 import produtos_agrupados as inicializar_produtos_agrupados
+    from transformacao.produtos_final_v2 import produtos_agrupados as inicializar_produtos_agrupados
 except ImportError:
     inicializar_produtos_agrupados = None
 
 try:
-    from fontes_produtos import gerar_fontes_produtos
+    from transformacao.fontes_produtos import gerar_fontes_produtos
 except ImportError:
     gerar_fontes_produtos = None
 
 try:
-    from fatores_conversao import calcular_fatores_conversao
+    from transformacao.fatores_conversao import calcular_fatores_conversao
 except ImportError:
     calcular_fatores_conversao = None
 
 try:
-    from precos_medios_produtos_final import calcular_precos_medios_produtos_final
+    from transformacao.precos_medios_produtos_final import calcular_precos_medios_produtos_final
 except ImportError:
     calcular_precos_medios_produtos_final = None
 
 try:
-    from id_agrupados import gerar_id_agrupados
+    from transformacao.id_agrupados import gerar_id_agrupados
 except ImportError:
     gerar_id_agrupados = None
 
 try:
-    from c170_xml import gerar_c170_xml
+    from transformacao.c170_xml import gerar_c170_xml
 except ImportError:
     gerar_c170_xml = None
 
 try:
-    from c176_xml import gerar_c176_xml
+    from transformacao.c176_xml import gerar_c176_xml
 except ImportError:
     gerar_c176_xml = None
 
 try:
-    from movimentacao_estoque import gerar_movimentacao_estoque
+    from transformacao.movimentacao_estoque import gerar_movimentacao_estoque
 except ImportError:
     gerar_movimentacao_estoque = None
 
 try:
-    from calculos_mensais import gerar_calculos_mensais
+    from transformacao.calculos_mensais import gerar_calculos_mensais
 except ImportError:
     gerar_calculos_mensais = None
 
 try:
-    from calculos_anuais import gerar_calculos_anuais
+    from transformacao.calculos_anuais import gerar_calculos_anuais
 except ImportError:
     gerar_calculos_anuais = None
 
@@ -99,7 +96,7 @@ class ServicoAgregacao:
 
     @staticmethod
     def _normalizar_descricao_para_match(texto: str | None):
-        from text import remove_accents
+        from utilitarios.text import remove_accents
         return " ".join((remove_accents(texto) or "").upper().strip().split()) if texto is not None else ""
 
     @staticmethod

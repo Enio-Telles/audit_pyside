@@ -22,19 +22,14 @@ from rich import print as rprint
 
 ROOT_DIR = Path(r"c:\funcoes - Copia")
 SRC_DIR = ROOT_DIR / "src"
-UTILITARIOS_DIR = SRC_DIR / "utilitarios"
 DADOS_DIR = ROOT_DIR / "dados"
 CNPJ_ROOT = DADOS_DIR / "CNPJ"
 
-for _dir in (SRC_DIR, UTILITARIOS_DIR):
-    dir_str = str(_dir)
-    if dir_str not in sys.path:
-        sys.path.insert(0, dir_str)
 
 try:
-    from salvar_para_parquet import salvar_para_parquet
-    from descricao_produtos import descricao_produtos
-    from id_agrupados import gerar_id_agrupados
+    from utilitarios.salvar_para_parquet import salvar_para_parquet
+    from transformacao.descricao_produtos import descricao_produtos
+    from transformacao.id_agrupados import gerar_id_agrupados
 except ImportError as e:
     rprint(f"[red]Erro ao importar modulos:[/red] {e}")
     sys.exit(1)

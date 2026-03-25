@@ -21,20 +21,14 @@ import polars as pl
 
 ROOT_DIR = Path(r"c:\funcoes - Copia")
 SRC_DIR = ROOT_DIR / "src"
-UTILITARIOS_DIR = SRC_DIR / "utilitarios"
-TRANSFORMACAO_DIR = SRC_DIR / "transformacao"
 SQL_DIR = ROOT_DIR / "sql"
 DADOS_DIR = ROOT_DIR / "dados"
 CNPJ_ROOT = DADOS_DIR / "CNPJ"
 
-for _dir in (ROOT_DIR, UTILITARIOS_DIR, TRANSFORMACAO_DIR):
-    dir_str = str(_dir)
-    if dir_str not in sys.path:
-        sys.path.insert(0, dir_str)
 
-from conectar_oracle import obter_conexao_oracle
-from extrair_parametros import extrair_parametros_sql
-from ler_sql import ler_sql
+from utilitarios.conectar_oracle import obter_conexao_oracle
+from utilitarios.extrair_parametros import extrair_parametros_sql
+from utilitarios.ler_sql import ler_sql
 
 
 @dataclass
@@ -441,10 +435,7 @@ class ServicoTabelas:
 def _importar_funcao_tabela(nome_modulo: str, nome_funcao: str) -> Callable:
     import importlib
 
-    if str(TRANSFORMACAO_DIR) not in sys.path:
-        sys.path.insert(0, str(TRANSFORMACAO_DIR))
-
-    modulo = importlib.import_module(nome_modulo)
+    modulo = importlib.import_module(f"transformacao.{nome_modulo}")
     return getattr(modulo, nome_funcao)
 
 

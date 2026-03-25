@@ -25,7 +25,7 @@ if str(_FUNCOES_AUX) not in sys.path:
     sys.path.insert(0, str(_FUNCOES_AUX))
 
 try:
-    from extrair_parametros import extrair_parametros_sql as _extrair_raw
+    from utilitarios.extrair_parametros import extrair_parametros_sql as _extrair_raw
 except ImportError:
     # Fallback caso o import falhe (ex.: ambiente sem c:\funcoes - Copia)
     def _extrair_raw(sql: str) -> set[str]:  # type: ignore[misc]

@@ -1,0 +1,4 @@
+from transformacao.tabelas_base.tabela_documentos import gerar_tabela_documentos
+from transformacao.tabelas_base.item_unidades import gerar_item_unidades, item_unidades
+from transformacao.tabelas_base.itens import gerar_itens, itens
+from transformacao.tabelas_base.enriquecimento_fontes import *

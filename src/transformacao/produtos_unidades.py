@@ -14,17 +14,14 @@ from rich import print as rprint
 
 ROOT_DIR = Path(r"c:\funcoes - Copia")
 SRC_DIR = ROOT_DIR / "src"
-UTILITARIOS_DIR = SRC_DIR / "utilitarios"
 DADOS_DIR = ROOT_DIR / "dados"
 CNPJ_ROOT = DADOS_DIR / "CNPJ"
 REFS_DIR = DADOS_DIR / "referencias"
 
-if str(UTILITARIOS_DIR) not in sys.path:
-    sys.path.insert(0, str(UTILITARIOS_DIR))
 
 try:
-    from salvar_para_parquet import salvar_para_parquet
-    from encontrar_arquivo_cnpj import encontrar_arquivo
+    from utilitarios.salvar_para_parquet import salvar_para_parquet
+    from utilitarios.encontrar_arquivo_cnpj import encontrar_arquivo
     from aux_leitura_notas import ler_nfe_nfce, ler_c170, ler_bloco_h
 except ImportError as e:
     rprint(f"[red]Erro ao importar modulos utilitarios:[/red] {e}")

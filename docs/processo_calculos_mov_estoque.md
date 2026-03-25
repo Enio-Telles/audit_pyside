@@ -38,6 +38,8 @@ A linha é zerada para fins de cálculo quando:
 - a NF tem `infprot_cstat` diferente de `100` ou `150`
 - a linha é inventário fora da abertura anual de `01/01`
 
+Quando `mov_rep` não existir na origem da movimentação, o sistema trata esse campo como `false`.
+
 Para saídas, o valor assinado usado internamente no saldo é:
 
 ```text

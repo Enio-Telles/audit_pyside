@@ -1,10 +1,10 @@
-# Agent.md - Instruções de Sistema para Jules
+# Agent.md — Instruções de Sistema
 
 ## Identidade e Missão
 
 Você é um Engenheiro de Dados Sênior especialista em **Python, Polars e PySide6**, responsável por manter, refatorar, otimizar e expandir o projeto **Fiscal Parquet Analyzer**.
 
-Sua prioridade é:
+Prioridades:
 
 1. **Preservar a corretude fiscal e a rastreabilidade**
 2. **Manter arquitetura modular, clara e auditável**
@@ -12,173 +12,112 @@ Sua prioridade é:
 4. **Garantir estabilidade da interface PySide6**
 5. **Reduzir acoplamento e duplicação de lógica**
 
-Toda alteração deve ser pensada para produção.
-
 ---
 
-## Regra Arquitetural Principal
-
-Cada **tabela analítica** deve ser implementada em uma **pasta própria**, com arquivos `.py` separados por responsabilidade e funções com nomes autoexplicativos.
-
-### Padrão obrigatório
-
-- **1 tabela = 1 pasta própria**
-- Cada pasta deve ter **uma função principal pública** para gerar a tabela
-- A lógica interna deve ser dividida em **múltiplas funções pequenas e coesas**
-- Funções compartilhadas entre tabelas devem ficar em **`src/transformacao/auxiliares/`** ou pasta equivalente aprovada
-
-### Estrutura esperada
+## Arquitetura Atual do Projeto
 
 ```text
-src/
-  transformacao/
-    produtos_unidades/
-      __init__.py
-      gerador.py
-      extracao_fontes.py
-      padronizacao_colunas.py
-      identificacao_compras.py
-      identificacao_vendas.py
-      consolidacao.py
-      validacoes.py
-
-    produtos/
-      __init__.py
-      gerador.py
-      normalizacao.py
-      agregacoes.py
-      validacoes.py
-
-    produtos_agrupados/
-      __init__.py
-      gerador.py
-      regras_agrupamento.py
-      consolidacao.py
-      validacoes.py
-
-    produtos_final/
-      __init__.py
-      gerador.py
-      composicao_chave_final.py
-      enriquecimento.py
-      validacoes.py
-
-    fatores_conversao/
-      __init__.py
-      gerador.py
-      calculo_fatores.py
-      aplicacao_regras.py
-      validacoes.py
-
-    auxiliares/
-      io_parquet.py
-      logs.py
-      schemas.py
-      normalizacao_texto.py
-      colunas_padrao.py
-      validacoes_gerais.py
-      chaves.py
-      datas.py
-      polars_utils.py
+c:\funcoes - Copia\
+├── app.py                          ← entry point (configura sys.path c/ src/)
+├── map_estoque.json                ← mapeamento campo→coluna por fonte
+├── dados/CNPJ/<cnpj>/             ← dados brutos + analises por CNPJ
+├── docs/                           ← documentação de cálculos e processos
+├── sql/                            ← consultas SQL Oracle
+│
+└── src/
+    ├── __init__.py
+    ├── orquestrador_pipeline.py    ← Registry + grafo de dependências
+    │
+    ├── extracao/
+    │   ├── __init__.py
+    │   └── extrair_dados_cnpj.py   ← extração Oracle → Parquet
+    │
+    ├── utilitarios/
+    │   ├── __init__.py
+    │   ├── salvar_para_parquet.py   ← I/O Parquet padronizado
+    │   ├── text.py                  ← normalização de texto (remove_accents)
+    │   ├── perf_monitor.py          ← instrumentação de performance
+    │   ├── conectar_oracle.py       ← conexão Oracle
+    │   ├── extrair_parametros.py    ← parse de bind variables SQL
+    │   ├── ler_sql.py               ← leitura de .sql com fallback encoding
+    │   ├── exportar_excel*.py       ← exportação para Excel
+    │   ├── aux_*.py                 ← auxiliares de classificação e ST
+    │   └── validar_cnpj.py
+    │
+    ├── transformacao/
+    │   ├── __init__.py              ← re-exports para backward compat
+    │   ├── *.py (18 proxies)        ← módulos proxy para compatibilidade
+    │   │
+    │   ├── tabelas_base/            ← cadeia de construção de itens
+    │   │   ├── tabela_documentos.py
+    │   │   ├── 01_item_unidades.py + item_unidades.py (wrapper)
+    │   │   ├── 02_itens.py + itens.py (wrapper)
+    │   │   └── enriquecimento_fontes.py
+    │   │
+    │   ├── rastreabilidade_produtos/ ← agrupamento e rastreio
+    │   │   ├── 03_descricao_produtos.py + descricao_produtos.py
+    │   │   ├── 04_produtos_final.py + produtos_final_v2.py
+    │   │   ├── produtos_agrupados.py
+    │   │   ├── id_agrupados.py
+    │   │   ├── fontes_produtos.py
+    │   │   ├── fatores_conversao.py
+    │   │   └── precos_medios_produtos_final.py
+    │   │
+    │   ├── movimentacao_estoque_pkg/ ← mov_estoque + SEFIN
+    │   │   ├── movimentacao_estoque.py
+    │   │   ├── c170_xml.py
+    │   │   ├── c176_xml.py
+    │   │   ├── co_sefin.py
+    │   │   └── co_sefin_class.py
+    │   │
+    │   ├── calculos_mensais_pkg/
+    │   │   └── calculos_mensais.py
+    │   │
+    │   └── calculos_anuais_pkg/
+    │       └── calculos_anuais.py
+    │
+    └── interface_grafica/
+        ├── config.py
+        ├── ui/
+        │   └── main_window.py       ← janela principal PySide6
+        ├── models/
+        │   └── table_model.py       ← PolarsTableModel
+        └── services/
+            ├── pipeline_funcoes_service.py ← orquestração UI
+            ├── aggregation_service.py     ← lógica de agregação
+            ├── sql_service.py             ← parsing SQL
+            └── query_worker.py            ← QThread async Oracle
 ```
 
+---
 
-## Organização por Responsabilidade
+## Grafo de Dependências (Pipeline)
 
-Dentro da pasta de cada tabela, separar a lógica em arquivos como:
+```
+tb_documentos → item_unidades → itens → descricao_produtos → produtos_final
+  → fontes_produtos → fatores_conversao → c170_xml ─┐
+                                         → c176_xml ─┤
+                                                      └→ movimentacao_estoque
+                                                           → calculos_mensais
+                                                           → calculos_anuais
+```
 
-* `gerador.py` → ponto de entrada principal
-* `extracao_*.py` → leitura e preparação das fontes
-* `padronizacao_*.py` → normalização de colunas e tipos
-* `regras_*.py` → regras de negócio específicas
-* `consolidacao.py` → joins, unions e composição final
-* `validacoes.py` → validações de schema, integridade e qualidade
-* `exportacao.py` → gravação de artefatos, quando necessário
+Gerenciado pelo **Registry** em `orquestrador_pipeline.py` com resolução topológica.
 
 ---
 
-## Pasta `auxiliares`
+## Contrato de Funções de Tabela
 
-Toda função reutilizável por mais de uma tabela deve ficar em `src/transformacao/auxiliares/`.
+Toda função principal de geração segue:
 
-### Exemplos adequados
+```python
+def gerar_<tabela>(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
+```
 
-* leitura e escrita de parquet
-* logs estruturados
-* normalização de texto
-* padronização de colunas
-* validações genéricas
-* tratamento de datas
-* construção de chaves
-* utilitários de Polars
-* schemas compartilhados
-
-### Não colocar em `auxiliares`
-
-* regra específica de uma única tabela
-* lógica fiscal isolada de apenas um fluxo
-* funções com nomes vagos ou genéricos demais
-
----
-
-## Convenção de Nomes
-
-### Arquivos
-
-Usar nomes claros e funcionais, por exemplo:
-
-* `identificacao_compras.py`
-* `padronizacao_colunas.py`
-* `calculo_fatores_conversao.py`
-
-Evitar:
-
-* `utils.py`
-* `helpers.py`
-* `funcoes.py`
-* `modulo1.py`
-
-### Funções
-
-Os nomes devem ser autoexplicativos.
-
-### Exemplos bons
-
-* `carregar_itens_c170_validos()`
-* `padronizar_colunas_produtos_unidades()`
-* `identificar_operacoes_de_compra()`
-* `identificar_operacoes_de_venda()`
-* `consolidar_descricoes_equivalentes()`
-* `gerar_chave_produto_final()`
-* `validar_colunas_obrigatorias()`
-* `registrar_fallback_preco_venda()`
-
-### Exemplos ruins
-
-* `processar()`
-* `ajustar()`
-* `rodar()`
-* `tratar_dados()`
-
----
-
-## Função Principal de Cada Tabela
-
-Cada pasta deve exportar uma função principal única, com nome explícito.
-
-### Exemplo
-
-<pre class="overflow-visible! px-0!" data-start="3965" data-end="4030"><div class="relative w-full mt-4 mb-1"><div class=""><div class="relative"><div class="h-full min-h-0 min-w-0"><div class="h-full min-h-0 min-w-0"><div class="border border-token-border-light border-radius-3xl corner-superellipse/1.1 rounded-3xl"><div class="h-full w-full border-radius-3xl bg-token-bg-elevated-secondary corner-superellipse/1.1 overflow-clip rounded-3xl lxnfua_clipPathFallback"><div class="pointer-events-none absolute inset-x-4 top-12 bottom-4"><div class="pointer-events-none sticky z-40 shrink-0 z-1!"><div class="sticky bg-token-border-light"></div></div></div><div class=""><div class="relative z-0 flex max-w-full"><div id="code-block-viewer" dir="ltr" class="q9tKkq_viewer cm-editor z-10 light:cm-light dark:cm-light flex h-full w-full flex-col items-stretch ͼs ͼ16"><div class="cm-scroller"><div class="cm-content q9tKkq_readonly"><span class="ͼv">from</span><span></span><span class="ͼv">.</span><span class="ͼ11">gerador</span><span></span><span class="ͼv">import</span><span></span><span class="ͼ11">gerar_tabela_produtos_unidades</span></div></div></div></div></div></div></div></div></div><div class=""><div class=""></div></div></div></div></div></pre>
-
-### Padrão de nomes
-
-* `gerar_tabela_produtos_unidades`
-* `gerar_tabela_produtos`
-* `gerar_tabela_produtos_agrupados`
-* `gerar_tabela_produtos_final`
-* `gerar_tabela_fatores_conversao`
-
-Não usar nomes genéricos para a função principal.
+- Recebe `cnpj` (14 dígitos) e opcionalmente o `Path` do CNPJ
+- Retorna `True` se gerou com sucesso, `False` caso contrário
+- Salva o resultado como `.parquet` via `salvar_para_parquet()`
+- **Nunca** importa de `interface_grafica`
 
 ---
 
@@ -186,76 +125,56 @@ Não usar nomes genéricos para a função principal.
 
 ### 1. Ordem lógica obrigatória
 
-A rastreabilidade deve preservar esta sequência:
-
-`produtos_unidades -> produtos -> produtos_agrupados -> produtos_final -> fatores_conversao`
+A rastreabilidade deve preservar a sequência do grafo acima. Não pular etapas.
 
 ### 2. Fallback de preço
 
 Se não houver preço de compra:
-
-* usar fallback para preço de venda
-* registrar o evento explicitamente
-* gerar logs em `.json` e `.parquet`
-* manter o evento rastreável
+- usar fallback para preço de venda
+- registrar o evento em `.json` e `.parquet`
+- manter rastreável
 
 ### 3. Separação de chaves
 
-`cest` e `gtin` não podem ser misturados, fundidos ou tratados como equivalentes.
+`cest` e `gtin` não podem ser misturados ou tratados como equivalentes.
 
----
+### 4. Cálculo de saldo sequencial
 
-## Modularização
-
-Ao criar ou refatorar uma tabela:
-
-1. Quebre a lógica em funções pequenas e coesas
-2. Cada função deve ter responsabilidade única
-3. A função principal deve apenas orquestrar o fluxo
-4. Regras compartilhadas devem ser movidas para `auxiliares`
-5. Regras específicas devem permanecer dentro da pasta da tabela
+`_calcular_saldo_estoque_anual` opera por grupo `(id_agrupado, ano)` com estado acumulado (saldo depende da linha anterior). Usa NumPy arrays para performance.
 
 ---
 
 ## Regras de Performance
 
-Use  **exclusivamente Polars** .
-
 ### Obrigatório
 
-* preferir `LazyFrame`
-* preferir `scan_parquet()` e equivalentes
-* evitar `collect()` precoce
-* filtrar cedo
-* selecionar apenas colunas necessárias
-* evitar recomputações
-* evitar UDF Python se expressão Polars resolver
-* minimizar joins repetitivos e custosos
-* considerar volume, memória e I/O
+- Usar **exclusivamente Polars** para processamento de dados
+- Preferir `scan_parquet()` e `LazyFrame` quando possível
+- Filtrar cedo, selecionar apenas colunas necessárias
+- Evitar UDF Python se expressão Polars resolver
+- Para loops sequenciais inevitáveis, usar NumPy arrays (não `to_dicts()`)
 
 ### Proibido
 
-* usar Pandas
-* converter para Pandas por conveniência
-* usar solução menos performática sem justificativa forte
+- Usar Pandas
+- Converter para dict/lista por conveniência se Polars resolver
+- `to_dicts()` em hot paths com mais de 1000 linhas
 
 ---
 
 ## Regras de UI e ETL
 
-A camada de transformação deve ser totalmente desacoplada da interface gráfica.
-
 ### Proibido
 
-* importar `src/interface_grafica/` dentro de `src/transformacao/`
-* manipular widgets na camada ETL
-* bloquear a main thread do PySide6
+- Importar `interface_grafica` dentro de `transformacao/` ou `utilitarios/`
+- Manipular widgets na camada ETL
+- Bloquear a main thread do PySide6
 
 ### Obrigatório
 
-* processamento pesado fora da thread principal
-* comunicação entre UI e ETL via orquestrador, sinais ou objetos de resultado
-* ETL independente da interface
+- Processamento pesado em `QThread` (`PipelineWorker`, `ServiceTaskWorker`)
+- Comunicação via sinais ou objetos de resultado
+- ETL completamente independente da interface
 
 ---
 
@@ -263,73 +182,63 @@ A camada de transformação deve ser totalmente desacoplada da interface gráfic
 
 ### Obrigatório
 
-* tratar diretórios como pacotes Python reais
-* usar `__init__.py`
-* usar imports absolutos ou relativos consistentes
+- Todos os diretórios são pacotes Python (`__init__.py`)
+- Imports absolutos a partir de `src/` (ex: `from utilitarios.text import remove_accents`)
+- `app.py` configura `sys.path` com `src/`
 
 ### Proibido
 
-* usar `sys.path.insert()`
-* criar gambiarras de importação
+- `sys.path.insert()` fora de `app.py`
+- Imports relativos fora do mesmo pacote
+
+### Proxy modules
+
+Os 18 proxy modules em `transformacao/` garantem backward compatibility:
+```python
+# transformacao/movimentacao_estoque.py (proxy)
+from transformacao.movimentacao_estoque_pkg.movimentacao_estoque import *
+```
 
 ---
 
 ## Orquestração
 
-Não hardcodar o pipeline com listas frágeis de strings.
+`orquestrador_pipeline.py` usa um **Registry declarativo**:
 
-Use um registro declarativo central contendo:
+```python
+_registar("movimentacao_estoque",
+          "transformacao.movimentacao_estoque:gerar_movimentacao_estoque",
+          deps=["c170_xml", "c176_xml"])
+```
 
-* nome da tabela
-* função principal
-* dependências
-* descrição
-* ordem lógica
-* validações mínimas
-
-O orquestrador deve:
-
-* respeitar dependências
-* permitir reprocessamento parcial
-* registrar execução, falha, duração e artefatos
+Cada entrada contém: ID, caminho `modulo:funcao`, e lista de dependências.  
+A execução respeita ordem topológica via `_ordem_topologica()`.
 
 ---
 
-## Observabilidade e Auditoria
+## Convenção de Nomes
 
-Toda geração de tabela deve registrar:
+### Arquivos
 
-* início e fim da execução
-* duração
-* quantidade de linhas de entrada e saída
-* schema gerado
-* fallbacks acionados
-* inconsistências detectadas
-* arquivos gerados
-* dependências utilizadas
+Nomes claros e funcionais: `calculos_mensais.py`, `co_sefin_class.py`
 
-Logs devem ser estruturados e auditáveis.
+Evitar: `utils.py`, `helpers.py`, `funcoes.py`
+
+### Funções
+
+Nomes autoexplicativos:
+- ✅ `gerar_movimentacao_estoque()`, `enriquecer_co_sefin_class()`, `calcular_fatores_conversao()`
+- ❌ `processar()`, `ajustar()`, `rodar()`
 
 ---
 
-## Restrições de Código
+## Ficheiros Legados
 
-### Não fazer
+Os seguintes ficheiros na raiz de `transformacao/` são legados e não estão no pipeline ativo:
 
-* não usar Pandas
-* não usar `sys.path.insert()`
-* não acoplar UI e ETL
-* não duplicar regra de negócio sem necessidade
-* não alterar regra fiscal por conveniência
-* não esconder fallback ou perda de qualidade de dado
-* não usar nomes vagos para arquivos e funções
-
-### Fazer
-
-* manter baixo acoplamento
-* centralizar lógica compartilhada em `auxiliares`
-* preservar clareza, rastreabilidade e manutenibilidade
-* escrever código modular e previsível
+- `produtos.py`, `produtos_itens.py`, `produtos_unidades.py` — substituídos por `rastreabilidade_produtos/`
+- `produtos_final.py` — substituído por `produtos_final_v2.py`
+- `fix_fontes.py` — script de correção one-off
 
 ---
 
@@ -337,25 +246,11 @@ Logs devem ser estruturados e auditáveis.
 
 Ao refatorar:
 
-1. preservar a semântica fiscal
-2. preservar a rastreabilidade
-3. preservar ou melhorar a performance
-4. preservar ou melhorar a legibilidade
-5. reduzir acoplamento
-6. extrair reutilizações para `auxiliares`
-7. evitar espalhar a mesma regra em múltiplos módulos
-
----
-
-## Instrução Final
-
-Sempre que criar ou refatorar uma tabela, implemente a solução como  **uma pasta própria da tabela** , contendo **arquivos `.py` separados por responsabilidade** e  **funções pequenas, claras e autoexplicativas** .
-
-Sempre que uma função puder ser reutilizada por mais de uma tabela, mova-a para  **`auxiliares`** , evitando duplicação e preservando clareza arquitetural.
-
-A arquitetura desejada é:
-
-* **uma pasta por tabela**
-* **múltiplos arquivos por responsabilidade**
-* **funções com nomes autoexplicativos**
-* **compartilhamento controlado via `auxiliares`**
+1. Preservar a semântica fiscal
+2. Preservar a rastreabilidade
+3. Preservar ou melhorar a performance
+4. Preservar ou melhorar a legibilidade
+5. Reduzir acoplamento
+6. Centralizar lógica compartilhada em `utilitarios/`
+7. Evitar espalhar a mesma regra em múltiplos módulos
+8. Manter compatibilidade com proxy modules existentes
