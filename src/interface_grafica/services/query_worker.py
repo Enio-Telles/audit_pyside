@@ -189,7 +189,11 @@ class QueryWorker(QThread):
                 },
                 status="error",
             )
-            self.failed.emit(str(exc))
+            # 🛡️ Sentinel: Sanitize error message to prevent leaking internal database schema/details to the UI
+            from rich import print as rprint
+            rprint(f"[red]Erro interno no QueryWorker:[/red] {exc}")
+            safe_error_msg = "Ocorreu um erro ao executar a consulta no banco de dados. Verifique os logs para mais detalhes."
+            self.failed.emit(safe_error_msg)
         finally:
             if conn is not None:
                 try:
