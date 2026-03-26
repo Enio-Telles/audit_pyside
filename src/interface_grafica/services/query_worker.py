@@ -13,6 +13,7 @@ from typing import Any
 
 import polars as pl
 from PySide6.QtCore import QThread, Signal
+from rich import print as rprint
 from utilitarios.perf_monitor import registrar_evento_performance
 
 # ---------------------------------------------------------------------------
@@ -189,7 +190,6 @@ class QueryWorker(QThread):
                 status="error",
             )
             # 🛡️ Sentinel: Sanitize error message to prevent leaking internal database schema/details to the UI
-            from rich import print as rprint
             rprint(f"[red]Erro interno no QueryWorker:[/red] {exc}")
             safe_error_msg = "Ocorreu um erro ao executar a consulta no banco de dados. Verifique os logs para mais detalhes."
             self.failed.emit(safe_error_msg)
@@ -197,5 +197,5 @@ class QueryWorker(QThread):
             if conn is not None:
                 try:
                     conn.close()
-                except Exception:
-                    pass
+                except Exception as close_exc:
+                    rprint(f"[yellow]Aviso: Erro ao fechar conexao Oracle:[/yellow] {close_exc}")
