@@ -23,6 +23,9 @@ try:
 except ImportError:
     conectar_oracle = None  # type: ignore[assignment]
 
+# Cache para as credenciais do banco de dados (evita repetidos os.getenv)
+_DB_CONFIG_CACHE: dict[str, Any] | None = None
+
 
 def _conectar_oracle_fallback():
     """Conexao Oracle standalone caso o import falhe."""
@@ -31,25 +34,31 @@ def _conectar_oracle_fallback():
     except ImportError as exc:
         raise RuntimeError("O pacote 'oracledb' nao esta instalado.") from exc
 
-    from dotenv import load_dotenv
+    global _DB_CONFIG_CACHE
 
-    root = Path(__file__).resolve().parents[2]
-    for candidate in [Path.cwd() / ".env", root / ".env"]:
-        if candidate.exists():
-            load_dotenv(candidate, override=False, encoding="latin-1")
-            break
+    if _DB_CONFIG_CACHE is None:
+        from dotenv import load_dotenv
 
-    host = os.getenv("ORACLE_HOST", "exa01-scan.sefin.ro.gov.br").strip()
-    porta = int(os.getenv("ORACLE_PORT", "1521").strip())
-    servico = os.getenv("ORACLE_SERVICE", "sefindw").strip()
-    usuario = os.getenv("DB_USER", "").strip()
-    senha = os.getenv("DB_PASSWORD", "").strip()
+        root = Path(__file__).resolve().parents[2]
+        for candidate in [Path.cwd() / ".env", root / ".env"]:
+            if candidate.exists():
+                load_dotenv(candidate, override=False, encoding="latin-1")
+                break
 
-    if not usuario or not senha:
+        _DB_CONFIG_CACHE = {
+            "host": os.getenv("ORACLE_HOST", "exa01-scan.sefin.ro.gov.br").strip(),
+            "porta": int(os.getenv("ORACLE_PORT", "1521").strip()),
+            "servico": os.getenv("ORACLE_SERVICE", "sefindw").strip(),
+            "usuario": os.getenv("DB_USER", "").strip(),
+            "senha": os.getenv("DB_PASSWORD", "").strip(),
+        }
+
+    cfg = _DB_CONFIG_CACHE
+    if not cfg["usuario"] or not cfg["senha"]:
         raise RuntimeError("Credenciais Oracle nao encontradas. Preencha DB_USER e DB_PASSWORD no .env")
 
-    dsn = oracledb.makedsn(host, porta, service_name=servico)
-    conn = oracledb.connect(user=usuario, password=senha, dsn=dsn)
+    dsn = oracledb.makedsn(cfg["host"], cfg["porta"], service_name=cfg["servico"])
+    conn = oracledb.connect(user=cfg["usuario"], password=cfg["senha"], dsn=dsn)
     with conn.cursor() as cursor:
         cursor.execute("ALTER SESSION SET NLS_NUMERIC_CHARACTERS = '.,'")
     return conn
