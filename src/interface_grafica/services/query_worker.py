@@ -47,18 +47,18 @@ def _conectar_oracle_fallback():
                 break
 
         _DB_CONFIG_CACHE = {
-            "host": os.getenv("ORACLE_HOST", "exa01-scan.sefin.ro.gov.br").strip(),
-            "porta": int(os.getenv("ORACLE_PORT", "1521").strip()),
-            "servico": os.getenv("ORACLE_SERVICE", "sefindw").strip(),
-            "usuario": os.getenv("DB_USER", "").strip(),
-            "senha": os.getenv("DB_PASSWORD", "").strip(),
+            "host": (os.getenv("ORACLE_HOST") or "").strip(),
+            "porta": (os.getenv("ORACLE_PORT") or "").strip(),
+            "servico": (os.getenv("ORACLE_SERVICE") or "").strip(),
+            "usuario": (os.getenv("DB_USER") or "").strip(),
+            "senha": (os.getenv("DB_PASSWORD") or "").strip(),
         }
 
     cfg = _DB_CONFIG_CACHE
-    if not cfg["usuario"] or not cfg["senha"]:
-        raise RuntimeError("Credenciais Oracle nao encontradas. Preencha DB_USER e DB_PASSWORD no .env")
+    if not all(cfg.values()):
+        raise RuntimeError("Configuracao Oracle incompleta. Verifique as variaveis ORACLE_HOST, ORACLE_PORT, ORACLE_SERVICE, DB_USER e DB_PASSWORD no .env")
 
-    dsn = oracledb.makedsn(cfg["host"], cfg["porta"], service_name=cfg["servico"])
+    dsn = oracledb.makedsn(cfg["host"], int(cfg["porta"]), service_name=cfg["servico"])
     conn = oracledb.connect(user=cfg["usuario"], password=cfg["senha"], dsn=dsn)
     with conn.cursor() as cursor:
         cursor.execute("ALTER SESSION SET NLS_NUMERIC_CHARACTERS = '.,'")
