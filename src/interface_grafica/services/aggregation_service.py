@@ -139,6 +139,19 @@ class ServicoAgregacao:
         return df.with_columns(casts) if casts else df
 
     @staticmethod
+    def _normalizar_lista_textos(valor) -> list[str]:
+        """Converte listas aninhadas do Polars, listas Python ou escalares em lista de strings validas."""
+        if valor is None:
+            return []
+        if isinstance(valor, pl.Series):
+            itens = valor.to_list()
+        elif isinstance(valor, (list, tuple, set)):
+            itens = list(valor)
+        else:
+            itens = [valor]
+        return [str(item).strip() for item in itens if item is not None and str(item).strip()]
+
+    @staticmethod
     def _padronizar_chaves_prod(df: pl.DataFrame) -> pl.DataFrame:
         """
         Define chave_item como chave canonica interna.
@@ -238,19 +251,40 @@ class ServicoAgregacao:
 
         lista_sefin = []
         for lista in df_para_unir["lista_co_sefin"]:
-            lista_sefin.extend(lista)
+            lista_sefin.extend(self._normalizar_lista_textos(lista))
         lista_sefin = sorted(list(set(lista_sefin)))
         lista_fontes = []
         if "fontes" in df_para_unir.columns:
             for lista in df_para_unir["fontes"]:
-                if not lista:
-                    continue
-                if isinstance(lista, list):
-                    lista_fontes.extend([str(v).strip() for v in lista if v is not None and str(v).strip()])
-                else:
-                    texto = str(lista).strip()
-                    if texto:
-                        lista_fontes.append(texto)
+                lista_fontes.extend(self._normalizar_lista_textos(lista))
+        if not lista_fontes and "fonte" in df_base_filtered.columns:
+            lista_fontes = (
+                df_base_filtered
+                .select(
+                    pl.when(pl.col("fonte").is_not_null())
+                    .then(pl.col("fonte").cast(pl.Utf8, strict=False).str.strip_chars())
+                    .otherwise(pl.lit(""))
+                    .alias("fonte")
+                )
+                .filter(pl.col("fonte") != "")
+                .unique()
+                .sort("fonte")
+                .get_column("fonte")
+                .to_list()
+            )
+        if not lista_fontes and "fontes" in df_prod_link.columns:
+            lista_fontes = (
+                df_prod_link
+                .filter(pl.col("chave_item").is_in(todas_chaves_proc))
+                .explode("fontes")
+                .drop_nulls("fontes")
+                .select(pl.col("fontes").cast(pl.Utf8, strict=False).str.strip_chars().alias("fonte"))
+                .filter(pl.col("fonte") != "")
+                .unique()
+                .sort("fonte")
+                .get_column("fonte")
+                .to_list()
+            )
         lista_fontes = sorted(list(set(lista_fontes)))
 
         nova_linha = {
@@ -263,7 +297,15 @@ class ServicoAgregacao:
             "lista_co_sefin": lista_sefin,
             "co_sefin_padrao": padrao.get("co_sefin_padrao"),
             "co_sefin_agr": ", ".join(sorted([str(s) for s in lista_sefin])),
-            "lista_unidades": sorted(list(set([u for sub in df_para_unir["lista_unidades"] for u in sub]))),
+            "lista_unidades": sorted(
+                list(
+                    set(
+                        u
+                        for sub in df_para_unir["lista_unidades"]
+                        for u in self._normalizar_lista_textos(sub)
+                    )
+                )
+            ),
             "co_sefin_divergentes": len(lista_sefin) > 1,
             "fontes": lista_fontes,
         }
