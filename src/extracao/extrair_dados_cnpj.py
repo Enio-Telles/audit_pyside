@@ -2,6 +2,9 @@ import sys
 import os
 import re
 import threading
+import logging
+
+logger = logging.getLogger(__name__)
 import polars as pl
 import concurrent.futures
 
@@ -9,8 +12,21 @@ thread_local = threading.local()
 
 def get_thread_connection():
     if not hasattr(thread_local, "conexao"):
-        # Import local so we don't mess up global imports if any issue
-        thread_local.conexao = conectar()
+        # Cria uma nova conexão para esta thread
+        conn = conectar_oracle()
+        if conn is None:
+            logger.error(f"[{threading.current_thread().name}] Falha ao criar conexão com banco de dados.")
+            return None
+
+        try:
+            # Testar a conexão
+            cursor = conn.cursor()
+            cursor.execute("SELECT 1 FROM DUAL")
+        except Exception as e:
+            logger.error(f"[{threading.current_thread().name}] Erro ao testar conexão: {e}")
+            return None
+
+        thread_local.conexao = conn
     return thread_local.conexao
 
 def close_thread_connection():
@@ -32,7 +48,7 @@ CNPJ_ROOT       = DADOS_DIR / "CNPJ"
 
 
 try:
-    from utilitarios.conectar_oracle import conectar
+    from utilitarios.conectar_oracle import conectar, conectar as conectar_oracle
     from utilitarios.ler_sql import ler_sql
     from utilitarios.salvar_para_parquet import salvar_para_parquet
     from utilitarios.validar_cnpj import validar_cnpj
