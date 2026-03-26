@@ -2,3 +2,7 @@
 **Vulnerability:** The application was exposing raw database exceptions (`str(exc)`) directly to the PySide UI in `QueryWorker.run()`, which could leak sensitive information such as database schema, query structures, or connection credentials to end users.
 **Learning:** PySide asynchronous workers often propagate exceptions back to the main thread UI via signals (`self.failed.emit`). If these strings are not sanitized, they create Information Disclosure vulnerabilities.
 **Prevention:** Always catch exceptions in worker threads, log the full traceback securely on the backend (using `rprint` or a logging framework), and emit only generic, safe error messages to the UI.
+## 2025-02-28 - Secure Exception Handling in Oracle Connection Module
+**Vulnerability:** Information Disclosure. Broad exception handlers in `src/utilitarios/conectar_oracle.py` were directly printing raw exception objects (`{e}`) using `rich.print`. This could expose sensitive network topologies, credentials, or backend internal errors to the user or system logs.
+**Learning:** During refactoring, ensure that all instances of a vulnerability type within the file are addressed, including module-level configurations, connection strings, and context-manager cleanup steps (e.g., `finally` blocks). Adding an `except Exception as e` to explicitly handle an error must not involve printing `e` when the goal is to sanitize logs.
+**Prevention:** Use strictly formatted, generic, user-friendly messages for standard output when catching broad exceptions related to database resources.
