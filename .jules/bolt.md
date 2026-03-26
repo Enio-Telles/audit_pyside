@@ -1,0 +1,3 @@
+## 2024-05-18 - Avoid List Comprehension with Polars Initialization
+**Learning:** Initializing a Polars DataFrame by mapping a list of DB tuples into a list of dictionaries via a python list comprehension (e.g. `[dict(zip(cols, row)) for row in rows]`) is extremely slow and acts as a massive bottleneck for data ingestion.
+**Action:** Always create a `pl.DataFrame` directly from the raw list of tuples using the `orient="row"` argument. It bypasses python dictionary creation entirely and runs an order of magnitude faster.
