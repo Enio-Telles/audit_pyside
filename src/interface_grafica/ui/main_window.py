@@ -1127,7 +1127,7 @@ class MainWindow(QMainWindow):
         self.mov_filter_num_max = QLineEdit()
         self.mov_filter_num_max.setPlaceholderText("Max numerico")
         self.mov_profile = QComboBox()
-        self.mov_profile.addItems(["Padrao", "Contribuinte", "Auditoria", "Estoque", "Custos"])
+        self.mov_profile.addItems(["Padrao", "Contribuinte", "Auditoria", "Auditoria Fiscal", "Estoque", "Custos"])
         self.btn_mov_profile = QPushButton("Perfil")
         self.btn_mov_save_profile = QPushButton("Salvar perfil")
         self.btn_mov_colunas = QPushButton("Colunas")
@@ -1916,7 +1916,7 @@ class MainWindow(QMainWindow):
         self.mov_filter_num_max.textChanged.connect(lambda _value: schedule_mov())
         self.btn_mov_profile.clicked.connect(lambda: self._aplicar_perfil_tabela("mov_estoque", self.mov_estoque_table, self.mov_estoque_model, self.mov_profile.currentText(), "mov_estoque"))
         self.btn_mov_save_profile.clicked.connect(
-            lambda: self._salvar_perfil_tabela_com_dialogo("mov_estoque", self.mov_estoque_table, self.mov_estoque_model, self.mov_profile, ["Exportar", "Padrao", "Auditoria", "Estoque", "Custos"])
+            lambda: self._salvar_perfil_tabela_com_dialogo("mov_estoque", self.mov_estoque_table, self.mov_estoque_model, self.mov_profile, ["Exportar", "Padrao", "Auditoria", "Auditoria Fiscal", "Estoque", "Custos"])
         )
         self.btn_mov_colunas.clicked.connect(lambda: self._abrir_menu_colunas_tabela("mov_estoque", self.mov_estoque_table))
         self.btn_mov_destacar.clicked.connect(lambda: self._destacar_tabela("mov_estoque"))
@@ -2620,8 +2620,10 @@ class MainWindow(QMainWindow):
 
         consultas_disp = self.servico_pipeline_funcoes.servico_extracao.listar_consultas()
         sql_nfe = next((p for p in consultas_disp if p.name.lower() == "nfe.sql"), None)
-        if sql_nfe is None:
-            self.show_error("SQL nao encontrada", "Nao foi possivel localizar a consulta NFe.sql na pasta sql/.")
+        sql_nfce = next((p for p in consultas_disp if p.name.lower() == "nfce.sql"), None)
+        consultas_nfe_entrada = [p for p in [sql_nfe, sql_nfce] if p is not None]
+        if not consultas_nfe_entrada:
+            self.show_error("SQL nao encontrada", "Nao foi possivel localizar as consultas NFe.sql/NFCe.sql na pasta sql/.")
             return
 
         tabelas_necessarias = [
@@ -2637,7 +2639,7 @@ class MainWindow(QMainWindow):
         self.pipeline_worker = PipelineWorker(
             self.servico_pipeline_funcoes,
             cnpj,
-            [sql_nfe],
+            consultas_nfe_entrada,
             tabelas_necessarias,
             data_limite,
         )
@@ -3197,17 +3199,28 @@ class MainWindow(QMainWindow):
 
     def _obter_colunas_preset_perfil(self, perfil: str, colunas: list[str], contexto: str) -> list[str]:
         nome = (perfil or "").strip().lower()
-        if nome in {"", "padrao"}:
-            return colunas
-
         if contexto == "mov_estoque":
             mapa = {
+                "padrao": [
+                    "ordem_operacoes", "Tipo_operacao", "origem",
+                    "id_agrupado", "descr_padrao", "Descr_item", "Descr_compl", "Cod_item", "Cod_barra", "Ncm", "Cest", "Tipo_item",
+                    "Chv_nfe", "mod", "Ser", "num_nfe", "Num_item", "Dt_doc", "Dt_e_s", "nsu", "finnfe", "infprot_cstat", "co_uf_emit", "co_uf_dest",
+                    "Cfop", "Cst", "Aliq_icms", "Vl_bc_icms", "Vl_icms", "vl_bc_icms_st", "vl_icms_st", "aliq_st",
+                    "Qtd", "q_conv", "Unid", "unid_ref", "fator",
+                    "Vl_item", "preco_item", "preco_unit", "custo_medio_anual",
+                    "saldo_estoque_anual", "entr_desac_anual", "mov_rep", "excluir_estoque", "dev_simples", "dev_venda", "dev_compra", "dev_ent_simples",
+                    "ncm_padrao", "cest_padrao", "co_sefin_agr", "it_pc_interna", "it_in_st", "it_pc_mva", "it_in_mva_ajustado",
+                    "it_in_isento_icms", "it_in_reducao", "it_pc_reducao", "it_in_combustivel", "it_in_pmpf", "it_in_reducao_credito",
+                ],
                 "exportar": ["ordem_operacoes", "Tipo_operacao", "origem", "id_agrupado", "descr_padrao", "Descr_item", "Dt_doc", "Dt_e_s", "Cfop", "Qtd", "q_conv", "saldo_estoque_anual", "entr_desac_anual", "custo_medio_anual", "preco_item", "preco_unit", "unid_ref", "fator", "mov_rep", "dev_simples", "excluir_estoque"],
                 "contribuinte": ["ordem_operacoes", "Tipo_operacao", "Dt_doc", "id_agrupado", "descr_padrao", "Qtd", "q_conv", "unid_ref", "preco_item", "preco_unit", "saldo_estoque_anual", "entr_desac_anual"],
                 "auditoria": ["ordem_operacoes", "Tipo_operacao", "origem", "id_agrupado", "descr_padrao", "Dt_doc", "Dt_e_s", "Cfop", "q_conv", "saldo_estoque_anual", "entr_desac_anual", "mov_rep", "dev_simples", "excluir_estoque"],
+                "auditoria fiscal": ["ordem_operacoes", "Tipo_operacao", "origem", "id_agrupado", "descr_padrao", "Descr_item", "Descr_compl", "Cod_item", "Cod_barra", "Ncm", "Cest", "Tipo_item", "Chv_nfe", "mod", "Ser", "num_nfe", "Num_item", "Dt_doc", "Dt_e_s", "nsu", "finnfe", "infprot_cstat", "co_uf_emit", "co_uf_dest", "Cfop", "Cst", "Aliq_icms", "Vl_bc_icms", "Vl_icms", "vl_bc_icms_st", "vl_icms_st", "aliq_st", "Qtd", "q_conv", "Unid", "unid_ref", "fator", "Vl_item", "preco_item", "preco_unit", "custo_medio_anual", "saldo_estoque_anual", "entr_desac_anual", "mov_rep", "excluir_estoque", "dev_simples", "dev_venda", "dev_compra", "dev_ent_simples", "co_sefin_agr", "it_pc_interna", "it_in_st", "it_pc_mva", "it_in_mva_ajustado", "it_in_isento_icms", "it_in_reducao", "it_pc_reducao", "it_in_combustivel", "it_in_pmpf", "it_in_reducao_credito"],
                 "estoque": ["ordem_operacoes", "Tipo_operacao", "id_agrupado", "descr_padrao", "Dt_doc", "q_conv", "saldo_estoque_anual", "unid_ref", "fator"],
                 "custos": ["ordem_operacoes", "Tipo_operacao", "id_agrupado", "descr_padrao", "Dt_doc", "q_conv", "preco_item", "preco_unit", "custo_medio_anual", "saldo_estoque_anual"],
             }
+        elif nome in {"", "padrao"}:
+            return colunas
         elif contexto == "conversao":
             mapa = {
                 "auditoria": ["id_agrupado", "id_produtos", "descr_padrao", "lista_descricoes_produto", "unid", "unid_ref", "fator", "fator_calculado", "preco_medio", "preco_medio_ref", "origem_preco"],
@@ -3230,9 +3243,9 @@ class MainWindow(QMainWindow):
             }
         elif contexto == "nfe_entrada":
             mapa = {
-                "auditoria": ["data_classificacao", "tipo_operacao", "nnf", "prod_nitem", "id_agrupado", "descr_padrao", "prod_xprod", "prod_ncm", "prod_cest", "co_sefin_inferido", "co_sefin_agr", "it_pc_interna", "it_in_st", "it_in_isento_icms", "it_in_reducao", "it_pc_reducao", "it_pc_mva", "it_in_mva_ajustado", "xnome_emit", "xnome_dest", "chave_acesso"],
-                "estoque": ["data_classificacao", "id_agrupado", "descr_padrao", "prod_xprod", "prod_ncm", "prod_cest", "co_sefin_agr", "it_pc_interna", "it_in_st", "it_in_isento_icms", "it_in_reducao", "prod_ucom", "prod_qcom", "prod_vprod"],
-                "custos": ["data_classificacao", "id_agrupado", "descr_padrao", "prod_xprod", "co_sefin_agr", "it_pc_interna", "it_in_st", "it_in_isento_icms", "it_in_reducao", "it_pc_reducao", "it_pc_mva", "it_in_mva_ajustado", "prod_vuncom", "prod_vprod"],
+                "auditoria": ["data_classificacao", "fonte_documento", "tipo_operacao", "nnf", "prod_nitem", "id_agrupado", "descr_padrao", "prod_xprod", "prod_ncm", "prod_cest", "co_sefin_inferido", "co_sefin_agr", "it_pc_interna", "it_in_st", "it_in_isento_icms", "it_in_reducao", "it_pc_reducao", "it_pc_mva", "it_in_mva_ajustado", "xnome_emit", "xnome_dest", "chave_acesso"],
+                "estoque": ["data_classificacao", "fonte_documento", "id_agrupado", "descr_padrao", "prod_xprod", "prod_ncm", "prod_cest", "co_sefin_agr", "it_pc_interna", "it_in_st", "it_in_isento_icms", "it_in_reducao", "prod_ucom", "prod_qcom", "prod_vprod"],
+                "custos": ["data_classificacao", "fonte_documento", "id_agrupado", "descr_padrao", "prod_xprod", "co_sefin_agr", "it_pc_interna", "it_in_st", "it_in_isento_icms", "it_in_reducao", "it_pc_reducao", "it_pc_mva", "it_in_mva_ajustado", "prod_vuncom", "prod_vprod"],
             }
         elif contexto == "produtos_selecionados":
             mapa = {
@@ -3269,7 +3282,12 @@ class MainWindow(QMainWindow):
                 key=lambda item: item[0],
             )
         ]
-        visiveis = [nome for idx, nome in enumerate(colunas) if not table.isColumnHidden(idx + offset)]
+        visiveis = [
+            nome
+            for nome in colunas
+            if nome in model.dataframe.columns
+            and not table.isColumnHidden(model.dataframe.columns.index(nome) + offset)
+        ]
         dialog = ColumnSelectorDialog(colunas, visiveis, self)
         if not dialog.exec():
             return
@@ -3347,8 +3365,11 @@ class MainWindow(QMainWindow):
     def _aplicar_preset_colunas(self, table: QTableView, colunas: list[str], visiveis: list[str]) -> None:
         visiveis_set = set(visiveis)
         model = table.model()
+        if not isinstance(model, PolarsTableModel):
+            return
         offset = 1 if getattr(model, "_checkable", False) else 0
-        for idx, nome in enumerate(colunas):
+        colunas_modelo = list(model.dataframe.columns)
+        for idx, nome in enumerate(colunas_modelo):
             table.setColumnHidden(idx + offset, nome not in visiveis_set)
 
     def _aplicar_ordem_colunas(self, table: QTableView, ordem_colunas: list[str]) -> None:
@@ -3408,7 +3429,7 @@ class MainWindow(QMainWindow):
             (self.top_profile, "agregacao_top", ["Padrao", "Auditoria", "Estoque", "Custos"], None),
             (self.bottom_profile, "agregacao_bottom", ["Padrao", "Auditoria", "Estoque", "Custos"], None),
             (self.conversao_profile, "conversao", ["Padrao", "Auditoria", "Estoque", "Custos"], None),
-            (self.mov_profile, "mov_estoque", ["Exportar", "Padrao", "Contribuinte", "Auditoria", "Estoque", "Custos"], None),
+            (self.mov_profile, "mov_estoque", ["Exportar", "Padrao", "Contribuinte", "Auditoria", "Auditoria Fiscal", "Estoque", "Custos"], None),
             (self.mensal_profile, "aba_mensal", ["Exportar", "Padrao", "Auditoria", "Estoque", "Custos"], None),
             (self.anual_profile, "aba_anual", ["Exportar", "Padrao", "Auditoria", "Estoque", "Custos"], None),
             (self.produtos_sel_profile, "produtos_selecionados", ["Padrao", "Auditoria", "Estoque", "Custos"], None),
@@ -3730,26 +3751,37 @@ class MainWindow(QMainWindow):
         if not cnpj:
             self.nfe_entrada_model.set_dataframe(pl.DataFrame())
             self._nfe_entrada_df = pl.DataFrame()
-            self.lbl_nfe_entrada_status.setText("Selecione um CPF/CNPJ para carregar as NFes de entrada.")
+            self.lbl_nfe_entrada_status.setText("Selecione um CPF/CNPJ para carregar as NFes/NFCes de entrada.")
             return
 
-        path = CNPJ_ROOT / cnpj / "arquivos_parquet" / f"nfe_agr_{cnpj}.parquet"
-        if not path.exists():
+        path_nfe = CNPJ_ROOT / cnpj / "arquivos_parquet" / f"nfe_agr_{cnpj}.parquet"
+        path_nfce = CNPJ_ROOT / cnpj / "arquivos_parquet" / f"nfce_agr_{cnpj}.parquet"
+        if not path_nfe.exists() and not path_nfce.exists():
             self.nfe_entrada_model.set_dataframe(pl.DataFrame())
             self._nfe_entrada_df = pl.DataFrame()
             base_nfe = CNPJ_ROOT / cnpj / "arquivos_parquet" / f"nfe_{cnpj}.parquet"
-            if base_nfe.exists():
-                self.lbl_nfe_entrada_status.setText("Arquivo 'nfe_agr' ainda nao foi gerado. Clique em Extrair para preparar a tabela.")
+            base_nfce = CNPJ_ROOT / cnpj / "arquivos_parquet" / f"nfce_{cnpj}.parquet"
+            if base_nfe.exists() or base_nfce.exists():
+                self.lbl_nfe_entrada_status.setText("Arquivos 'nfe_agr'/'nfce_agr' ainda nao foram gerados. Clique em Extrair para preparar a tabela.")
             else:
-                self.lbl_nfe_entrada_status.setText("Arquivo 'nfe_agr' nao encontrado para este CPF/CNPJ.")
+                self.lbl_nfe_entrada_status.setText("Arquivos 'nfe_agr'/'nfce_agr' nao encontrados para este CPF/CNPJ.")
             return
 
         try:
             from transformacao.co_sefin import inferir_co_sefin_dataframe
             from transformacao.co_sefin_class import enriquecer_co_sefin_class
 
-            df_nfe = pl.read_parquet(path)
-            self._nfe_entrada_file_path = path
+            df_partes: list[pl.DataFrame] = []
+            if path_nfe.exists():
+                df_partes.append(
+                    pl.read_parquet(path_nfe).with_columns(pl.lit("NFe").alias("fonte_documento"))
+                )
+            if path_nfce.exists():
+                df_partes.append(
+                    pl.read_parquet(path_nfce).with_columns(pl.lit("NFCe").alias("fonte_documento"))
+                )
+            df_nfe = pl.concat(df_partes, how="diagonal_relaxed") if df_partes else pl.DataFrame()
+            self._nfe_entrada_file_path = path_nfe if path_nfe.exists() else path_nfce
 
             if "tipo_operacao" in df_nfe.columns:
                 df_nfe = df_nfe.filter(
@@ -3761,8 +3793,12 @@ class MainWindow(QMainWindow):
             if df_nfe.is_empty():
                 self._nfe_entrada_df = pl.DataFrame()
                 self.nfe_entrada_model.set_dataframe(pl.DataFrame())
-                self.lbl_nfe_entrada_status.setText("Nenhuma NFe de entrada foi encontrada.")
+                self.lbl_nfe_entrada_status.setText("Nenhuma NFe/NFCe de entrada foi encontrada.")
                 return
+
+            for col in ["dhemi", "dhsaient", "prod_cest"]:
+                if col not in df_nfe.columns:
+                    df_nfe = df_nfe.with_columns(pl.lit(None).alias(col))
 
             df_nfe = df_nfe.with_columns(
                 [
@@ -3797,6 +3833,7 @@ class MainWindow(QMainWindow):
             colunas = list(df_enriquecido.columns)
             prioridade = [
                 "data_classificacao",
+                "fonte_documento",
                 "tipo_operacao",
                 "nnf",
                 "prod_nitem",
@@ -3881,7 +3918,7 @@ class MainWindow(QMainWindow):
                     self.nfe_entrada_model.dataframe.columns,
                     self._obter_colunas_preset_perfil("auditoria", self.nfe_entrada_model.dataframe.columns, "nfe_entrada"),
                 )
-            self.lbl_nfe_entrada_status.setText(f"Exibindo {df_filtrado.height:,} de {self._nfe_entrada_df.height:,} itens de NFe de entrada.")
+            self.lbl_nfe_entrada_status.setText(f"Exibindo {df_filtrado.height:,} de {self._nfe_entrada_df.height:,} itens de NFe/NFCe de entrada.")
             periodo = ""
             if data_ini is not None or data_fim is not None:
                 periodo = f"{data_ini.toString('dd/MM/yyyy') if data_ini is not None else '...'} ate {data_fim.toString('dd/MM/yyyy') if data_fim is not None else '...'}"
@@ -4024,7 +4061,24 @@ class MainWindow(QMainWindow):
         if not target:
             return
         try:
-            self.export_service.export_excel(target, df, sheet_name="id_agrupados")
+            wb = Workbook()
+            ws_id_agrupados = wb.active
+            ws_id_agrupados.title = "id_agrupados"
+            self._escrever_planilha_openpyxl(ws_id_agrupados, df)
+
+            df_produtos_sel = self._dataframe_colunas_visiveis(
+                self.produtos_sel_table,
+                self.produtos_selecionados_model,
+            )
+            if not df_produtos_sel.is_empty():
+                self._escrever_planilha_openpyxl(
+                    wb.create_sheet("produtos_selecionados"),
+                    df_produtos_sel,
+                )
+
+            target.parent.mkdir(parents=True, exist_ok=True)
+            wb.save(target)
+            self.show_info("Exportacao concluida", f"Arquivo gerado em:\n{target}")
         except Exception as e:
             self.show_error("Erro de exportacao", str(e))
 

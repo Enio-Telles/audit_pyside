@@ -240,6 +240,18 @@ class ServicoAgregacao:
         for lista in df_para_unir["lista_co_sefin"]:
             lista_sefin.extend(lista)
         lista_sefin = sorted(list(set(lista_sefin)))
+        lista_fontes = []
+        if "fontes" in df_para_unir.columns:
+            for lista in df_para_unir["fontes"]:
+                if not lista:
+                    continue
+                if isinstance(lista, list):
+                    lista_fontes.extend([str(v).strip() for v in lista if v is not None and str(v).strip()])
+                else:
+                    texto = str(lista).strip()
+                    if texto:
+                        lista_fontes.append(texto)
+        lista_fontes = sorted(list(set(lista_fontes)))
 
         nova_linha = {
             "id_agrupado": ids_agrupados_selecionados[0],
@@ -253,6 +265,7 @@ class ServicoAgregacao:
             "co_sefin_agr": ", ".join(sorted([str(s) for s in lista_sefin])),
             "lista_unidades": sorted(list(set([u for sub in df_para_unir["lista_unidades"] for u in sub]))),
             "co_sefin_divergentes": len(lista_sefin) > 1,
+            "fontes": lista_fontes,
         }
 
         df_nova = pl.DataFrame([nova_linha], schema=df.schema)
@@ -572,6 +585,35 @@ class ServicoAgregacao:
                 .get_column("u")
                 .to_list()
             )
+            lista_fontes: list[str] = []
+            if "fonte" in df_base_filtered.columns:
+                lista_fontes = (
+                    df_base_filtered
+                    .select(
+                        pl.when(pl.col("fonte").is_not_null())
+                        .then(pl.col("fonte").cast(pl.Utf8, strict=False).str.strip_chars())
+                        .otherwise(pl.lit(""))
+                        .alias("fonte")
+                    )
+                    .filter(pl.col("fonte") != "")
+                    .unique()
+                    .sort("fonte")
+                    .get_column("fonte")
+                    .to_list()
+                )
+            if not lista_fontes and "fontes" in df_prod.columns:
+                lista_fontes = (
+                    df_prod
+                    .filter(pl.col("chave_item").is_in(chaves))
+                    .explode("fontes")
+                    .drop_nulls("fontes")
+                    .select(pl.col("fontes").cast(pl.Utf8, strict=False).str.strip_chars().alias("fonte"))
+                    .filter(pl.col("fonte") != "")
+                    .unique()
+                    .sort("fonte")
+                    .get_column("fonte")
+                    .to_list()
+                )
 
             row["descr_padrao"] = padrao.get("descr_padrao") or row.get("descr_padrao") or descr_fallback
             row["ncm_padrao"] = padrao.get("ncm_padrao")
@@ -582,6 +624,7 @@ class ServicoAgregacao:
             row["lista_co_sefin"] = lista_co_sefin
             row["lista_unidades"] = lista_unidades
             row["co_sefin_divergentes"] = len(lista_co_sefin) > 1
+            row["fontes"] = lista_fontes
             registros.append(row)
 
         df_novo = pl.DataFrame(registros, schema=df_agrup.schema)

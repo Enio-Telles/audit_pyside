@@ -143,8 +143,10 @@ O estoque final anual não altera nem o saldo físico nem o financeiro. Por isso
 
 Quando a movimentação for identificada como devolução, por exemplo com `finnfe = 4` e/ou marcações de CFOP como `dev_simples`, `dev_venda`, `dev_compra` ou `dev_ent_simples`, ela entra no cálculo cronológico normalmente, desde que o CFOP não esteja com `excluir_estoque = true`.
 
-- Devolução de venda (`1 - ENTRADA`): volta para o estoque e recalcula o `custo_medio_anual` usando o `preco_item` de retorno.
-- Devolução de compra (`2 - SAIDAS`): sai do estoque pelo custo médio vigente, sem usar o `preco_item` da linha para formar nova média.
+- Devolução de venda (`1 - ENTRADA`): volta para o estoque sem mudar o `custo_medio_anual`. Para isso, o saldo financeiro da devolução retorna pelo custo médio vigente antes da linha, e não pelo `preco_item` de retorno.
+- Devolução de compra (`2 - SAIDAS`): sai do estoque pelo custo médio vigente, também sem alterar o `custo_medio_anual`.
+
+Em resumo: devoluções podem alterar o saldo físico, mas não formam nova média de custo.
 
 ## 6. Reset anual
 

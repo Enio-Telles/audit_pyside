@@ -89,6 +89,15 @@ O sistema utiliza o CMM para valorizar o estoque e as baixas (saídas).
 
   * `Valor_Baixa = Quantidade_Saída * CMM`
 
+### Devoluções
+
+Movimentações de devolução não alteram o custo médio anual.
+
+* **Devolução de venda**: a quantidade retorna ao estoque, mas o saldo financeiro volta pelo custo médio vigente, e não pelo `preco_item` da nota de devolução.
+* **Devolução de compra**: a saída reduz quantidade e saldo financeiro pelo custo médio vigente.
+
+Com isso, o `custo_medio_anual` permanece o mesmo antes e depois da devolução, salvo se houver outras entradas normais no período.
+
 ### Fluxograma de Custo Médio
 
 ```mermaid

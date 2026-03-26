@@ -40,6 +40,27 @@ except ImportError as e:
 # ---
 
 
+def marcar_mov_rep_por_chave_item(df: pl.DataFrame) -> pl.DataFrame:
+    """Marca mov_rep quando houver mais de uma linha com a mesma Chv_nfe + Num_item."""
+    if df.is_empty() or "Chv_nfe" not in df.columns or "Num_item" not in df.columns:
+        return df
+
+    chave_expr = pl.col("Chv_nfe").cast(pl.Utf8, strict=False).fill_null("").str.strip_chars()
+    item_expr = pl.col("Num_item").cast(pl.Utf8, strict=False).fill_null("").str.strip_chars()
+    repetido_expr = (
+        (chave_expr != "")
+        & (item_expr != "")
+        & (pl.len().over(["Chv_nfe", "Num_item"]) > 1)
+    )
+
+    if "mov_rep" in df.columns:
+        return df.with_columns(
+            (repetido_expr | _boolish_expr("mov_rep").fill_null(False)).alias("mov_rep")
+        )
+
+    return df.with_columns(repetido_expr.alias("mov_rep"))
+
+
 def gerar_movimentacao_estoque(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
     cnpj = re.sub(r"\D", "", cnpj)
     if pasta_cnpj is None:
@@ -329,7 +350,8 @@ def gerar_movimentacao_estoque(cnpj: str, pasta_cnpj: Path | None = None) -> boo
     for col in ["mov_rep", "excluir_estoque", "dev_simples", "dev_venda", "dev_compra", "dev_ent_simples"]:
         if col not in df_final.columns:
             df_final = df_final.with_columns(pl.lit(None).alias(col))
-    
+    df_final = marcar_mov_rep_por_chave_item(df_final)
+
     # Ordenacao semantica:
     # - por id_agrupado
     # - por data do evento (preferindo Dt_e_s e depois Dt_doc)

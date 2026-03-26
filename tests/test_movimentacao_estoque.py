@@ -7,6 +7,7 @@ import pytest
 sys.path.insert(0, str(Path("src/transformacao").resolve()))
 
 from movimentacao_estoque import _calcular_saldo_estoque_anual
+from movimentacao_estoque_pkg.movimentacao_estoque import marcar_mov_rep_por_chave_item
 
 
 def test_calcular_saldo_estoque_anual_com_custo_medio_por_movimento():
@@ -89,7 +90,7 @@ def test_calculos_reiniciam_por_ano():
     assert result["custo_medio_anual"].to_list() == [10.0, 0.0]
 
 
-def test_devolucao_venda_recalcula_custo_medio_pelo_preco_de_retorno():
+def test_devolucao_venda_nao_altera_custo_medio_anual():
     df = pl.DataFrame(
         {
             "__q_conv_sinal__": [10.0, 2.0],
@@ -108,8 +109,7 @@ def test_devolucao_venda_recalcula_custo_medio_pelo_preco_de_retorno():
     result = _calcular_saldo_estoque_anual(df)
 
     assert result["saldo_estoque_anual"].to_list() == [10.0, 12.0]
-    assert result["custo_medio_anual"][0] == 10.0
-    assert result["custo_medio_anual"][1] == pytest.approx(140.0 / 12.0)
+    assert result["custo_medio_anual"].to_list() == [10.0, 10.0]
 
 
 def test_devolucao_compra_sai_pelo_custo_medio_vigente():
@@ -183,7 +183,7 @@ def test_flags_de_devolucao_em_texto_nao_quebram_o_calculo():
     result = _calcular_saldo_estoque_anual(df)
 
     assert result["saldo_estoque_anual"].to_list() == [10.0, 12.0]
-    assert result["custo_medio_anual"][1] == pytest.approx(124.0 / 12.0)
+    assert result["custo_medio_anual"].to_list() == [10.0, 10.0]
 
 
 def test_linha_neutralizada_nao_altera_saldo_omissao_ou_custo():
@@ -207,3 +207,17 @@ def test_linha_neutralizada_nao_altera_saldo_omissao_ou_custo():
     assert result["saldo_estoque_anual"].to_list() == [10.0, 10.0, 8.0]
     assert result["entr_desac_anual"].to_list() == [0.0, 0.0, 0.0]
     assert result["custo_medio_anual"].to_list() == [10.0, 10.0, 10.0]
+
+
+def test_mov_rep_e_marcado_por_chave_e_item_repetidos():
+    df = pl.DataFrame(
+        {
+            "Chv_nfe": ["abc", "abc", "abc", "def", None],
+            "Num_item": ["1", "1", "2", "1", "1"],
+            "mov_rep": [None, None, None, None, None],
+        }
+    )
+
+    result = marcar_mov_rep_por_chave_item(df)
+
+    assert result["mov_rep"].to_list() == [True, True, False, False, False]

@@ -353,6 +353,51 @@ def calcular_fatores_conversao(cnpj: str, pasta_cnpj: Path | None = None) -> boo
         .sort(["id_agrupado", "unid"])
     )
 
+    # --- Preservar linhas manuais orfas (editadas pelo usuario mas ausentes no novo calculo) ---
+    if not df_fatores_existente.is_empty():
+        colunas_manual = []
+        if "fator_manual" in df_fatores_existente.columns:
+            colunas_manual.append(pl.col("fator_manual").cast(pl.Boolean, strict=False).fill_null(False))
+        if "unid_ref_manual" in df_fatores_existente.columns:
+            colunas_manual.append(pl.col("unid_ref_manual").cast(pl.Boolean, strict=False).fill_null(False))
+
+        if colunas_manual:
+            df_manuais_antigos = (
+                df_fatores_existente
+                .with_columns(colunas_manual)
+                .filter(
+                    pl.col("fator_manual").fill_null(False)
+                    | pl.col("unid_ref_manual").fill_null(False)
+                )
+            )
+
+            if not df_manuais_antigos.is_empty():
+                # Identificar pares (id_agrupado, unid) que NAO existem no novo calculo
+                df_orfaos = (
+                    df_manuais_antigos
+                    .join(
+                        df_fatores.select(["id_agrupado", "unid"]).unique(),
+                        on=["id_agrupado", "unid"],
+                        how="anti",
+                    )
+                )
+
+                if not df_orfaos.is_empty():
+                    # Garantir que os orfaos tem as mesmas colunas que df_fatores
+                    for col in df_fatores.columns:
+                        if col not in df_orfaos.columns:
+                            df_orfaos = df_orfaos.with_columns(pl.lit(None).alias(col))
+                    # id_produtos = id_agrupado se nao existir
+                    if "id_produtos" in df_orfaos.columns:
+                        df_orfaos = df_orfaos.with_columns(
+                            pl.coalesce([pl.col("id_produtos"), pl.col("id_agrupado")]).alias("id_produtos")
+                        )
+
+                    df_orfaos = df_orfaos.select(df_fatores.columns)
+                    df_fatores = pl.concat([df_fatores, df_orfaos], how="vertical_relaxed")
+                    df_fatores = df_fatores.unique(subset=["id_agrupado", "unid"], keep="first").sort(["id_agrupado", "unid"])
+                    rprint(f"[green]Preservados {df_orfaos.height} fatores manuais orfaos.[/green]")
+
     return salvar_para_parquet(df_fatores, pasta_analises, f"fatores_conversao_{cnpj}.parquet")
 
 
