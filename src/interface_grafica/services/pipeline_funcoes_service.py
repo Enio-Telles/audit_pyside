@@ -279,10 +279,12 @@ class ServicoExtracao:
 
                     if todas_linhas:
                         try:
-                            registros = [dict(zip(colunas, row)) for row in todas_linhas]
+                            # Otimizacao Bolt: criar DataFrame diretamente de tuplas
                             df = pl.DataFrame(
-                                registros,
-                                infer_schema_length=min(len(registros), 50_000),
+                                todas_linhas,
+                                schema=colunas,
+                                orient="row",
+                                infer_schema_length=min(len(todas_linhas), 50_000),
                             )
                         except Exception as exc:
                             _msg(

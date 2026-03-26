@@ -153,9 +153,8 @@ class QueryWorker(QThread):
                 self.progress.emit("Consulta retornou 0 linhas.")
                 df = pl.DataFrame({col: [] for col in columns})
             else:
-                # Converter para Polars via dicts, mais seguro com tipos mistos.
-                records = [dict(zip(columns, row)) for row in all_rows]
-                df = pl.DataFrame(records, infer_schema_length=min(len(records), 1000))
+                # Otimizacao Bolt: criar DataFrame diretamente de tuplas (muito mais rapido)
+                df = pl.DataFrame(all_rows, schema=columns, orient="row", infer_schema_length=min(len(all_rows), 1000))
             registrar_evento_performance(
                 "query_worker.build_dataframe",
                 perf_counter() - inicio_dataframe,
@@ -189,7 +188,11 @@ class QueryWorker(QThread):
                 },
                 status="error",
             )
-            self.failed.emit(str(exc))
+            # 🛡️ Sentinel: Sanitize error message to prevent leaking internal database schema/details to the UI
+            from rich import print as rprint
+            rprint(f"[red]Erro interno no QueryWorker:[/red] {exc}")
+            safe_error_msg = "Ocorreu um erro ao executar a consulta no banco de dados. Verifique os logs para mais detalhes."
+            self.failed.emit(safe_error_msg)
         finally:
             if conn is not None:
                 try:
