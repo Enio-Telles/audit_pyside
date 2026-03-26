@@ -23,9 +23,9 @@ def _get_required_env(key: str) -> str:
     return val.strip()
 
 try:
-    HOST = os.getenv("ORACLE_HOST", 'exa01-scan.sefin.ro.gov.br').strip()
-    PORTA = int(os.getenv("ORACLE_PORT", '1521').strip())
-    SERVICO = os.getenv("ORACLE_SERVICE", 'sefindw').strip()
+    HOST = _get_required_env("ORACLE_HOST")
+    PORTA = int(_get_required_env("ORACLE_PORT"))
+    SERVICO = _get_required_env("ORACLE_SERVICE")
 except Exception as e:
     rprint(f"[red]Erro na configuração das variáveis de rede Oracle:[/red] {e}")
     HOST, PORTA, SERVICO = None, None, None
