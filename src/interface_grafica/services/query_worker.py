@@ -7,6 +7,7 @@ Emite sinais de progresso, sucesso e falha.
 from __future__ import annotations
 
 import os
+import traceback
 from pathlib import Path
 from time import perf_counter
 from typing import Any
@@ -14,6 +15,7 @@ from typing import Any
 import polars as pl
 from PySide6.QtCore import QThread, Signal
 from utilitarios.perf_monitor import registrar_evento_performance
+from rich import print as rprint
 
 # ---------------------------------------------------------------------------
 # Reutiliza funcoes do pipeline existente quando possivel
@@ -170,17 +172,18 @@ class QueryWorker(QThread):
             self.finished_ok.emit(df)
 
         except Exception as exc:
+            rprint(f"[red]Erro interno no QueryWorker:[/red] {exc}")
+            rprint(f"[red]{traceback.format_exc()}[/red]")
             registrar_evento_performance(
                 "query_worker.total",
                 perf_counter() - inicio_total,
                 {
                     "fetch_size": self.fetch_size,
                     "quantidade_binds": len(self.binds or {}),
-                    "erro": str(exc),
                 },
                 status="error",
             )
-            self.failed.emit(str(exc))
+            self.failed.emit("Ocorreu um erro ao executar a consulta. Consulte os logs para mais detalhes.")
         finally:
             if conn is not None:
                 try:

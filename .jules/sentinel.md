@@ -1,0 +1,4 @@
+## 2024-05-30 - Prevent Information Disclosure in UI via QueryWorker
+**Vulnerability:** The asynchronous UI worker (`QueryWorker`) was capturing raw database exceptions (which could contain SQL syntax, schema details, or sensitive bind variable values) and directly emitting them via `self.failed.emit(str(exc))` to the PySide6 UI. It also wrote these raw exception strings into performance logs.
+**Learning:** Returning or logging raw `Exception` strings or tracebacks in a UI application's exception handlers creates a serious Information Disclosure vulnerability.
+**Prevention:** Always catch exceptions in asynchronous workers, log the full traceback securely on the backend (e.g., using `traceback` and `rich.print`), and emit only a generic, sanitized error message to the UI. Never include raw exception objects in analytics or logs.
