@@ -4,6 +4,7 @@ Usa credenciais do arquivo .env
 Implementa Context Manager para evitar vazamentos de recursos.
 """
 import os
+import logging
 import socket
 import oracledb
 from pathlib import Path
@@ -52,7 +53,8 @@ def conectar(cpf_usuario=None, senha=None):
             
         return conexao
     except Exception as e:
-        rprint(f"[red]Erro de conexão Oracle:[/red] {e}")
+        logging.error(f"Detalhes internos do erro de conexão Oracle: {e}")
+        rprint("[red]Erro de conexão Oracle. Verifique suas configurações e o status do banco de dados.[/red]")
         return None
 
 @contextmanager

@@ -180,7 +180,7 @@ class QueryWorker(QThread):
                 },
                 status="error",
             )
-            self.failed.emit(str(exc))
+            self.failed.emit("Ocorreu um erro ao executar a consulta no banco de dados. Verifique os logs internos.")
         finally:
             if conn is not None:
                 try:
