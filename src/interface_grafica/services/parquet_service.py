@@ -181,23 +181,43 @@ class ParquetService:
                 return canonical
         return op_l
 
-    def _build_expr(self, cond: FilterCondition) -> pl.Expr:
+    @staticmethod
+    def _is_list_dtype(dtype) -> bool:
+        if dtype is None:
+            return False
+        try:
+            return dtype.base_type() == pl.List
+        except Exception:
+            return str(dtype).startswith("List")
+
+    def _text_expr(self, column: str, dtype) -> pl.Expr:
+        col = pl.col(column)
+        if self._is_list_dtype(dtype):
+            return (
+                col.cast(pl.List(pl.Utf8), strict=False)
+                .list.join(" | ")
+                .fill_null("")
+            )
+        return col.cast(pl.Utf8, strict=False).fill_null("")
+
+    def _build_expr(self, cond: FilterCondition, dtype=None) -> pl.Expr:
         col = pl.col(cond.column)
         value = cond.value or ""
         op = self._normalize_operator(cond.operator)
+        text_col = self._text_expr(cond.column, dtype)
 
         if op == "contem":
-            return col.cast(pl.Utf8, strict=False).fill_null("").str.to_lowercase().str.contains(value.lower(), literal=True)
+            return text_col.str.to_lowercase().str.contains(value.lower(), literal=True)
         if op == "igual":
-            return col.cast(pl.Utf8, strict=False).fill_null("") == value
+            return text_col == value
         if op == "comeca_com":
-            return col.cast(pl.Utf8, strict=False).fill_null("").str.to_lowercase().str.starts_with(value.lower())
+            return text_col.str.to_lowercase().str.starts_with(value.lower())
         if op == "termina_com":
-            return col.cast(pl.Utf8, strict=False).fill_null("").str.to_lowercase().str.ends_with(value.lower())
+            return text_col.str.to_lowercase().str.ends_with(value.lower())
         if op == "e_nulo":
-            return col.is_null() | (col.cast(pl.Utf8, strict=False).fill_null("") == "")
+            return col.is_null() | (text_col == "")
         if op == "nao_e_nulo":
-            return ~(col.is_null() | (col.cast(pl.Utf8, strict=False).fill_null("") == ""))
+            return ~(col.is_null() | (text_col == ""))
 
         numeric_col = col.cast(pl.Float64, strict=False)
         try:
@@ -214,20 +234,21 @@ class ParquetService:
             }
             return mapping[op]
 
-        return col.cast(pl.Utf8, strict=False).fill_null("") == value
+        return text_col == value
 
     def apply_filters(
         self,
         lf: pl.LazyFrame,
         conditions: Iterable[FilterCondition],
-        available_columns: set[str] | None = None,
+        available_columns: dict[str, object] | None = None,
     ) -> pl.LazyFrame:
         filtered = lf
         if available_columns is None:
             try:
-                available_columns = set(filtered.collect_schema().names())
+                schema = filtered.collect_schema()
+                available_columns = {name: schema[name] for name in schema.names()}
             except Exception:
-                available_columns = set()
+                available_columns = {}
 
         for cond in conditions:
             if not cond.column:
@@ -238,13 +259,14 @@ class ParquetService:
             op_norm = self._normalize_operator(cond.operator)
             if op_norm not in {"e_nulo", "nao_e_nulo"} and cond.value == "":
                 continue
-            filtered = filtered.filter(self._build_expr(cond))
+            filtered = filtered.filter(self._build_expr(cond, available_columns.get(cond.column)))
         return filtered
 
     def build_lazyframe(self, parquet_path: Path, conditions: Iterable[FilterCondition] | None = None) -> pl.LazyFrame:
         lf = pl.scan_parquet(parquet_path)
         if conditions:
-            lf = self.apply_filters(lf, conditions, available_columns=set(self.get_schema(parquet_path)))
+            schema = lf.collect_schema()
+            lf = self.apply_filters(lf, conditions, available_columns={name: schema[name] for name in schema.names()})
         return lf
 
     def get_page(
