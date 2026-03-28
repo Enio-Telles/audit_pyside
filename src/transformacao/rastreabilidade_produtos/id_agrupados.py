@@ -20,65 +20,6 @@ except ImportError as e:
     sys.exit(1)
 
 
-def _limpar_lista(valores) -> list[str]:
-    saida: list[str] = []
-    for valor in valores or []:
-        if valor is None:
-            continue
-        if isinstance(valor, list):
-            saida.extend(_limpar_lista(valor))
-            continue
-        texto = str(valor).strip()
-        if texto:
-            saida.append(texto)
-    return sorted(set(saida))
-
-
-def _consolidar_grupo_id_agrupado(df_grupo: pl.DataFrame) -> pl.DataFrame:
-    registros = df_grupo.to_dicts()
-    descr_padrao = None
-    descricoes: list[str] = []
-    codigos: list[str] = []
-    unidades: list[str] = []
-
-    for row in registros:
-        if descr_padrao is None:
-            valor = (row.get("descr_padrao") or "").strip() if row.get("descr_padrao") is not None else ""
-            if valor:
-                descr_padrao = valor
-
-        descricoes.extend(
-            _limpar_lista(
-                [
-                    row.get("descr_padrao"),
-                    row.get("descricao_final"),
-                    row.get("descricao"),
-                    row.get("lista_desc_compl"),
-                ]
-            )
-        )
-        codigos.extend(_limpar_lista(row.get("lista_codigos")))
-        unidades.extend(
-            _limpar_lista(
-                [
-                    row.get("lista_unid"),
-                    row.get("lista_unidades_agr"),
-                    row.get("unid_ref_sugerida"),
-                ]
-            )
-        )
-
-    return pl.DataFrame(
-        {
-            "id_agrupado": [str(registros[0]["id_agrupado"])],
-            "descr_padrao": [descr_padrao],
-            "lista_descricoes": [_limpar_lista(descricoes)],
-            "lista_codigos": [_limpar_lista(codigos)],
-            "lista_unidades": [_limpar_lista(unidades)],
-        }
-    )
-
-
 def gerar_id_agrupados(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
     cnpj = re.sub(r"\D", "", cnpj or "")
     if len(cnpj) not in {11, 14}:
@@ -114,7 +55,26 @@ def gerar_id_agrupados(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
             ]
         )
         .group_by("id_agrupado")
-        .map_groups(_consolidar_grupo_id_agrupado)
+        .agg([
+            pl.col("descr_padrao").filter(pl.col("descr_padrao").str.strip_chars() != "").drop_nulls().first().alias("descr_padrao"),
+            pl.concat_list([
+                pl.col("descr_padrao").drop_nulls().implode(),
+                pl.col("descricao_final").drop_nulls().implode(),
+                pl.col("descricao").drop_nulls().implode(),
+                pl.col("lista_desc_compl").explode().drop_nulls().implode()
+            ]).explode().drop_nulls().str.strip_chars().unique().sort().alias("lista_descricoes"),
+            pl.col("lista_codigos").explode().drop_nulls().str.strip_chars().unique().sort().alias("lista_codigos"),
+            pl.concat_list([
+                pl.col("lista_unid").explode().drop_nulls().implode(),
+                pl.col("lista_unidades_agr").explode().drop_nulls().implode(),
+                pl.col("unid_ref_sugerida").drop_nulls().implode()
+            ]).explode().drop_nulls().str.strip_chars().unique().sort().alias("lista_unidades")
+        ])
+        .with_columns([
+            pl.col("lista_descricoes").list.eval(pl.element().filter(pl.element() != "")),
+            pl.col("lista_codigos").list.eval(pl.element().filter(pl.element() != "")),
+            pl.col("lista_unidades").list.eval(pl.element().filter(pl.element() != ""))
+        ])
         .sort("id_agrupado")
     )
 
