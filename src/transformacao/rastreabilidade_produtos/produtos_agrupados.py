@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 """
 produtos_agrupados.py
@@ -162,14 +162,12 @@ def inicializar_produtos_agrupados(cnpj: str, pasta_cnpj: Path | None = None) ->
         if not found:
             grupos.append([row])
 
-
-    df_base = df_base.with_columns(
-        pl.col("descricao")
-        .map_elements(_normalizar_descricao_para_match, return_dtype=pl.String)
-        .alias("__descricao_norm")
+    # Bolt: Pre-calculate normalization outside the loop to avoid redundant operations for each group
+    # Optimized: Using native implementation of _expr_normalizar_descricao to ensure vectorization
+    df_base_opt = df_base.with_columns(
+        _expr_normalizar_descricao("descricao").alias("__descricao_norm")
     )
-    df_base_parts = df_base.partition_by("__descricao_norm", as_dict=True)
-    df_base_empty = df_base.filter(pl.lit(False))
+    part_dict = df_base_opt.partition_by("__descricao_norm", as_dict=True)
 
     registros_mestra = []
     registros_ponte = []
@@ -182,10 +180,21 @@ def inicializar_produtos_agrupados(cnpj: str, pasta_cnpj: Path | None = None) ->
         desc_norms = [r.get("descricao_normalizada") for r in g if r.get("descricao_normalizada")]
         
         if desc_norms:
-            partes = [df_base_parts.get((n,), df_base_empty) for n in desc_norms]
-            df_base_filtered = pl.concat(partes, how="vertical_relaxed") if partes else df_base_empty
+            group_dfs = []
+            for d in set(desc_norms):
+                if (d,) in part_dict:
+                    group_dfs.append(part_dict[(d,)])
+
+            if group_dfs:
+                if len(group_dfs) > 1:
+                    df_base_filtered = pl.concat(group_dfs, how="vertical_relaxed")
+                else:
+                    df_base_filtered = group_dfs[0]
+                df_base_filtered = df_base_filtered.drop("__descricao_norm")
+            else:
+                df_base_filtered = df_base.filter(pl.lit(False))
         else:
-            df_base_filtered = df_base_empty
+            df_base_filtered = df_base.filter(pl.lit(False))
 
         padrao = calcular_atributos_padrao(df_base_filtered)
 
@@ -230,6 +239,9 @@ def inicializar_produtos_agrupados(cnpj: str, pasta_cnpj: Path | None = None) ->
                     "id_agrupado": id_grp
                 })
 
+    if not registros_mestra:
+        return False
+
     df_mestra = pl.DataFrame(registros_mestra)
     df_ponte = pl.DataFrame(registros_ponte)
     
@@ -244,5 +256,3 @@ if __name__ == "__main__":
     else:
         c = input("CNPJ: ")
         inicializar_produtos_agrupados(c)
-
-
