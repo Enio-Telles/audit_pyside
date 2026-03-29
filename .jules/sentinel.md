@@ -1,4 +1,4 @@
-## YYYY-MM-DD - [Prevent Information Exposure Through Error Messages]
-**Vulnerability:** The exception `e` or `exc` was directly cast to string and emitted to the UI or standard output (`rprint`) in `src/interface_grafica/services/query_worker.py` and `src/utilitarios/conectar_oracle.py`.
-**Learning:** Emitting the raw `str(exc)` from `oracledb` could expose internal database schema or connection details (Information Exposure Through an Error Message - CWE-209).
-**Prevention:** Avoid exposing `str(e)` directly to the user or standard output. Always use generic error messages for the UI/stdout and log the actual error internally for debugging.
+## 2024-03-29 - [Information Disclosure in Oracle Configuration]
+**Vulnerability:** Raw exception objects (`e`) were being printed directly to standard output via `rprint` during database configuration and connection failures. This could expose internal environment details, file paths, or network stack traces to the user. Additionally, exceptions during connection closure were silently swallowed with `pass`, making resource leaks difficult to track securely.
+**Learning:** Exception details must be sanitized before being displayed to users, even in CLI tools, as they can reveal system information.
+**Prevention:** Catch exceptions securely, log the raw `e` object internally (e.g., using `logging.error`), and emit a generic, safe error message to the console. Never use bare `except:` or swallow exceptions silently with `pass` without logging.
