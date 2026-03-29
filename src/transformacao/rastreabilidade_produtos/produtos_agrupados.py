@@ -148,6 +148,14 @@ def inicializar_produtos_agrupados(cnpj: str, pasta_cnpj: Path | None = None) ->
         if not found:
             grupos.append([row])
 
+    # Bolt: Pre-calculate map_elements outside the loop for O(1) lookups
+    df_base_opt = df_base.with_columns(
+        pl.col("descricao")
+        .map_elements(_normalizar_descricao_para_match, return_dtype=pl.String)
+        .alias("__descricao_norm")
+    )
+    part_dict = df_base_opt.partition_by("__descricao_norm", as_dict=True)
+
     registros_mestra = []
     registros_ponte = []
     
@@ -159,9 +167,19 @@ def inicializar_produtos_agrupados(cnpj: str, pasta_cnpj: Path | None = None) ->
         desc_norms = [r.get("descricao_normalizada") for r in g if r.get("descricao_normalizada")]
         
         if desc_norms:
-            df_base_filtered = df_base.filter(
-                pl.col("descricao").map_elements(_normalizar_descricao_para_match, return_dtype=pl.String).is_in(desc_norms)
-            )
+            group_dfs = []
+            for d in set(desc_norms):
+                if (d,) in part_dict:
+                    group_dfs.append(part_dict[(d,)])
+
+            if group_dfs:
+                if len(group_dfs) > 1:
+                    df_base_filtered = pl.concat(group_dfs)
+                else:
+                    df_base_filtered = group_dfs[0]
+                df_base_filtered = df_base_filtered.drop("__descricao_norm")
+            else:
+                df_base_filtered = df_base.filter(pl.lit(False))
         else:
             df_base_filtered = df_base.filter(pl.lit(False))
 
