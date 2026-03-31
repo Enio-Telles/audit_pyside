@@ -34,6 +34,8 @@ import pandas as pd
 from rich import print as rprint
 from xlsxwriter.utility import xl_col_to_name
 
+from utilitarios.text import is_year_column_name
+
 
 # -----------------------------------------------------------------------------
 # Utilidades
@@ -767,10 +769,13 @@ def _criar_formatos(workbook):
             "font_name": "Arial", "font_size": 8, "valign": "top", "text_wrap": True
         }),
         "inteiro": workbook.add_format({
-            "font_name": "Arial", "font_size": 8, "valign": "top", "align": "right", "num_format": "0"
+            "font_name": "Arial", "font_size": 8, "valign": "top", "align": "right", "num_format": "#,##0"
         }),
         "decimal": workbook.add_format({
             "font_name": "Arial", "font_size": 8, "valign": "top", "align": "right", "num_format": "#,##0.00"
+        }),
+        "ano": workbook.add_format({
+            "font_name": "Arial", "font_size": 8, "valign": "top", "align": "center", "num_format": "0"
         }),
         "data": workbook.add_format({
             "font_name": "Arial", "font_size": 8, "valign": "top", "align": "center", "num_format": "dd/mm/yyyy"
@@ -809,6 +814,8 @@ def _largura_auto(serie: pd.Series, header: str, minimo: int = 10, maximo: int =
 
 
 def _escolher_formato(col_lower: str, dtype: str, cfg: dict[str, Any], formatos: dict[str, Any]):
+    if is_year_column_name(col_lower):
+        return formatos["ano"]
     if col_lower in cfg["datetime_cols"] or "datetime64" in dtype:
         return formatos["data_hora"]
     if col_lower in cfg["date_cols"]:

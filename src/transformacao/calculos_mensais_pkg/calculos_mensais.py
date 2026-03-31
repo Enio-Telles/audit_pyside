@@ -299,7 +299,8 @@ def calcular_aba_mensal_dataframe(df: pl.DataFrame, df_aux_st: pl.DataFrame | No
         | _finnfe_4_expr()
     ).fill_null(False)
     is_excluida = _boolish_expr("excluir_estoque").fill_null(False)
-    is_valida_media = ~is_devolucao & ~is_excluida
+    is_q_conv_positiva = pl.col("q_conv").cast(pl.Float64, strict=False).fill_null(0.0) > 0
+    is_valida_media = ~is_devolucao & ~is_excluida & is_q_conv_positiva
 
     df_base = (
         df.with_columns(
@@ -375,6 +376,10 @@ def calcular_aba_mensal_dataframe(df: pl.DataFrame, df_aux_st: pl.DataFrame | No
                 .then(pl.col("__mva_pct_mes__").cast(pl.Float64, strict=False).fill_null(0.0))
                 .otherwise(pl.lit(None, dtype=pl.Float64))
                 .alias("MVA"),
+                # As medias exibidas na tabela mensal devem ser as mesmas usadas na base do ICMS,
+                # evitando diferenca entre o valor mostrado e o valor efetivamente multiplicado.
+                pl.col("pme_mes").round(2).alias("__pme_mes_icms__"),
+                pl.col("pms_mes").round(2).alias("__pms_mes_icms__"),
                 pl.when(
                     pl.col("__tem_st_mes__")
                     & (
@@ -402,14 +407,14 @@ def calcular_aba_mensal_dataframe(df: pl.DataFrame, df_aux_st: pl.DataFrame | No
                     & (pl.col("entradas_desacob") > 0)
                 )
                 .then(
-                    pl.when(pl.col("pms_mes") > 0)
+                    pl.when(pl.col("__pms_mes_icms__") > 0)
                     .then(
-                        pl.col("pms_mes")
+                        pl.col("__pms_mes_icms__")
                         * pl.col("entradas_desacob")
                         * (pl.col("__aliq_mes__") / 100.0)
                     )
                     .otherwise(
-                        pl.col("pme_mes")
+                        pl.col("__pme_mes_icms__")
                         * pl.col("entradas_desacob")
                         * (pl.col("__aliq_mes__") / 100.0)
                         * pl.col("__mva_mes__")

@@ -1,5 +1,6 @@
 import json
 import sys
+import re
 from pathlib import Path
 from time import perf_counter
 
@@ -93,6 +94,31 @@ class ServicoAgregacao:
         if not self.ultimo_tempo_etapas:
             return ""
         return " | ".join(f"{nome}: {duracao:.2f}s" for nome, duracao in self.ultimo_tempo_etapas.items())
+
+    @staticmethod
+    def _sanitizar_cnpj(cnpj: str) -> str:
+        return re.sub(r"\D", "", cnpj or "")
+
+    def _pasta_produtos(self, cnpj: str) -> Path:
+        return CNPJ_ROOT / self._sanitizar_cnpj(cnpj) / "analises" / "produtos"
+
+    def artefatos_estoque_defasados(self, cnpj: str) -> list[str]:
+        cnpj = self._sanitizar_cnpj(cnpj)
+        pasta_prod = self._pasta_produtos(cnpj)
+        mov_path = pasta_prod / f"mov_estoque_{cnpj}.parquet"
+        if not mov_path.exists():
+            return []
+
+        mov_mtime = mov_path.stat().st_mtime_ns
+        derivados = {
+            "calculos_mensais": pasta_prod / f"aba_mensal_{cnpj}.parquet",
+            "calculos_anuais": pasta_prod / f"aba_anual_{cnpj}.parquet",
+        }
+        return [
+            etapa
+            for etapa, caminho in derivados.items()
+            if not caminho.exists() or caminho.stat().st_mtime_ns < mov_mtime
+        ]
 
     @staticmethod
     def _normalizar_descricao_para_match(texto: str | None):
@@ -213,6 +239,9 @@ class ServicoAgregacao:
     def caminho_tabela_final(self, cnpj: str) -> Path:
         return CNPJ_ROOT / cnpj / "analises" / "produtos" / f"produtos_final_{cnpj}.parquet"
 
+    def caminho_tabela_id_agrupados(self, cnpj: str) -> Path:
+        return CNPJ_ROOT / cnpj / "analises" / "produtos" / f"id_agrupados_{cnpj}.parquet"
+
     @staticmethod
     def _ler_parquet_colunas(path: Path, colunas: list[str]) -> pl.DataFrame:
         schema_cols = list(pl.scan_parquet(path).collect_schema().names())
@@ -220,6 +249,12 @@ class ServicoAgregacao:
         if not selecionadas:
             return pl.DataFrame()
         return pl.scan_parquet(path).select(selecionadas).collect()
+
+    @staticmethod
+    def _obter_schema_parquet(path: Path) -> set[str]:
+        if not path.exists():
+            return set()
+        return set(pl.scan_parquet(path).collect_schema().names())
 
     @staticmethod
     def _colunas_metricas_agregacao() -> list[str]:
@@ -235,17 +270,63 @@ class ServicoAgregacao:
             "total_movimentacao",
         ]
 
-    def garantir_metricas_tabela_agregadas(self, cnpj: str) -> bool:
-        path = self.garantir_tabela_agregadas(cnpj, criar_se_ausente=True)
-        if not path.exists():
-            return False
-        schema_cols = set(pl.scan_parquet(path).collect_schema().names())
-        colunas_esperadas = set(self._colunas_metricas_agregacao()) | {
+    @staticmethod
+    def _colunas_descricoes_agregacao() -> set[str]:
+        return {
             "lista_ncm",
             "lista_cest",
             "lista_gtin",
             "lista_descricoes",
         }
+
+    def _regenerar_tabela_agregadas_legada(self, cnpj: str) -> bool:
+        """
+        Recria a camada de agregacao quando o parquet legado nao possui
+        colunas canonicas de descricoes.
+        """
+        path_agrup = self.caminho_tabela_agregadas(cnpj)
+        schema_cols = self._obter_schema_parquet(path_agrup)
+        if "lista_descricoes" in schema_cols:
+            return True
+
+        path_base = self.caminho_tabela_base(cnpj)
+        path_final = self.caminho_tabela_final(cnpj)
+        if not path_agrup.exists() or not path_base.exists() or not path_final.exists():
+            return False
+
+        if inicializar_produtos_agrupados is None:
+            raise ImportError("Nao foi possivel importar produtos_final_v2.py.")
+
+        ok_regeneracao = bool(inicializar_produtos_agrupados(cnpj))
+        if not ok_regeneracao:
+            return False
+
+        path_id_agrupados = self.caminho_tabela_id_agrupados(cnpj)
+        if gerar_id_agrupados is not None and path_final.exists():
+            ok_regeneracao = bool(gerar_id_agrupados(cnpj)) and ok_regeneracao
+
+        if not ok_regeneracao:
+            return False
+
+        schema_regenerado = self._obter_schema_parquet(path_agrup)
+        if "lista_descricoes" not in schema_regenerado:
+            return False
+
+        if path_id_agrupados.exists() and "lista_descricoes" not in self._obter_schema_parquet(path_id_agrupados):
+            return False
+
+        return True
+
+    def garantir_metricas_tabela_agregadas(self, cnpj: str) -> bool:
+        path = self.garantir_tabela_agregadas(cnpj, criar_se_ausente=True)
+        if not path.exists():
+            return False
+
+        if not self._regenerar_tabela_agregadas_legada(cnpj):
+            return False
+
+        schema_cols = self._obter_schema_parquet(path)
+        colunas_esperadas = set(self._colunas_metricas_agregacao()) | self._colunas_descricoes_agregacao()
         if colunas_esperadas.issubset(schema_cols):
             return True
         ok_padroes = bool(
@@ -650,6 +731,58 @@ class ServicoAgregacao:
             perf_counter() - inicio_total,
             progresso,
             contexto={**contexto_base, "sucesso": ok_total},
+        )
+        return ok_total
+
+    def recalcular_resumos_estoque(self, cnpj: str, progresso=None, reset_timings: bool = True) -> bool:
+        """
+        Recalcula apenas os resumos mensal/anual quando estiverem ausentes ou defasados da mov_estoque.
+        """
+        if gerar_calculos_mensais is None:
+            raise ImportError("Nao foi possivel importar calculos_mensais.py.")
+        if gerar_calculos_anuais is None:
+            raise ImportError("Nao foi possivel importar calculos_anuais.py.")
+
+        if reset_timings:
+            self.ultimo_tempo_etapas = {}
+        inicio_total = perf_counter()
+        contexto_base = {"cnpj": cnpj, "fluxo": "recalcular_resumos_estoque"}
+        artefatos_defasados = self.artefatos_estoque_defasados(cnpj)
+
+        if not artefatos_defasados:
+            self._registrar_tempo(
+                "recalcular_resumos_estoque_total",
+                perf_counter() - inicio_total,
+                progresso,
+                contexto={**contexto_base, "sucesso": True, "etapas": []},
+            )
+            if progresso:
+                progresso("Mensal e anual ja estao sincronizadas com mov_estoque.")
+            return True
+
+        ok_mensal = True
+        ok_anual = True
+        if "calculos_mensais" in artefatos_defasados:
+            ok_mensal = self._executar_etapa_tempo(
+                "calculos_mensais",
+                lambda: bool(gerar_calculos_mensais(cnpj)),
+                progresso,
+                contexto=contexto_base,
+            )
+        if "calculos_anuais" in artefatos_defasados:
+            ok_anual = self._executar_etapa_tempo(
+                "calculos_anuais",
+                lambda: bool(gerar_calculos_anuais(cnpj)),
+                progresso,
+                contexto=contexto_base,
+            )
+
+        ok_total = bool(ok_mensal and ok_anual)
+        self._registrar_tempo(
+            "recalcular_resumos_estoque_total",
+            perf_counter() - inicio_total,
+            progresso,
+            contexto={**contexto_base, "sucesso": ok_total, "etapas": artefatos_defasados},
         )
         return ok_total
 

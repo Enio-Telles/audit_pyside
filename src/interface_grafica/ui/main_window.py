@@ -62,6 +62,7 @@ from interface_grafica.services.export_service import ExportService
 from interface_grafica.services.parquet_service import FilterCondition, ParquetService
 from interface_grafica.services.pipeline_funcoes_service import ResultadoPipeline, ServicoPipelineCompleto
 from interface_grafica.services.pipeline_service import PipelineService
+from interface_grafica.services.profile_utils import ordenar_colunas_perfil, ordenar_colunas_visiveis
 from interface_grafica.services.query_worker import QueryWorker
 from interface_grafica.services.registry_service import RegistryService
 from interface_grafica.services.selection_persistence_service import SelectionPersistenceService
@@ -71,7 +72,7 @@ from interface_grafica.ui.dialogs import (
     DialogoSelecaoConsultas,
     DialogoSelecaoTabelas,
 )
-from utilitarios.text import display_cell, normalize_text, remove_accents
+from utilitarios.text import display_cell, is_year_column_name, normalize_text, remove_accents
 
 
 class FloatDelegate(QStyledItemDelegate):
@@ -405,6 +406,8 @@ class MainWindow(QMainWindow):
         self._produtos_selecionados_mov_df: pl.DataFrame = pl.DataFrame()
         self._produtos_selecionados_mensal_df: pl.DataFrame = pl.DataFrame()
         self._produtos_selecionados_anual_df: pl.DataFrame = pl.DataFrame()
+        self.resumo_global_model = PolarsTableModel()
+        self._resumo_global_df: pl.DataFrame = pl.DataFrame()
         self._produtos_sel_preselecionado_cnpj: str | None = None
         self._filtro_cruzado_anuais_ids: list[str] = []
         self._aggregation_file_path: Path | None = None
@@ -412,6 +415,7 @@ class MainWindow(QMainWindow):
         self._aggregation_results_filters: list[FilterCondition] = []
         self._aggregation_relational_mode: str | None = None
         self._aggregation_results_relational_mode: str | None = None
+        self._sync_resumos_estoque_cnpj: str | None = None
         self._debounce_timers: dict[str, QTimer] = {}
         self._debounce_callbacks: dict[str, Callable[[], None]] = {}
         self._auto_resized_tables: set[str] = set()
@@ -1134,6 +1138,7 @@ class MainWindow(QMainWindow):
         self.btn_mov_save_profile = QPushButton("Salvar perfil")
         self.btn_mov_colunas = QPushButton("Colunas")
         self.btn_mov_destacar = self._criar_botao_destacar()
+        self.btn_export_mov_estoque = QPushButton("Exportar Excel")
         for widget in [
             QLabel("Data"),
             self.mov_filter_data_col,
@@ -1148,6 +1153,7 @@ class MainWindow(QMainWindow):
             self.btn_mov_save_profile,
             self.btn_mov_colunas,
             self.btn_mov_destacar,
+            self.btn_export_mov_estoque,
         ]:
             filtros_avancados.addWidget(widget)
         layout.addLayout(filtros_avancados)
@@ -1194,6 +1200,9 @@ class MainWindow(QMainWindow):
 
         self.tab_aba_anual = self._build_tab_aba_anual()
         self.estoque_tabs.addTab(self.tab_aba_anual, "Tabela anual")
+
+        self.tab_resumo_global = self._build_tab_resumo_global()
+        self.estoque_tabs.addTab(self.tab_resumo_global, "Resumo Global")
 
         self.tab_produtos_selecionados = self._build_tab_produtos_selecionados()
         self.estoque_tabs.addTab(self.tab_produtos_selecionados, "Produtos selecionados")
@@ -1716,6 +1725,89 @@ class MainWindow(QMainWindow):
 
         return tab
 
+    def _build_tab_resumo_global(self) -> QWidget:
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        tab.setStyleSheet(
+            """
+            QWidget {
+                background: #252526;
+                color: #f3f4f6;
+            }
+            QLabel {
+                color: #e5e7eb;
+            }
+            QPushButton {
+                background: #34373d;
+                color: #f9fafb;
+                border: 1px solid #4b5563;
+                border-radius: 4px;
+                padding: 6px 10px;
+            }
+            QPushButton:hover {
+                background: #40444b;
+            }
+            QPushButton:pressed {
+                background: #2f3338;
+            }
+            QTableView {
+                background: #1f1f1f;
+                alternate-background-color: #262626;
+                color: #f9fafb;
+                gridline-color: #3f3f46;
+                border: 1px solid #3f3f46;
+                selection-background-color: #0e639c;
+                selection-color: #ffffff;
+            }
+            QHeaderView::section {
+                background: #18181b;
+                color: #f9fafb;
+                border: 1px solid #3f3f46;
+                padding: 6px 8px;
+                font-weight: bold;
+            }
+            """
+        )
+
+        self.lbl_resumo_global_titulo = QLabel("Tabela: Resumo Global (Mensal e Anual)")
+        self.lbl_resumo_global_titulo.setStyleSheet(
+            "QLabel { font-weight: bold; color: #f8fafc; background: #1f2a44; border: 1px solid #334155; border-radius: 4px; padding: 6px 10px; }"
+        )
+        layout.addWidget(self.lbl_resumo_global_titulo)
+
+        toolbar = QHBoxLayout()
+        self.btn_refresh_resumo_global = QPushButton("Atualizar Resumo Global")
+        self.btn_export_resumo_global = QPushButton("Exportar Excel")
+        toolbar.addWidget(self.btn_refresh_resumo_global)
+        toolbar.addStretch()
+        toolbar.addWidget(self.btn_export_resumo_global)
+        layout.addLayout(toolbar)
+
+        self.lbl_resumo_global_status = QLabel("Aguardando carregamento da aba mensal e anual...")
+        self.lbl_resumo_global_status.setStyleSheet(
+            "QLabel { padding: 4px 8px; background: #101827; border: 1px solid #374151; border-radius: 4px; color: #e5e7eb; }"
+        )
+        layout.addWidget(self.lbl_resumo_global_status)
+
+        self.resumo_global_table = QTableView()
+        self.resumo_global_table.setModel(self.resumo_global_model)
+        self.resumo_global_table.setSelectionBehavior(QAbstractItemView.SelectItems)
+        self.resumo_global_table.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        self.resumo_global_table.setAlternatingRowColors(True)
+        self.resumo_global_table.setSortingEnabled(True)
+        self.resumo_global_table.setWordWrap(True)
+        self.resumo_global_table.verticalHeader().setDefaultSectionSize(40)
+        self.resumo_global_table.horizontalHeader().setMinimumSectionSize(80)
+        self.resumo_global_table.horizontalHeader().setDefaultSectionSize(180)
+        self.resumo_global_table.horizontalHeader().setStretchLastSection(True)
+        self.resumo_global_table.setStyleSheet(
+            "QTableView::item { padding: 4px 2px; }"
+            "QTableCornerButton::section { background: #18181b; border: 1px solid #3f3f46; }"
+        )
+        layout.addWidget(self.resumo_global_table, 1)
+
+        return tab
+
     def _build_tab_aba_mensal(self) -> QWidget:
         tab = QWidget()
         layout = QVBoxLayout(tab)
@@ -1935,6 +2027,7 @@ class MainWindow(QMainWindow):
             lambda _index, _order: self._salvar_preferencias_tabela("mov_estoque", self.mov_estoque_table, self.mov_estoque_model)
         )
 
+        self.btn_export_mov_estoque.clicked.connect(self.exportar_mov_estoque_excel)
         self.btn_refresh_aba_anual.clicked.connect(self.atualizar_aba_anual)
         self.btn_apply_aba_anual_filters.clicked.connect(self.aplicar_filtros_aba_anual)
         self.btn_clear_aba_anual_filters.clicked.connect(self.limpar_filtros_aba_anual)
@@ -1966,6 +2059,9 @@ class MainWindow(QMainWindow):
         self.aba_anual_table.horizontalHeader().sortIndicatorChanged.connect(
             lambda _index, _order: self._salvar_preferencias_tabela("aba_anual", self.aba_anual_table, self.aba_anual_model)
         )
+
+        self.btn_refresh_resumo_global.clicked.connect(self.atualizar_aba_resumo_global)
+        self.btn_export_resumo_global.clicked.connect(self.exportar_resumo_global_excel)
 
         self.btn_refresh_aba_mensal.clicked.connect(self.atualizar_aba_mensal)
         self.btn_apply_aba_mensal_filters.clicked.connect(self.aplicar_filtros_aba_mensal)
@@ -3082,9 +3178,21 @@ class MainWindow(QMainWindow):
     def _capturar_estado_tabela(self, table: QTableView, model: PolarsTableModel) -> dict:
         offset = 1 if getattr(model, "_checkable", False) else 0
         colunas = model.dataframe.columns
-        visiveis = [nome for idx, nome in enumerate(colunas) if not table.isColumnHidden(idx + offset)]
+        header = table.horizontalHeader()
+        visiveis = [
+            nome
+            for _visual, nome in sorted(
+                (
+                    (header.visualIndex(idx + offset), nome)
+                    for idx, nome in enumerate(colunas)
+                    if not table.isColumnHidden(idx + offset)
+                ),
+                key=lambda item: item[0],
+            )
+        ]
         estado = {
             "visible_columns": visiveis,
+            "column_order": visiveis,
             "header_state": self._serializar_estado_header(table),
         }
         if getattr(model, "_last_sort_column", None):
@@ -3114,6 +3222,48 @@ class MainWindow(QMainWindow):
         if isinstance(header_state, str) and header_state:
             aplicado = self._restaurar_estado_header(table, header_state) or aplicado
         return aplicado
+
+    def _colunas_estado_perfil(self, prefs: dict, model: PolarsTableModel) -> list[str] | None:
+        if not isinstance(prefs, dict) or model.dataframe.is_empty():
+            return None
+
+        raw = prefs.get("visible_columns")
+        if not isinstance(raw, list) or not raw:
+            return None
+
+        visiveis = ordenar_colunas_perfil(
+            list(model.dataframe.columns),
+            raw,
+            prefs.get("column_order") if isinstance(prefs.get("column_order"), list) else None,
+        )
+        if not visiveis:
+            return None
+
+        header_state = prefs.get("header_state")
+        if not isinstance(header_state, str) or not header_state:
+            return visiveis
+
+        probe = QTableView()
+        try:
+            probe.setModel(model)
+            if not self._restaurar_estado_header(probe, header_state):
+                return visiveis
+
+            offset = 1 if getattr(model, "_checkable", False) else 0
+            ordem = [
+                nome
+                for _visual, nome in sorted(
+                    (
+                        (probe.horizontalHeader().visualIndex(idx + offset), nome)
+                        for idx, nome in enumerate(model.dataframe.columns)
+                        if nome in visiveis
+                    ),
+                    key=lambda item: item[0],
+                )
+            ]
+            return ordenar_colunas_perfil(list(model.dataframe.columns), visiveis, ordem)
+        finally:
+            probe.setModel(None)
 
     def _nomes_perfis_nomeados_tabela(self, aba: str, scope: str | None = None) -> list[str]:
         prefs = self._carregar_preferencias_tabela(aba, scope)
@@ -3208,7 +3358,7 @@ class MainWindow(QMainWindow):
         if contexto == "mov_estoque":
             mapa = {
                 "padrao": [
-                    "ordem_operacoes", "Tipo_operacao", "origem",
+                    "ordem_operacoes", "Tipo_operacao", "fonte",
                     "id_agrupado", "descr_padrao", "Descr_item", "Descr_compl", "Cod_item", "Cod_barra", "Ncm", "Cest", "Tipo_item",
                     "Chv_nfe", "mod", "Ser", "num_nfe", "Num_item", "Dt_doc", "Dt_e_s", "nsu", "finnfe", "infprot_cstat", "co_uf_emit", "co_uf_dest",
                     "Cfop", "Cst", "Aliq_icms", "Vl_bc_icms", "Vl_icms", "vl_bc_icms_st", "vl_icms_st", "aliq_st",
@@ -3218,10 +3368,10 @@ class MainWindow(QMainWindow):
                     "ncm_padrao", "cest_padrao", "co_sefin_agr", "it_pc_interna", "it_in_st", "it_pc_mva", "it_in_mva_ajustado",
                     "it_in_isento_icms", "it_in_reducao", "it_pc_reducao", "it_in_combustivel", "it_in_pmpf", "it_in_reducao_credito",
                 ],
-                "exportar": ["ordem_operacoes", "Tipo_operacao", "origem", "id_agrupado", "descr_padrao", "Descr_item", "Dt_doc", "Dt_e_s", "Cfop", "Qtd", "q_conv", "saldo_estoque_anual", "entr_desac_anual", "custo_medio_anual", "preco_item", "preco_unit", "unid_ref", "fator", "mov_rep", "dev_simples", "excluir_estoque"],
+                "exportar": ["ordem_operacoes", "Tipo_operacao", "fonte", "id_agrupado", "descr_padrao", "Descr_item", "Dt_doc", "Dt_e_s", "Cfop", "Qtd", "q_conv", "saldo_estoque_anual", "entr_desac_anual", "custo_medio_anual", "preco_item", "preco_unit", "unid_ref", "fator", "mov_rep", "dev_simples", "excluir_estoque"],
                 "contribuinte": ["ordem_operacoes", "Tipo_operacao", "Dt_doc", "id_agrupado", "descr_padrao", "Qtd", "q_conv", "unid_ref", "preco_item", "preco_unit", "saldo_estoque_anual", "entr_desac_anual"],
-                "auditoria": ["ordem_operacoes", "Tipo_operacao", "origem", "id_agrupado", "descr_padrao", "Dt_doc", "Dt_e_s", "Cfop", "q_conv", "saldo_estoque_anual", "entr_desac_anual", "mov_rep", "dev_simples", "excluir_estoque"],
-                "auditoria fiscal": ["ordem_operacoes", "Tipo_operacao", "origem", "id_agrupado", "descr_padrao", "Descr_item", "Descr_compl", "Cod_item", "Cod_barra", "Ncm", "Cest", "Tipo_item", "Chv_nfe", "mod", "Ser", "num_nfe", "Num_item", "Dt_doc", "Dt_e_s", "nsu", "finnfe", "infprot_cstat", "co_uf_emit", "co_uf_dest", "Cfop", "Cst", "Aliq_icms", "Vl_bc_icms", "Vl_icms", "vl_bc_icms_st", "vl_icms_st", "aliq_st", "Qtd", "q_conv", "Unid", "unid_ref", "fator", "Vl_item", "preco_item", "preco_unit", "custo_medio_anual", "saldo_estoque_anual", "entr_desac_anual", "mov_rep", "excluir_estoque", "dev_simples", "dev_venda", "dev_compra", "dev_ent_simples", "co_sefin_agr", "it_pc_interna", "it_in_st", "it_pc_mva", "it_in_mva_ajustado", "it_in_isento_icms", "it_in_reducao", "it_pc_reducao", "it_in_combustivel", "it_in_pmpf", "it_in_reducao_credito"],
+                "auditoria": ["ordem_operacoes", "Tipo_operacao", "fonte", "id_agrupado", "descr_padrao", "Dt_doc", "Dt_e_s", "Cfop", "q_conv", "saldo_estoque_anual", "entr_desac_anual", "mov_rep", "dev_simples", "excluir_estoque"],
+                "auditoria fiscal": ["ordem_operacoes", "Tipo_operacao", "fonte", "id_agrupado", "descr_padrao", "Descr_item", "Descr_compl", "Cod_item", "Cod_barra", "Ncm", "Cest", "Tipo_item", "Chv_nfe", "mod", "Ser", "num_nfe", "Num_item", "Dt_doc", "Dt_e_s", "nsu", "finnfe", "infprot_cstat", "co_uf_emit", "co_uf_dest", "Cfop", "Cst", "Aliq_icms", "Vl_bc_icms", "Vl_icms", "vl_bc_icms_st", "vl_icms_st", "aliq_st", "Qtd", "q_conv", "Unid", "unid_ref", "fator", "Vl_item", "preco_item", "preco_unit", "custo_medio_anual", "saldo_estoque_anual", "entr_desac_anual", "mov_rep", "excluir_estoque", "dev_simples", "dev_venda", "dev_compra", "dev_ent_simples", "co_sefin_agr", "it_pc_interna", "it_in_st", "it_pc_mva", "it_in_mva_ajustado", "it_in_isento_icms", "it_in_reducao", "it_pc_reducao", "it_in_combustivel", "it_in_pmpf", "it_in_reducao_credito"],
                 "estoque": ["ordem_operacoes", "Tipo_operacao", "id_agrupado", "descr_padrao", "Dt_doc", "q_conv", "saldo_estoque_anual", "unid_ref", "fator"],
                 "custos": ["ordem_operacoes", "Tipo_operacao", "id_agrupado", "descr_padrao", "Dt_doc", "q_conv", "preco_item", "preco_unit", "custo_medio_anual", "saldo_estoque_anual"],
             }
@@ -3475,8 +3625,16 @@ class MainWindow(QMainWindow):
             return base_df
         offset = 1 if getattr(model, "_checkable", False) else 0
         colunas_modelo = list(model.dataframe.columns)
+        header = table.horizontalHeader()
         visiveis = [nome for idx, nome in enumerate(colunas_modelo) if not table.isColumnHidden(idx + offset)]
-        visiveis = [nome for nome in visiveis if nome in base_df.columns]
+        ordem_visual = [
+            nome
+            for _visual, nome in sorted(
+                ((header.visualIndex(idx + offset), nome) for idx, nome in enumerate(colunas_modelo)),
+                key=lambda item: item[0],
+            )
+        ]
+        visiveis = ordenar_colunas_visiveis(list(base_df.columns), visiveis, ordem_visual)
         return base_df.select(visiveis) if visiveis else base_df
 
     def _dataframe_colunas_perfil(
@@ -3493,11 +3651,7 @@ class MainWindow(QMainWindow):
             return base_df
 
         estado_perfil = self._obter_estado_perfil_nomeado(aba, perfil, scope)
-        visiveis: list[str] | None = None
-        if isinstance(estado_perfil, dict):
-            raw = estado_perfil.get("visible_columns")
-            if isinstance(raw, list) and raw:
-                visiveis = [str(col) for col in raw if str(col) in base_df.columns]
+        visiveis = self._colunas_estado_perfil(estado_perfil, model)
 
         if not visiveis:
             visiveis = self._obter_colunas_preset_perfil(perfil, list(base_df.columns), contexto)
@@ -3591,10 +3745,78 @@ class MainWindow(QMainWindow):
                 return pl.DataFrame()
         return self.parquet_service.load_dataset(path, conditions or [], colunas_solicitadas)
 
+    def _limpar_aba_resumo_estoque(self, contexto: str, mensagem: str) -> None:
+        if contexto == "aba_mensal":
+            self.aba_mensal_model.set_dataframe(pl.DataFrame())
+            self._aba_mensal_df = pl.DataFrame()
+            self.lbl_aba_mensal_status.setText(mensagem)
+            self.lbl_aba_mensal_filtros.setText("Filtros ativos: nenhum")
+            self._atualizar_titulo_aba_mensal()
+            return
+        if contexto == "aba_anual":
+            self.aba_anual_model.set_dataframe(pl.DataFrame())
+            self._aba_anual_df = pl.DataFrame()
+            self.lbl_aba_anual_status.setText(mensagem)
+            self.lbl_aba_anual_filtros.setText("Filtros ativos: nenhum")
+            self._atualizar_titulo_aba_anual()
+
+    def _garantir_resumos_estoque_atualizados(self, cnpj: str) -> bool:
+        artefatos_defasados = self.servico_agregacao.artefatos_estoque_defasados(cnpj)
+        if not artefatos_defasados:
+            return True
+
+        if self._sync_resumos_estoque_cnpj == cnpj:
+            return False
+
+        if self.service_worker is not None and self.service_worker.isRunning():
+            self.status.showMessage("Aguardando o processamento atual para sincronizar as tabelas mensal/anual.")
+            return False
+
+        self._sync_resumos_estoque_cnpj = cnpj
+        nomes = {
+            "calculos_mensais": "mensal",
+            "calculos_anuais": "anual",
+        }
+        descricoes = ", ".join(nomes.get(item, item) for item in artefatos_defasados)
+
+        def _on_success(ok) -> None:
+            self._sync_resumos_estoque_cnpj = None
+            if ok:
+                self.refresh_file_tree(cnpj)
+                self.atualizar_aba_mensal()
+                self.atualizar_aba_anual()
+                self.atualizar_aba_produtos_selecionados()
+                self.atualizar_aba_resumo_global()
+                self.status.showMessage(f"Tabelas {descricoes} sincronizadas com a mov_estoque.")
+            else:
+                self.status.showMessage("Falha ao sincronizar as tabelas mensal/anual com a mov_estoque.")
+                self.show_error("Falha na sincronizacao", "Nao foi possivel atualizar as tabelas mensal/anual.")
+
+        def _on_failure(mensagem: str) -> None:
+            self._sync_resumos_estoque_cnpj = None
+            self.status.showMessage("Erro ao sincronizar as tabelas mensal/anual.")
+            self.show_error("Falha na sincronizacao", mensagem)
+
+        iniciado = self._executar_em_worker(
+            self.servico_agregacao.recalcular_resumos_estoque,
+            cnpj,
+            mensagem_inicial=f"Sincronizando tabelas {descricoes} com a mov_estoque...",
+            on_success=_on_success,
+            on_failure=_on_failure,
+        )
+        if not iniciado:
+            self._sync_resumos_estoque_cnpj = None
+            return False
+        return False
+
     def atualizar_aba_anual(self) -> None:
         cnpj = self.state.current_cnpj
         if not cnpj:
             self._atualizar_titulo_aba_anual()
+            return
+
+        if not self._garantir_resumos_estoque_atualizados(cnpj):
+            self._limpar_aba_resumo_estoque("aba_anual", "Sincronizando tabela anual com a mov_estoque atual...")
             return
             
         path = CNPJ_ROOT / cnpj / "analises" / "produtos" / f"aba_anual_{cnpj}.parquet"
@@ -3621,6 +3843,7 @@ class MainWindow(QMainWindow):
 
             self.aplicar_filtros_aba_anual()
             self.atualizar_aba_produtos_selecionados()
+            self.atualizar_aba_resumo_global()
         except Exception as e:
             self.show_error("Erro de leitura", f"Falha ao ler aba_anual: {e}")
 
@@ -3628,6 +3851,10 @@ class MainWindow(QMainWindow):
         cnpj = self.state.current_cnpj
         if not cnpj:
             self._atualizar_titulo_aba_mensal()
+            return
+
+        if not self._garantir_resumos_estoque_atualizados(cnpj):
+            self._limpar_aba_resumo_estoque("aba_mensal", "Sincronizando tabela mensal com a mov_estoque atual...")
             return
 
         path = CNPJ_ROOT / cnpj / "analises" / "produtos" / f"aba_mensal_{cnpj}.parquet"
@@ -3654,6 +3881,7 @@ class MainWindow(QMainWindow):
 
             self.aplicar_filtros_aba_mensal()
             self.atualizar_aba_produtos_selecionados()
+            self.atualizar_aba_resumo_global()
         except Exception as e:
             self.show_error("Erro de leitura", f"Falha ao ler aba_mensal: {e}")
 
@@ -3726,7 +3954,7 @@ class MainWindow(QMainWindow):
         self.aplicar_filtros_aba_mensal()
 
     def exportar_aba_mensal_excel_metodo(self) -> None:
-        df = self._dataframe_colunas_visiveis(self.aba_mensal_table, self.aba_mensal_model)
+        df = self._dataframe_colunas_perfil("aba_mensal", "aba_mensal", self.aba_mensal_model, self.aba_mensal_model.dataframe, perfil="Exportar")
         if df.is_empty():
             return
         target = self._save_dialog("Exportar Mensal", "Excel (*.xlsx)")
@@ -3829,7 +4057,7 @@ class MainWindow(QMainWindow):
         self.aplicar_filtros_mov_estoque()
 
     def exportar_aba_anual_excel_metodo(self) -> None:
-        df = self._dataframe_colunas_visiveis(self.aba_anual_table, self.aba_anual_model)
+        df = self._dataframe_colunas_perfil("aba_anual", "aba_anual", self.aba_anual_model, self.aba_anual_model.dataframe, perfil="Exportar")
         if df.is_empty(): return
         target = self._save_dialog(f"Exportar Anual", "Excel (*.xlsx)")
         if not target: return
@@ -3840,6 +4068,24 @@ class MainWindow(QMainWindow):
 
     def exportar_aba_anual_excel(self) -> None:
         self.exportar_aba_anual_excel_metodo()
+
+    def exportar_mov_estoque_excel(self) -> None:
+        if self.mov_estoque_model.dataframe.is_empty():
+            QMessageBox.information(self, "Exportacao", "Nao ha dados filtrados na mov_estoque para exportar.")
+            return
+        target = self._save_dialog("Exportar Movimentacao de Estoque", "Excel (*.xlsx)")
+        if not target:
+            return
+        try:
+            df_to_export = self._dataframe_colunas_visiveis(
+                self.mov_estoque_table,
+                self.mov_estoque_model,
+                self.mov_estoque_model.dataframe,
+            )
+            self.export_service.export_excel(target, df_to_export, sheet_name="Mov_Estoque")
+            # self.show_info("Exportacao concluida", f"Arquivo gerado em:\n{target}") # Export service shows its own message/bar maybe? I'll add one just in case 
+        except Exception as e:
+            self.show_error("Erro de exportacao", str(e))
 
     def atualizar_aba_nfe_entrada(self) -> None:
         self._atualizar_estado_botao_nfe_entrada()
@@ -4045,7 +4291,7 @@ class MainWindow(QMainWindow):
         self.aplicar_filtros_nfe_entrada()
 
     def exportar_nfe_entrada_excel(self) -> None:
-        df = self._dataframe_colunas_visiveis(self.nfe_entrada_table, self.nfe_entrada_model)
+        df = self._dataframe_colunas_perfil("nfe_entrada", "nfe_entrada", self.nfe_entrada_model, self.nfe_entrada_model.dataframe, perfil="Exportar")
         if df.is_empty():
             self.show_info("Exportacao", "Nao ha dados de NFe Entrada para exportar.")
             return
@@ -4149,7 +4395,7 @@ class MainWindow(QMainWindow):
         self.aplicar_filtros_id_agrupados()
 
     def exportar_id_agrupados_excel(self) -> None:
-        df = self._dataframe_colunas_visiveis(self.id_agrupados_table, self.id_agrupados_model)
+        df = self._dataframe_colunas_perfil("id_agrupados", "id_agrupados", self.id_agrupados_model, self.id_agrupados_model.dataframe, perfil="Exportar")
         if df.is_empty():
             self.show_info("Exportacao", "Nao ha dados de id_agrupados para exportar.")
             return
@@ -4509,6 +4755,10 @@ class MainWindow(QMainWindow):
         fonte_padrao = OpenPyxlFont(name="Arial", size=8)
         fonte_header = OpenPyxlFont(name="Arial", size=8, bold=True)
         formato_num = "#,##0.00"
+        formato_inteiro = "#,##0"
+        formato_ano = "0"
+        formato_data = "dd/mm/yyyy"
+        formato_data_hora = "dd/mm/yyyy hh:mm:ss"
 
         ws.append(list(df.columns))
         for cell in ws[1]:
@@ -4516,11 +4766,11 @@ class MainWindow(QMainWindow):
 
         for row in df.iter_rows():
             linha_excel = []
-            for valor in row:
+            for coluna, valor in zip(df.columns, row):
                 if isinstance(valor, (int, float)) and not isinstance(valor, bool):
                     linha_excel.append(valor)
                 else:
-                    linha_excel.append(display_cell(valor))
+                    linha_excel.append(display_cell(valor, coluna))
             ws.append(linha_excel)
 
         for row in ws.iter_rows():
@@ -4529,34 +4779,28 @@ class MainWindow(QMainWindow):
                     cell.font = fonte_header
                 else:
                     cell.font = fonte_padrao
-                if isinstance(cell.value, (int, float)) and not isinstance(cell.value, bool):
-                    cell.number_format = formato_num
+                if cell.row == 1:
+                    continue
+                nome_coluna = str(ws.cell(row=1, column=cell.column).value or "")
+                if is_year_column_name(nome_coluna) and isinstance(cell.value, (int, float)) and not isinstance(cell.value, bool):
+                    cell.number_format = formato_ano
+                elif isinstance(cell.value, (int, float)) and not isinstance(cell.value, bool):
+                    if float(cell.value).is_integer():
+                        cell.number_format = formato_inteiro
+                    else:
+                        cell.number_format = formato_num
+                elif hasattr(cell.value, "hour"):
+                    cell.number_format = formato_data_hora
+                elif hasattr(cell.value, "day") and hasattr(cell.value, "month"):
+                    cell.number_format = formato_data
 
         ws.freeze_panes = "A2"
         if ws.max_row >= 1 and ws.max_column >= 1:
             ws.auto_filter.ref = ws.dimensions
 
-    def _montar_valores_consolidados_produtos_selecionados(self, ids: list[str]) -> pl.DataFrame:
-        resumo = self._filtrar_dataframe_por_ids(self._produtos_selecionados_df, ids)
-        mensal = self._filtrar_dataframe_por_ids(self._produtos_selecionados_mensal_df, ids)
-        anual = self._filtrar_dataframe_por_ids(self._produtos_selecionados_anual_df, ids)
-
-        if resumo.is_empty():
-            return pl.DataFrame(
-                schema={
-                    "Ano/Mes": pl.Utf8,
-                    "ICMS_entr_desacob": pl.Float64,
-                    "ICMS_saidas_desac": pl.Float64,
-                    "ICMS_estoque_desac": pl.Float64,
-                    "Total": pl.Float64,
-                }
-            )
-
-        anos_base: list[int] = []
-        ano_ini, ano_fim = self._intervalo_anos_produtos_selecionados()
-        if ano_ini is not None and ano_fim is not None:
-            anos_base = list(range(int(ano_ini), int(ano_fim) + 1))
-        else:
+    def _gerar_resumo_global(self, mensal: pl.DataFrame, anual: pl.DataFrame, anos_base: list[int] | None = None) -> pl.DataFrame:
+        if anos_base is None:
+            anos_base = []
             for df in (mensal, anual):
                 if not df.is_empty() and "ano" in df.columns:
                     anos_base.extend(
@@ -4663,6 +4907,71 @@ class MainWindow(QMainWindow):
             nulls_last=True,
         )
 
+    def atualizar_aba_resumo_global(self) -> None:
+        if self._aba_mensal_df.is_empty() and self._aba_anual_df.is_empty():
+            self.resumo_global_model.set_dataframe(pl.DataFrame())
+            self._resumo_global_df = pl.DataFrame()
+            self.lbl_resumo_global_status.setText("Aguarde a aba mensal e a aba anual estarem processadas.")
+            return
+
+        try:
+            resumo = self._gerar_resumo_global(self._aba_mensal_df, self._aba_anual_df)
+            self._resumo_global_df = resumo
+            self.resumo_global_model.set_dataframe(resumo)
+            self.lbl_resumo_global_status.setText(f"Resumo global calculado com base em {resumo.height} competencias.")
+        except Exception as e:
+            self.show_error("Erro de consoliacao", f"Erro ao calcular Resumo Global: {e}")
+
+    def exportar_resumo_global_excel(self) -> None:
+        if self._resumo_global_df is None or self._resumo_global_df.is_empty():
+            QMessageBox.information(self, "Exportacao", "Nao ha dados globais para exportar.")
+            return
+        target = self._save_dialog("Exportar Resumo Global", "Excel (*.xlsx)")
+        if not target:
+            return
+        try:
+            df_to_export = self._dataframe_colunas_perfil(
+                "resumo_global",
+                "resumo_global",
+                self.resumo_global_model,
+                self._resumo_global_df,
+                perfil="Exportar"
+            )
+            wb = Workbook()
+            ws = wb.active
+            ws.title = "Resumo Global"
+            self._escrever_planilha_openpyxl(ws, df_to_export)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            wb.save(target)
+            self.show_info("Exportacao concluida", f"Arquivo gerado em:\n{target}")
+        except Exception as e:
+            self.show_error("Erro de exportacao", str(e))
+
+    def _montar_valores_consolidados_produtos_selecionados(self, ids: list[str]) -> pl.DataFrame:
+        resumo = self._filtrar_dataframe_por_ids(self._produtos_selecionados_df, ids)
+        mensal = self._filtrar_dataframe_por_ids(self._produtos_selecionados_mensal_df, ids)
+        anual = self._filtrar_dataframe_por_ids(self._produtos_selecionados_anual_df, ids)
+
+        if resumo.is_empty():
+            return pl.DataFrame(
+                schema={
+                    "Ano/Mes": pl.Utf8,
+                    "ICMS_entr_desacob": pl.Float64,
+                    "ICMS_saidas_desac": pl.Float64,
+                    "ICMS_estoque_desac": pl.Float64,
+                    "Total": pl.Float64,
+                }
+            )
+
+        anos_base: list[int] = []
+        ano_ini, ano_fim = self._intervalo_anos_produtos_selecionados()
+        if ano_ini is not None and ano_fim is not None:
+            anos_base = list(range(int(ano_ini), int(ano_fim) + 1))
+        else:
+            anos_base = None
+
+        return self._gerar_resumo_global(mensal, anual, anos_base)
+
     def exportar_produtos_selecionados_excel(self) -> None:
         if self._produtos_selecionados_df.is_empty():
             QMessageBox.information(self, "Exportacao", "Nao ha dados consolidados para exportar.")
@@ -4698,13 +5007,23 @@ class MainWindow(QMainWindow):
             )
             valores_consolidados = self._montar_valores_consolidados_produtos_selecionados(ids)
 
+            produtos_selecionados_tabela = self._dataframe_colunas_perfil(
+                "produtos_selecionados",
+                "produtos_selecionados",
+                self.produtos_selecionados_model,
+                self._filtrar_dataframe_por_ids(self._produtos_selecionados_df, ids),
+                perfil="Exportar"
+            )
+
             wb = Workbook()
-            ws_mov = wb.active
-            ws_mov.title = "Mov_Estoque"
-            self._escrever_planilha_openpyxl(ws_mov, mov)
+            ws_produtos = wb.active
+            ws_produtos.title = "Produtos_Selecionados"
+            self._escrever_planilha_openpyxl(ws_produtos, produtos_selecionados_tabela)
+
+            self._escrever_planilha_openpyxl(wb.create_sheet("Mov_Estoque"), mov)
             self._escrever_planilha_openpyxl(wb.create_sheet("Mensal"), mensal)
             self._escrever_planilha_openpyxl(wb.create_sheet("Anual"), anual)
-            self._escrever_planilha_openpyxl(wb.create_sheet("valores_consolidados"), valores_consolidados)
+            self._escrever_planilha_openpyxl(wb.create_sheet("ICMS_devido"), valores_consolidados)
             target.parent.mkdir(parents=True, exist_ok=True)
             wb.save(target)
             self.show_info("Exportacao concluida", f"Arquivo gerado em:\n{target}")
@@ -5652,8 +5971,7 @@ class MainWindow(QMainWindow):
         # Salvar as alteracoes matematicas
         if self._conversion_file_path:
             (
-                self._conversion_df_full
-                .drop(["__row_id__", "preco_medio_ref", "fator_calculado"], strict=False)
+                self._preparar_dataframe_para_salvar_conversao(self._conversion_df_full)
                 .write_parquet(self._conversion_file_path)
             )
             
@@ -5758,13 +6076,112 @@ class MainWindow(QMainWindow):
 
         return df_enriquecido
 
-    def _enriquecer_descricoes_conversao(self, cnpj: str, df: pl.DataFrame) -> pl.DataFrame:
-        if df.is_empty() or "id_agrupado" not in df.columns:
-            return df
+    def _montar_descricoes_exibicao_por_grupo(self, df_descricoes: pl.DataFrame) -> pl.DataFrame:
+        """
+        Normaliza a lista exibida na aba de conversao sem alterar a
+        fonte canonica persistida em parquet.
+        """
+        if df_descricoes.is_empty() or not {"id_agrupado", "descricao_item"}.issubset(set(df_descricoes.columns)):
+            return pl.DataFrame()
 
+        return (
+            df_descricoes
+            .select(
+                [
+                    pl.col("id_agrupado").cast(pl.Utf8, strict=False),
+                    pl.col("descricao_item").cast(pl.Utf8, strict=False),
+                ]
+            )
+            .with_columns(
+                pl.col("descricao_item").fill_null("").str.strip_chars().alias("descricao_item")
+            )
+            .filter(pl.col("descricao_item") != "")
+            .unique(subset=["id_agrupado", "descricao_item"])
+            .sort(["id_agrupado", "descricao_item"], nulls_last=True)
+            .group_by("id_agrupado")
+            .agg(pl.col("descricao_item").alias("__lista_descricoes"))
+            .with_columns(
+                pl.col("__lista_descricoes").list.join(" | ").alias("lista_descricoes_produto")
+            )
+            .select(["id_agrupado", "lista_descricoes_produto"])
+        )
+
+    def _carregar_descr_padrao_canonico_conversao(self, cnpj: str) -> pl.DataFrame:
+        """
+        Garante que a aba use o descr_padrao atual do agrupamento.
+        """
+        arquivos_canonicos = [
+            CNPJ_ROOT / cnpj / "analises" / "produtos" / f"produtos_agrupados_{cnpj}.parquet",
+            CNPJ_ROOT / cnpj / "analises" / "produtos" / f"id_agrupados_{cnpj}.parquet",
+            CNPJ_ROOT / cnpj / "analises" / "produtos" / f"produtos_final_{cnpj}.parquet",
+        ]
+
+        for caminho in arquivos_canonicos:
+            if not caminho.exists():
+                continue
+            try:
+                df_origem = self._carregar_dataset_ui(caminho, columns=["id_agrupado", "descr_padrao"])
+            except Exception:
+                continue
+
+            if df_origem.is_empty() or not {"id_agrupado", "descr_padrao"}.issubset(set(df_origem.columns)):
+                continue
+
+            return (
+                df_origem
+                .select(
+                    [
+                        pl.col("id_agrupado").cast(pl.Utf8, strict=False),
+                        pl.col("descr_padrao").cast(pl.Utf8, strict=False).fill_null("").str.strip_chars().alias("descr_padrao_canonico"),
+                    ]
+                )
+                .filter(pl.col("descr_padrao_canonico") != "")
+                .unique(subset=["id_agrupado"], keep="first")
+            )
+
+        return pl.DataFrame()
+
+    def _carregar_descricoes_canonicas_conversao(self, cnpj: str) -> pl.DataFrame:
+        """
+        Prefere a lista consolidada do ETL; so recorre ao fallback via
+        produtos_final quando o schema antigo ainda nao foi regenerado.
+        """
+        arquivos_canonicos = [
+            CNPJ_ROOT / cnpj / "analises" / "produtos" / f"produtos_agrupados_{cnpj}.parquet",
+            CNPJ_ROOT / cnpj / "analises" / "produtos" / f"id_agrupados_{cnpj}.parquet",
+        ]
+
+        for caminho in arquivos_canonicos:
+            if not caminho.exists():
+                continue
+            try:
+                df_origem = self._carregar_dataset_ui(caminho, columns=["id_agrupado", "lista_descricoes"])
+            except Exception:
+                continue
+
+            if df_origem.is_empty() or not {"id_agrupado", "lista_descricoes"}.issubset(set(df_origem.columns)):
+                continue
+
+            df_descricoes = self._montar_descricoes_exibicao_por_grupo(
+                df_origem
+                .select(
+                    [
+                        pl.col("id_agrupado").cast(pl.Utf8, strict=False),
+                        pl.col("lista_descricoes").cast(pl.List(pl.Utf8), strict=False).alias("descricao_item"),
+                    ]
+                )
+                .explode("descricao_item")
+            )
+            if not df_descricoes.is_empty():
+                return df_descricoes
+
+        return pl.DataFrame()
+
+    def _reconstruir_descricoes_conversao_via_produtos_final(self, cnpj: str) -> pl.DataFrame:
+        """Fallback legado para CNPJs ainda nao regenerados."""
         arq_prod_final = CNPJ_ROOT / cnpj / "analises" / "produtos" / f"produtos_final_{cnpj}.parquet"
         if not arq_prod_final.exists():
-            return df
+            return pl.DataFrame()
 
         try:
             df_prod = self._carregar_dataset_ui(
@@ -5772,10 +6189,10 @@ class MainWindow(QMainWindow):
                 columns=["id_agrupado", "descricao", "descricao_final", "lista_desc_compl"],
             )
         except Exception:
-            return df
+            return pl.DataFrame()
 
         if df_prod.is_empty() or "id_agrupado" not in df_prod.columns:
-            return df
+            return pl.DataFrame()
 
         partes_descricoes: list[pl.DataFrame] = []
         if "descricao" in df_prod.columns:
@@ -5807,33 +6224,60 @@ class MainWindow(QMainWindow):
             )
 
         if not partes_descricoes:
+            return pl.DataFrame()
+
+        return self._montar_descricoes_exibicao_por_grupo(
+            pl.concat(partes_descricoes, how="vertical_relaxed")
+        )
+
+    def _preparar_dataframe_para_salvar_conversao(self, df: pl.DataFrame) -> pl.DataFrame:
+        """
+        Remove colunas derivadas da UI antes de persistir fatores_conversao.
+        """
+        return df.drop(
+            [
+                "__row_id__",
+                "preco_medio_ref",
+                "fator_calculado",
+                "lista_descricoes_produto",
+                "descr_padrao_canonico",
+            ],
+            strict=False,
+        )
+
+    def _enriquecer_descricoes_conversao(self, cnpj: str, df: pl.DataFrame) -> pl.DataFrame:
+        if df.is_empty() or "id_agrupado" not in df.columns:
             return df
 
-        df_descricoes_base = (
-            pl.concat(partes_descricoes, how="vertical_relaxed")
-            .with_columns(
-                pl.col("descricao_item").cast(pl.Utf8, strict=False).fill_null("").str.strip_chars().alias("descricao_item")
-            )
-            .filter(pl.col("descricao_item") != "")
-            .unique(subset=["id_agrupado", "descricao_item"])
-            .sort(["id_agrupado", "descricao_item"], nulls_last=True)
-            .group_by("id_agrupado")
-            .agg(pl.col("descricao_item").alias("lista_descricoes_produto"))
-            .with_columns(
-                pl.col("lista_descricoes_produto").list.join(" | ").alias("lista_descricoes_produto")
-            )
-        )
+        df_descr_padrao = self._carregar_descr_padrao_canonico_conversao(cnpj)
+        df_descricoes_base = self._carregar_descricoes_canonicas_conversao(cnpj)
+        if df_descricoes_base.is_empty():
+            df_descricoes_base = self._reconstruir_descricoes_conversao_via_produtos_final(cnpj)
+        if df_descricoes_base.is_empty() and df_descr_padrao.is_empty():
+            return df
 
-        df_out = (
-            df.drop(["lista_descricoes_produto"], strict=False)
-            .join(df_descricoes_base, on="id_agrupado", how="left")
-            .with_columns(
-                pl.col("lista_descricoes_produto")
-                .cast(pl.Utf8, strict=False)
-                .fill_null("")
-                .alias("lista_descricoes_produto")
+        df_out = df.drop(["lista_descricoes_produto", "descr_padrao_canonico"], strict=False)
+        if not df_descr_padrao.is_empty():
+            df_out = (
+                df_out
+                .join(df_descr_padrao, on="id_agrupado", how="left")
+                .with_columns(
+                    pl.coalesce([pl.col("descr_padrao_canonico"), pl.col("descr_padrao")]).alias("descr_padrao")
+                )
             )
-        )
+        if not df_descricoes_base.is_empty():
+            df_out = (
+                df_out
+                .join(df_descricoes_base, on="id_agrupado", how="left")
+                .with_columns(
+                    pl.col("lista_descricoes_produto")
+                    .cast(pl.Utf8, strict=False)
+                    .fill_null("")
+                    .alias("lista_descricoes_produto")
+                )
+            )
+        else:
+            df_out = df_out.with_columns(pl.lit("").alias("lista_descricoes_produto"))
 
         colunas = list(df_out.columns)
         if "descr_padrao" in colunas and "lista_descricoes_produto" in colunas:
@@ -6010,8 +6454,7 @@ class MainWindow(QMainWindow):
         self._conversion_df_full = self._enriquecer_dataframe_conversao(self._conversion_df_full)
 
         (
-            self._conversion_df_full
-            .drop(["__row_id__", "preco_medio_ref", "fator_calculado"], strict=False)
+            self._preparar_dataframe_para_salvar_conversao(self._conversion_df_full)
             .write_parquet(self._conversion_file_path)
         )
         self.status.showMessage("Fator e/ou unidade de referencia atualizados e salvos.")

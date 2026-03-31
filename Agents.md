@@ -161,27 +161,33 @@ Classes já existentes que refletem esse padrão:
 
 Estas regras devem ser tratadas como sensíveis:
 
-### Rastreabilidade
+### Rastreabilidade e Linha Dourada (Golden Thread)
 
-- Não pular etapas do pipeline para "simplificar" processamento.
-- Não remover colunas intermediárias que permitam auditoria sem confirmar impacto.
+Para garantir auditoria total, o sistema utiliza o conceito de **Golden Thread**:
+
+- **id_linha_origem**: Chave única de linha deve ser preservada desde a extração (NFe: `chave_acesso + prod_nitem`, C170: `reg_0000_id + num_doc + num_item`).
+- **codigo_fonte**: Identificador de produto antes do agrupamento, formado por `CNPJ_Emitente + "|" + codigo_produto_original`.
+- **id_agrupado**: Chave mestra que une diferentes `codigo_fonte` após saneamento/agrupamento.
+- **Enriquecimento**: O módulo `movimentacao_estoque` atua como a camada de enriquecimento, realizando JOINs entre as fontes originais e as tabelas de de/para e `fatores_conversao`.
 
 ### Chaves fiscais
 
 - `cest` e `gtin` não são equivalentes.
 - Não misturar código de barras com classificações fiscais.
 
-### Fallback de preço
+### Fallback de preço e classificação
 
-Quando não houver preço médio de compra:
-
-- usar fallback permitido pelo fluxo atual;
-- registrar o evento em artefatos rastreáveis;
-- manter comportamento consistente com a geração atual de logs `.json` e `.parquet`.
+- **Preço Médio**: Quando não houver preço médio de compra, usar fallback permitido pelo fluxo atual e registrar em logs.
+- **Classificação SITAFE**: Em `movimentacao_estoque`, colunas como `it_pc_interna` até `it_in_reducao_credito` devem usar a regra ativa mais recente caso não haja correspondência exata de data, evitando campos nulos para itens com `co_sefin_padrao` válido.
+- **Colunas Críticas (Auditáveis)**: Em `mov_estoque`, as seguintes colunas são mandatórias para cruzamentos: `id_agrupado`, `ncm_padrao`, `cest_padrao`, `unid_ref`, `fator`, `co_sefin_final`, `co_sefin_agr`, `it_pc_interna`, `it_in_st`, `it_pc_mva`, `it_in_mva_ajustado`, `it_pc_reducao`, `it_in_reducao_credito`.
 
 ### Saldo sequencial
 
 O cálculo de saldo em estoque anual é dependente de ordem e estado acumulado por grupo. Otimizações não podem quebrar essa característica.
+
+### Preservação de Ajustes Manuais
+
+No pipeline de `fatores_conversao`, é mandatório preservar ajustes manuais feitos pelo usuário. O reprocessamento deve sempre tentar o merge com dados de referência já existentes para evitar perda de trabalho de saneamento.
 
 ---
 

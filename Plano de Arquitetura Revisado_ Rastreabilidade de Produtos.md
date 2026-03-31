@@ -2,7 +2,7 @@
 
 > **Nota Oficial de Documentação:**  
 > A documentação detalhada sobre a teoria, regras de heurística e os métodos exatos de como produtos são associados (agregação automática, intervenção manual e JOIN dinâmico de chaves nas fontes) foi consolidada no diretório oficial de documentação:
-> 👉 **[Consulte a Metodologia Completa: `docs/metodo_agregacao_rastreabilidade.md`](docs/metodo_agregacao_rastreabilidade.md)**
+> 👉 **[Consulte a Metodologia Completa: `docs/agregacao_produtos.md`](docs/agregacao_produtos.md)**
 
 Este documento aprimora a arquitetura original, introduzindo o conceito de **Chaves Surrogadas (Surrogate Keys)** e **Tabelas de Ligação (Bridge Tables)** para garantir que qualquer cálculo de fator de conversão ou agrupamento manual possa ser rastreado e aplicado diretamente às linhas individuais das fontes originais (NFe, NFCe, C170, Bloco\_H) armazenadas em Parquet.
 

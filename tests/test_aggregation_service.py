@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 import sys
 
 import polars as pl
@@ -142,3 +143,141 @@ def test_agregar_linhas_recalcula_padroes_com_colunas_item_unidades(monkeypatch,
     assert row["lista_cest"] == ["2000"]
     assert row["lista_gtin"] == ["789"]
     assert row["lista_descricoes"] == ["Caixa 12x1L", "Garrafa 1L", "Produto A"]
+
+
+def test_garantir_metricas_regenera_schema_legado_com_descricoes(monkeypatch, tmp_path: Path):
+    cnpj = "12345678000190"
+    pasta_prod = tmp_path / cnpj / "analises" / "produtos"
+    pasta_prod.mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setattr(aggregation_service_module, "CNPJ_ROOT", tmp_path)
+    monkeypatch.setattr(aggregation_service_module, "registrar_evento_performance", lambda *args, **kwargs: None)
+
+    pl.DataFrame(
+        {
+            "id_agrupado": ["AGR_1"],
+            "lista_chave_produto": [["desc_1"]],
+            "descr_padrao": ["Produto A"],
+        }
+    ).write_parquet(pasta_prod / f"produtos_agrupados_{cnpj}.parquet")
+
+    pl.DataFrame({"id_descricao": ["desc_1"]}).write_parquet(pasta_prod / f"descricao_produtos_{cnpj}.parquet")
+    pl.DataFrame({"id_descricao": ["desc_1"], "id_agrupado": ["AGR_1"]}).write_parquet(
+        pasta_prod / f"produtos_final_{cnpj}.parquet"
+    )
+
+    chamadas: list[str] = []
+
+    def fake_inicializar(cnpj_recebido: str) -> bool:
+        chamadas.append(f"inicializar:{cnpj_recebido}")
+        pl.DataFrame(
+            {
+                "id_agrupado": ["AGR_1"],
+                "lista_chave_produto": [["desc_1"]],
+                "descr_padrao": ["Produto A"],
+                "lista_ncm": [["1000"]],
+                "lista_cest": [["2000"]],
+                "lista_gtin": [["789"]],
+                "lista_descricoes": [["Caixa 12x1L", "Produto A"]],
+            }
+        ).write_parquet(pasta_prod / f"produtos_agrupados_{cnpj}.parquet")
+        return True
+
+    def fake_id_agrupados(cnpj_recebido: str) -> bool:
+        chamadas.append(f"id_agrupados:{cnpj_recebido}")
+        pl.DataFrame(
+            {
+                "id_agrupado": ["AGR_1"],
+                "descr_padrao": ["Produto A"],
+                "lista_descricoes": [["Caixa 12x1L", "Produto A"]],
+            }
+        ).write_parquet(pasta_prod / f"id_agrupados_{cnpj}.parquet")
+        return True
+
+    monkeypatch.setattr(aggregation_service_module, "inicializar_produtos_agrupados", fake_inicializar)
+    monkeypatch.setattr(aggregation_service_module, "gerar_id_agrupados", fake_id_agrupados)
+
+    servico = ServicoAgregacao()
+    monkeypatch.setattr(
+        servico,
+        "recalcular_todos_padroes",
+        lambda *args, **kwargs: chamadas.append("recalcular_padroes") or True,
+    )
+    monkeypatch.setattr(
+        servico,
+        "recalcular_valores_totais",
+        lambda *args, **kwargs: chamadas.append("recalcular_totais") or True,
+    )
+
+    assert servico.garantir_metricas_tabela_agregadas(cnpj) is True
+
+    schema_agr = pl.read_parquet(pasta_prod / f"produtos_agrupados_{cnpj}.parquet", n_rows=1).columns
+    schema_id = pl.read_parquet(pasta_prod / f"id_agrupados_{cnpj}.parquet", n_rows=1).columns
+
+    assert "lista_descricoes" in schema_agr
+    assert "lista_descricoes" in schema_id
+    assert chamadas == [
+        f"inicializar:{cnpj}",
+        f"id_agrupados:{cnpj}",
+        "recalcular_padroes",
+        "recalcular_totais",
+    ]
+
+
+def test_artefatos_estoque_defasados_identifica_derivados_antigos_ou_ausentes(monkeypatch, tmp_path: Path):
+    cnpj = "12345678000190"
+    pasta_prod = tmp_path / cnpj / "analises" / "produtos"
+    pasta_prod.mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setattr(aggregation_service_module, "CNPJ_ROOT", tmp_path)
+    monkeypatch.setattr(aggregation_service_module, "registrar_evento_performance", lambda *args, **kwargs: None)
+
+    arq_mov = pasta_prod / f"mov_estoque_{cnpj}.parquet"
+    arq_mensal = pasta_prod / f"aba_mensal_{cnpj}.parquet"
+    pl.DataFrame({"id": [1]}).write_parquet(arq_mov)
+    pl.DataFrame({"id": [1]}).write_parquet(arq_mensal)
+
+    os.utime(arq_mensal, ns=(1_000_000_000, 1_000_000_000))
+    os.utime(arq_mov, ns=(2_000_000_000, 2_000_000_000))
+
+    servico = ServicoAgregacao()
+
+    assert servico.artefatos_estoque_defasados(cnpj) == ["calculos_mensais", "calculos_anuais"]
+
+
+def test_recalcular_resumos_estoque_executa_apenas_etapas_defasadas(monkeypatch, tmp_path: Path):
+    cnpj = "12345678000190"
+    pasta_prod = tmp_path / cnpj / "analises" / "produtos"
+    pasta_prod.mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setattr(aggregation_service_module, "CNPJ_ROOT", tmp_path)
+    monkeypatch.setattr(aggregation_service_module, "registrar_evento_performance", lambda *args, **kwargs: None)
+
+    arq_mov = pasta_prod / f"mov_estoque_{cnpj}.parquet"
+    arq_mensal = pasta_prod / f"aba_mensal_{cnpj}.parquet"
+    arq_anual = pasta_prod / f"aba_anual_{cnpj}.parquet"
+    pl.DataFrame({"id": [1]}).write_parquet(arq_mov)
+    pl.DataFrame({"id": [1]}).write_parquet(arq_mensal)
+    pl.DataFrame({"id": [1]}).write_parquet(arq_anual)
+
+    os.utime(arq_mensal, ns=(1_000_000_000, 1_000_000_000))
+    os.utime(arq_mov, ns=(2_000_000_000, 2_000_000_000))
+    os.utime(arq_anual, ns=(3_000_000_000, 3_000_000_000))
+
+    chamadas: list[str] = []
+
+    monkeypatch.setattr(
+        aggregation_service_module,
+        "gerar_calculos_mensais",
+        lambda cnpj_recebido: chamadas.append(f"mensal:{cnpj_recebido}") or True,
+    )
+    monkeypatch.setattr(
+        aggregation_service_module,
+        "gerar_calculos_anuais",
+        lambda cnpj_recebido: chamadas.append(f"anual:{cnpj_recebido}") or True,
+    )
+
+    servico = ServicoAgregacao()
+
+    assert servico.recalcular_resumos_estoque(cnpj) is True
+    assert chamadas == [f"mensal:{cnpj}"]

@@ -65,6 +65,23 @@ def marcar_mov_rep_por_chave_item(df: pl.DataFrame) -> pl.DataFrame:
     return df.with_columns(repetido_expr.alias("mov_rep"))
 
 
+def filtrar_movimentacoes_por_fonte(df: pl.DataFrame) -> pl.DataFrame:
+    """Aplica a regra fiscal de direcao por origem na mov_estoque."""
+    if df.is_empty() or "fonte" not in df.columns or "Tipo_operacao" not in df.columns:
+        return df
+
+    fonte_expr = pl.col("fonte").cast(pl.Utf8, strict=False).str.to_lowercase()
+    tipo_expr = pl.col("Tipo_operacao").cast(pl.Utf8, strict=False)
+    filtro_expr = (
+        pl.when(fonte_expr == "c170")
+        .then(tipo_expr == "1 - ENTRADA")
+        .when(fonte_expr.is_in(["nfe", "nfce"]))
+        .then(tipo_expr == "2 - SAIDAS")
+        .otherwise(pl.lit(True))
+    )
+    return df.filter(filtro_expr)
+
+
 def gerar_movimentacao_estoque(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
     cnpj = re.sub(r"\D", "", cnpj)
     if pasta_cnpj is None:
@@ -310,6 +327,8 @@ def gerar_movimentacao_estoque(cnpj: str, pasta_cnpj: Path | None = None) -> boo
             else:
                 df_selecionado = df_selecionado.with_columns(pl.lit(None).alias(c))
 
+        df_selecionado = df_selecionado.with_columns(pl.lit(prefix_sys).alias("fonte"))
+
         if prefix_sys == "c170":
             for c in ["finnfe", "infprot_cstat", "co_uf_emit", "co_uf_dest"]:
                 if c in df_raw.columns:
@@ -361,7 +380,11 @@ def gerar_movimentacao_estoque(cnpj: str, pasta_cnpj: Path | None = None) -> boo
             )
             .drop(["nsu_ref", "finnfe_ref", "infprot_cstat_ref", "co_uf_emit_ref", "co_uf_dest_ref"], strict=False)
         )
-    df_mov = df_mov.with_columns(_padronizar_tipo_operacao_expr("Tipo_operacao"))
+    df_mov = (
+        df_mov
+        .with_columns(_padronizar_tipo_operacao_expr("Tipo_operacao"))
+        .pipe(filtrar_movimentacoes_por_fonte)
+    )
     
     # 2. Ajustar eventos de estoque final/inicial
     df_mov = _gerar_eventos_estoque(df_mov)
@@ -421,12 +444,16 @@ def gerar_movimentacao_estoque(cnpj: str, pasta_cnpj: Path | None = None) -> boo
 
     # Reordenar colunas para exibição: Descr_item e Descr_compl logo após Tipo_operacao
     cols = list(df_final.columns)
-    if "Tipo_operacao" in cols and "Descr_item" in cols and "Descr_compl" in cols:
-        cols.remove("Descr_item")
-        cols.remove("Descr_compl")
+    if "Tipo_operacao" in cols:
+        for coluna in ["fonte", "Descr_item", "Descr_compl"]:
+            if coluna in cols:
+                cols.remove(coluna)
         idx = cols.index("Tipo_operacao")
-        cols.insert(idx + 1, "Descr_item")
-        cols.insert(idx + 2, "Descr_compl")
+        posicao = idx + 1
+        for coluna in ["fonte", "Descr_item", "Descr_compl"]:
+            if coluna in df_final.columns:
+                cols.insert(posicao, coluna)
+                posicao += 1
         df_final = df_final.select(cols)
 
     data_ref_expr = pl.coalesce(
@@ -466,18 +493,18 @@ def gerar_movimentacao_estoque(cnpj: str, pasta_cnpj: Path | None = None) -> boo
         )
         .with_columns(
             [
+                # __qtd_decl_final_audit__: captura a quantidade declarada em TODO estoque final do ano
+                # A restricao de 31/12 foi removida para permitir auditoria anual correta
                 pl.when(
                     pl.col("Tipo_operacao").cast(pl.Utf8, strict=False).str.starts_with("3 - ESTOQUE FINAL")
-                    & (pl.col("__data_ref_calc__").dt.month() == 12)
-                    & (pl.col("__data_ref_calc__").dt.day() == 31)
                 )
                 .then(q_conv_valido_expr)
                 .otherwise(pl.lit(0.0))
                 .alias("__qtd_decl_final_audit__"),
+                # q_conv: estoque inicial e final agora sao capturados independente da data
+                # para permitir auditoria anual completa
                 pl.when(
                     pl.col("Tipo_operacao").cast(pl.Utf8, strict=False).str.starts_with("0 - ESTOQUE INICIAL")
-                    & (pl.col("__data_ref_calc__").dt.month() == 1)
-                    & (pl.col("__data_ref_calc__").dt.day() == 1)
                 )
                 .then(q_conv_valido_expr)
                 .when(pl.col("Tipo_operacao") == "1 - ENTRADA")
@@ -486,10 +513,9 @@ def gerar_movimentacao_estoque(cnpj: str, pasta_cnpj: Path | None = None) -> boo
                 .then(q_conv_valido_expr)
                 .otherwise(pl.lit(0.0))
                 .alias("q_conv"),
+                # __q_conv_sinal__: mesmo principio - estoque inicial/final capturado em qualquer data
                 pl.when(
                     pl.col("Tipo_operacao").cast(pl.Utf8, strict=False).str.starts_with("0 - ESTOQUE INICIAL")
-                    & (pl.col("__data_ref_calc__").dt.month() == 1)
-                    & (pl.col("__data_ref_calc__").dt.day() == 1)
                 )
                 .then(q_conv_valido_expr)
                 .when(pl.col("Tipo_operacao") == "1 - ENTRADA")
