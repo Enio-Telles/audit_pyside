@@ -26,7 +26,7 @@ try:
     from utilitarios.text import remove_accents
     from utilitarios.validacao_schema import (
         SchemaValidacaoError,
-        validar_parquet_essencial,
+        garantir_colunas_obrigatorias,
     )
 except ImportError as e:
     rprint(f"[red]Erro ao importar modulos utilitarios:[/red] {e}")
@@ -489,24 +489,24 @@ def calcular_fatores_conversao(cnpj: str, pasta_cnpj: Path | None = None) -> boo
 
     rprint(f"[bold cyan]Calculando fatores de conversao para CNPJ: {cnpj}[/bold cyan]")
 
+    df_unid = pl.read_parquet(arq_unid)
+    df_final = pl.read_parquet(arq_final)
+    df_fatores_existente = pl.read_parquet(arq_fatores_existente) if arq_fatores_existente.exists() else pl.DataFrame()
+
     try:
-        validar_parquet_essencial(
-            arq_unid,
+        garantir_colunas_obrigatorias(
+            df_unid,
             ["descricao", "unid", "compras", "vendas", "qtd_compras", "qtd_vendas"],
             contexto="fatores_conversao/item_unidades",
         )
-        validar_parquet_essencial(
-            arq_final,
+        garantir_colunas_obrigatorias(
+            df_final,
             ["id_agrupado", "descricao_normalizada", "descricao_final", "descr_padrao", "unid_ref_sugerida"],
             contexto="fatores_conversao/produtos_final",
         )
     except SchemaValidacaoError as exc:
         rprint(f"[red]{exc}[/red]")
         return False
-
-    df_unid = pl.read_parquet(arq_unid)
-    df_final = pl.read_parquet(arq_final)
-    df_fatores_existente = pl.read_parquet(arq_fatores_existente) if arq_fatores_existente.exists() else pl.DataFrame()
 
     if df_unid.is_empty() or df_final.is_empty():
         rprint("[yellow]Aviso: sem dados para calcular fatores de conversao.[/yellow]")
