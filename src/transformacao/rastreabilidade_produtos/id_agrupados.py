@@ -20,26 +20,28 @@ except ImportError as e:
     sys.exit(1)
 
 
-def _limpar_lista(valores) -> list[str]:
-    saida: list[str] = []
-    for valor in valores or []:
-        if valor is None:
+def _extrair_valores(valores, saida: set[str]) -> None:
+    if not valores:
+        return
+    stack = [valores]
+    while stack:
+        curr = stack.pop()
+        if curr is None:
             continue
-        if isinstance(valor, list):
-            saida.extend(_limpar_lista(valor))
-            continue
-        texto = str(valor).strip()
-        if texto:
-            saida.append(texto)
-    return sorted(set(saida))
+        if isinstance(curr, list):
+            stack.extend(curr)
+        else:
+            texto = str(curr).strip()
+            if texto:
+                saida.add(texto)
 
 
 def _consolidar_grupo_id_agrupado(df_grupo: pl.DataFrame) -> pl.DataFrame:
     registros = df_grupo.to_dicts()
     descr_padrao = None
-    descricoes: list[str] = []
-    codigos: list[str] = []
-    unidades: list[str] = []
+    descricoes: set[str] = set()
+    codigos: set[str] = set()
+    unidades: set[str] = set()
 
     for row in registros:
         if descr_padrao is None:
@@ -47,34 +49,32 @@ def _consolidar_grupo_id_agrupado(df_grupo: pl.DataFrame) -> pl.DataFrame:
             if valor:
                 descr_padrao = valor
 
-        descricoes.extend(
-            _limpar_lista(
-                [
-                    row.get("descr_padrao"),
-                    row.get("descricao_final"),
-                    row.get("descricao"),
-                    row.get("lista_desc_compl"),
-                ]
-            )
+        _extrair_valores(
+            [
+                row.get("descr_padrao"),
+                row.get("descricao_final"),
+                row.get("descricao"),
+                row.get("lista_desc_compl"),
+            ],
+            descricoes
         )
-        codigos.extend(_limpar_lista(row.get("lista_codigos")))
-        unidades.extend(
-            _limpar_lista(
-                [
-                    row.get("lista_unid"),
-                    row.get("lista_unidades_agr"),
-                    row.get("unid_ref_sugerida"),
-                ]
-            )
+        _extrair_valores(row.get("lista_codigos"), codigos)
+        _extrair_valores(
+            [
+                row.get("lista_unid"),
+                row.get("lista_unidades_agr"),
+                row.get("unid_ref_sugerida"),
+            ],
+            unidades
         )
 
     return pl.DataFrame(
         {
             "id_agrupado": [str(registros[0]["id_agrupado"])],
             "descr_padrao": [descr_padrao],
-            "lista_descricoes": [_limpar_lista(descricoes)],
-            "lista_codigos": [_limpar_lista(codigos)],
-            "lista_unidades": [_limpar_lista(unidades)],
+            "lista_descricoes": [sorted(descricoes)],
+            "lista_codigos": [sorted(codigos)],
+            "lista_unidades": [sorted(unidades)],
         }
     )
 
