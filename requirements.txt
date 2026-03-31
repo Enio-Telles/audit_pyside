@@ -1,0 +1,12 @@
+pytest
+pytest-mock
+polars
+rich
+pyarrow
+numpy
+pandas
+xlsxwriter
+oracledb
+python-dotenv
+PySide6
+python-docx
