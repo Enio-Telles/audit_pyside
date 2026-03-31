@@ -174,6 +174,10 @@ def produtos_agrupados(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         )
     )
 
+
+    df_item_unid_parts = df_item_unid_norm.partition_by("__descricao_upper", as_dict=True)
+    df_item_unid_empty = df_item_unid_norm.filter(pl.lit(False)).drop("__descricao_upper", strict=False)
+
     registros_mestra: list[dict] = []
     registros_ponte: list[dict] = []
 
@@ -182,13 +186,11 @@ def produtos_agrupados(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         desc_norm = row.get("descricao_normalizada")
 
         if desc_norm:
-            df_base = (
-                df_item_unid_norm
-                .filter(pl.col("__descricao_upper") == desc_norm)
-                .drop("__descricao_upper")
-            )
+            df_base = df_item_unid_parts.get((desc_norm,), df_item_unid_empty)
+            if "__descricao_upper" in df_base.columns:
+                df_base = df_base.drop("__descricao_upper")
         else:
-            df_base = df_item_unid.filter(pl.lit(False))
+            df_base = df_item_unid_empty
 
         padrao = _calcular_atributos_padrao(df_base)
         lista_co_sefin = _serie_limpa_lista(row.get("lista_co_sefin"))

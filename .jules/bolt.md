@@ -1,0 +1,3 @@
+## 2024-03-31 - [Optimization using partition_by]
+**Learning:** Polars `filter` with `map_elements` or `is_in` inside a Python loop scaling over thousands of product groups leads to O(N*M) complexity and severely degraded performance due to redundant evaluation.
+**Action:** Always pre-calculate expensive transformations (e.g. string manipulation with `map_elements` or `str.to_uppercase()`) outside the loop, and use `df.partition_by('column', as_dict=True)` to convert the DataFrame into an O(1) dictionary indexed by the grouping key. Then, fetch partitioned chunks inside the loop via `dict.get()`, drastically reducing time complexity.
