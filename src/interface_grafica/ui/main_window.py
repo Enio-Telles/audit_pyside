@@ -5548,15 +5548,14 @@ class MainWindow(QMainWindow):
             )
         except Exception as e:
             import traceback
-            traceback.print_exc()
-            self.show_error("Erro na agregacao", f"Ocorreu um erro ao agregar: {e}")
+            from utilitarios.perf_monitor import registrar_evento_performance
+            registrar_evento_performance("main_window.agregacao_erro", contexto={"erro": str(e), "traceback": traceback.format_exc()}, status="error")
+            self.show_error("Erro na agregacao", "Ocorreu um erro interno ao agregar. Consulte os logs internos para mais detalhes.")
             
             # Clear checks and reload top table
             self.aggregation_table_model.clear_checked()
             self.results_table_model.clear_checked()
             self.open_editable_aggregation_table()
-        except Exception as exc:
-            self.show_error("Falha na agregacao", str(exc))
 
     def apply_quick_filters(self) -> None:
         idx = self.tabs.currentIndex()
