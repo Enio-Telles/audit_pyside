@@ -501,8 +501,9 @@ def gerar_movimentacao_estoque(cnpj: str, pasta_cnpj: Path | None = None) -> boo
                 .then(q_conv_valido_expr)
                 .otherwise(pl.lit(0.0))
                 .alias("__qtd_decl_final_audit__"),
-                # q_conv: estoque inicial e final agora sao capturados independente da data
+                # q_conv: estoque inicial, entradas, saidas e final capturados independente da data
                 # para permitir auditoria anual completa
+                # Nota: estoque final tem q_conv populado, mas nao afeta o saldo sequencial
                 pl.when(
                     pl.col("Tipo_operacao").cast(pl.Utf8, strict=False).str.starts_with("0 - ESTOQUE INICIAL")
                 )
@@ -511,9 +512,14 @@ def gerar_movimentacao_estoque(cnpj: str, pasta_cnpj: Path | None = None) -> boo
                 .then(q_conv_valido_expr)
                 .when(pl.col("Tipo_operacao") == "2 - SAIDAS")
                 .then(q_conv_valido_expr)
+                .when(
+                    pl.col("Tipo_operacao").cast(pl.Utf8, strict=False).str.starts_with("3 - ESTOQUE FINAL")
+                )
+                .then(q_conv_valido_expr)
                 .otherwise(pl.lit(0.0))
                 .alias("q_conv"),
-                # __q_conv_sinal__: mesmo principio - estoque inicial/final capturado em qualquer data
+                # __q_conv_sinal__: usado no calculo sequencial de saldo
+                # estoque final nao entra aqui para nao afetar o saldo acumulado
                 pl.when(
                     pl.col("Tipo_operacao").cast(pl.Utf8, strict=False).str.starts_with("0 - ESTOQUE INICIAL")
                 )
