@@ -188,10 +188,25 @@ class ServicoAgregacao:
     def _coletar_lista_coluna(cls, df: pl.DataFrame, coluna: str) -> list[str]:
         if df.is_empty() or coluna not in df.columns:
             return []
-        valores: list[str] = []
-        for valor in df.get_column(coluna).to_list():
-            valores.extend(cls._normalizar_lista_textos(valor))
-        return sorted(set(valores))
+
+        series = df.get_column(coluna)
+        if series.dtype.is_nested():
+            series = series.explode()
+
+        series_clean = (
+            series
+            .cast(pl.Utf8, strict=False)
+            .str.strip_chars()
+            .drop_nulls()
+        )
+
+        return (
+            series_clean
+            .filter(series_clean != "")
+            .unique()
+            .sort()
+            .to_list()
+        )
 
     @staticmethod
     def _garantir_colunas_lista_agregacao(df: pl.DataFrame) -> pl.DataFrame:
