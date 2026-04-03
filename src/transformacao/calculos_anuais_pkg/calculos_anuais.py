@@ -433,7 +433,6 @@ if __name__ == "__main__":
             c = input("CNPJ: ")
             gerar_calculos_anuais(c)
     except Exception as e:
-        import traceback
-        with open(r"c:\funcoes - Copia\traceback.txt", "w") as f:
-            traceback.print_exc(file=f)
+        from transformacao.auxiliares.logs import setup_logging
+        setup_logging().error("Erro na geracao de calculos anuais", exc_info=e)
         raise

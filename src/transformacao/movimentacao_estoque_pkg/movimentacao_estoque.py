@@ -561,7 +561,6 @@ if __name__ == "__main__":
             c = input("CNPJ: ")
             gerar_movimentacao_estoque(c)
     except Exception as e:
-        import traceback
-        with open(r"c:\funcoes - Copia\traceback.txt", "w") as f:
-            traceback.print_exc(file=f)
+        from transformacao.auxiliares.logs import setup_logging
+        setup_logging().error("Erro na geracao de movimentacao de estoque", exc_info=e)
         raise
