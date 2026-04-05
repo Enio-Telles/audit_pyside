@@ -55,7 +55,14 @@ def execute_sql(req: SqlRequest):
 
 @router.get("/file")
 def read_sql_file(path: str):
-    p = Path(path)
+    try:
+        p = Path(path).resolve()
+        allowed_dirs = [Path(d).resolve() for d in [SQL_DIR] + EXTRA_SQL_DIRS]
+        if not any(p.is_relative_to(d) for d in allowed_dirs):
+            raise ValueError("Path outside allowed directories")
+    except Exception:
+        raise HTTPException(400, "Caminho inválido ou acesso negado")
+
     if not p.exists() or p.suffix != ".sql":
         raise HTTPException(404, "Arquivo SQL não encontrado")
     return {"content": p.read_text(encoding="utf-8", errors="replace")}
