@@ -522,9 +522,7 @@ if __name__ == "__main__":
         else:
             c = input("CNPJ: ")
             gerar_calculos_mensais(c)
-    except Exception:
-        import traceback
-
-        with open(r"c:\funcoes - Copia\traceback.txt", "w") as f:
-            traceback.print_exc(file=f)
+    except Exception as e:
+        from transformacao.auxiliares.logs import log_exception
+        log_exception(e)
         raise
