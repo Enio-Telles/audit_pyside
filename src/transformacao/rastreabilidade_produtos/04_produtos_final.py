@@ -174,6 +174,9 @@ def produtos_agrupados(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         )
     )
 
+    df_item_unid_norm_dict = df_item_unid_norm.partition_by("__descricao_upper", as_dict=True)
+    empty_df = df_item_unid_norm.clear()
+
     registros_mestra: list[dict] = []
     registros_ponte: list[dict] = []
 
@@ -183,8 +186,7 @@ def produtos_agrupados(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
 
         if desc_norm:
             df_base = (
-                df_item_unid_norm
-                .filter(pl.col("__descricao_upper") == desc_norm)
+                df_item_unid_norm_dict.get((desc_norm,), empty_df)
                 .drop("__descricao_upper")
             )
         else:

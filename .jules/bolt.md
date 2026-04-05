@@ -5,3 +5,7 @@
 ## 2024-03-31 - Optimize Recursive Nested List Flattening in id_agrupados
  **Learning:** When processing complex, deeply nested heterogeneous lists of lists and strings inside `polars` `map_groups` (specifically when Polars `list.eval` expressions fail on heterogeneous lengths/types), a clean iterative Python `while` stack pushing directly to a `set` drastically reduces memory allocations and call overhead compared to recursive function calls returning and extending lists.
  **Action:** Prioritize iterative algorithms targeting single mutable collections (like `set.add` inside a `while stack:`) over pure recursion returning temporary `list` buffers when flattening heavily nested structures in data pipelines.
+
+## 2024-05-30 - Replace O(N*M) loop filter with partition_by
+**Learning:** Using `polars.DataFrame.filter()` inside a Python loop can lead to severe O(N*M) performance bottlenecks when doing cross-dataset lookups, as each iteration performs a full scan of the dataframe. Using `partition_by(column, as_dict=True)` pre-computes a constant-time lookup dictionary mapping keys to their corresponding DataFrames, turning an O(N*M) operation into an O(N+M) operation. This reduces lookup times significantly (e.g. 0.43s -> 0.05s in test script).
+**Action:** Always prefer `partition_by(..., as_dict=True)` over iterative `df.filter()` when querying or cross-referencing values inside a Python `for` or `while` loop.
