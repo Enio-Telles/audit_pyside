@@ -1,10 +1,10 @@
-import { useMemo } from 'react';
+import { useMemo } from "react";
 import {
   useReactTable,
   getCoreRowModel,
   flexRender,
   type ColumnDef,
-} from '@tanstack/react-table';
+} from "@tanstack/react-table";
 
 interface DataTableProps {
   columns: string[];
@@ -26,11 +26,14 @@ interface DataTableProps {
 }
 
 function formatCell(value: unknown): string {
-  if (value === null || value === undefined) return '';
-  if (Array.isArray(value)) return value.join(' | ');
-  if (typeof value === 'number') {
-    if (Number.isInteger(value)) return value.toLocaleString('pt-BR');
-    return value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  if (value === null || value === undefined) return "";
+  if (Array.isArray(value)) return value.join(" | ");
+  if (typeof value === "number") {
+    if (Number.isInteger(value)) return value.toLocaleString("pt-BR");
+    return value.toLocaleString("pt-BR", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
   }
   return String(value);
 }
@@ -59,7 +62,7 @@ export function DataTable({
         cell: (info) => formatCell(info.getValue()),
         size: 120,
       })),
-    [columns]
+    [columns],
   );
 
   const table = useReactTable({
@@ -77,27 +80,46 @@ export function DataTable({
             Carregando...
           </div>
         ) : (
-          <table className="w-full border-collapse text-xs" style={{ tableLayout: 'fixed', minWidth: columns.length * 120 + (selectable ? 36 : 0) }}>
-            <thead className="sticky top-0 z-10" style={{ background: '#1e2d4a' }}>
+          <table
+            className="w-full border-collapse text-xs"
+            style={{
+              tableLayout: "fixed",
+              minWidth: columns.length * 120 + (selectable ? 36 : 0),
+            }}
+          >
+            <thead
+              className="sticky top-0 z-10"
+              style={{ background: "#1e2d4a" }}
+            >
               {table.getHeaderGroups().map((hg) => {
                 const visibleKeys = selectable
-                  ? table.getRowModel().rows.map((r) => String(r.original[rowKey!] ?? ''))
+                  ? table
+                      .getRowModel()
+                      .rows.map((r) => String(r.original[rowKey!] ?? ""))
                   : [];
                 const allSelected =
-                  selectable && visibleKeys.length > 0 && visibleKeys.every((k) => selectedRowKeys!.has(k));
+                  selectable &&
+                  visibleKeys.length > 0 &&
+                  visibleKeys.every((k) => selectedRowKeys!.has(k));
                 return (
                   <tr key={hg.id}>
                     {selectable && (
                       <th className="w-9 px-2 py-2 border-b border-slate-700 text-center">
                         <input
                           type="checkbox"
+                          aria-label="Selecionar todas as linhas"
+                          title="Selecionar todas as linhas"
                           checked={allSelected}
-                          onChange={(e) => onSelectAll?.(e.target.checked, visibleKeys)}
+                          onChange={(e) =>
+                            onSelectAll?.(e.target.checked, visibleKeys)
+                          }
                           className="accent-blue-500 cursor-pointer"
                         />
                       </th>
                     )}
-                    <th className="w-10 px-2 py-2 text-slate-400 text-right border-b border-slate-700">#</th>
+                    <th className="w-10 px-2 py-2 text-slate-400 text-right border-b border-slate-700">
+                      #
+                    </th>
                     {hg.headers.map((h) => (
                       <th
                         key={h.id}
@@ -107,44 +129,65 @@ export function DataTable({
                       >
                         {flexRender(h.column.columnDef.header, h.getContext())}
                       </th>
-                  ))}
-                </tr>
+                    ))}
+                  </tr>
                 );
               })}
             </thead>
             <tbody>
               {table.getRowModel().rows.map((row, idx) => {
-                const tipoOp = row.original['Tipo_operacao'] as string | undefined;
-                const isEntrada = tipoOp?.includes('ENTRADA');
-                const isSaida = tipoOp?.includes('SAIDA') || tipoOp?.includes('SAÍDAS');
-                const rowKeyVal = rowKey ? String(row.original[rowKey] ?? '') : '';
-                const isSelected = selectable && selectedRowKeys!.has(rowKeyVal);
+                const tipoOp = row.original["Tipo_operacao"] as
+                  | string
+                  | undefined;
+                const isEntrada = tipoOp?.includes("ENTRADA");
+                const isSaida =
+                  tipoOp?.includes("SAIDA") || tipoOp?.includes("SAÍDAS");
+                const rowKeyVal = rowKey
+                  ? String(row.original[rowKey] ?? "")
+                  : "";
+                const isSelected =
+                  selectable && selectedRowKeys!.has(rowKeyVal);
                 const bg = isSelected
-                  ? 'rgba(37,99,235,0.25)'
+                  ? "rgba(37,99,235,0.25)"
                   : highlightRows
-                  ? isEntrada
-                    ? 'rgba(30,80,30,0.5)'
-                    : isSaida
-                    ? 'rgba(120,30,30,0.5)'
+                    ? isEntrada
+                      ? "rgba(30,80,30,0.5)"
+                      : isSaida
+                        ? "rgba(120,30,30,0.5)"
+                        : idx % 2 === 0
+                          ? "#0f1b33"
+                          : "#0a1628"
                     : idx % 2 === 0
-                    ? '#0f1b33'
-                    : '#0a1628'
-                  : idx % 2 === 0
-                  ? '#0f1b33'
-                  : '#0a1628';
+                      ? "#0f1b33"
+                      : "#0a1628";
                 return (
                   <tr
                     key={row.id}
-                    style={{ background: bg, outline: isSelected ? '1px solid rgba(59,130,246,0.5)' : undefined, cursor: selectable ? 'pointer' : undefined }}
+                    style={{
+                      background: bg,
+                      outline: isSelected
+                        ? "1px solid rgba(59,130,246,0.5)"
+                        : undefined,
+                      cursor: selectable ? "pointer" : undefined,
+                    }}
                     className="hover:brightness-125 transition-all"
-                    onClick={selectable ? () => onRowSelect!(rowKeyVal, !isSelected) : undefined}
+                    onClick={
+                      selectable
+                        ? () => onRowSelect!(rowKeyVal, !isSelected)
+                        : undefined
+                    }
                   >
                     {selectable && (
                       <td className="px-2 py-1.5 border-b border-slate-800 text-center">
                         <input
                           type="checkbox"
+                          aria-label={`Selecionar linha ${rowKeyVal}`}
+                          title={`Selecionar linha ${rowKeyVal}`}
                           checked={isSelected}
-                          onChange={(e) => { e.stopPropagation(); onRowSelect!(rowKeyVal, e.target.checked); }}
+                          onChange={(e) => {
+                            e.stopPropagation();
+                            onRowSelect!(rowKeyVal, e.target.checked);
+                          }}
                           onClick={(e) => e.stopPropagation()}
                           className="accent-blue-500 cursor-pointer"
                         />
@@ -160,7 +203,10 @@ export function DataTable({
                         style={{ maxWidth: 200 }}
                         title={formatCell(cell.getValue())}
                       >
-                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        {flexRender(
+                          cell.column.columnDef.cell,
+                          cell.getContext(),
+                        )}
                       </td>
                     ))}
                   </tr>
@@ -177,31 +223,36 @@ export function DataTable({
           <button
             onClick={() => onPageChange(1)}
             disabled={page <= 1}
-            className="px-2 py-1 rounded bg-slate-700 disabled:opacity-40 hover:bg-slate-600"
+            aria-label="Primeira página"
+            title="Primeira página"
+            className="px-2 py-1 rounded bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-600"
           >
             «
           </button>
           <button
             onClick={() => onPageChange(page - 1)}
             disabled={page <= 1}
-            className="px-2 py-1 rounded bg-slate-700 disabled:opacity-40 hover:bg-slate-600"
+            className="px-2 py-1 rounded bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-600"
           >
             Página anterior
           </button>
           <span>
-            Página {page} / {totalPages} | Linhas filtradas: {(totalRows ?? 0).toLocaleString('pt-BR')}
+            Página {page} / {totalPages} | Linhas filtradas:{" "}
+            {(totalRows ?? 0).toLocaleString("pt-BR")}
           </span>
           <button
             onClick={() => onPageChange(page + 1)}
             disabled={page >= totalPages}
-            className="px-2 py-1 rounded bg-slate-700 disabled:opacity-40 hover:bg-slate-600"
+            className="px-2 py-1 rounded bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-600"
           >
             Próxima página
           </button>
           <button
             onClick={() => onPageChange(totalPages)}
             disabled={page >= totalPages}
-            className="px-2 py-1 rounded bg-slate-700 disabled:opacity-40 hover:bg-slate-600"
+            aria-label="Última página"
+            title="Última página"
+            className="px-2 py-1 rounded bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-600"
           >
             »
           </button>
