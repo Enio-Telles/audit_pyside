@@ -98,18 +98,8 @@ def _carregar_referencia_st_mensal(df_base: pl.DataFrame, df_aux_st: pl.DataFram
         )
         .with_columns(
             [
-                pl.struct(["ano", "mes"]).map_elements(
-                    lambda registro: date(int(registro["ano"]), int(registro["mes"]), 1),
-                    return_dtype=pl.Date,
-                ).alias("__mes_ini__"),
-                pl.struct(["ano", "mes"]).map_elements(
-                    lambda registro: (
-                        date(int(registro["ano"]) + 1, 1, 1)
-                        if int(registro["mes"]) == 12
-                        else date(int(registro["ano"]), int(registro["mes"]) + 1, 1)
-                    ),
-                    return_dtype=pl.Date,
-                ).alias("__prox_mes_ini__"),
+                pl.date(pl.col("ano"), pl.col("mes"), 1).alias("__mes_ini__"),
+                pl.date(pl.col("ano"), pl.col("mes"), 1).dt.offset_by("1mo").alias("__prox_mes_ini__"),
             ]
         )
         .with_columns(
