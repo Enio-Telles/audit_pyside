@@ -13,3 +13,6 @@
 ## 2024-05-30 - Replace `pl.read_parquet(..., n_rows=0).schema` with `pl.read_parquet_schema(...)`
 **Learning:** In Polars, using `pl.read_parquet(path, n_rows=0).schema` to read the metadata of a Parquet file incorrectly initializes the query engine and allocates an empty DataFrame, carrying unnecessary overhead. Using the specialized API `pl.read_parquet_schema(path)` natively parses the Parquet metadata header without these side effects.
 **Action:** Always use `pl.read_parquet_schema(path)` when only the schema mapping of a Parquet file is needed.
+## 2024-04-05 - Avoid .map_elements() for String Operations
+**Learning:** Using `.map_elements()` with custom Python functions (e.g., removing accents) breaks Polars' vectorization, causing significant performance bottlenecks, especially in large transformations.
+**Action:** Prefer native Polars string operations (like chained `.str.replace_all()` calls with regex) for vectorized processing.
