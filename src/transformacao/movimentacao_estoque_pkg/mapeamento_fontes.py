@@ -22,17 +22,22 @@ ROOT_DIR = Path(r"c:\funcoes - Copia")
 DADOS_DIR = ROOT_DIR / "dados"
 
 
-def _norm(text: str | None) -> str:
-    if text is None:
-        return ""
-    return re.sub(r"\s+", " ", (remove_accents(text) or "").upper().strip())
-
-
 def normalizar_descricao_expr(col: str) -> pl.Expr:
+    # Optimization: Replace .map_elements with native Polars string operations to preserve vectorization
     return (
         pl.col(col)
         .cast(pl.Utf8, strict=False)
-        .map_elements(_norm, return_dtype=pl.String)
+        .fill_null("")
+        .str.to_uppercase()
+        .str.replace_all(r"[ÁÀÂÃÄ]", "A")
+        .str.replace_all(r"[ÉÈÊË]", "E")
+        .str.replace_all(r"[ÍÌÎÏ]", "I")
+        .str.replace_all(r"[ÓÒÔÕÖ]", "O")
+        .str.replace_all(r"[ÚÙÛÜ]", "U")
+        .str.replace_all(r"Ç", "C")
+        .str.replace_all(r"Ñ", "N")
+        .str.strip_chars()
+        .str.replace_all(r"\s+", " ")
         .alias("__descricao_normalizada__")
     )
 

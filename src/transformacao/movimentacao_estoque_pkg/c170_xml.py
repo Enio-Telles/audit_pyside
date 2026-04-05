@@ -45,11 +45,21 @@ def _norm_text(value: str | None) -> str:
 
 
 def _norm_text_expr(col: str, alias: str | None = None) -> pl.Expr:
+    # Optimization: Replace .map_elements with native Polars string operations to preserve vectorization
     expr = (
         pl.col(col)
         .cast(pl.Utf8, strict=False)
         .fill_null("")
-        .map_elements(_norm_text, return_dtype=pl.String)
+        .str.to_uppercase()
+        .str.replace_all(r"[ÁÀÂÃÄ]", "A")
+        .str.replace_all(r"[ÉÈÊË]", "E")
+        .str.replace_all(r"[ÍÌÎÏ]", "I")
+        .str.replace_all(r"[ÓÒÔÕÖ]", "O")
+        .str.replace_all(r"[ÚÙÛÜ]", "U")
+        .str.replace_all(r"Ç", "C")
+        .str.replace_all(r"Ñ", "N")
+        .str.strip_chars()
+        .str.replace_all(r"\s+", " ")
     )
     return expr.alias(alias or col)
 
