@@ -5,7 +5,11 @@ from pathlib import Path
 from time import perf_counter
 
 import polars as pl
+from utilitarios.text import remove_accents
 from utilitarios.perf_monitor import registrar_evento_performance
+
+def _remover_acentos(texto: str | None) -> str | None:
+    return remove_accents(texto) if texto else None
 
 ROOT_DIR = Path(r"c:\funcoes - Copia")
 SRC_DIR = ROOT_DIR / "src"
@@ -418,7 +422,10 @@ class ServicoAgregacao:
             ["descricao", "ncm", "cest", "gtin", "co_sefin_item", "fontes", "fonte"],
         ).with_columns(
             pl.col("descricao")
-            .map_elements(self._normalizar_descricao_para_match, return_dtype=pl.String)
+            .map_elements(_remover_acentos, return_dtype=pl.String)
+            .str.to_uppercase()
+            .str.strip_chars()
+            .str.replace_all(r"\s+", " ")
             .alias("descricao_normalizada_temp")
         )
 
@@ -880,7 +887,10 @@ class ServicoAgregacao:
         )
         df_base = self._ler_parquet_colunas(path_base, ["descricao", "fonte", "fontes", "ncm", "cest", "gtin", "co_sefin_item"]).with_columns(
             pl.col("descricao")
-            .map_elements(self._normalizar_descricao_para_match, return_dtype=pl.String)
+            .map_elements(_remover_acentos, return_dtype=pl.String)
+            .str.to_uppercase()
+            .str.strip_chars()
+            .str.replace_all(r"\s+", " ")
             .alias("descricao_normalizada_temp")
         )
 
@@ -1083,7 +1093,10 @@ class ServicoAgregacao:
                 .with_columns(
                     [
                         pl.col("descricao")
-                        .map_elements(self._normalizar_descricao_para_match, return_dtype=pl.String)
+                        .map_elements(_remover_acentos, return_dtype=pl.String)
+                        .str.to_uppercase()
+                        .str.strip_chars()
+                        .str.replace_all(r"\s+", " ")
                         .alias("descricao_normalizada"),
                         pl.col("compras").cast(pl.Float64, strict=False).fill_null(0.0).alias("compras"),
                         pl.col("qtd_compras").cast(pl.Float64, strict=False).fill_null(0.0).alias("qtd_compras"),
