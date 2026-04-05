@@ -60,3 +60,13 @@ ws_id_agrupados.title = "id_agrupados"
 ## 7. Há forte acoplamento entre eventos de interface e processamento de dados
 **Status: Validado.**
 A execução de pipelines pesadas, recalculos de agregações e interações do sistema de arquivos (criação e carregamento de planilhas/parquets) ocorrem na mesma classe que lida com os cliques nos botões e manipulação de tabelas. Essa falta de separação entre o "Model" e a "View" cria um forte acoplamento em `main_window.py`.
+
+## 8. Frontend já implementa as propostas sugeridas de modernização
+**Status: Validado e Implementado.**
+Analisando o código fonte na pasta `frontend/`, observamos que todas as propostas indicadas já estão plenamente em uso:
+1. **Adicionar TypeScript**: O projeto foi inteiramente construído com React + TypeScript (ex. `App.tsx`, extensos tipos mapeados em `api/types.ts`). A configuração de build (`tsconfig.app.json` e `tsconfig.node.json`) está pronta.
+2. **Gerenciamento de Estado**: Está sendo utilizado o **Zustand**. O arquivo `src/store/appStore.ts` demonstra a gestão centralizada do CNPJ selecionado, filtros e tabs ativas.
+3. **Testes Automatizados**: A suite de testes está configurada com `Vitest` e `@testing-library/react`. Um exemplo funcional de teste para hooks (`useRelatorio.test.tsx`) garante o bom funcionamento via mocks de requisições API.
+4. **Padronização de Estilos**: A UI utiliza inteiramente **Tailwind CSS**, que é integrado via `@tailwindcss/vite`, substituindo CSS manual por classes utilitárias no JSX.
+
+Não há refatorações requeridas, pois a infraestrutura do frontend alcançou 100% da meta destas propostas.
