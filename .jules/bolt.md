@@ -9,3 +9,7 @@
 ## 2024-05-30 - Replace O(N*M) loop filter with partition_by
 **Learning:** Using `polars.DataFrame.filter()` inside a Python loop can lead to severe O(N*M) performance bottlenecks when doing cross-dataset lookups, as each iteration performs a full scan of the dataframe. Using `partition_by(column, as_dict=True)` pre-computes a constant-time lookup dictionary mapping keys to their corresponding DataFrames, turning an O(N*M) operation into an O(N+M) operation. This reduces lookup times significantly (e.g. 0.43s -> 0.05s in test script).
 **Action:** Always prefer `partition_by(..., as_dict=True)` over iterative `df.filter()` when querying or cross-referencing values inside a Python `for` or `while` loop.
+
+## 2024-05-30 - Replace `pl.read_parquet(..., n_rows=0).schema` with `pl.read_parquet_schema(...)`
+**Learning:** In Polars, using `pl.read_parquet(path, n_rows=0).schema` to read the metadata of a Parquet file incorrectly initializes the query engine and allocates an empty DataFrame, carrying unnecessary overhead. Using the specialized API `pl.read_parquet_schema(path)` natively parses the Parquet metadata header without these side effects.
+**Action:** Always use `pl.read_parquet_schema(path)` when only the schema mapping of a Parquet file is needed.

@@ -171,7 +171,8 @@ def _ler_c170(path: Path | None, cfop_mercantil: pl.DataFrame | None) -> pl.Data
     if path is None or not path.exists():
         return None
 
-    schema = pl.read_parquet(path, n_rows=0).schema
+    # Otimização Bolt: pl.read_parquet_schema le a metadata sem alocar o DataFrame na memoria
+    schema = pl.read_parquet_schema(path)
     col_cfop = "co_cfop" if "co_cfop" in schema else "cfop" if "cfop" in schema else None
     selecionar = [
         c
@@ -253,7 +254,8 @@ def _ler_bloco_h(path: Path | None) -> pl.DataFrame | None:
     if path is None or not path.exists():
         return None
 
-    schema = pl.read_parquet(path, n_rows=0).schema
+    # Otimização Bolt: pl.read_parquet_schema le a metadata sem alocar o DataFrame na memoria
+    schema = pl.read_parquet_schema(path)
 
     def _pick(*candidatas: str) -> str | None:
         for coluna in candidatas:
@@ -304,7 +306,8 @@ def _ler_nfe_ou_nfce(path: Path | None, cnpj: str, nome_fonte: str, cfop_mercant
     if path is None or not path.exists():
         return None
 
-    schema = pl.read_parquet(path, n_rows=0).schema
+    # Otimização Bolt: pl.read_parquet_schema le a metadata sem alocar o DataFrame na memoria
+    schema = pl.read_parquet_schema(path)
     col_tp = next((c for c in ["tipo_operacao", "co_tp_nf", "tp_nf"] if c in schema), None)
     if "co_emitente" not in schema or col_tp is None:
         return None

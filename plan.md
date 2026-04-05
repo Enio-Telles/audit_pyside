@@ -1,5 +1,7 @@
-1. **Target Vulnerability**: Information Disclosure via Raw Exception Exfiltration.
-2. **Issue**: In `src/utilitarios/conectar_oracle.py`, the `except Exception as e:` block at the module level (lines 30-31) and inside `conectar()` (lines 55-56) directly log/print the raw exception `{e}`. This can expose sensitive information about the host, database, network environment, or credentials, which violates the security coding standard (as noted in Sentinel's journal/memory guidelines: "never print or log raw exception objects (e.g., `{e}`) directly to the console in `except` or `finally` blocks").
-3. **Fix**: Sanitize the error messages in `src/utilitarios/conectar_oracle.py` by removing `{e}` from the user-facing `rprint` calls and genericising the error logs, specifically ensuring connection errors don't expose sensitive context or paths. I will replace the raw exception variable output with a generic warning.
-4. **Pre-commit Checks**: Run pre-commit instructions and vitest suite or relevant Python test command (`PYTHONPATH=src python3 -m pytest`) to ensure no functionality is broken.
-5. **Commit and Submit PR**: Submit a PR as Sentinel following the format required for a security fix.
+1. **Optimize `pl.read_parquet(..., n_rows=0).schema`**
+   - Replace `pl.read_parquet(path, n_rows=0).schema` with `pl.read_parquet_schema(path)` which is the more efficient way to read only the metadata of a Parquet file without reading the whole file structure or launching a query engine dataframe.
+   - Files to update: `src/utilitarios/aux_leitura_notas.py`, `src/transformacao/tabelas_base/01_item_unidades.py`, `src/transformacao/01_item_unidades.py`.
+
+2. **Complete pre-commit steps to ensure proper testing, verification, review, and reflection are done.**
+   - Run linter and tests to make sure no syntax is broken.
+   - Run the custom `pre_commit_instructions` tool.
