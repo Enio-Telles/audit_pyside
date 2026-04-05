@@ -16,3 +16,7 @@
 ## 2024-04-05 - Avoid .map_elements() for String Operations
 **Learning:** Using `.map_elements()` with custom Python functions (e.g., removing accents) breaks Polars' vectorization, causing significant performance bottlenecks, especially in large transformations.
 **Action:** Prefer native Polars string operations (like chained `.str.replace_all()` calls with regex) for vectorized processing.
+
+## 2024-05-24 - React Component Filtering Bottlenecks
+**Learning:** In React components rendering large tables (`EstoqueTab`, `ConversaoTab`, `AgregacaoTab`), performing string casing (`toLowerCase()`) and object value iteration inside the `useMemo` filter loops causes significant performance degradation (O(N) operations multiplied by data size and string creation overhead).
+**Action:** When filtering arrays in React components, hoist string manipulations (e.g., `search.toLowerCase()`) outside the `.filter` loop and evaluate them once to improve lookup performance.
