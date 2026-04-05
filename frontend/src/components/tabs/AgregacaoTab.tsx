@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { aggregationApi } from "../../api/client";
 import { useAppStore } from "../../store/appStore";
 import { DataTable } from "../table/DataTable";
+import { ColumnToggle } from "../table/ColumnToggle";
 
 // ---------------------------------------------------------------------------
 // Modal de confirmação de agregação
@@ -151,6 +152,7 @@ export function AgregacaoTab() {
   >(new Map());
   const [showMergeModal, setShowMergeModal] = useState(false);
   const [mergeSuccess, setMergeSuccess] = useState("");
+  const [hiddenCols, setHiddenCols] = useState<Set<string>>(new Set());
 
   const { data, isLoading } = useQuery({
     queryKey: ["tabela_agrupada", selectedCnpj, page],
@@ -331,7 +333,20 @@ export function AgregacaoTab() {
         )}
 
         {/* Filtros */}
-        <div className="flex gap-2 mb-2 flex-wrap">
+        <div className="flex gap-2 mb-2 flex-wrap items-center">
+          <ColumnToggle
+            allColumns={data?.columns ?? []}
+            hiddenColumns={hiddenCols}
+            onChange={(col, visible) =>
+              setHiddenCols((prev) => {
+                const next = new Set(prev);
+                if (visible) next.delete(col);
+                else next.add(col);
+                return next;
+              })
+            }
+            onReset={() => setHiddenCols(new Set())}
+          />
           <input
             className={inputCls + " w-44"}
             placeholder="Filtrar Descrição..."
@@ -374,6 +389,7 @@ export function AgregacaoTab() {
             selectedRowKeys={selectedKeys}
             onRowSelect={handleRowSelect}
             onSelectAll={handleSelectAll}
+            hiddenColumns={hiddenCols}
           />
         </div>
       </div>

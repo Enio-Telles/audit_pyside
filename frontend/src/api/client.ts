@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { CNPJRecord, ParquetFile, PageResult, FilterItem, PipelineStatus, SqlFile } from './types';
+import type { CNPJRecord, ParquetFile, PageResult, FilterItem, PipelineStatus, SqlFile, FisconformeConsultaResult, FisconformeCacheStats } from './types';
 
 const api = axios.create({ baseURL: '/api' });
 
@@ -21,6 +21,8 @@ export const parquetApi = {
     visible_columns: string[];
     page: number;
     page_size: number;
+    sort_by?: string;
+    sort_desc?: boolean;
   }) => api.post<PageResult>('/parquet/query', payload).then(r => r.data),
 };
 
@@ -63,6 +65,20 @@ export const sqlApi = {
   readFile: (path: string) => api.get<{ content: string }>('/sql/file', { params: { path } }).then(r => r.data),
   execute: (sql: string, cnpj?: string, params?: Record<string, string>) =>
     api.post<{ rows: Record<string, unknown>[]; count: number }>('/sql/execute', { sql, cnpj, params }).then(r => r.data),
+};
+
+// ---- Fisconforme ----
+export const fisconformeApi = {
+  getConfig: () => api.get<{ oracle_host: string; oracle_port: string; oracle_service: string; db_user: string; configured: boolean }>('/fisconforme/config').then(r => r.data),
+  configurarDb: (payload: { oracle_host: string; oracle_port: number; oracle_service: string; db_user: string; db_password: string }) =>
+    api.post<{ ok: boolean }>('/fisconforme/configurar-db', payload).then(r => r.data),
+  testarConexao: () => api.get<{ ok: boolean; message: string }>('/fisconforme/testar-conexao').then(r => r.data),
+  consultaCadastral: (cnpj: string, data_inicio: string, data_fim: string, forcar = false) =>
+    api.post<FisconformeConsultaResult>('/fisconforme/consulta-cadastral', { cnpj, data_inicio, data_fim, forcar_atualizacao: forcar }).then(r => r.data),
+  consultaLote: (cnpjs: string[], data_inicio: string, data_fim: string, forcar = false) =>
+    api.post<{ total: number; resultados: FisconformeConsultaResult[] }>('/fisconforme/consulta-lote', { cnpjs, data_inicio, data_fim, forcar_atualizacao: forcar }).then(r => r.data),
+  cacheStats: () => api.get<FisconformeCacheStats>('/fisconforme/cache/stats').then(r => r.data),
+  limparCache: (cnpj: string) => api.delete<{ ok: boolean; removidos: string[] }>(`/fisconforme/cache/${cnpj}`).then(r => r.data),
 };
 
 export default api;

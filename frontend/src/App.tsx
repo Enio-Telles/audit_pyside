@@ -7,6 +7,8 @@ import { AgregacaoTab } from "./components/tabs/AgregacaoTab";
 import { ConversaoTab } from "./components/tabs/ConversaoTab";
 import { EstoqueTab } from "./components/tabs/EstoqueTab";
 import { LogsTab } from "./components/tabs/LogsTab";
+import { LandingPage } from "./components/LandingPage";
+import { FisconformeTab } from "./components/tabs/FisconformeTab";
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 30_000 } },
@@ -22,7 +24,35 @@ const TABS = [
 ];
 
 function MainContent() {
-  const { activeTab, setActiveTab, leftPanelVisible, toggleLeftPanel, selectedFile, selectedCnpj } = useAppStore();
+  const { activeTab, setActiveTab, leftPanelVisible, toggleLeftPanel, selectedFile, selectedCnpj, appMode, setAppMode } = useAppStore();
+
+  if (appMode === null) {
+    return <LandingPage onSelect={setAppMode} />;
+  }
+
+  if (appMode === 'fisconforme') {
+    return (
+      <div className="flex h-screen overflow-hidden" style={{ background: "#0a1628" }}>
+        <div className="flex flex-col flex-1 overflow-hidden">
+          <div
+            className="flex items-center justify-between px-3 py-1 border-b border-slate-700"
+            style={{ background: "#0d1f3c", minHeight: 32 }}
+          >
+            <span className="text-xs text-slate-400 font-semibold">Fisconforme — Análise em Lote</span>
+            <button
+              onClick={() => setAppMode(null)}
+              className="text-xs text-blue-400 hover:text-blue-200 px-2 py-1 rounded bg-slate-800 border border-slate-700"
+            >
+              ← Voltar ao Início
+            </button>
+          </div>
+          <div className="flex-1 overflow-hidden">
+            <FisconformeTab />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen overflow-hidden" style={{ background: "#0a1628" }}>
@@ -54,6 +84,12 @@ function MainContent() {
             className="text-xs text-blue-400 hover:text-blue-200 px-2 py-1 rounded bg-slate-800 border border-slate-700"
           >
             {leftPanelVisible ? "<< Ocultar Painel Lateral" : ">> Mostrar Painel Lateral"}
+          </button>
+          <button
+            onClick={() => setAppMode(null)}
+            className="text-xs text-slate-400 hover:text-slate-200 px-2 py-1 rounded bg-slate-800 border border-slate-700 ml-2"
+          >
+            ← Início
           </button>
         </div>
 

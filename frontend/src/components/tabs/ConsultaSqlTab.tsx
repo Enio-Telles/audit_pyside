@@ -3,12 +3,14 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import { sqlApi } from '../../api/client';
 import { useAppStore } from '../../store/appStore';
 import { DataTable } from '../table/DataTable';
+import { ColumnToggle } from '../table/ColumnToggle';
 
 export function ConsultaSqlTab() {
   const { selectedCnpj } = useAppStore();
   const [sqlText, setSqlText] = useState('');
   const [result, setResult] = useState<{ rows: Record<string, unknown>[]; count: number } | null>(null);
   const [error, setError] = useState('');
+  const [hiddenCols, setHiddenCols] = useState<Set<string>>(new Set());
 
   const { data: sqlFiles = [] } = useQuery({
     queryKey: ['sqlFiles'],
@@ -55,7 +57,7 @@ export function ConsultaSqlTab() {
         placeholder="Digite ou cole o SQL aqui..."
       />
 
-      <div className="flex gap-2">
+      <div className="flex gap-2 flex-wrap items-center">
         <button
           onClick={() => execMutation.mutate()}
           disabled={!sqlText.trim() || execMutation.isPending}
@@ -66,13 +68,33 @@ export function ConsultaSqlTab() {
         <button onClick={() => setSqlText('')} className={btnCls + ' bg-slate-700 hover:bg-slate-600 text-slate-200'}>
           Limpar
         </button>
+        {result && (
+          <ColumnToggle
+            allColumns={resultCols}
+            hiddenColumns={hiddenCols}
+            onChange={(col, visible) =>
+              setHiddenCols((prev) => {
+                const next = new Set(prev);
+                if (visible) next.delete(col);
+                else next.add(col);
+                return next;
+              })
+            }
+            onReset={() => setHiddenCols(new Set())}
+          />
+        )}
         {result && <span className="text-xs text-green-400 self-center">{result.count} registros</span>}
         {error && <span className="text-xs text-red-400 self-center">{error}</span>}
       </div>
 
       {result && result.rows.length > 0 && (
         <div className="flex-1 overflow-hidden border border-slate-700 rounded">
-          <DataTable columns={resultCols} rows={result.rows} totalRows={result.count} />
+          <DataTable
+            columns={resultCols}
+            rows={result.rows}
+            totalRows={result.count}
+            hiddenColumns={hiddenCols}
+          />
         </div>
       )}
     </div>

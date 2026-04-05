@@ -166,7 +166,7 @@ def enriquecer_co_sefin_class(df_movimentacao: pl.DataFrame, cnpj: str = None) -
     if not caminho_aux or not caminho_aux.exists():
         rprint("[yellow]Aviso: sitafe_produto_sefin_aux.parquet nao encontrado.[/yellow]")
         return df_mov.with_columns(pl.col("__co_sefin_lookup__").alias("co_sefin_agr")).drop(
-            ["__co_sefin_lookup__", "co_sefin_final", "co_sefin_padrao"],
+            ["__co_sefin_lookup__", "co_sefin_padrao"],
             strict=False,
         )
 
@@ -266,7 +266,6 @@ def enriquecer_co_sefin_class(df_movimentacao: pl.DataFrame, cnpj: str = None) -
             "da_inicio",
             "da_final",
             "it_co_sefin",
-            "co_sefin_final",
             "co_sefin_padrao",
             "__co_sefin_lookup__",
             "__tem_inicio__",

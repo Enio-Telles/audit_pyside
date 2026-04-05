@@ -4,6 +4,8 @@ import { parquetApi, cnpjApi } from '../../api/client';
 import { useAppStore } from '../../store/appStore';
 import { DataTable } from '../table/DataTable';
 import { FilterBar } from '../table/FilterBar';
+import { ColumnToggle } from '../table/ColumnToggle';
+import { HighlightRulesPanel } from '../table/HighlightRulesPanel';
 
 export function ConsultaTab() {
   const {
@@ -14,12 +16,22 @@ export function ConsultaTab() {
     removeConsultaFilter,
     clearConsultaFilters,
     consultaVisibleCols,
-    setConsultaVisibleCols,
     consultaPage,
     setConsultaPage,
+    consultaSort,
+    setConsultaSort,
+    consultaColumnFilters,
+    setConsultaColumnFilter,
+    clearConsultaColumnFilters,
+    consultaHiddenCols,
+    setConsultaHiddenCol,
+    resetConsultaHiddenCols,
+    consultaHighlightRules,
+    addConsultaHighlightRule,
+    removeConsultaHighlightRule,
   } = useAppStore();
 
-  const [search, setSearch] = useState('');
+  const [showColFilters, setShowColFilters] = useState(false);
 
   const { data: schema } = useQuery({
     queryKey: ['schema', selectedCnpj, selectedFile?.path],
@@ -28,24 +40,43 @@ export function ConsultaTab() {
   });
 
   const allCols = schema?.columns ?? [];
-  const visibleCols = consultaVisibleCols.length > 0 ? consultaVisibleCols : allCols;
+  const baseVisibleCols =
+    consultaVisibleCols.length > 0 ? consultaVisibleCols : allCols;
+  const visibleCols = baseVisibleCols.filter(
+    (c) => !consultaHiddenCols.has(c),
+  );
+
+  // Merge server-side column filters with user-added filters
+  const colFilterItems = Object.entries(consultaColumnFilters)
+    .filter(([, v]) => v !== '')
+    .map(([column, value]) => ({ column, operator: 'contem' as const, value }));
+  const allFilters = [...consultaFilters, ...colFilterItems];
 
   const { data, isLoading } = useQuery({
-    queryKey: ['parquet', selectedFile?.path, consultaFilters, visibleCols, consultaPage],
+    queryKey: [
+      'parquet',
+      selectedFile?.path,
+      allFilters,
+      visibleCols,
+      consultaPage,
+      consultaSort,
+    ],
     queryFn: () =>
       parquetApi.query({
         path: selectedFile!.path,
-        filters: consultaFilters,
+        filters: allFilters,
         visible_columns: visibleCols,
         page: consultaPage,
         page_size: 200,
+        sort_by: consultaSort?.col,
+        sort_desc: consultaSort?.desc,
       }),
     enabled: !!selectedFile,
     placeholderData: (prev) => prev,
   });
 
-  const inputCls = 'bg-slate-800 border border-slate-600 rounded px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-blue-500';
-  const btnCls = 'px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-colors';
+  const btnCls =
+    'px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-colors';
 
   if (!selectedFile) {
     return (
@@ -59,7 +90,8 @@ export function ConsultaTab() {
     <div className="flex flex-col h-full p-3 gap-2">
       {/* File info */}
       <div className="text-xs text-slate-400">
-        {selectedFile.name} | Colunas visíveis: {visibleCols.length}/{allCols.length}
+        {selectedFile.name} | Colunas visíveis: {visibleCols.length}/
+        {allCols.length}
       </div>
 
       {/* Filter bar */}
@@ -71,37 +103,65 @@ export function ConsultaTab() {
         onClear={clearConsultaFilters}
       />
 
+      {/* Highlight rules */}
+      <HighlightRulesPanel
+        columns={allCols}
+        rules={consultaHighlightRules}
+        onAdd={addConsultaHighlightRule}
+        onRemove={removeConsultaHighlightRule}
+      />
+
       {/* Toolbar */}
       <div className="flex gap-2 items-center flex-wrap">
-        <input
-          className={inputCls + ' w-48'}
-          placeholder="Filtrar Desc. Norm"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
+        <ColumnToggle
+          allColumns={allCols}
+          hiddenColumns={consultaHiddenCols}
+          onChange={setConsultaHiddenCol}
+          onReset={resetConsultaHiddenCols}
         />
+
+        <button
+          className={
+            btnCls +
+            (showColFilters
+              ? ' bg-blue-700 hover:bg-blue-600 text-white'
+              : ' bg-slate-700 hover:bg-slate-600 text-slate-200')
+          }
+          title="Alternar filtros por coluna"
+          onClick={() => setShowColFilters((v) => !v)}
+        >
+          Filtros ▽
+        </button>
+
+        {Object.values(consultaColumnFilters).some((v) => v !== '') && (
+          <button
+            className={btnCls + ' bg-red-800 hover:bg-red-700 text-slate-200'}
+            onClick={clearConsultaColumnFilters}
+          >
+            Limpar filtros col.
+          </button>
+        )}
+
         <button
           className={btnCls + ' bg-slate-700 hover:bg-slate-600 text-slate-200'}
           onClick={() => {
-            // Export visible columns
             if (!data) return;
-            const csv = [data.columns.join(','), ...data.rows.map(r => data.columns.map(c => JSON.stringify(r[c] ?? '')).join(','))].join('\n');
+            const csv = [
+              data.columns.join(','),
+              ...data.rows.map((r) =>
+                data.columns
+                  .map((c) => JSON.stringify(r[c] ?? ''))
+                  .join(','),
+              ),
+            ].join('\n');
             const blob = new Blob([csv], { type: 'text/csv' });
-            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'export.csv'; a.click();
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = 'export.csv';
+            a.click();
           }}
         >
           Exportar CSV
-        </button>
-        {/* Column selector */}
-        <select
-          multiple
-          className={inputCls + ' max-h-20'}
-          style={{ display: 'none' }}
-        />
-        <button
-          className={btnCls + ' bg-slate-700 hover:bg-slate-600 text-slate-200'}
-          onClick={() => setConsultaVisibleCols([])}
-        >
-          Padrão
         </button>
       </div>
 
@@ -114,7 +174,23 @@ export function ConsultaTab() {
           loading={isLoading}
           page={consultaPage}
           totalPages={data?.total_pages}
-          onPageChange={setConsultaPage}
+          onPageChange={(p) => {
+            setConsultaPage(p);
+          }}
+          sortBy={consultaSort?.col}
+          sortDesc={consultaSort?.desc}
+          onSortChange={(col, desc) => {
+            setConsultaSort({ col, desc });
+            setConsultaPage(1);
+          }}
+          hiddenColumns={consultaHiddenCols}
+          columnFilters={consultaColumnFilters}
+          onColumnFilterChange={(col, val) => {
+            setConsultaColumnFilter(col, val);
+            setConsultaPage(1);
+          }}
+          showColumnFilters={showColFilters}
+          highlightRules={consultaHighlightRules}
         />
       </div>
     </div>

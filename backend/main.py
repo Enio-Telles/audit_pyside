@@ -11,7 +11,7 @@ if str(SRC_DIR) not in sys.path:
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from routers import cnpj, parquet, pipeline, estoque, aggregation, sql_query
+from routers import cnpj, parquet, pipeline, estoque, aggregation, sql_query, fisconforme
 
 app = FastAPI(
     title="Fiscal Parquet Analyzer API",
@@ -33,6 +33,7 @@ app.include_router(pipeline.router, prefix="/api/pipeline", tags=["pipeline"])
 app.include_router(estoque.router, prefix="/api/estoque", tags=["estoque"])
 app.include_router(aggregation.router, prefix="/api/aggregation", tags=["aggregation"])
 app.include_router(sql_query.router, prefix="/api/sql", tags=["sql"])
+app.include_router(fisconforme.router, prefix="/api/fisconforme", tags=["fisconforme"])
 
 
 @app.get("/api/health")

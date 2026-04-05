@@ -25,6 +25,8 @@ class QueryRequest(BaseModel):
     visible_columns: list[str] = []
     page: int = 1
     page_size: int = 200
+    sort_by: str | None = None
+    sort_desc: bool = False
 
 
 def _safe_value(v: Any) -> Any:
@@ -54,6 +56,8 @@ def query_parquet(req: QueryRequest):
         visible_columns=visible,
         page=req.page,
         page_size=req.page_size,
+        sort_by=req.sort_by,
+        sort_desc=req.sort_desc,
     )
     rows = [
         {col: _safe_value(row[col]) for col in result.df_visible.columns}

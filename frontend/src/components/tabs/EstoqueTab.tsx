@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { estoqueApi } from "../../api/client";
 import { useAppStore } from "../../store/appStore";
 import { DataTable } from "../table/DataTable";
+import { ColumnToggle } from "../table/ColumnToggle";
 
 type SubTab =
   | "mov_estoque"
@@ -22,6 +23,7 @@ function EstoqueSubTab({ cnpj, sub }: { cnpj: string; sub: SubTab }) {
   const [selectedRowKeys, setSelectedRowKeys] = useState<Set<string>>(
     new Set(),
   );
+  const [hiddenCols, setHiddenCols] = useState<Set<string>>(new Set());
 
   const isProdutosSub = PRODUTOS_SUBS.has(sub);
 
@@ -157,6 +159,19 @@ function EstoqueSubTab({ cnpj, sub }: { cnpj: string; sub: SubTab }) {
             </button>
           )}
           <div className="flex-1" />
+          <ColumnToggle
+            allColumns={data?.columns ?? []}
+            hiddenColumns={hiddenCols}
+            onChange={(col, visible) =>
+              setHiddenCols((prev) => {
+                const next = new Set(prev);
+                if (visible) next.delete(col);
+                else next.add(col);
+                return next;
+              })
+            }
+            onReset={() => setHiddenCols(new Set())}
+          />
           <button
             className={
               btnCls + " bg-slate-700 hover:bg-slate-600 text-slate-200"
@@ -240,6 +255,7 @@ function EstoqueSubTab({ cnpj, sub }: { cnpj: string; sub: SubTab }) {
           selectedRowKeys={isProdutosSub ? selectedRowKeys : undefined}
           onRowSelect={isProdutosSub ? handleRowSelect : undefined}
           onSelectAll={isProdutosSub ? handleSelectAll : undefined}
+          hiddenColumns={hiddenCols}
         />
       </div>
     </div>
