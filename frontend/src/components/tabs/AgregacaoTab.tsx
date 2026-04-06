@@ -176,14 +176,29 @@ export function AgregacaoTab() {
     const sCest = searchCest ? searchCest.toLowerCase() : "";
 
     return (data?.rows ?? []).filter((r) => {
-      const desc = String(r["descr_padrao"] ?? "").toLowerCase();
-      const ncm = String(r["ncm_padrao"] ?? "").toLowerCase();
-      const cest = String(r["cest_padrao"] ?? "").toLowerCase();
-      return (
-        (!sDesc || desc.includes(sDesc)) &&
-        (!sNcm || ncm.includes(sNcm)) &&
-        (!sCest || cest.includes(sCest))
-      );
+      // ⚡ Bolt Optimization: Use early returns to skip unnecessary .toLowerCase() allocations when filters are empty
+      if (
+        sDesc &&
+        !String(r["descr_padrao"] ?? "")
+          .toLowerCase()
+          .includes(sDesc)
+      )
+        return false;
+      if (
+        sNcm &&
+        !String(r["ncm_padrao"] ?? "")
+          .toLowerCase()
+          .includes(sNcm)
+      )
+        return false;
+      if (
+        sCest &&
+        !String(r["cest_padrao"] ?? "")
+          .toLowerCase()
+          .includes(sCest)
+      )
+        return false;
+      return true;
     });
   }, [data?.rows, searchDesc, searchNcm, searchCest]);
 

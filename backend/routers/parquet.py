@@ -41,7 +41,12 @@ def _safe_value(v: Any) -> Any:
 
 @router.post("/query")
 def query_parquet(req: QueryRequest):
-    p = Path(req.path)
+    try:
+        p = Path(req.path).resolve()
+        if not p.is_relative_to(CNPJ_ROOT.resolve()):
+            raise ValueError()
+    except Exception:
+        raise HTTPException(400, "Caminho inválido ou acesso negado")
     if not p.exists():
         raise HTTPException(404, "Arquivo nao encontrado")
     svc = ParquetService(CNPJ_ROOT)

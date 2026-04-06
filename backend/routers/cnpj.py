@@ -269,7 +269,12 @@ def list_files(cnpj: str):
 
 @router.get("/{cnpj}/schema")
 def get_schema(cnpj: str, path: str):
-    p = Path(path)
+    try:
+        p = Path(path).resolve()
+        if not p.is_relative_to(CNPJ_ROOT.resolve()):
+            raise ValueError()
+    except Exception:
+        raise HTTPException(400, "Caminho inválido ou acesso negado")
     if not p.exists():
         raise HTTPException(404, "Arquivo não encontrado")
     svc = ParquetService(CNPJ_ROOT)
