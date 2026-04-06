@@ -11,3 +11,7 @@
 **Vulnerability:** Raw exception tracebacks were being written using `traceback.print_exc()` to a hardcoded local file path (`c:\funcoes - Copia\traceback.txt`) in `calculos_mensais.py`, `calculos_anuais.py`, and `movimentacao_estoque.py`, leading to Information Disclosure (CWE-209).
 **Learning:** Exception handling `__main__` blocks in legacy extraction scripts bypassed the centralized logging utility, causing unsafe hardcoded paths and leaked application internals.
 **Prevention:** Always use the centralized application logger (e.g., `log_exception(e)` from `transformacao.auxiliares.logs`) rather than ad-hoc local files. Avoid hardcoded developer paths in `except` blocks.
+## 2024-03-05 - Fix Information Disclosure in Orchestrator
+**Vulnerability:** `src/orquestrador_pipeline.py` leaked raw exception details and full stack traces directly to `stdout` (`rprint`), potentially exposing sensitive internal application structure, paths, and database execution states during exceptions.
+**Learning:** Even CLI utilities or top-level orchestrators must fail securely. Exposing `{e}` or `traceback.format_exc()` on standard output provides attackers with critical footprinting information.
+**Prevention:** Catch blocks should output generic, sanitized error messages to the user while logging the full exception internally using a secure centralized logging utility, such as `transformacao.auxiliares.logs.log_exception`.
