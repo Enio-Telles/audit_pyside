@@ -69,11 +69,18 @@ function EstoqueSubTab({ cnpj, sub }: { cnpj: string; sub: SubTab }) {
       )
         return false;
       if (searchLower) {
-        const hit = Object.values(r).some((v) =>
-          String(v ?? "")
-            .toLowerCase()
-            .includes(searchLower),
-        );
+        let hit = false;
+        // ⚡ Bolt Optimization: Replace Object.values().some() with for...in loop and early break to prevent O(N*C) object allocations
+        for (const key in r) {
+          if (
+            String(r[key] ?? "")
+              .toLowerCase()
+              .includes(searchLower)
+          ) {
+            hit = true;
+            break;
+          }
+        }
         if (!hit) return false;
       }
       return true;
