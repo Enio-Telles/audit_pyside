@@ -42,17 +42,15 @@ except ImportError as e:
     sys.exit(1)
 
 
-def _norm(text: str | None) -> str:
-    if text is None:
-        return ""
-    return re.sub(r"\s+", " ", (remove_accents(text) or "").upper().strip())
-
-
 def _normalizar_descricao_expr(col: str) -> pl.Expr:
     return (
         pl.col(col)
         .cast(pl.Utf8, strict=False)
-        .map_elements(_norm, return_dtype=pl.String)
+        .map_elements(remove_accents, return_dtype=pl.String)
+        .str.to_uppercase()
+        .str.strip_chars()
+        .str.replace_all(r"\s+", " ")
+        .fill_null("")
         .alias("__descricao_normalizada__")
     )
 
