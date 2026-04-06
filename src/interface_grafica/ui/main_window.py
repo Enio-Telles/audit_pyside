@@ -1214,10 +1214,16 @@ class MainWindow(QMainWindow):
         bottom_layout.addWidget(self.results_table)
 
         tb_acoes = QToolBar()
+        self.btn_reverter_agregacao = QPushButton(
+            QApplication.style().standardIcon(QApplication.style().StandardPixmap.SP_BrowserReload),
+            "Reverter agrupamento",
+        )
         self.btn_desfazer_agregacao = QPushButton(
             QApplication.style().standardIcon(QApplication.style().StandardPixmap.SP_ArrowLeft),
             "Desfazer selecao",
         )
+        self.btn_reverter_agregacao.clicked.connect(self.reverter_agregacao)
+        tb_acoes.addWidget(self.btn_reverter_agregacao)
         self.btn_desfazer_agregacao.clicked.connect(self._desfazer_agregacao)
         tb_acoes.addWidget(self.btn_desfazer_agregacao)
         bottom_layout.addWidget(tb_acoes)
@@ -3746,18 +3752,21 @@ class MainWindow(QMainWindow):
             mapa = {
                 "padrao": [
                     "id_agrupado", "descr_padrao",
+                    "ids_origem_agrupamento",
                     "preco_medio_compra", "preco_medio_venda",
                     "total_entradas", "total_saidas", "total_movimentacao",
                     "total_compras", "qtd_compras_total",
                     "total_vendas", "qtd_vendas_total",
                     "ncm_padrao", "cest_padrao", "gtin_padrao",
-                    "lista_ncm", "lista_cest", "lista_gtin", "lista_descricoes",
+                    "lista_itens_agrupados",
+                    "lista_ncm", "lista_cest", "lista_gtin", "lista_descricoes", "lista_desc_compl",
                     "co_sefin_padrao", "co_sefin_agr", "lista_unidades", "fontes",
                 ],
                 "auditoria": [
                     "id_agrupado", "descr_padrao",
+                    "ids_origem_agrupamento", "lista_itens_agrupados",
                     "ncm_padrao", "cest_padrao", "gtin_padrao",
-                    "lista_ncm", "lista_cest", "lista_gtin", "lista_descricoes",
+                    "lista_ncm", "lista_cest", "lista_gtin", "lista_descricoes", "lista_desc_compl",
                     "co_sefin_padrao", "co_sefin_agr", "lista_co_sefin",
                     "co_sefin_divergentes", "lista_unidades", "fontes",
                     "total_entradas", "total_saidas", "total_movimentacao",
@@ -3767,19 +3776,21 @@ class MainWindow(QMainWindow):
                 ],
                 "estoque": [
                     "id_agrupado", "descr_padrao",
+                    "ids_origem_agrupamento",
                     "total_entradas", "total_saidas", "total_movimentacao",
                     "total_compras", "qtd_compras_total",
                     "total_vendas", "qtd_vendas_total",
-                    "lista_unidades", "lista_descricoes", "fontes",
+                    "lista_unidades", "lista_descricoes", "lista_desc_compl", "lista_itens_agrupados", "fontes",
                     "ncm_padrao", "cest_padrao",
                 ],
                 "custos": [
                     "id_agrupado", "descr_padrao",
+                    "ids_origem_agrupamento",
                     "preco_medio_compra", "preco_medio_venda",
                     "total_entradas", "total_saidas", "total_movimentacao",
                     "total_compras", "qtd_compras_total",
                     "total_vendas", "qtd_vendas_total",
-                    "lista_ncm", "lista_cest", "lista_gtin", "lista_descricoes",
+                    "lista_ncm", "lista_cest", "lista_gtin", "lista_descricoes", "lista_desc_compl", "lista_itens_agrupados",
                     "lista_unidades", "fontes",
                 ],
             }
@@ -3819,8 +3830,8 @@ class MainWindow(QMainWindow):
             }
         elif contexto == "id_agrupados":
             mapa = {
-                "auditoria": ["id_agrupado", "descr_padrao", "lista_descricoes", "lista_codigos", "lista_unidades"],
-                "estoque": ["id_agrupado", "descr_padrao", "lista_unidades", "lista_descricoes"],
+                "auditoria": ["id_agrupado", "descr_padrao", "lista_descricoes", "lista_desc_compl", "lista_codigos", "lista_unidades"],
+                "estoque": ["id_agrupado", "descr_padrao", "lista_unidades", "lista_descricoes", "lista_desc_compl"],
                 "custos": ["id_agrupado", "descr_padrao", "lista_codigos", "lista_unidades"],
             }
         else:
@@ -3850,6 +3861,7 @@ class MainWindow(QMainWindow):
         larguras = {
             "id_agrupado": 150,
             "descr_padrao": 320,
+            "ids_origem_agrupamento": 180,
             "preco_medio_compra": 150,
             "preco_medio_venda": 150,
             "total_entradas": 145,
@@ -3863,6 +3875,8 @@ class MainWindow(QMainWindow):
             "lista_cest": 180,
             "lista_gtin": 180,
             "lista_descricoes": 340,
+            "lista_desc_compl": 320,
+            "lista_itens_agrupados": 340,
         }
         for nome, largura in larguras.items():
             if nome in colunas:
@@ -5832,7 +5846,69 @@ class MainWindow(QMainWindow):
 
     def _desfazer_agregacao(self) -> None:
         self.aggregation_table_model.clear_checked()
+        self.results_table_model.clear_checked()
         self.status.showMessage("Selecao de agregacao limpa.")
+
+    def _obter_ids_agrupados_para_reversao(self) -> list[str]:
+        rows = self.results_table_model.get_checked_rows()
+        if not rows:
+            selecao = self.results_table.selectionModel()
+            if selecao is not None:
+                df = self.results_table_model.get_dataframe()
+                rows = [
+                    df.row(index.row(), named=True)
+                    for index in selecao.selectedRows()
+                    if 0 <= index.row() < df.height
+                ]
+
+        ids: list[str] = []
+        vistos: set[str] = set()
+        for row in rows:
+            valor = str(row.get("id_agrupado") or "").strip()
+            if not valor or valor in vistos:
+                continue
+            vistos.add(valor)
+            ids.append(valor)
+        return ids
+
+    def reverter_agregacao(self) -> None:
+        if not self.state.current_cnpj:
+            self.show_error("CNPJ nao selecionado", "Selecione um CNPJ antes de reverter agrupamentos.")
+            return
+
+        ids_reversao = self._obter_ids_agrupados_para_reversao()
+        if not ids_reversao:
+            self.show_error(
+                "Selecao insuficiente",
+                "Marque ou selecione na tabela inferior o agrupamento que deve ser revertido.",
+            )
+            return
+
+        mensagem = (
+            "Isso vai restaurar os grupos de origem do(s) agrupamento(s) selecionado(s):\n"
+            + "\n".join(ids_reversao)
+            + "\n\nProsseguir?"
+        )
+        if QMessageBox.question(self, "Reverter agrupamento", mensagem) != QMessageBox.StandardButton.Yes:
+            return
+
+        try:
+            resultados = [
+                self.servico_agregacao.reverter_agrupamento(self.state.current_cnpj, id_agrupado)
+                for id_agrupado in ids_reversao
+            ]
+            self.atualizar_tabelas_agregacao()
+            self.recarregar_historico_agregacao(self.state.current_cnpj)
+            self.atualizar_aba_id_agrupados()
+            self.refresh_logs()
+
+            total_restaurado = sum(int(item.get("qtd_grupos_restaurados", 0)) for item in resultados)
+            self.show_info(
+                "Agrupamento revertido",
+                f"Foram restaurados {total_restaurado} grupos a partir de {len(ids_reversao)} agrupamento(s).",
+            )
+        except Exception as exc:
+            self.show_error("Erro ao reverter agrupamento", str(exc))
 
     def _load_aggregation_table(self) -> None:
         cnpj = self.state.current_cnpj
@@ -5957,6 +6033,8 @@ class MainWindow(QMainWindow):
             "descricao": [
                 "descricao",
                 "lista_descricoes",
+                "lista_desc_compl",
+                "lista_itens_agrupados",
                 "descr",
                 "descr_padrao",
                 "descricao_final",
@@ -6056,6 +6134,8 @@ class MainWindow(QMainWindow):
             "descricao": [
                 "descricao",
                 "lista_descricoes",
+                "lista_desc_compl",
+                "lista_itens_agrupados",
                 "descr",
                 "descr_padrao",
                 "descricao_final",

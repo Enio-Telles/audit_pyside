@@ -1,11 +1,14 @@
-import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { parquetApi, cnpjApi } from '../../api/client';
-import { useAppStore } from '../../store/appStore';
-import { DataTable } from '../table/DataTable';
-import { FilterBar } from '../table/FilterBar';
-import { ColumnToggle } from '../table/ColumnToggle';
-import { HighlightRulesPanel } from '../table/HighlightRulesPanel';
+import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { parquetApi, cnpjApi } from "../../api/client";
+import { useAppStore } from "../../store/appStore";
+import { DataTable } from "../table/DataTable";
+import { FilterBar } from "../table/FilterBar";
+import { ColumnToggle } from "../table/ColumnToggle";
+import { HighlightRulesPanel } from "../table/HighlightRulesPanel";
+import { usePreferenciasColunas } from "../../hooks/usePreferenciasColunas";
+
+const CHAVE_PREFERENCIAS_COLUNAS_CONSULTA = "consulta_colunas_v1";
 
 export function ConsultaTab() {
   const {
@@ -39,12 +42,17 @@ export function ConsultaTab() {
     enabled: !!selectedCnpj && !!selectedFile,
   });
 
-  const allCols = schema?.columns ?? [];
+  const allCols = useMemo(() => schema?.columns ?? [], [schema?.columns]);
+  const {
+    ordemColunas,
+    largurasColunas,
+    definirOrdemColunas,
+    definirLarguraColuna,
+    redefinirPreferenciasColunas,
+  } = usePreferenciasColunas(CHAVE_PREFERENCIAS_COLUNAS_CONSULTA, allCols);
   const baseVisibleCols =
-    consultaVisibleCols.length > 0 ? consultaVisibleCols : allCols;
-  const visibleCols = baseVisibleCols.filter(
-    (c) => !consultaHiddenCols.has(c),
-  );
+    consultaVisibleCols.length > 0 ? consultaVisibleCols : ordemColunas;
+  const visibleCols = baseVisibleCols.filter((c) => !consultaHiddenCols.has(c));
 
   // Merge server-side column filters with user-added filters
   const colFilterItems = Object.entries(consultaColumnFilters)
@@ -115,9 +123,16 @@ export function ConsultaTab() {
       <div className="flex gap-2 items-center flex-wrap">
         <ColumnToggle
           allColumns={allCols}
+          orderedColumns={ordemColunas}
           hiddenColumns={consultaHiddenCols}
+          columnWidths={largurasColunas}
           onChange={setConsultaHiddenCol}
-          onReset={resetConsultaHiddenCols}
+          onOrderChange={definirOrdemColunas}
+          onWidthChange={definirLarguraColuna}
+          onReset={() => {
+            resetConsultaHiddenCols();
+            redefinirPreferenciasColunas();
+          }}
         />
 
         <button
@@ -147,17 +162,15 @@ export function ConsultaTab() {
           onClick={() => {
             if (!data) return;
             const csv = [
-              data.columns.join(','),
+              visibleCols.join(","),
               ...data.rows.map((r) =>
-                data.columns
-                  .map((c) => JSON.stringify(r[c] ?? ''))
-                  .join(','),
+                visibleCols.map((c) => JSON.stringify(r[c] ?? "")).join(","),
               ),
-            ].join('\n');
-            const blob = new Blob([csv], { type: 'text/csv' });
-            const a = document.createElement('a');
+            ].join("\n");
+            const blob = new Blob([csv], { type: "text/csv" });
+            const a = document.createElement("a");
             a.href = URL.createObjectURL(blob);
-            a.download = 'export.csv';
+            a.download = "export.csv";
             a.click();
           }}
         >
@@ -169,6 +182,10 @@ export function ConsultaTab() {
       <div className="flex-1 overflow-hidden border border-slate-700 rounded">
         <DataTable
           columns={data?.columns ?? visibleCols}
+          orderedColumns={ordemColunas}
+          columnWidths={largurasColunas}
+          onOrderedColumnsChange={definirOrdemColunas}
+          onColumnWidthChange={definirLarguraColuna}
           rows={data?.rows ?? []}
           totalRows={data?.total_rows}
           loading={isLoading}

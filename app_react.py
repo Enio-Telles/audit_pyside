@@ -22,6 +22,11 @@ import webbrowser
 from pathlib import Path
 from threading import Thread
 
+
+def _find_pnpm() -> str | None:
+    """Localiza o pnpm quando ele estiver disponivel no ambiente."""
+    return shutil.which("pnpm")
+
 # ---------------------------------------------------------------------------
 # Caminhos raiz
 # ---------------------------------------------------------------------------
@@ -48,6 +53,61 @@ def _find_npm() -> str:
         _print("ERRO: npm não encontrado. Instale o Node.js.", color="red")
         sys.exit(1)
     return npm
+
+
+def _obter_gerenciador_frontend() -> tuple[str, str]:
+    """
+    Define o gerenciador de pacotes do frontend.
+
+    Priorizamos pnpm quando o lockfile existe porque os wrappers do Windows em
+    node_modules/.bin dependem do layout gerado pelo gerenciador utilizado.
+    """
+    pnpm = _find_pnpm()
+    if (FRONTEND_DIR / "pnpm-lock.yaml").exists() and pnpm:
+        return "pnpm", pnpm
+    return "npm", _find_npm()
+
+
+def _montar_comando_frontend(executavel_gerenciador: str, script: str) -> list[str]:
+    """Monta o comando do script sem alterar a interface publica do projeto."""
+    if Path(executavel_gerenciador).stem.lower() == "pnpm":
+        return [executavel_gerenciador, script]
+    return [executavel_gerenciador, "run", script]
+
+
+def _dependencias_frontend_estao_validas() -> bool:
+    """
+    Confere se o binario real do Vite existe na instalacao atual.
+
+    Isso evita falso positivo quando node_modules foi reaproveitado apos mover
+    a pasta do projeto e os wrappers de .bin ficaram apontando para caminhos
+    absolutos antigos.
+    """
+    binario_vite = FRONTEND_DIR / "node_modules" / "vite" / "bin" / "vite.js"
+    return binario_vite.exists()
+
+
+def _garantir_dependencias_frontend() -> tuple[str, str]:
+    """Garante dependencias utilizaveis antes de subir ou buildar o frontend."""
+    nome_gerenciador, executavel_gerenciador = _obter_gerenciador_frontend()
+
+    if _dependencias_frontend_estao_validas():
+        return nome_gerenciador, executavel_gerenciador
+
+    _print(
+        f"Dependencias do frontend ausentes ou inconsistentes. Reinstalando com {nome_gerenciador}...",
+        color="yellow",
+    )
+    subprocess.run([executavel_gerenciador, "install"], cwd=FRONTEND_DIR, check=True)
+
+    if not _dependencias_frontend_estao_validas():
+        _print(
+            "ERRO: a reinstalacao terminou, mas o binario do Vite continua indisponivel.",
+            color="red",
+        )
+        sys.exit(1)
+
+    return nome_gerenciador, executavel_gerenciador
 
 
 def _find_uvicorn() -> str:
@@ -90,7 +150,7 @@ def _stream_output(proc: subprocess.Popen, prefix: str, color: str) -> None:
 # ---------------------------------------------------------------------------
 
 def build_frontend() -> None:
-    npm = _find_npm()
+    nome_gerenciador, executavel_gerenciador = _garantir_dependencias_frontend()
     _print("\n▶  Construindo frontend React...", color="cyan")
 
     # Instala dependências se node_modules ausente
@@ -98,7 +158,10 @@ def build_frontend() -> None:
         _print("   Instalando dependências npm...", color="yellow")
         subprocess.run([npm, "install"], cwd=FRONTEND_DIR, check=True)
 
-    result = subprocess.run([npm, "run", "build"], cwd=FRONTEND_DIR)
+    result = subprocess.run(
+        _montar_comando_frontend(executavel_gerenciador, "build"),
+        cwd=FRONTEND_DIR,
+    )
     if result.returncode != 0:
         _print("ERRO: build do frontend falhou.", color="red")
         sys.exit(1)
@@ -284,6 +347,105 @@ def run_prod(port: int, open_browser: bool) -> None:
 
     try:
         proc.wait()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        _shutdown()
+
+
+# ---------------------------------------------------------------------------
+# Overrides de bootstrap do frontend
+# ---------------------------------------------------------------------------
+
+def build_frontend() -> None:
+    """
+    Reimplementado para validar dependencias de forma real antes do build.
+    """
+    nome_gerenciador, executavel_gerenciador = _garantir_dependencias_frontend()
+    _print("\nConstruindo frontend React...", color="cyan")
+
+    result = subprocess.run(
+        _montar_comando_frontend(executavel_gerenciador, "build"),
+        cwd=FRONTEND_DIR,
+    )
+    if result.returncode != 0:
+        _print("ERRO: build do frontend falhou.", color="red")
+        sys.exit(1)
+
+    _print(f"Frontend construido com sucesso via {nome_gerenciador}.", color="green")
+
+
+def run_dev(backend_port: int, open_browser: bool) -> None:
+    """
+    Reimplementado para reparar node_modules inconsistente antes de iniciar o Vite.
+    """
+    nome_gerenciador, executavel_gerenciador = _garantir_dependencias_frontend()
+    uvicorn = _find_uvicorn()
+
+    _print("\n=======================================", color="cyan")
+    _print("  Fiscal Parquet Analyzer  [MODO DEV]", color="cyan")
+    _print("=======================================", color="cyan")
+    _print(f"  Backend  -> http://localhost:{backend_port}", color="cyan")
+    _print("  Frontend -> http://localhost:5173", color="cyan")
+    _print(f"  API Docs -> http://localhost:{backend_port}/docs", color="cyan")
+    _print("  Encerrar: Ctrl+C", color="cyan")
+    _print("=======================================\n", color="cyan")
+
+    env = {**os.environ, "PYTHONUNBUFFERED": "1"}
+    _print(f"Frontend validado com {nome_gerenciador}.", color="yellow")
+
+    proc_backend = subprocess.Popen(
+        [uvicorn, "main:app", "--host", "0.0.0.0", "--port", str(backend_port), "--reload"],
+        cwd=BACKEND_DIR,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        env={**env, "PYTHONPATH": str(SRC_DIR)},
+    )
+    Thread(target=_stream_output, args=(proc_backend, "API", "green"), daemon=True).start()
+
+    proc_frontend = subprocess.Popen(
+        _montar_comando_frontend(executavel_gerenciador, "dev"),
+        cwd=FRONTEND_DIR,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        env=env,
+    )
+    Thread(target=_stream_output, args=(proc_frontend, "UI", "yellow"), daemon=True).start()
+
+    procs = [proc_backend, proc_frontend]
+
+    def _shutdown(signum=None, frame=None) -> None:  # noqa: ARG001
+        _print("\n\nEncerrando processos...", color="red")
+        for processo in procs:
+            try:
+                processo.terminate()
+            except Exception:
+                pass
+        time.sleep(1)
+        for processo in procs:
+            try:
+                if processo.poll() is None:
+                    processo.kill()
+            except Exception:
+                pass
+        sys.exit(0)
+
+    signal.signal(signal.SIGINT, _shutdown)
+    signal.signal(signal.SIGTERM, _shutdown)
+
+    if open_browser:
+        _print("Aguardando backend subir...", color="yellow")
+        if _wait_for_port(backend_port):
+            _print("Aguardando frontend subir...", color="yellow")
+            if _wait_for_port(5173):
+                _print("Abrindo navegador...", color="cyan")
+                webbrowser.open("http://localhost:5173")
+        else:
+            _print("Backend demorou demais. Abra o navegador manualmente.", color="yellow")
+
+    try:
+        while all(processo.poll() is None for processo in procs):
+            time.sleep(1)
     except KeyboardInterrupt:
         pass
     finally:

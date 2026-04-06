@@ -1,25 +1,52 @@
-import { useState, useMemo } from "react";
+import {
+  useState,
+  useMemo,
+  useRef,
+  type MouseEvent as EventoMouseReact,
+} from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { estoqueApi } from "../../api/client";
 import { useAppStore } from "../../store/appStore";
+import { ColumnToggle } from "../table/ColumnToggle";
+import { usePreferenciasColunas } from "../../hooks/usePreferenciasColunas";
 
 type Row = Record<string, unknown>;
+
+const CHAVE_PREFERENCIAS_COLUNAS_CONVERSAO = "conversao_colunas_v1";
 
 function rowKey(r: Row) {
   return `${r["id_agrupado"]}__${r["id_produtos"]}`;
 }
 
-const COL_WIDTHS: Record<string, string> = {
-  id_agrupado: "11rem",
-  id_produtos: "9rem",
-  descr_padrao: "18rem",
-  unid: "4rem",
-  unid_ref: "6rem",
-  fator: "7rem",
-  fator_manual: "3.5rem",
-  unid_ref_manual: "4.5rem",
-  preco_medio: "8rem",
-  origem_preco: "8rem",
+function moverColunaNaOrdem(
+  ordemAtual: string[],
+  colunaOrigem: string,
+  colunaDestino: string,
+): string[] {
+  if (colunaOrigem === colunaDestino) return ordemAtual;
+
+  const proximaOrdem = [...ordemAtual];
+  const indiceOrigem = proximaOrdem.indexOf(colunaOrigem);
+  const indiceDestino = proximaOrdem.indexOf(colunaDestino);
+
+  if (indiceOrigem < 0 || indiceDestino < 0) return ordemAtual;
+
+  const [colunaMovida] = proximaOrdem.splice(indiceOrigem, 1);
+  proximaOrdem.splice(indiceDestino, 0, colunaMovida);
+  return proximaOrdem;
+}
+
+const LARGURAS_INICIAIS_COLUNAS: Record<string, number> = {
+  id_agrupado: 176,
+  id_produtos: 144,
+  descr_padrao: 288,
+  unid: 80,
+  unid_ref: 96,
+  fator: 112,
+  fator_manual: 90,
+  unid_ref_manual: 110,
+  preco_medio: 128,
+  origem_preco: 128,
 };
 
 const DISPLAY_COLS_ORDER = [
@@ -47,6 +74,8 @@ export function ConversaoTab() {
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   const [newUnidRef, setNewUnidRef] = useState("");
+  const [hiddenCols, setHiddenCols] = useState<Set<string>>(new Set());
+  const colunaArrastadaRef = useRef<string | null>(null);
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ["fatores_conversao", selectedCnpj],
@@ -91,8 +120,21 @@ export function ConversaoTab() {
   const rows = data?.rows;
   const allRows: Row[] = useMemo(() => rows ?? [], [rows]);
   const dataColumns: string[] = data?.columns ?? [];
+  const {
+    ordemColunas,
+    largurasColunas,
+    definirOrdemColunas,
+    definirLarguraColuna,
+    redefinirPreferenciasColunas,
+  } = usePreferenciasColunas(
+    CHAVE_PREFERENCIAS_COLUNAS_CONVERSAO,
+    dataColumns,
+    LARGURAS_INICIAIS_COLUNAS,
+  );
 
-  const displayCols = DISPLAY_COLS_ORDER.filter((c) => dataColumns.includes(c));
+  const displayCols = ordemColunas.filter(
+    (c) => DISPLAY_COLS_ORDER.includes(c) && !hiddenCols.has(c),
+  );
 
   // Unique id_agrupadoes for the filter dropdown
   const uniqueIdAgrupados = useMemo(() => {
@@ -214,6 +256,48 @@ export function ConversaoTab() {
     });
   }
 
+  function iniciarArrasteColuna(nomeColuna: string) {
+    colunaArrastadaRef.current = nomeColuna;
+  }
+
+  function finalizarArrasteColuna() {
+    colunaArrastadaRef.current = null;
+  }
+
+  function soltarColuna(nomeColunaDestino: string) {
+    const colunaOrigem = colunaArrastadaRef.current;
+    if (!colunaOrigem) return;
+
+    definirOrdemColunas(
+      moverColunaNaOrdem(ordemColunas, colunaOrigem, nomeColunaDestino),
+    );
+    finalizarArrasteColuna();
+  }
+
+  function iniciarRedimensionamentoColuna(
+    evento: EventoMouseReact<HTMLDivElement>,
+    nomeColuna: string,
+  ) {
+    evento.preventDefault();
+    evento.stopPropagation();
+
+    const posicaoInicial = evento.clientX;
+    const larguraInicial = largurasColunas[nomeColuna] ?? 120;
+
+    const aoMoverMouse = (movimento: MouseEvent) => {
+      const deslocamento = movimento.clientX - posicaoInicial;
+      definirLarguraColuna(nomeColuna, larguraInicial + deslocamento);
+    };
+
+    const aoSoltarMouse = () => {
+      window.removeEventListener("mousemove", aoMoverMouse);
+      window.removeEventListener("mouseup", aoSoltarMouse);
+    };
+
+    window.addEventListener("mousemove", aoMoverMouse);
+    window.addEventListener("mouseup", aoSoltarMouse);
+  }
+
   if (!selectedCnpj) {
     return (
       <div className="flex items-center justify-center h-full text-slate-500">
@@ -226,6 +310,26 @@ export function ConversaoTab() {
     <div className="flex flex-col h-full p-3 gap-2">
       {/* Toolbar */}
       <div className="flex gap-2 items-center flex-wrap">
+        <ColumnToggle
+          allColumns={DISPLAY_COLS_ORDER.filter((c) => dataColumns.includes(c))}
+          orderedColumns={ordemColunas.filter((c) => DISPLAY_COLS_ORDER.includes(c))}
+          hiddenColumns={hiddenCols}
+          columnWidths={largurasColunas}
+          onChange={(col, visible) =>
+            setHiddenCols((prev) => {
+              const next = new Set(prev);
+              if (visible) next.delete(col);
+              else next.add(col);
+              return next;
+            })
+          }
+          onOrderChange={definirOrdemColunas}
+          onWidthChange={definirLarguraColuna}
+          onReset={() => {
+            setHiddenCols(new Set());
+            redefinirPreferenciasColunas();
+          }}
+        />
         <button
           className={btnCls + " bg-slate-700 hover:bg-slate-600 text-slate-200"}
           onClick={() => refetch()}
@@ -388,11 +492,14 @@ export function ConversaoTab() {
       >
         <table
           className="w-full border-collapse"
-          style={{ tableLayout: "fixed", minWidth: "60rem" }}
+          style={{
+            tableLayout: "fixed",
+            minWidth: `${displayCols.reduce((total, col) => total + (largurasColunas[col] ?? 120), 0)}px`,
+          }}
         >
           <colgroup>
             {displayCols.map((c) => (
-              <col key={c} style={{ width: COL_WIDTHS[c] ?? "8rem" }} />
+              <col key={c} style={{ width: `${largurasColunas[c] ?? 120}px` }} />
             ))}
           </colgroup>
           <thead
@@ -403,9 +510,22 @@ export function ConversaoTab() {
               {displayCols.map((c) => (
                 <th
                   key={c}
-                  className="px-2 py-1.5 text-left text-slate-400 font-semibold border-b border-slate-700 truncate"
+                  className="px-2 py-1.5 text-left text-slate-400 font-semibold border-b border-slate-700 truncate relative select-none cursor-move"
+                  draggable
+                  onDragStart={() => iniciarArrasteColuna(c)}
+                  onDragOver={(evento) => evento.preventDefault()}
+                  onDrop={() => soltarColuna(c)}
+                  onDragEnd={finalizarArrasteColuna}
+                  title={`${c} - arraste para reordenar`}
                 >
                   {c}
+                  <div
+                    className="absolute top-0 right-0 h-full w-2 cursor-col-resize"
+                    onMouseDown={(evento) =>
+                      iniciarRedimensionamentoColuna(evento, c)
+                    }
+                    title={`Redimensionar ${c}`}
+                  />
                 </th>
               ))}
             </tr>

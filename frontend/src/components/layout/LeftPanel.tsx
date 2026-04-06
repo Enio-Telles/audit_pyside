@@ -37,9 +37,39 @@ export function LeftPanel() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["cnpjs"] }),
   });
 
-  const runPipeline = async () => {
-    if (!selectedCnpj) return;
-    await pipelineApi.run(selectedCnpj, [], dataLimite);
+  const ensureSelectedCnpj = async () => {
+    const typedCnpj = newCnpj.trim();
+    if (typedCnpj) {
+      const record = await addMutation.mutateAsync(typedCnpj);
+      setSelectedCnpj(record.cnpj);
+      setNewCnpj("");
+      return record.cnpj;
+    }
+    return selectedCnpj;
+  };
+
+  const runPipeline = async (modo: "full" | "extract" | "process") => {
+    const cnpj = await ensureSelectedCnpj();
+    if (!cnpj) return;
+
+    setPipelineStatus({
+      status: "queued",
+      progresso: [],
+      erros: [],
+      percentual: 0,
+      etapas_concluidas: 0,
+      total_etapas: 0,
+      etapa_atual: "fila",
+      item_atual: null,
+    });
+
+    await pipelineApi.run({
+      cnpj,
+      data_limite: modo === "process" ? undefined : dataLimite,
+      incluir_extracao: modo !== "process",
+      incluir_processamento: modo !== "extract",
+    });
+    setSelectedCnpj(cnpj);
     setPolling(true);
   };
 
@@ -55,6 +85,40 @@ export function LeftPanel() {
     }, 1500);
     return () => clearInterval(id);
   }, [polling, selectedCnpj, queryClient]);
+
+  const progressValue = pipelineStatus?.percentual ?? 0;
+  const etapasConcluidas = pipelineStatus?.etapas_concluidas ?? 0;
+  const totalEtapas = pipelineStatus?.total_etapas ?? 0;
+  const etapaAtualTexto =
+    pipelineStatus?.etapa_atual === "extracao"
+      ? "Extraindo tabelas brutas"
+      : pipelineStatus?.etapa_atual === "processamento"
+        ? "Processando tabelas analiticas"
+        : pipelineStatus?.etapa_atual === "fila"
+          ? "Aguardando na fila"
+          : pipelineStatus?.etapa_atual === "preparacao"
+            ? "Preparando execucao"
+            : pipelineStatus?.etapa_atual === "concluido"
+              ? "Concluido"
+              : pipelineStatus?.etapa_atual === "erro"
+                ? "Falha no pipeline"
+                : "Pipeline";
+
+  const pipelineStatusLabel =
+    pipelineStatus?.status === "done"
+      ? "Concluido"
+      : pipelineStatus?.status === "error"
+        ? "Falha no pipeline"
+        : pipelineStatus?.item_atual
+          ? `${etapaAtualTexto}: ${pipelineStatus.item_atual}`
+          : etapaAtualTexto;
+
+  const progressBarCls =
+    pipelineStatus?.status === "done"
+      ? "bg-emerald-500"
+      : pipelineStatus?.status === "error"
+        ? "bg-rose-500"
+        : "bg-blue-500";
 
   const sectionCls = "border border-slate-700 rounded p-2 mb-3";
   const sectionTitleCls =
@@ -95,12 +159,7 @@ export function LeftPanel() {
             className={
               btnCls + " flex-1 bg-blue-700 hover:bg-blue-600 text-white"
             }
-            onClick={() => {
-              if (newCnpj.trim()) {
-                addMutation.mutate(newCnpj.trim());
-                setNewCnpj("");
-              }
-            }}
+            onClick={() => void runPipeline("full")}
           >
             Extrair + Processar
           </button>
@@ -121,6 +180,8 @@ export function LeftPanel() {
             className={
               btnCls + " bg-slate-700 hover:bg-slate-600 text-slate-200"
             }
+            onClick={() => void runPipeline("extract")}
+            disabled={(!selectedCnpj && !newCnpj.trim()) || polling}
           >
             Extrair Tabelas Brutas
           </button>
@@ -128,8 +189,8 @@ export function LeftPanel() {
             className={
               btnCls + " bg-slate-700 hover:bg-slate-600 text-slate-200"
             }
-            onClick={runPipeline}
-            disabled={!selectedCnpj || polling}
+            onClick={() => void runPipeline("process")}
+            disabled={(!selectedCnpj && !newCnpj.trim()) || polling}
           >
             {polling ? "Processando..." : "Processamento"}
           </button>
@@ -137,6 +198,14 @@ export function LeftPanel() {
             className={
               btnCls + " bg-slate-700 hover:bg-slate-600 text-slate-200"
             }
+            onClick={() => {
+              void queryClient.invalidateQueries({ queryKey: ["cnpjs"] });
+              if (selectedCnpj) {
+                void queryClient.invalidateQueries({
+                  queryKey: ["files", selectedCnpj],
+                });
+              }
+            }}
           >
             Atualizar lista
           </button>
@@ -151,9 +220,31 @@ export function LeftPanel() {
       </div>
 
       {/* Pipeline progress */}
-      {pipelineStatus && pipelineStatus.progresso.length > 0 && (
+      {pipelineStatus && pipelineStatus.status !== "idle" && (
         <div className="border border-slate-700 rounded p-2 text-xs">
           <div className={sectionTitleCls}>Pipeline</div>
+          <div className="mb-2">
+            <div className="mb-1 flex items-center justify-between text-[11px] text-slate-300">
+              <span>{pipelineStatusLabel}</span>
+              <span>{Math.round(progressValue)}%</span>
+            </div>
+            <div className="mb-1 text-[10px] text-slate-400">
+              {totalEtapas > 0
+                ? `${etapasConcluidas} de ${totalEtapas} etapa(s) concluida(s)`
+                : "Aguardando definicao das etapas"}
+            </div>
+            <div className="h-2 overflow-hidden rounded-full bg-slate-800">
+              <div
+                className={`h-full rounded-full transition-all duration-500 ${progressBarCls} ${
+                  pipelineStatus.status === "queued" ||
+                  pipelineStatus.status === "running"
+                    ? "animate-pulse"
+                    : ""
+                }`}
+                style={{ width: `${progressValue}%` }}
+              />
+            </div>
+          </div>
           <div
             className="overflow-auto"
             style={{
@@ -168,6 +259,12 @@ export function LeftPanel() {
                 {msg}
               </div>
             ))}
+            {pipelineStatus.progresso.length === 0 &&
+              pipelineStatus.erros.length === 0 && (
+                <div className="text-slate-400 font-mono">
+                  Aguardando atualizacao do pipeline...
+                </div>
+              )}
             {pipelineStatus.erros.map((e, i) => (
               <div key={`e${i}`} className="text-red-400 font-mono">
                 {e}
@@ -201,8 +298,12 @@ export function LeftPanel() {
                   ? "bg-blue-700 text-white"
                   : "text-slate-300 hover:bg-slate-700"
               }`}
+              title={r.razao_social ? `${r.cnpj} - ${r.razao_social}` : r.cnpj}
             >
-              {r.cnpj}
+              <div className="font-semibold">{r.cnpj}</div>
+              <div className="truncate text-[11px] text-slate-400">
+                {r.razao_social ?? "Razão social não disponível"}
+              </div>
             </button>
           ))}
         </div>

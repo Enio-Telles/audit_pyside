@@ -13,6 +13,7 @@ from transformacao.rastreabilidade_produtos import id_agrupados  # noqa
 from transformacao.rastreabilidade_produtos import fontes_produtos  # noqa
 from transformacao.rastreabilidade_produtos import fatores_conversao  # noqa
 from transformacao.rastreabilidade_produtos import precos_medios_produtos_final  # noqa
+from transformacao import efd_atomizacao  # noqa
 
 # movimentacao_estoque
 from transformacao.movimentacao_estoque_pkg import movimentacao_estoque  # noqa

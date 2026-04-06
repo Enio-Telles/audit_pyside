@@ -1,9 +1,12 @@
-import { useState, useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { aggregationApi } from "../../api/client";
 import { useAppStore } from "../../store/appStore";
 import { DataTable } from "../table/DataTable";
 import { ColumnToggle } from "../table/ColumnToggle";
+import { usePreferenciasColunas } from "../../hooks/usePreferenciasColunas";
+
+const CHAVE_PREFERENCIAS_COLUNAS_AGREGACAO = "agregacao_colunas_v1";
 
 // ---------------------------------------------------------------------------
 // Modal de confirmação de agregação
@@ -186,6 +189,17 @@ export function AgregacaoTab() {
 
   const selectedKeys = new Set(selectedRows.keys());
   const selCount = selectedRows.size;
+  const colunasDisponiveis = useMemo(() => data?.columns ?? [], [data?.columns]);
+  const {
+    ordemColunas,
+    largurasColunas,
+    definirOrdemColunas,
+    definirLarguraColuna,
+    redefinirPreferenciasColunas,
+  } = usePreferenciasColunas(
+    CHAVE_PREFERENCIAS_COLUNAS_AGREGACAO,
+    colunasDisponiveis,
+  );
 
   function handleRowSelect(key: string, checked: boolean) {
     setSelectedRows((prev) => {
@@ -335,8 +349,10 @@ export function AgregacaoTab() {
         {/* Filtros */}
         <div className="flex gap-2 mb-2 flex-wrap items-center">
           <ColumnToggle
-            allColumns={data?.columns ?? []}
+            allColumns={colunasDisponiveis}
+            orderedColumns={ordemColunas}
             hiddenColumns={hiddenCols}
+            columnWidths={largurasColunas}
             onChange={(col, visible) =>
               setHiddenCols((prev) => {
                 const next = new Set(prev);
@@ -345,7 +361,12 @@ export function AgregacaoTab() {
                 return next;
               })
             }
-            onReset={() => setHiddenCols(new Set())}
+            onOrderChange={definirOrdemColunas}
+            onWidthChange={definirLarguraColuna}
+            onReset={() => {
+              setHiddenCols(new Set());
+              redefinirPreferenciasColunas();
+            }}
           />
           <input
             className={inputCls + " w-44"}
@@ -378,7 +399,11 @@ export function AgregacaoTab() {
 
         <div className="overflow-hidden border border-slate-700 rounded flex-1 min-h-0">
           <DataTable
-            columns={data?.columns ?? []}
+            columns={colunasDisponiveis}
+            orderedColumns={ordemColunas}
+            columnWidths={largurasColunas}
+            onOrderedColumnsChange={definirOrdemColunas}
+            onColumnWidthChange={definirLarguraColuna}
             rows={rows}
             totalRows={data?.total_rows}
             loading={isLoading}

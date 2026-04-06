@@ -40,6 +40,7 @@ def _consolidar_grupo_id_agrupado(df_grupo: pl.DataFrame) -> pl.DataFrame:
     registros = df_grupo.to_dicts()
     descr_padrao = None
     descricoes: set[str] = set()
+    descricoes_complementares: set[str] = set()
     codigos: set[str] = set()
     unidades: set[str] = set()
 
@@ -54,10 +55,10 @@ def _consolidar_grupo_id_agrupado(df_grupo: pl.DataFrame) -> pl.DataFrame:
                 row.get("descr_padrao"),
                 row.get("descricao_final"),
                 row.get("descricao"),
-                row.get("lista_desc_compl"),
             ],
             descricoes
         )
+        _extrair_valores(row.get("lista_desc_compl"), descricoes_complementares)
         _extrair_valores(row.get("lista_codigos"), codigos)
         _extrair_valores(
             [
@@ -73,6 +74,7 @@ def _consolidar_grupo_id_agrupado(df_grupo: pl.DataFrame) -> pl.DataFrame:
             "id_agrupado": [str(registros[0]["id_agrupado"])],
             "descr_padrao": [descr_padrao],
             "lista_descricoes": [sorted(descricoes)],
+            "lista_desc_compl": [sorted(descricoes_complementares)],
             "lista_codigos": [sorted(codigos)],
             "lista_unidades": [sorted(unidades)],
         }

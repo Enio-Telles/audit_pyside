@@ -141,7 +141,10 @@ class DialogoSelecaoConsultas(QDialog):
         pre_set = set(pre_selecionados) if pre_selecionados is not None else None
 
         for sql_path in consultas:
-            item = QListWidgetItem(sql_path.stem)
+            rotulo = sql_path.stem
+            if sql_path.parent.name.lower() != "sql":
+                rotulo = f"{sql_path.parent.name}/{sql_path.stem}"
+            item = QListWidgetItem(rotulo)
             item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
             estado = Qt.Checked if (pre_set is None or str(sql_path) in pre_set) else Qt.Unchecked
             item.setCheckState(estado)

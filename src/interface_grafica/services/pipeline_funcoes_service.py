@@ -11,7 +11,6 @@ Salva:
 from __future__ import annotations
 
 import re
-import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from time import perf_counter
@@ -19,16 +18,11 @@ from typing import Any, Callable
 
 import polars as pl
 
-ROOT_DIR = Path(r"c:\funcoes - Copia")
-SRC_DIR = ROOT_DIR / "src"
-SQL_DIR = ROOT_DIR / "sql"
-DADOS_DIR = ROOT_DIR / "dados"
-CNPJ_ROOT = DADOS_DIR / "CNPJ"
+from extracao.extracao_oracle_eficiente import descobrir_consultas_sql, executar_extracao_oracle
+from interface_grafica.config import CNPJ_ROOT, EXTRA_SQL_DIRS, SQL_DIR
 
 
-from utilitarios.conectar_oracle import obter_conexao_oracle
 from utilitarios.extrair_parametros import extrair_parametros_sql
-from utilitarios.ler_sql import ler_sql
 
 
 @dataclass
@@ -144,17 +138,21 @@ TABELAS_DISPONIVEIS: list[dict[str, str]] = [
 class ServicoExtracao:
     """Executa consultas SQL Oracle e salva os resultados como Parquet."""
 
-    def __init__(self, consultas_dir: Path = SQL_DIR, cnpj_root: Path = CNPJ_ROOT):
-        self.consultas_dir = consultas_dir
+    def __init__(self, consultas_dir: Path | list[Path] | None = None, cnpj_root: Path = CNPJ_ROOT):
+        if consultas_dir is None:
+            candidatos = [Path(item) for item in EXTRA_SQL_DIRS] + [SQL_DIR]
+        elif isinstance(consultas_dir, list):
+            candidatos = [Path(item) for item in consultas_dir]
+        else:
+            candidatos = [Path(consultas_dir)]
+
+        self.consultas_dirs = [diretorio for idx, diretorio in enumerate(candidatos) if diretorio not in candidatos[:idx]]
+        self.consultas_dir = self.consultas_dirs[0] if self.consultas_dirs else SQL_DIR
         self.cnpj_root = cnpj_root
 
     def listar_consultas(self) -> list[Path]:
-        if not self.consultas_dir.exists():
-            return []
-        return sorted(
-            [p for p in self.consultas_dir.iterdir() if p.is_file() and p.suffix.lower() == ".sql"],
-            key=lambda p: p.name.lower(),
-        )
+        consultas = descobrir_consultas_sql(diretorios_sql=self.consultas_dirs)
+        return [consulta.caminho for consulta in consultas]
 
     def pasta_cnpj(self, cnpj: str) -> Path:
         return self.cnpj_root / cnpj
@@ -244,74 +242,20 @@ class ServicoExtracao:
         pasta = self.pasta_parquets(cnpj)
         arquivos: list[str] = []
 
-        _msg("Conectando ao Oracle...")
-        with obter_conexao_oracle() as conn:
-            for sql_path in consultas:
-                nome_consulta = sql_path.stem.lower()
-                _msg(f"Executando {sql_path.name}...")
-
-                sql_text = ler_sql(sql_path)
-                if sql_text is None:
-                    _msg(f"Aviso: nao foi possivel ler {sql_path.name}")
-                    continue
-
-                valores = {
-                    "CNPJ": cnpj,
-                    "cnpj": cnpj,
-                    "data_limite_processamento": data_limite,
-                    "DATA_LIMITE_PROCESSAMENTO": data_limite,
-                }
-                binds = self.montar_binds(sql_text, valores)
-
-                try:
-                    with conn.cursor() as cursor:
-                        cursor.arraysize = 50_000
-                        cursor.prefetchrows = 50_000
-                        cursor.execute(sql_text, binds)
-                        colunas = [desc[0].lower() for desc in cursor.description]
-                        todas_linhas: list[tuple] = []
-                        while True:
-                            lote = cursor.fetchmany(50_000)
-                            if not lote:
-                                break
-                            todas_linhas.extend(lote)
-                            _msg(f"  {sql_path.name}: {len(todas_linhas):,} linhas lidas...")
-
-                    if todas_linhas:
-                        try:
-                            registros = [dict(zip(colunas, row)) for row in todas_linhas]
-                            df = pl.DataFrame(
-                                registros,
-                                infer_schema_length=min(len(registros), 50_000),
-                            )
-                        except Exception as exc:
-                            _msg(
-                                f"  Aviso: falha na inferencia automatica ({exc}). Tentando modo robusto..."
-                            )
-                            dados_colunas = {
-                                col_name: [row[i] for row in todas_linhas]
-                                for i, col_name in enumerate(colunas)
-                            }
-                            try:
-                                df = pl.DataFrame(dados_colunas)
-                            except Exception:
-                                dados_string = {
-                                    col_name: [
-                                        str(row[i]) if row[i] is not None else None
-                                        for row in todas_linhas
-                                    ]
-                                    for i, col_name in enumerate(colunas)
-                                }
-                                df = pl.DataFrame(dados_string)
-                    else:
-                        df = pl.DataFrame({col: [] for col in colunas})
-
-                    arquivo_saida = pasta / f"{nome_consulta}_{cnpj}.parquet"
-                    df.write_parquet(arquivo_saida, compression="snappy")
-                    arquivos.append(str(arquivo_saida))
-                    _msg(f"OK {sql_path.name}: {df.height:,} linhas -> {arquivo_saida.name}")
-                except Exception as exc:
-                    _msg(f"Erro em {sql_path.name}: {exc}")
+        resultados = executar_extracao_oracle(
+            cnpj_input=cnpj,
+            data_limite_input=data_limite,
+            consultas_selecionadas=consultas,
+            pasta_saida_base=pasta,
+            diretorios_sql=self.consultas_dirs,
+            max_workers=1,
+            progresso=_msg,
+        )
+        arquivos.extend(
+            str(resultado.arquivo_saida)
+            for resultado in resultados
+            if resultado.ok and resultado.arquivo_saida is not None
+        )
 
         return arquivos
 

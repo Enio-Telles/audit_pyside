@@ -12,7 +12,6 @@ from __future__ import annotations
 import re
 from pathlib import Path
 from time import perf_counter
-from typing import Literal
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -45,6 +44,7 @@ class OracleConexaoConfig(BaseModel):
     port: str
     service: str
     user: str
+    password: str  # returned so UI can pre-fill (local app only)
     configured: bool
 
 
@@ -90,7 +90,7 @@ class SalvarConfigRequest(BaseModel):
 
 @router.get("/config", response_model=OracleConfigResponse)
 def obter_config():
-    """Retorna as configurações das duas conexões Oracle (sem senhas)."""
+    """Retorna as configurações das duas conexões Oracle, incluindo senhas (app local)."""
     env = _read_env()
     return {
         "conexao_1": {
@@ -98,6 +98,7 @@ def obter_config():
             "port": env.get("ORACLE_PORT", "1521"),
             "service": env.get("ORACLE_SERVICE", ""),
             "user": env.get("DB_USER", ""),
+            "password": env.get("DB_PASSWORD", ""),
             "configured": bool(env.get("DB_USER") and env.get("DB_PASSWORD")),
         },
         "conexao_2": {
@@ -105,6 +106,7 @@ def obter_config():
             "port": env.get("ORACLE_PORT_1", "1521"),
             "service": env.get("ORACLE_SERVICE_1", ""),
             "user": env.get("DB_USER_1", ""),
+            "password": env.get("DB_PASSWORD_1", ""),
             "configured": bool(env.get("DB_USER_1") and env.get("DB_PASSWORD_1")),
         },
     }
@@ -182,3 +184,26 @@ def salvar_config(req: SalvarConfigRequest):
         return {"ok": True}
     except Exception as exc:
         raise HTTPException(500, str(exc)) from exc
+
+
+@router.get("/verificar/{slot}", response_model=TestarConexaoResponse)
+def verificar_conexao_salva(slot: int):
+    """
+    Testa a conexão Oracle usando as credenciais do .env (sem expô-las ao frontend).
+    slot=1 → conexão principal, slot=2 → conexão secundária.
+    """
+    if slot not in (1, 2):
+        raise HTTPException(400, "slot deve ser 1 ou 2")
+    env = _read_env()
+    suffix = "" if slot == 1 else "_1"
+    host = env.get(f"ORACLE_HOST{suffix}", "").strip()
+    port = env.get(f"ORACLE_PORT{suffix}", "1521").strip()
+    service = env.get(f"ORACLE_SERVICE{suffix}", "").strip()
+    user = env.get(f"DB_USER{suffix}", "").strip()
+    password = env.get(f"DB_PASSWORD{suffix}", "").strip()
+
+    if not all([host, service, user, password]):
+        return {"ok": False, "message": "Credenciais incompletas no .env.", "tempo_ms": 0}
+
+    req = TestarConexaoRequest(host=host, port=port, service=service, user=user, password=password)
+    return testar_conexao(req)

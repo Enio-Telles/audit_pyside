@@ -74,6 +74,7 @@ def _df_vazio_agrupamento_canonico() -> pl.DataFrame:
             "id_agrupado": pl.Utf8,
             "descr_padrao_canonico": pl.Utf8,
             "lista_descricoes": pl.List(pl.Utf8),
+            "lista_desc_compl": pl.List(pl.Utf8),
         }
     )
 
@@ -107,12 +108,16 @@ def _carregar_base_agrupamento_canonico(path: Path) -> pl.DataFrame:
         selecionadas.append("descr_padrao")
     if "lista_descricoes" in schema_cols:
         selecionadas.append("lista_descricoes")
+    if "lista_desc_compl" in schema_cols:
+        selecionadas.append("lista_desc_compl")
 
     df = pl.scan_parquet(path).select(selecionadas).collect()
     if "descr_padrao" not in df.columns:
         df = df.with_columns(pl.lit(None, dtype=pl.Utf8).alias("descr_padrao"))
     if "lista_descricoes" not in df.columns:
         df = df.with_columns(pl.lit([]).cast(pl.List(pl.Utf8), strict=False).alias("lista_descricoes"))
+    if "lista_desc_compl" not in df.columns:
+        df = df.with_columns(pl.lit([]).cast(pl.List(pl.Utf8), strict=False).alias("lista_desc_compl"))
 
     return (
         df
@@ -121,6 +126,7 @@ def _carregar_base_agrupamento_canonico(path: Path) -> pl.DataFrame:
                 pl.col("id_agrupado").cast(pl.Utf8, strict=False),
                 pl.col("descr_padrao").cast(pl.Utf8, strict=False).alias("descr_padrao_canonico"),
                 pl.col("lista_descricoes").cast(pl.List(pl.Utf8), strict=False),
+                pl.col("lista_desc_compl").cast(pl.List(pl.Utf8), strict=False),
             ]
         )
         .unique(subset=["id_agrupado"], keep="first")
@@ -151,14 +157,20 @@ def _carregar_agrupamento_canonico(pasta_analises: Path, cnpj: str) -> pl.DataFr
             [
                 pl.col("descr_padrao_canonico").drop_nulls().first().alias("descr_padrao_canonico"),
                 pl.col("lista_descricoes").drop_nulls().alias("__listas_descricoes"),
+                pl.col("lista_desc_compl").drop_nulls().alias("__listas_desc_compl"),
             ]
         )
         .with_columns(
-            pl.col("__listas_descricoes")
-            .map_elements(_primeira_lista_textos_nao_vazia, return_dtype=pl.List(pl.Utf8))
-            .alias("lista_descricoes")
+            [
+                pl.col("__listas_descricoes")
+                .map_elements(_primeira_lista_textos_nao_vazia, return_dtype=pl.List(pl.Utf8))
+                .alias("lista_descricoes"),
+                pl.col("__listas_desc_compl")
+                .map_elements(_primeira_lista_textos_nao_vazia, return_dtype=pl.List(pl.Utf8))
+                .alias("lista_desc_compl"),
+            ]
         )
-        .drop("__listas_descricoes")
+        .drop(["__listas_descricoes", "__listas_desc_compl"])
     )
 
 
@@ -190,6 +202,18 @@ def _construir_mapa_descricoes_canonicas(df_agrupamento_canonico: pl.DataFrame) 
                     pl.col("id_agrupado").cast(pl.Utf8, strict=False),
                     pl.col("descr_padrao_canonico").cast(pl.Utf8, strict=False).alias("descr_padrao_destino"),
                     pl.col("lista_descricoes").cast(pl.List(pl.Utf8), strict=False).alias("descricao_texto"),
+                ]
+            )
+            .explode("descricao_texto")
+        )
+    if "lista_desc_compl" in df_agrupamento_canonico.columns:
+        partes.append(
+            df_agrupamento_canonico
+            .select(
+                [
+                    pl.col("id_agrupado").cast(pl.Utf8, strict=False),
+                    pl.col("descr_padrao_canonico").cast(pl.Utf8, strict=False).alias("descr_padrao_destino"),
+                    pl.col("lista_desc_compl").cast(pl.List(pl.Utf8), strict=False).alias("descricao_texto"),
                 ]
             )
             .explode("descricao_texto")
@@ -278,6 +302,7 @@ def _reconciliar_fatores_existentes_com_agrupamento_atual(
             pl.col("id_agrupado").cast(pl.Utf8, strict=False),
             pl.col("descr_padrao_canonico").cast(pl.Utf8, strict=False),
             pl.col("lista_descricoes").cast(pl.List(pl.Utf8), strict=False),
+            pl.col("lista_desc_compl").cast(pl.List(pl.Utf8), strict=False),
         ]
     )
     df_mapa_descricoes = _construir_mapa_descricoes_canonicas(df_canonico)

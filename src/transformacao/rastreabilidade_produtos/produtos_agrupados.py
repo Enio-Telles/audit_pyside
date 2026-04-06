@@ -172,11 +172,11 @@ def inicializar_produtos_agrupados(cnpj: str, pasta_cnpj: Path | None = None) ->
         lista_ncm = sorted(set([item for r in g for item in (r.get("lista_ncm") or []) if item]))
         lista_cest = sorted(set([item for r in g for item in (r.get("lista_cest") or []) if item]))
         lista_gtin = sorted(set([item for r in g for item in (r.get("lista_gtin") or []) if item]))
-        lista_descricoes = sorted(
-            set(
-                [r.get("descricao") for r in g if r.get("descricao")]
-                + [item for r in g for item in (r.get("lista_desc_compl") or []) if item]
-            )
+        # A lista principal deve conter apenas descricoes-base do grupo.
+        lista_descricoes = sorted(set([r.get("descricao") for r in g if r.get("descricao")]))
+        # Complementos permanecem auditaveis em coluna propria.
+        lista_desc_compl = sorted(
+            set([item for r in g for item in (r.get("lista_desc_compl") or []) if item])
         )
         divergentes = len(lista_sefin) > 1
 
@@ -191,6 +191,7 @@ def inicializar_produtos_agrupados(cnpj: str, pasta_cnpj: Path | None = None) ->
                 "lista_cest": lista_cest,
                 "lista_gtin": lista_gtin,
                 "lista_descricoes": lista_descricoes,
+                "lista_desc_compl": lista_desc_compl,
                 "lista_co_sefin": lista_sefin,
                 "co_sefin_padrao": padrao.get("co_sefin_padrao"),
                 "co_sefin_agr": ", ".join(sorted([str(s) for s in lista_sefin])),

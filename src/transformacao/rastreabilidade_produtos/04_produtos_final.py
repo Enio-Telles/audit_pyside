@@ -199,7 +199,10 @@ def produtos_agrupados(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         lista_ncm = _serie_limpa_lista(row.get("lista_ncm"))
         lista_cest = _serie_limpa_lista(row.get("lista_cest"))
         lista_gtin = _serie_limpa_lista(row.get("lista_gtin"))
-        lista_descricoes = _serie_limpa_lista([row.get("descricao")] + list(row.get("lista_desc_compl") or []))
+        # Mantem a descricao principal separada dos complementos para evitar
+        # que textos auxiliares contaminem a lista canonica exibida na agregacao.
+        lista_descricoes = _serie_limpa_lista([row.get("descricao")])
+        lista_desc_compl = _serie_limpa_lista(list(row.get("lista_desc_compl") or []))
 
         registros_mestra.append(
             {
@@ -213,6 +216,7 @@ def produtos_agrupados(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
                 "lista_cest": lista_cest,
                 "lista_gtin": lista_gtin,
                 "lista_descricoes": lista_descricoes,
+                "lista_desc_compl": lista_desc_compl,
                 "lista_co_sefin": lista_co_sefin,
                 "co_sefin_padrao": padrao.get("co_sefin_padrao"),
                 "lista_unidades": lista_unidades,

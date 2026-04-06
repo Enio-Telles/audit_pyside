@@ -1,4 +1,9 @@
-﻿import { useMemo, useState } from "react";
+import {
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent as EventoMouseReact,
+} from "react";
 import {
   useReactTable,
   getCoreRowModel,
@@ -11,6 +16,10 @@ import type { HighlightRule } from "../../api/types";
 
 interface DataTableProps {
   columns: string[];
+  orderedColumns?: string[];
+  columnWidths?: Record<string, number>;
+  onOrderedColumnsChange?: (orderedColumns: string[]) => void;
+  onColumnWidthChange?: (column: string, width: number) => void;
   rows: Record<string, unknown>[];
   totalRows?: number;
   loading?: boolean;
@@ -24,17 +33,13 @@ interface DataTableProps {
   selectedRowKeys?: Set<string>;
   onRowSelect?: (key: string, checked: boolean) => void;
   onSelectAll?: (checked: boolean, visibleKeys: string[]) => void;
-  // Sorting
   sortBy?: string;
   sortDesc?: boolean;
   onSortChange?: (col: string, desc: boolean) => void;
-  // Column visibility
   hiddenColumns?: Set<string>;
-  // Inline column filters
   columnFilters?: Record<string, string>;
   onColumnFilterChange?: (col: string, val: string) => void;
   showColumnFilters?: boolean;
-  // Highlight rules
   highlightRules?: HighlightRule[];
 }
 
@@ -49,6 +54,44 @@ function formatCell(value: unknown): string {
     });
   }
   return String(value);
+}
+
+function obterLarguraColuna(
+  largurasColunas: Record<string, number> | undefined,
+  nomeColuna: string,
+): number {
+  const largura = largurasColunas?.[nomeColuna];
+  if (!largura || Number.isNaN(largura)) return 120;
+  return Math.max(80, largura);
+}
+
+function montarOrdemBaseColunas(
+  columns: string[],
+  orderedColumns?: string[],
+): string[] {
+  if (!orderedColumns?.length) return columns;
+  return [
+    ...orderedColumns.filter((coluna) => columns.includes(coluna)),
+    ...columns.filter((coluna) => !orderedColumns.includes(coluna)),
+  ];
+}
+
+function moverColunaNaOrdem(
+  ordemAtual: string[],
+  colunaOrigem: string,
+  colunaDestino: string,
+): string[] {
+  if (colunaOrigem === colunaDestino) return ordemAtual;
+
+  const proximaOrdem = [...ordemAtual];
+  const indiceOrigem = proximaOrdem.indexOf(colunaOrigem);
+  const indiceDestino = proximaOrdem.indexOf(colunaDestino);
+
+  if (indiceOrigem < 0 || indiceDestino < 0) return ordemAtual;
+
+  const [colunaMovida] = proximaOrdem.splice(indiceOrigem, 1);
+  proximaOrdem.splice(indiceDestino, 0, colunaMovida);
+  return proximaOrdem;
 }
 
 function matchesRule(
@@ -85,6 +128,10 @@ function matchesRule(
 
 export function DataTable({
   columns,
+  orderedColumns,
+  columnWidths,
+  onOrderedColumnsChange,
+  onColumnWidthChange,
   rows,
   totalRows,
   loading,
@@ -109,11 +156,15 @@ export function DataTable({
   const selectable = !!onRowSelect && !!rowKey;
   const shouldAutoHighlight = autoHighlight ?? highlightRows ?? false;
   const isServerSort = !!onSortChange;
+  const podeReordenarColunas = !!onOrderedColumnsChange;
+  const podeRedimensionarColunas = !!onColumnWidthChange;
 
   const [localSort, setLocalSort] = useState<SortingState>([]);
   const [localColFilters, setLocalColFilters] = useState<
     Record<string, string>
   >({});
+  const colunaArrastadaRef = useRef<string | null>(null);
+  const momentoUltimaInteracaoCabecalhoRef = useRef(0);
 
   const effectiveColFilters =
     columnFilters !== undefined ? columnFilters : localColFilters;
@@ -147,13 +198,15 @@ export function DataTable({
 
   const activeSorting: SortingState = isServerSort ? controlledSort : localSort;
 
-  const visibleCols = useMemo(
-    () =>
-      hiddenColumns?.size
-        ? columns.filter((c) => !hiddenColumns!.has(c))
-        : columns,
-    [columns, hiddenColumns],
+  const ordemBaseColunas = useMemo(
+    () => montarOrdemBaseColunas(columns, orderedColumns),
+    [columns, orderedColumns],
   );
+
+  const visibleCols = useMemo(() => {
+    if (!hiddenColumns?.size) return ordemBaseColunas;
+    return ordemBaseColunas.filter((coluna) => !hiddenColumns.has(coluna));
+  }, [hiddenColumns, ordemBaseColunas]);
 
   const colDefs = useMemo<ColumnDef<Record<string, unknown>>[]>(
     () =>
@@ -181,7 +234,7 @@ export function DataTable({
   const handleHeaderClick = (colId: string) => {
     if (isServerSort) {
       const newDesc = sortBy === colId ? !(sortDesc ?? false) : false;
-      onSortChange!(colId, newDesc);
+      onSortChange?.(colId, newDesc);
     } else {
       const current = localSort.find((s) => s.id === colId);
       if (!current) {
@@ -196,8 +249,8 @@ export function DataTable({
 
   const getSortIcon = (colId: string): string => {
     const s = activeSorting.find((x) => x.id === colId);
-    if (!s) return "â†•";
-    return s.desc ? "â–¼" : "â–²";
+    if (!s) return "<>";
+    return s.desc ? "v" : "^";
   };
 
   const rowRules = useMemo(
@@ -230,6 +283,65 @@ export function DataTable({
     return undefined;
   };
 
+  function marcarInteracaoCabecalho() {
+    momentoUltimaInteracaoCabecalhoRef.current = Date.now();
+  }
+
+  function cliqueCabecalhoDeveSerIgnorado(): boolean {
+    return Date.now() - momentoUltimaInteracaoCabecalhoRef.current < 200;
+  }
+
+  function iniciarArrasteColuna(nomeColuna: string) {
+    if (!podeReordenarColunas) return;
+    colunaArrastadaRef.current = nomeColuna;
+    marcarInteracaoCabecalho();
+  }
+
+  function finalizarArrasteColuna() {
+    colunaArrastadaRef.current = null;
+    marcarInteracaoCabecalho();
+  }
+
+  function soltarColuna(nomeColunaDestino: string) {
+    if (!podeReordenarColunas) return;
+
+    const colunaOrigem = colunaArrastadaRef.current;
+    if (!colunaOrigem) return;
+
+    onOrderedColumnsChange?.(
+      moverColunaNaOrdem(ordemBaseColunas, colunaOrigem, nomeColunaDestino),
+    );
+    finalizarArrasteColuna();
+  }
+
+  function iniciarRedimensionamentoColuna(
+    evento: EventoMouseReact<HTMLDivElement>,
+    nomeColuna: string,
+  ) {
+    if (!podeRedimensionarColunas) return;
+
+    evento.preventDefault();
+    evento.stopPropagation();
+
+    const posicaoInicial = evento.clientX;
+    const larguraInicial = obterLarguraColuna(columnWidths, nomeColuna);
+    marcarInteracaoCabecalho();
+
+    const aoMoverMouse = (movimento: MouseEvent) => {
+      const deslocamento = movimento.clientX - posicaoInicial;
+      onColumnWidthChange?.(nomeColuna, larguraInicial + deslocamento);
+    };
+
+    const aoSoltarMouse = () => {
+      window.removeEventListener("mousemove", aoMoverMouse);
+      window.removeEventListener("mouseup", aoSoltarMouse);
+      marcarInteracaoCabecalho();
+    };
+
+    window.addEventListener("mousemove", aoMoverMouse);
+    window.addEventListener("mouseup", aoSoltarMouse);
+  }
+
   return (
     <div className="flex flex-col h-full">
       <div className="overflow-auto flex-1">
@@ -242,9 +354,24 @@ export function DataTable({
             className="w-full border-collapse text-xs"
             style={{
               tableLayout: "fixed",
-              minWidth: visibleCols.length * 120 + (selectable ? 36 : 0),
+              minWidth:
+                visibleCols.reduce(
+                  (total, coluna) =>
+                    total + obterLarguraColuna(columnWidths, coluna),
+                  0,
+                ) + (selectable ? 36 : 0),
             }}
           >
+            <colgroup>
+              {selectable && <col style={{ width: 36 }} />}
+              <col style={{ width: 40 }} />
+              {visibleCols.map((coluna) => (
+                <col
+                  key={coluna}
+                  style={{ width: obterLarguraColuna(columnWidths, coluna) }}
+                />
+              ))}
+            </colgroup>
             <thead
               className="sticky top-0 z-10"
               style={{ background: "#1e2d4a" }}
@@ -281,12 +408,26 @@ export function DataTable({
                     {hg.headers.map((h) => (
                       <th
                         key={h.id}
-                        className="px-2 py-2 text-left text-slate-300 font-semibold border-b border-slate-700 truncate select-none cursor-pointer hover:bg-slate-700 transition-colors group"
-                        style={{ maxWidth: 200 }}
-                        title={`${h.column.id} â€” clique para ordenar`}
-                        onClick={() => handleHeaderClick(h.column.id)}
+                        className="px-2 py-2 text-left text-slate-300 font-semibold border-b border-slate-700 truncate select-none cursor-pointer hover:bg-slate-700 transition-colors group relative"
+                        style={{
+                          width: obterLarguraColuna(columnWidths, h.column.id),
+                          maxWidth: obterLarguraColuna(columnWidths, h.column.id),
+                        }}
+                        title={`${h.column.id} - clique para ordenar`}
+                        draggable={podeReordenarColunas}
+                        onDragStart={() => iniciarArrasteColuna(h.column.id)}
+                        onDragOver={(evento) => {
+                          if (!podeReordenarColunas) return;
+                          evento.preventDefault();
+                        }}
+                        onDrop={() => soltarColuna(h.column.id)}
+                        onDragEnd={finalizarArrasteColuna}
+                        onClick={() => {
+                          if (cliqueCabecalhoDeveSerIgnorado()) return;
+                          handleHeaderClick(h.column.id);
+                        }}
                       >
-                        <span className="flex items-center gap-1">
+                        <span className="flex items-center gap-1 pr-3">
                           <span className="truncate flex-1">
                             {flexRender(
                               h.column.columnDef.header,
@@ -297,6 +438,18 @@ export function DataTable({
                             {getSortIcon(h.column.id)}
                           </span>
                         </span>
+                        {podeRedimensionarColunas && (
+                          <div
+                            className="absolute top-0 right-0 h-full w-2 cursor-col-resize"
+                            onMouseDown={(evento) =>
+                              iniciarRedimensionamentoColuna(
+                                evento,
+                                h.column.id,
+                              )
+                            }
+                            title={`Redimensionar ${h.column.id}`}
+                          />
+                        )}
                       </th>
                     ))}
                   </tr>
@@ -313,7 +466,7 @@ export function DataTable({
                     >
                       <input
                         className="w-full bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-xs text-slate-200 focus:outline-none focus:border-blue-500 placeholder-slate-600"
-                        placeholder="â–½"
+                        placeholder="v"
                         value={effectiveColFilters[col] ?? ""}
                         onChange={(e) =>
                           handleColFilterChange(col, e.target.value)
@@ -331,7 +484,7 @@ export function DataTable({
                   | undefined;
                 const isEntrada = tipoOp?.includes("ENTRADA");
                 const isSaida =
-                  tipoOp?.includes("SAIDA") || tipoOp?.includes("SAÃDAS");
+                  tipoOp?.includes("SAIDA") || tipoOp?.includes("SAIDAS");
                 const rowKeyVal = rowKey
                   ? String(row.original[rowKey] ?? "")
                   : "";
@@ -366,7 +519,7 @@ export function DataTable({
                     className="hover:brightness-125 transition-all"
                     onClick={
                       selectable
-                        ? () => onRowSelect!(rowKeyVal, !isSelected)
+                        ? () => onRowSelect?.(rowKeyVal, !isSelected)
                         : undefined
                     }
                   >
@@ -379,7 +532,7 @@ export function DataTable({
                           checked={isSelected}
                           onChange={(e) => {
                             e.stopPropagation();
-                            onRowSelect!(rowKeyVal, e.target.checked);
+                            onRowSelect?.(rowKeyVal, e.target.checked);
                           }}
                           onClick={(e) => e.stopPropagation()}
                           className="accent-blue-500 cursor-pointer"
@@ -399,7 +552,11 @@ export function DataTable({
                           key={cell.id}
                           className="px-2 py-1.5 border-b border-slate-800 truncate"
                           style={{
-                            maxWidth: 200,
+                            width: obterLarguraColuna(columnWidths, cell.column.id),
+                            maxWidth: obterLarguraColuna(
+                              columnWidths,
+                              cell.column.id,
+                            ),
                             background: cellColor ?? undefined,
                           }}
                           title={formatCell(cell.getValue())}
@@ -419,27 +576,26 @@ export function DataTable({
         )}
       </div>
 
-      {/* Pagination */}
       {onPageChange && (
         <div className="flex items-center gap-3 px-3 py-2 border-t border-slate-700 bg-slate-900 text-xs text-slate-400">
           <button
             onClick={() => onPageChange(1)}
             disabled={page <= 1}
-            aria-label="Primeira pÃ¡gina"
-            title="Primeira pÃ¡gina"
+            aria-label="Primeira pagina"
+            title="Primeira pagina"
             className="px-2 py-1 rounded bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-600"
           >
-            Â«
+            {"<<"}
           </button>
           <button
             onClick={() => onPageChange(page - 1)}
             disabled={page <= 1}
             className="px-2 py-1 rounded bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-600"
           >
-            PÃ¡gina anterior
+            Pagina anterior
           </button>
           <span>
-            PÃ¡gina {page} / {totalPages} | Linhas filtradas:{" "}
+            Pagina {page} / {totalPages} | Linhas filtradas:{" "}
             {(totalRows ?? 0).toLocaleString("pt-BR")}
           </span>
           <button
@@ -447,16 +603,16 @@ export function DataTable({
             disabled={page >= totalPages}
             className="px-2 py-1 rounded bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-600"
           >
-            PrÃ³xima pÃ¡gina
+            Proxima pagina
           </button>
           <button
             onClick={() => onPageChange(totalPages)}
             disabled={page >= totalPages}
-            aria-label="Ãšltima pÃ¡gina"
-            title="Ãšltima pÃ¡gina"
+            aria-label="Ultima pagina"
+            title="Ultima pagina"
             className="px-2 py-1 rounded bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-600"
           >
-            Â»
+            {">>"}
           </button>
         </div>
       )}

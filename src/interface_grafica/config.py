@@ -19,7 +19,7 @@ AGGREGATION_LOG_FILE = APP_STATE_ROOT / "operacoes_agregacao.jsonl"
 SELECTIONS_FILE = APP_STATE_ROOT / "selections.json"
 PIPELINE_SCRIPT = PROJECT_ROOT / "pipeline_oracle_parquet.py"
 SQL_DIR = FUNCOES_ROOT / "sql"
-DADOS_ROOT = FUNCOES_ROOT / "dados"
+DADOS_ROOT = PROJECT_ROOT.parent / "dados"
 EXTRA_SQL_DIRS = [
     FUNCOES_ROOT / "consultas_fonte",
     PROJECT_ROOT / "sql",

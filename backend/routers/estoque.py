@@ -51,54 +51,65 @@ def _df_to_response(df: pl.DataFrame, page: int = 1, page_size: int = 500) -> di
     }
 
 
+def _resposta_paginada_vazia(page: int = 1, page_size: int = 500) -> dict:
+    """
+    Retorna uma estrutura vazia compatível com o contrato esperado pelo frontend.
+
+    Isso evita erro de leitura quando o parquet analítico ainda não foi gerado.
+    """
+    return {
+        "total_rows": 0,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": 1,
+        "columns": [],
+        "rows": [],
+    }
+
+
+def _ler_tabela_estoque_ou_vazia(path: Path, page: int = 1, page_size: int = 500) -> dict:
+    """
+    Lê o parquet solicitado ou devolve uma resposta vazia quando o artefato não existe.
+    """
+    if not path.exists():
+        return _resposta_paginada_vazia(page, page_size)
+    df = pl.read_parquet(path)
+    return _df_to_response(df, page, page_size)
+
+
 @router.get("/{cnpj}/mov_estoque")
 def get_mov_estoque(cnpj: str, page: int = 1, page_size: int = 500):
     cnpj = _sanitize(cnpj)
     path = _pasta_produtos(cnpj) / f"mov_estoque_{cnpj}.parquet"
-    if not path.exists():
-        raise HTTPException(404, "mov_estoque não encontrado")
-    df = pl.read_parquet(path)
-    return _df_to_response(df, page, page_size)
+    return _ler_tabela_estoque_ou_vazia(path, page, page_size)
 
 
 @router.get("/{cnpj}/tabela_mensal")
 def get_tabela_mensal(cnpj: str, page: int = 1, page_size: int = 500):
     cnpj = _sanitize(cnpj)
     path = _pasta_produtos(cnpj) / f"aba_mensal_{cnpj}.parquet"
-    if not path.exists():
-        raise HTTPException(404, "tabela mensal não encontrada")
-    df = pl.read_parquet(path)
-    return _df_to_response(df, page, page_size)
+    return _ler_tabela_estoque_ou_vazia(path, page, page_size)
 
 
 @router.get("/{cnpj}/tabela_anual")
 def get_tabela_anual(cnpj: str, page: int = 1, page_size: int = 500):
     cnpj = _sanitize(cnpj)
     path = _pasta_produtos(cnpj) / f"aba_anual_{cnpj}.parquet"
-    if not path.exists():
-        raise HTTPException(404, "tabela anual não encontrada")
-    df = pl.read_parquet(path)
-    return _df_to_response(df, page, page_size)
+    return _ler_tabela_estoque_ou_vazia(path, page, page_size)
 
 
 @router.get("/{cnpj}/id_agrupados")
 def get_id_agrupados(cnpj: str, page: int = 1, page_size: int = 500):
     cnpj = _sanitize(cnpj)
     path = _pasta_produtos(cnpj) / f"produtos_final_{cnpj}.parquet"
-    if not path.exists():
-        raise HTTPException(404, "id_agrupados não encontrado")
-    df = pl.read_parquet(path)
-    return _df_to_response(df, page, page_size)
+    return _ler_tabela_estoque_ou_vazia(path, page, page_size)
 
 
 @router.get("/{cnpj}/fatores_conversao")
 def get_fatores_conversao(cnpj: str, page: int = 1, page_size: int = 500):
     cnpj = _sanitize(cnpj)
     path = _pasta_produtos(cnpj) / f"fatores_conversao_{cnpj}.parquet"
-    if not path.exists():
-        raise HTTPException(404, "fatores_conversao não encontrado")
-    df = pl.read_parquet(path)
-    return _df_to_response(df, page, page_size)
+    return _ler_tabela_estoque_ou_vazia(path, page, page_size)
 
 
 class FatorUpdate(BaseModel):

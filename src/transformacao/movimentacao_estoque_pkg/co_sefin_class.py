@@ -222,7 +222,9 @@ def enriquecer_co_sefin_class(df_movimentacao: pl.DataFrame, cnpj: str = None) -
     )
     
     # 5. Tratamento de Órfãos (Fallbacks)
-    # Se sobrou alguem sem match de data, pegamos o registro SITAFE mais recente para aquele CO_SEFIN
+    # Se sobrou alguem sem match de data, pegamos o registro SITAFE mais recente para aquele CO_SEFIN.
+    # Excecao: it_pc_interna nao deve ser herdado sem vigencia compativel, para evitar aplicar
+    # aliquota atual em movimentos historicos.
     df_aux_latest = (
         df_aux
         .with_columns(
@@ -240,7 +242,11 @@ def enriquecer_co_sefin_class(df_movimentacao: pl.DataFrame, cnpj: str = None) -
     )
     
     orphans = df_mov_id.join(df_filtered.select(col_id), on=col_id, how="anti")
-    orphans_filled = orphans.join(df_aux_latest, left_on="__co_sefin_lookup__", right_on="it_co_sefin", how="left")
+    orphans_filled = (
+        orphans
+        .join(df_aux_latest, left_on="__co_sefin_lookup__", right_on="it_co_sefin", how="left")
+        .with_columns(pl.lit(None, dtype=pl.Float64).alias("it_pc_interna"))
+    )
     
     # 6. Finalização e Concat
     df_filtered = df_filtered.with_columns(pl.col("__co_sefin_lookup__").alias("co_sefin_agr"))

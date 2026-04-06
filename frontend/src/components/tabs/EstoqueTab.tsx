@@ -4,6 +4,7 @@ import { estoqueApi } from "../../api/client";
 import { useAppStore } from "../../store/appStore";
 import { DataTable } from "../table/DataTable";
 import { ColumnToggle } from "../table/ColumnToggle";
+import { usePreferenciasColunas } from "../../hooks/usePreferenciasColunas";
 
 type SubTab =
   | "mov_estoque"
@@ -49,6 +50,14 @@ function EstoqueSubTab({ cnpj, sub }: { cnpj: string; sub: SubTab }) {
     "bg-slate-800 border border-slate-600 rounded px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-blue-500";
   const btnCls =
     "px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-colors";
+  const colunasDisponiveis = useMemo(() => data?.columns ?? [], [data?.columns]);
+  const {
+    ordemColunas,
+    largurasColunas,
+    definirOrdemColunas,
+    definirLarguraColuna,
+    redefinirPreferenciasColunas,
+  } = usePreferenciasColunas(`estoque_colunas_${sub}_v1`, colunasDisponiveis);
 
   // Unique id_agrupado values for the dropdown (only relevant for produtos sub-tabs)
   const uniqueIdAgrupados = useMemo(() => {
@@ -160,8 +169,10 @@ function EstoqueSubTab({ cnpj, sub }: { cnpj: string; sub: SubTab }) {
           )}
           <div className="flex-1" />
           <ColumnToggle
-            allColumns={data?.columns ?? []}
+            allColumns={colunasDisponiveis}
+            orderedColumns={ordemColunas}
             hiddenColumns={hiddenCols}
+            columnWidths={largurasColunas}
             onChange={(col, visible) =>
               setHiddenCols((prev) => {
                 const next = new Set(prev);
@@ -170,7 +181,12 @@ function EstoqueSubTab({ cnpj, sub }: { cnpj: string; sub: SubTab }) {
                 return next;
               })
             }
-            onReset={() => setHiddenCols(new Set())}
+            onOrderChange={definirOrdemColunas}
+            onWidthChange={definirLarguraColuna}
+            onReset={() => {
+              setHiddenCols(new Set());
+              redefinirPreferenciasColunas();
+            }}
           />
           <button
             className={
@@ -243,7 +259,11 @@ function EstoqueSubTab({ cnpj, sub }: { cnpj: string; sub: SubTab }) {
 
       <div className="flex-1 overflow-hidden">
         <DataTable
-          columns={data?.columns ?? []}
+          columns={colunasDisponiveis}
+          orderedColumns={ordemColunas}
+          columnWidths={largurasColunas}
+          onOrderedColumnsChange={definirOrdemColunas}
+          onColumnWidthChange={definirLarguraColuna}
           rows={filteredRows}
           totalRows={isProdutosSub ? filteredRows.length : data?.total_rows}
           loading={isLoading}
