@@ -1,13 +1,14 @@
-import sys
+﻿import sys
 import re
 from datetime import date
 from pathlib import Path
+from utilitarios.project_paths import PROJECT_ROOT, TRACEBACK_PATH
 from time import perf_counter
 
 import polars as pl
 from rich import print as rprint
 
-ROOT_DIR = Path(r"c:\funcoes - Copia")
+ROOT_DIR = PROJECT_ROOT
 SRC_DIR = ROOT_DIR / "src"
 DADOS_DIR = ROOT_DIR / "dados"
 CNPJ_ROOT = DADOS_DIR / "CNPJ"
@@ -535,6 +536,8 @@ if __name__ == "__main__":
     except Exception:
         import traceback
 
-        with open(r"c:\funcoes - Copia\traceback.txt", "w") as f:
+        with open(TRACEBACK_PATH, "w", encoding="utf-8") as f:
             traceback.print_exc(file=f)
         raise
+
+

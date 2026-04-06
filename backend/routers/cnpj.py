@@ -13,14 +13,14 @@ from pydantic import BaseModel
 from interface_grafica.services.registry_service import RegistryService
 from interface_grafica.services.parquet_service import ParquetService
 from interface_grafica.config import CNPJ_ROOT
+from utilitarios.project_paths import ENV_PATH
+from utilitarios.sql_catalog import resolve_sql_path
 
 router = APIRouter()
 registry = RegistryService()
 logger = logging.getLogger(__name__)
 
-ROOT_DIR = Path(__file__).resolve().parents[2]
-SQL_DADOS_CADASTRAIS = ROOT_DIR / "sql" / "dados_cadastrais.sql"
-ENV_PATH = ROOT_DIR / ".env"
+SQL_DADOS_CADASTRAIS = resolve_sql_path("fisconforme/cadastro/dados_cadastrais.sql")
 
 
 class CNPJAdd(BaseModel):

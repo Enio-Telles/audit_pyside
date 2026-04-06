@@ -9,16 +9,14 @@ const inputCls =
 const btnCls =
   "px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-colors";
 const CONSULTAS_ATOMIZADAS_PADRAO = [
-  "01_reg0000_historico.sql",
-  "02_reg0000_versionado.sql",
-  "03_reg0000_ultimo_periodo.sql",
-  "10_c100_raw.sql",
-  "20_c170_raw.sql",
-  "30_c176_raw.sql",
-  "40_h005_raw.sql",
-  "41_h010_raw.sql",
-  "42_h020_raw.sql",
-  "50_reg0200_raw.sql",
+  "fiscal/efd/reg_0000.sql",
+  "fiscal/efd/reg_0005.sql",
+  "fiscal/efd/reg_0190.sql",
+  "fiscal/efd/reg_0200.sql",
+  "fiscal/efd/c100.sql",
+  "fiscal/efd/c170.sql",
+  "fiscal/efd/c176.sql",
+  "fiscal/efd/bloco_h.sql",
 ];
 
 export function LeftPanel() {
@@ -213,7 +211,8 @@ export function LeftPanel() {
           </button>
           <button
             className={
-              btnCls + " col-span-2 bg-cyan-900/70 hover:bg-cyan-800 text-cyan-100"
+              btnCls +
+              " col-span-2 bg-cyan-900/70 hover:bg-cyan-800 text-cyan-100"
             }
             onClick={() => void runPipeline("atomized")}
             disabled={(!selectedCnpj && !newCnpj.trim()) || polling}

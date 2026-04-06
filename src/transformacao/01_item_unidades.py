@@ -1,4 +1,4 @@
-"""
+﻿"""
 item_unidades.py
 
 Objetivo: Gerar a tabela base de itens por unidade a partir das fontes
@@ -27,11 +27,12 @@ from __future__ import annotations
 import re
 import sys
 from pathlib import Path
+from utilitarios.project_paths import PROJECT_ROOT
 
 import polars as pl
 from rich import print as rprint
 
-ROOT_DIR = Path(r"c:\funcoes - Copia")
+ROOT_DIR = PROJECT_ROOT
 SRC_DIR = ROOT_DIR / "src"
 UTILITARIOS_DIR = SRC_DIR / "utilitarios"
 DADOS_DIR = ROOT_DIR / "dados"
@@ -174,7 +175,7 @@ def _ler_c170(path: Path | None, cfop_mercantil: pl.DataFrame | None) -> pl.Data
     if path is None or not path.exists():
         return None
 
-    # Otimização Bolt: pl.read_parquet_schema le a metadata sem alocar o DataFrame na memoria
+    # OtimizaÃ§Ã£o Bolt: pl.read_parquet_schema le a metadata sem alocar o DataFrame na memoria
     schema = pl.read_parquet_schema(path)
     col_cfop = "co_cfop" if "co_cfop" in schema else "cfop" if "cfop" in schema else None
     selecionar = [
@@ -257,7 +258,7 @@ def _ler_bloco_h(path: Path | None) -> pl.DataFrame | None:
     if path is None or not path.exists():
         return None
 
-    # Otimização Bolt: pl.read_parquet_schema le a metadata sem alocar o DataFrame na memoria
+    # OtimizaÃ§Ã£o Bolt: pl.read_parquet_schema le a metadata sem alocar o DataFrame na memoria
     schema = pl.read_parquet_schema(path)
 
     def _pick(*candidatas: str) -> str | None:
@@ -309,7 +310,7 @@ def _ler_nfe_ou_nfce(path: Path | None, cnpj: str, nome_fonte: str, cfop_mercant
     if path is None or not path.exists():
         return None
 
-    # Otimização Bolt: pl.read_parquet_schema le a metadata sem alocar o DataFrame na memoria
+    # OtimizaÃ§Ã£o Bolt: pl.read_parquet_schema le a metadata sem alocar o DataFrame na memoria
     schema = pl.read_parquet_schema(path)
     col_tp = next((c for c in ["tipo_operacao", "co_tp_nf", "tp_nf"] if c in schema), None)
     if "co_emitente" not in schema or col_tp is None:
@@ -524,3 +525,5 @@ if __name__ == "__main__":
         item_unidades(sys.argv[1])
     else:
         item_unidades(input("CNPJ: "))
+
+

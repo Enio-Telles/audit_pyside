@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 """
 produtos_agrupados.py
@@ -12,11 +12,12 @@ import re
 import sys
 from collections import Counter
 from pathlib import Path
+from utilitarios.project_paths import PROJECT_ROOT
 
 import polars as pl
 from rich import print as rprint
 
-ROOT_DIR = Path(r"c:\funcoes - Copia")
+ROOT_DIR = PROJECT_ROOT
 SRC_DIR = ROOT_DIR / "src"
 DADOS_DIR = ROOT_DIR / "dados"
 CNPJ_ROOT = DADOS_DIR / "CNPJ"
@@ -222,3 +223,5 @@ if __name__ == "__main__":
     else:
         c = input("CNPJ: ")
         inicializar_produtos_agrupados(c)
+
+

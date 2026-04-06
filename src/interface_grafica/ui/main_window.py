@@ -92,7 +92,7 @@ class PipelineWorker(QThread):
         self,
         service: ServicoPipelineCompleto,
         cnpj: str,
-        consultas: list[Path],
+        consultas: list[str | Path],
         tabelas: list[str],
         data_limite: str | None = None,
     ) -> None:
@@ -2957,7 +2957,7 @@ class MainWindow(QMainWindow):
         if not dlg_sql.exec():
             return
         sql_selecionados = dlg_sql.consultas_selecionadas()
-        self.selection_service.set_selections("ultimas_consultas", [str(p) for p in sql_selecionados])
+        self.selection_service.set_selections("ultimas_consultas", sql_selecionados)
 
         # 2. Selecionar Tabelas
         tabelas_disp = self.servico_pipeline_funcoes.servico_tabelas.listar_tabelas()
@@ -3042,7 +3042,7 @@ class MainWindow(QMainWindow):
         if not dlg_sql.exec():
             return
         sql_selecionados = dlg_sql.consultas_selecionadas()
-        self.selection_service.set_selections("ultimas_consultas", [str(p) for p in sql_selecionados])
+        self.selection_service.set_selections("ultimas_consultas", sql_selecionados)
 
         self.btn_extrair_brutas.setEnabled(False)
         self.status.showMessage(f"Extraindo tabelas brutas para {cnpj}...")
@@ -3094,8 +3094,8 @@ class MainWindow(QMainWindow):
             return
 
         consultas_disp = self.servico_pipeline_funcoes.servico_extracao.listar_consultas()
-        sql_nfe = next((p for p in consultas_disp if p.name.lower() == "nfe.sql"), None)
-        sql_nfce = next((p for p in consultas_disp if p.name.lower() == "nfce.sql"), None)
+        sql_nfe = next((sql_id for sql_id in consultas_disp if sql_id.lower().endswith("/nfe.sql")), None)
+        sql_nfce = next((sql_id for sql_id in consultas_disp if sql_id.lower().endswith("/nfce.sql")), None)
         consultas_nfe_entrada = [p for p in [sql_nfe, sql_nfce] if p is not None]
         if not consultas_nfe_entrada:
             self.show_error("SQL nao encontrada", "Nao foi possivel localizar as consultas NFe.sql/NFCe.sql na pasta sql/.")
@@ -7088,7 +7088,7 @@ class MainWindow(QMainWindow):
         self.sql_combo.clear()
         self.sql_combo.addItem("- Selecione uma consulta -")
         for info in self._sql_files:
-            self.sql_combo.addItem(f"{info.display_name}  [{info.source_dir}]", str(info.path))
+            self.sql_combo.addItem(f"{info.display_name}  [{info.source_dir}]", info.sql_id)
         self.sql_combo.blockSignals(False)
 
     def _on_sql_selected(self, index: int) -> None:
@@ -7102,7 +7102,7 @@ class MainWindow(QMainWindow):
         if not path_str:
             return
         try:
-            sql_text = self.sql_service.read_sql(Path(path_str))
+            sql_text = self.sql_service.read_sql(path_str)
         except Exception as exc:
             self.show_error("Erro ao ler SQL", str(exc))
             return

@@ -1,8 +1,9 @@
-from pathlib import Path
+﻿from pathlib import Path
+from utilitarios.project_paths import PROJECT_ROOT
 import polars as pl
 from rich import print as rprint
 
-ROOT_DIR = Path(r"c:\funcoes - Copia")
+ROOT_DIR = PROJECT_ROOT
 DADOS_DIR = ROOT_DIR / "dados"
 REFS_DIR = DADOS_DIR / "referencias"
 
@@ -121,7 +122,7 @@ def gerar_co_sefin_final(df: pl.DataFrame) -> pl.DataFrame:
 def enriquecer_co_sefin_class(df_movimentacao: pl.DataFrame, cnpj: str = None) -> pl.DataFrame:
     """
     Enriquece a movimentacao de estoque com campos baseados na classificacao co_sefin.
-    Utiliza co_sefin_padrao do produtos_agrupados como principal chave de classificação.
+    Utiliza co_sefin_padrao do produtos_agrupados como principal chave de classificaÃ§Ã£o.
     """
     if df_movimentacao.height == 0:
         return df_movimentacao
@@ -221,7 +222,7 @@ def enriquecer_co_sefin_class(df_movimentacao: pl.DataFrame, cnpj: str = None) -
         .unique(subset=[col_id], keep="first")
     )
     
-    # 5. Tratamento de Órfãos (Fallbacks)
+    # 5. Tratamento de Ã“rfÃ£os (Fallbacks)
     # Se sobrou alguem sem match de data, pegamos o registro SITAFE mais recente para aquele CO_SEFIN.
     # Excecao: it_pc_interna nao deve ser herdado sem vigencia compativel, para evitar aplicar
     # aliquota atual em movimentos historicos.
@@ -248,7 +249,7 @@ def enriquecer_co_sefin_class(df_movimentacao: pl.DataFrame, cnpj: str = None) -
         .with_columns(pl.lit(None, dtype=pl.Float64).alias("it_pc_interna"))
     )
     
-    # 6. Finalização e Concat
+    # 6. FinalizaÃ§Ã£o e Concat
     df_filtered = df_filtered.with_columns(pl.col("__co_sefin_lookup__").alias("co_sefin_agr"))
     orphans_filled = orphans_filled.with_columns(pl.col("__co_sefin_lookup__").alias("co_sefin_agr"))
     
@@ -282,4 +283,6 @@ def enriquecer_co_sefin_class(df_movimentacao: pl.DataFrame, cnpj: str = None) -
 
 if __name__ == '__main__':
     # Teste isolado
-    print("Módulo co_sefin_class carregado com sucesso.")
+    print("MÃ³dulo co_sefin_class carregado com sucesso.")
+
+

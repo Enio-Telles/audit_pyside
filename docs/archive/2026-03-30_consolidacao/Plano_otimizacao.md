@@ -1,6 +1,6 @@
-# Plano de Otimizacao e Melhorias
+﻿# Plano de Otimizacao e Melhorias
 
-Este plano consolida melhorias tecnicas para o projeto **Fiscal Parquet Analyzer** com base no estado atual do codigo e nas diretrizes de [`Agents.md`](c:\funcoes - Copia\Agents.md).
+Este plano consolida melhorias tecnicas para o projeto **Fiscal Parquet Analyzer** com base no estado atual do codigo e nas diretrizes de [`Agents.md`](c:\Sistema_pysisde\Agents.md).
 
 O objetivo nao e "modernizar por modernizar". As melhorias abaixo priorizam:
 
@@ -496,3 +496,4 @@ Ao final, o projeto deve ficar:
 
 - [ ] medir tempos da agregacao antes/depois usando `perf_monitor`
 - [ ] revisar outros `read_parquet()` da UI com foco em `nfe_entrada` e `id_agrupados`
+

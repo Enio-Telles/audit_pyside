@@ -1,4 +1,4 @@
-"""
+﻿"""
 c170_xml.py
 
 Objetivo:
@@ -15,11 +15,12 @@ from __future__ import annotations
 import re
 import sys
 from pathlib import Path
+from utilitarios.project_paths import PROJECT_ROOT
 
 import polars as pl
 from rich import print as rprint
 
-ROOT_DIR = Path(r"c:\funcoes - Copia")
+ROOT_DIR = PROJECT_ROOT
 SRC_DIR = ROOT_DIR / "src"
 DADOS_DIR = ROOT_DIR / "dados"
 CNPJ_ROOT = DADOS_DIR / "CNPJ"
@@ -51,13 +52,13 @@ def _norm_text_expr(col: str, alias: str | None = None) -> pl.Expr:
         .cast(pl.Utf8, strict=False)
         .fill_null("")
         .str.to_uppercase()
-        .str.replace_all(r"[ÁÀÂÃÄ]", "A")
-        .str.replace_all(r"[ÉÈÊË]", "E")
-        .str.replace_all(r"[ÍÌÎÏ]", "I")
-        .str.replace_all(r"[ÓÒÔÕÖ]", "O")
-        .str.replace_all(r"[ÚÙÛÜ]", "U")
-        .str.replace_all(r"Ç", "C")
-        .str.replace_all(r"Ñ", "N")
+        .str.replace_all(r"[ÃÃ€Ã‚ÃƒÃ„]", "A")
+        .str.replace_all(r"[Ã‰ÃˆÃŠÃ‹]", "E")
+        .str.replace_all(r"[ÃÃŒÃŽÃ]", "I")
+        .str.replace_all(r"[Ã“Ã’Ã”Ã•Ã–]", "O")
+        .str.replace_all(r"[ÃšÃ™Ã›Ãœ]", "U")
+        .str.replace_all(r"Ã‡", "C")
+        .str.replace_all(r"Ã‘", "N")
         .str.strip_chars()
         .str.replace_all(r"\s+", " ")
     )
@@ -507,3 +508,5 @@ if __name__ == "__main__":
         gerar_c170_xml(sys.argv[1])
     else:
         gerar_c170_xml(input("CNPJ: "))
+
+

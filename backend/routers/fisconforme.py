@@ -25,6 +25,8 @@ from pydantic import BaseModel
 from starlette.responses import StreamingResponse
 
 from interface_grafica.config import CNPJ_ROOT
+from utilitarios.project_paths import APP_STATE_ROOT, ENV_PATH
+from utilitarios.sql_catalog import resolve_sql_path
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -32,11 +34,9 @@ router = APIRouter()
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
-FISCONFORME_ROOT = Path(r"C:\fisconforme")
-SQL_CADASTRAL = FISCONFORME_ROOT / "sql" / "dados_cadastrais.sql"
-SQL_MALHA = FISCONFORME_ROOT / "sql" / "Fisconforme_malha_cnpj.sql"
-FISCONFORME_ENV = FISCONFORME_ROOT / ".env"
-APP_STATE_ROOT = Path(__file__).resolve().parents[2] / "src" / "workspace" / "app_state"
+SQL_CADASTRAL = resolve_sql_path("fisconforme/cadastro/dados_cadastrais.sql")
+SQL_MALHA = resolve_sql_path("fisconforme/malhas/Fisconforme_malha_cnpj.sql")
+FISCONFORME_ENV = ENV_PATH
 AUDITOR_CONFIG_PATH = APP_STATE_ROOT / "fisconforme_auditor.json"
 DSF_ACERVO_PATH = APP_STATE_ROOT / "fisconforme_dsfs.json"
 DSF_FILES_ROOT = APP_STATE_ROOT / "fisconforme_dsfs"

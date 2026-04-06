@@ -1,8 +1,8 @@
-"""
-Módulo de extração de dados cadastrais com cache Parquet.
+﻿"""
+MÃ³dulo de extraÃ§Ã£o de dados cadastrais com cache Parquet.
 
 Utiliza as consultas SQL da pasta sql/ para extrair dados do Oracle DW
-e salva em formato Parquet para reutilização e performance.
+e salva em formato Parquet para reutilizaÃ§Ã£o e performance.
 
 Autor: Pipeline Fisconforme
 Data: 2026-04-03
@@ -16,23 +16,23 @@ from datetime import datetime
 
 import polars as pl
 
-# Configuração de logging
+# ConfiguraÃ§Ã£o de logging
 logger = logging.getLogger(__name__)
 
 # Importa resolvedor de caminhos do pacote integrado
 from .path_resolver import get_resource_path, get_root_dir, get_env_path
+from utilitarios.sql_catalog import resolve_sql_path
 
-# Diretório raiz do projeto
+# DiretÃ³rio raiz do projeto
 ROOT_DIR = get_root_dir()
 
-# Diretórios
-SQL_DIR = ROOT_DIR / "sql"
+# DiretÃ³rios
 PARQUET_DIR = ROOT_DIR / "dados" / "fisconforme" / "data_parquet"
 PARQUET_DIR.mkdir(parents=True, exist_ok=True)
 
 # Arquivos SQL
-SQL_DADOS_CADASTRAIS = SQL_DIR / "dados_cadastrais.sql"
-SQL_MALHA_CNPJ = SQL_DIR / "Fisconforme_malha_cnpj.sql"
+SQL_DADOS_CADASTRAIS = resolve_sql_path("fisconforme/cadastro/dados_cadastrais.sql")
+SQL_MALHA_CNPJ = resolve_sql_path("fisconforme/malhas/Fisconforme_malha_cnpj.sql")
 
 # Arquivos Parquet de cache
 PARQUET_CADASTRAIS = PARQUET_DIR / "dados_cadastrais.parquet"
@@ -41,17 +41,17 @@ PARQUET_MALHAS = PARQUET_DIR / "malhas_pendencias.parquet"
 
 def ler_sql(caminho_sql: Path) -> Optional[str]:
     """
-    Lê o conteúdo de um arquivo SQL.
+    LÃª o conteÃºdo de um arquivo SQL.
     
     Args:
         caminho_sql: Caminho para o arquivo SQL
         
     Returns:
-        Conteúdo do SQL ou None se erro
+        ConteÃºdo do SQL ou None se erro
     """
     try:
         if not caminho_sql.exists():
-            logger.error(f"Arquivo SQL não encontrado: {caminho_sql}")
+            logger.error(f"Arquivo SQL nÃ£o encontrado: {caminho_sql}")
             return None
         
         with open(caminho_sql, 'r', encoding='utf-8') as f:
@@ -67,10 +67,10 @@ def ler_sql(caminho_sql: Path) -> Optional[str]:
 
 def conectar_oracle_simples():
     """
-    Cria conexão simples com Oracle (sem pool).
+    Cria conexÃ£o simples com Oracle (sem pool).
 
     Returns:
-        Conexão Oracle ou None
+        ConexÃ£o Oracle ou None
     """
     try:
         import oracledb
@@ -108,10 +108,10 @@ def extrair_dados_cadastrais_oracle(cnpj: str) -> Optional[Dict[str, Any]]:
     Extrai dados cadastrais de um CNPJ usando o SQL da pasta sql/.
     
     Args:
-        cnpj: CNPJ limpo (apenas números)
+        cnpj: CNPJ limpo (apenas nÃºmeros)
         
     Returns:
-        Dicionário com dados cadastrais ou None
+        DicionÃ¡rio com dados cadastrais ou None
     """
     sql = ler_sql(SQL_DADOS_CADASTRAIS)
     if not sql:
@@ -133,7 +133,7 @@ def extrair_dados_cadastrais_oracle(cnpj: str) -> Optional[Dict[str, Any]]:
                 logger.warning(f"Nenhum dado encontrado para CNPJ {cnpj}")
                 return None
             
-            # Converte para dicionário
+            # Converte para dicionÃ¡rio
             dados = {}
             for i, valor in enumerate(resultado):
                 chave = colunas[i].upper().replace(" ", "_")
@@ -144,7 +144,7 @@ def extrair_dados_cadastrais_oracle(cnpj: str) -> Optional[Dict[str, Any]]:
                 else:
                     dados[chave] = valor
             
-            logger.info(f"Dados cadastrais extraídos para CNPJ {cnpj}")
+            logger.info(f"Dados cadastrais extraÃ­dos para CNPJ {cnpj}")
             return dados
             
     except Exception as e:
@@ -164,7 +164,7 @@ def salvar_cache_cadastral(cnpj: str, dados: Dict[str, Any]):
     
     Args:
         cnpj: CNPJ limpo
-        dados: Dicionário com dados cadastrais
+        dados: DicionÃ¡rio com dados cadastrais
     """
     try:
         # Cria DataFrame com os dados
@@ -209,7 +209,7 @@ def buscar_cache_cadastral(cnpj: str) -> Optional[Dict[str, Any]]:
         cnpj: CNPJ limpo
         
     Returns:
-        Dicionário com dados ou None
+        DicionÃ¡rio com dados ou None
     """
     try:
         if not PARQUET_CADASTRAIS.exists():
@@ -222,7 +222,7 @@ def buscar_cache_cadastral(cnpj: str) -> Optional[Dict[str, Any]]:
         if df.is_empty():
             return None
         
-        # Converte para dicionário
+        # Converte para dicionÃ¡rio
         row = df.row(0, named=True)
         dados = {}
         for chave, valor in row.items():
@@ -243,13 +243,13 @@ def buscar_cache_cadastral(cnpj: str) -> Optional[Dict[str, Any]]:
 
 def extrair_e_salvar_cadastral(cnpj: str) -> Optional[Dict[str, Any]]:
     """
-    Fluxo completo: busca no cache, se não encontrar extrai do Oracle e salva.
+    Fluxo completo: busca no cache, se nÃ£o encontrar extrai do Oracle e salva.
     
     Args:
         cnpj: CNPJ limpo
         
     Returns:
-        Dicionário com dados cadastrais ou None
+        DicionÃ¡rio com dados cadastrais ou None
     """
     # 1. Busca no cache Parquet
     dados = buscar_cache_cadastral(cnpj)
@@ -270,13 +270,13 @@ def extrair_e_salvar_cadastral(cnpj: str) -> Optional[Dict[str, Any]]:
 
 def extrair_multiplos_cnpjs(cnpjs: List[str]) -> Dict[str, Dict[str, Any]]:
     """
-    Extrai dados cadastrais para múltiplos CNPJs.
+    Extrai dados cadastrais para mÃºltiplos CNPJs.
     
     Args:
         cnpjs: Lista de CNPJs limpos
         
     Returns:
-        Dicionário {cnpj: dados}
+        DicionÃ¡rio {cnpj: dados}
     """
     resultados = {}
     
@@ -296,7 +296,7 @@ def exportar_cache_completo(caminho_saida: Optional[Path] = None) -> Optional[Pa
     Exporta todo o cache cadastral para um arquivo Parquet.
     
     Args:
-        caminho_saida: Caminho de saída (opcional)
+        caminho_saida: Caminho de saÃ­da (opcional)
         
     Returns:
         Caminho do arquivo exportado ou None
@@ -336,10 +336,10 @@ def limpar_cache_cadastral():
 
 def obter_estatisticas_cache() -> Dict[str, Any]:
     """
-    Obtém estatísticas do cache Parquet.
+    ObtÃ©m estatÃ­sticas do cache Parquet.
     
     Returns:
-        Dicionário com estatísticas
+        DicionÃ¡rio com estatÃ­sticas
     """
     try:
         if not PARQUET_CADASTRAIS.exists():
@@ -356,5 +356,6 @@ def obter_estatisticas_cache() -> Dict[str, Any]:
         }
         
     except Exception as e:
-        logger.error(f"Erro ao obter estatísticas: {e}")
+        logger.error(f"Erro ao obter estatÃ­sticas: {e}")
         return {"total": 0, "erro": str(e)}
+

@@ -1,6 +1,7 @@
 import os
+from utilitarios.project_paths import SRC_ROOT
 
-path = r'c:\funcoes - Copia\src\interface_grafica\ui\main_window.py'
+path = str(SRC_ROOT / 'interface_grafica' / 'ui' / 'main_window.py')
 with open(path, 'r', encoding='utf-8') as f:
     text = f.read()
 

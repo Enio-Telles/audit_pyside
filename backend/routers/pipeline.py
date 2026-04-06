@@ -7,6 +7,7 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel
 
 from interface_grafica.services.registry_service import RegistryService
+from utilitarios.sql_catalog import list_sql_entries, normalize_sql_id, resolve_sql_path
 
 router = APIRouter()
 registry = RegistryService()
@@ -86,19 +87,24 @@ def _resolver_execucao(
     )
 
     svc = ServicoPipelineCompleto()
-    consultas_disponiveis = svc.servico_extracao.listar_consultas()
-    consultas_por_nome = {path.name.lower(): path for path in consultas_disponiveis}
+    consultas_disponiveis = list_sql_entries()
+    consultas_por_nome = {entry.path.name.lower(): entry.path for entry in consultas_disponiveis}
+    consultas_por_id = {entry.sql_id.lower(): entry.path for entry in consultas_disponiveis}
     tabelas_disponiveis = svc.servico_tabelas.listar_tabelas()
     tabelas_por_id = {item["id"]: item["id"] for item in tabelas_disponiveis}
 
     if consultas == ["*"]:
-        consultas_resolvidas = consultas_disponiveis
+        consultas_resolvidas = [entry.path for entry in consultas_disponiveis]
     else:
-        consultas_resolvidas = [
-            consultas_por_nome[nome.lower()]
-            for nome in consultas
-            if nome.lower() in consultas_por_nome
-        ]
+        consultas_resolvidas = []
+        for nome in consultas:
+            sql_id = normalize_sql_id(nome)
+            if sql_id and sql_id.lower() in consultas_por_id:
+                consultas_resolvidas.append(consultas_por_id[sql_id.lower()])
+                continue
+            caminho = consultas_por_nome.get(nome.lower())
+            if caminho is not None:
+                consultas_resolvidas.append(caminho)
 
     if tabelas == ["*"]:
         tabelas_resolvidas = [item["id"] for item in tabelas_disponiveis]

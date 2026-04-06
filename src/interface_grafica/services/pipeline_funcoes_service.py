@@ -19,8 +19,9 @@ from typing import Any, Callable
 import polars as pl
 
 from extracao.extracao_oracle_eficiente import descobrir_consultas_sql, executar_extracao_oracle
-from interface_grafica.config import CNPJ_ROOT, EXTRA_SQL_DIRS, SQL_DIR
+from interface_grafica.config import CNPJ_ROOT, SQL_DIR
 
+from utilitarios.sql_catalog import list_sql_entries
 
 from utilitarios.extrair_parametros import extrair_parametros_sql
 
@@ -147,7 +148,7 @@ class ServicoExtracao:
 
     def __init__(self, consultas_dir: Path | list[Path] | None = None, cnpj_root: Path = CNPJ_ROOT):
         if consultas_dir is None:
-            candidatos = [Path(item) for item in EXTRA_SQL_DIRS] + [SQL_DIR]
+            candidatos = [SQL_DIR]
         elif isinstance(consultas_dir, list):
             candidatos = [Path(item) for item in consultas_dir]
         else:
@@ -157,9 +158,8 @@ class ServicoExtracao:
         self.consultas_dir = self.consultas_dirs[0] if self.consultas_dirs else SQL_DIR
         self.cnpj_root = cnpj_root
 
-    def listar_consultas(self) -> list[Path]:
-        consultas = descobrir_consultas_sql(diretorios_sql=self.consultas_dirs)
-        return [consulta.caminho for consulta in consultas]
+    def listar_consultas(self) -> list[str]:
+        return [entry.sql_id for entry in list_sql_entries()]
 
     def pasta_cnpj(self, cnpj: str) -> Path:
         return self.cnpj_root / cnpj
@@ -237,7 +237,7 @@ class ServicoExtracao:
     def executar_consultas(
         self,
         cnpj: str,
-        consultas: list[Path],
+        consultas: list[str | Path],
         data_limite: str | None = None,
         progresso: Callable[[str], None] | None = None,
     ) -> list[str]:
@@ -401,7 +401,7 @@ class ServicoPipelineCompleto:
     def executar_completo(
         self,
         cnpj: str,
-        consultas: list[Path],
+        consultas: list[str | Path],
         tabelas: list[str],
         data_limite: str | None = None,
         progresso: Callable[[str], None] | None = None,

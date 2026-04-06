@@ -120,7 +120,7 @@ class ColumnSelectorDialog(QDialog):
 class DialogoSelecaoConsultas(QDialog):
     """Dialogo para selecionar quais consultas SQL executar."""
 
-    def __init__(self, consultas: list[Path], parent=None, pre_selecionados: list[str] | None = None) -> None:
+    def __init__(self, consultas: list[str], parent=None, pre_selecionados: list[str] | None = None) -> None:
         super().__init__(parent)
         self.setWindowTitle("Selecionar consultas SQL para execucao")
         self.resize(520, 480)
@@ -140,16 +140,17 @@ class DialogoSelecaoConsultas(QDialog):
         self.lista = QListWidget()
         pre_set = set(pre_selecionados) if pre_selecionados is not None else None
 
-        for sql_path in consultas:
-            rotulo = sql_path.stem
-            if sql_path.parent.name.lower() != "sql":
-                rotulo = f"{sql_path.parent.name}/{sql_path.stem}"
+        for sql_id in consultas:
+            path_parts = sql_id.split("/")
+            rotulo = Path(sql_id).stem
+            if len(path_parts) > 1:
+                rotulo = f"{'/'.join(path_parts[:-1])}/{Path(sql_id).stem}"
             item = QListWidgetItem(rotulo)
             item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
-            estado = Qt.Checked if (pre_set is None or str(sql_path) in pre_set) else Qt.Unchecked
+            estado = Qt.Checked if (pre_set is None or sql_id in pre_set) else Qt.Unchecked
             item.setCheckState(estado)
-            item.setToolTip(str(sql_path))
-            item.setData(Qt.UserRole, str(sql_path))
+            item.setToolTip(sql_id)
+            item.setData(Qt.UserRole, sql_id)
             self.lista.addItem(item)
         layout.addWidget(self.lista, 1)
 
@@ -163,12 +164,12 @@ class DialogoSelecaoConsultas(QDialog):
         for idx in range(self.lista.count()):
             self.lista.item(idx).setCheckState(marcado)
 
-    def consultas_selecionadas(self) -> list[Path]:
+    def consultas_selecionadas(self) -> list[str]:
         selecionadas = []
         for idx in range(self.lista.count()):
             item = self.lista.item(idx)
             if item.checkState() == Qt.Checked:
-                selecionadas.append(Path(item.data(Qt.UserRole)))
+                selecionadas.append(item.data(Qt.UserRole))
         return selecionadas
 
 

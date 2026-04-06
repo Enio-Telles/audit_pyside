@@ -1,4 +1,4 @@
-# SEFIN Classification Padding & GitHub Sync
+﻿# SEFIN Classification Padding & GitHub Sync
 
 ## Goal 1: Fix SEFIN Padding & Source
 
@@ -20,11 +20,11 @@ The user reported two specific improvements to the logic generating `it_pc_inter
 
 Additionally, as before, if a row remains unmatched after adjusting the dates, we can still fall back to the most recent Sefin parameter (using `it_da_inicio`) for that [co_sefin](file:///c:/funcoes%20-%20Copia/src/transformacao/co_sefin_class.py#22-74) to guarantee complete coverage.
 
-### [MODIFY] [c:\funcoes - Copia\src\transformacao\co_sefin_class.py](file:///funcoes%20-%20Copia/src/transformacao/co_sefin_class.py)
+### [MODIFY] [c:\Sistema_pysisde\src\transformacao\co_sefin_class.py](file:///funcoes%20-%20Copia/src/transformacao/co_sefin_class.py)
 We will rewrite [enriquecer_co_sefin_class](file:///c:/funcoes%20-%20Copia/src/transformacao/co_sefin_class.py#75-194) and its imports to support these two fixes (loading [produtos_agrupados](file:///c:/funcoes%20-%20Copia/src/transformacao/04_produtos_final.py#112-246) and fixing the date condition).
 
-### [MODIFY] [c:\funcoes - Copia\src\transformacao\c170_xml.py](file:///funcoes%20-%20Copia/src/transformacao/c170_xml.py)
-### [MODIFY] [c:\funcoes - Copia\src\transformacao\movimentacao_estoque.py](file:///funcoes%20-%20Copia/src/transformacao/movimentacao_estoque.py)
+### [MODIFY] [c:\Sistema_pysisde\src\transformacao\c170_xml.py](file:///funcoes%20-%20Copia/src/transformacao/c170_xml.py)
+### [MODIFY] [c:\Sistema_pysisde\src\transformacao\movimentacao_estoque.py](file:///funcoes%20-%20Copia/src/transformacao/movimentacao_estoque.py)
 Pass the [cnpj](file:///c:/funcoes%20-%20Copia/src/interface_grafica/services/parquet_service.py#57-59) variable when calling [enriquecer_co_sefin_class(df_mov, cnpj)](file:///c:/funcoes%20-%20Copia/src/transformacao/co_sefin_class.py#75-194).
 
 ## Goal 2: GitHub Synchronization
@@ -38,3 +38,4 @@ We need to sync our ongoing local changes with the remote [main](file:///c:/func
 
 ## Verification
 - We will process `37671507000187` and assert that no row with a valid [co_sefin_final](file:///c:/funcoes%20-%20Copia/src/transformacao/co_sefin_class.py#22-74) has an empty `it_pc_interna`.
+

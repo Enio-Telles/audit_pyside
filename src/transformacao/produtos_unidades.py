@@ -1,4 +1,4 @@
-"""
+﻿"""
 produtos_unidades.py
 
 Objetivo: Gerar a tabela base de movimentacoes por unidade.
@@ -9,10 +9,11 @@ Fontes: Tabelas NFe, NFCe, C170 e bloco_h.
 import sys
 import re
 from pathlib import Path
+from utilitarios.project_paths import PROJECT_ROOT
 import polars as pl
 from rich import print as rprint
 
-ROOT_DIR = Path(r"c:\funcoes - Copia")
+ROOT_DIR = PROJECT_ROOT
 SRC_DIR = ROOT_DIR / "src"
 DADOS_DIR = ROOT_DIR / "dados"
 CNPJ_ROOT = DADOS_DIR / "CNPJ"
@@ -190,3 +191,5 @@ if __name__ == "__main__":
     else:
         c = input("CNPJ: ")
         gerar_produtos_unidades(c)
+
+

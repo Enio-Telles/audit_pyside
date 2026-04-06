@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 import math
-import re
-from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from interface_grafica.config import SQL_DIR, EXTRA_SQL_DIRS
+from interface_grafica.services.sql_service import SqlService
+from utilitarios.sql_catalog import list_sql_entries, normalize_sql_id
 
 router = APIRouter()
 
@@ -25,13 +24,7 @@ def _safe_value(v: Any) -> Any:
 
 @router.get("/files")
 def list_sql_files():
-    dirs = [SQL_DIR] + EXTRA_SQL_DIRS
-    files = []
-    for d in dirs:
-        if Path(d).exists():
-            for f in Path(d).glob("*.sql"):
-                files.append({"name": f.name, "path": str(f)})
-    return files
+    return [{"name": entry.path.name, "path": entry.sql_id} for entry in list_sql_entries()]
 
 
 class SqlRequest(BaseModel):
@@ -44,25 +37,23 @@ class SqlRequest(BaseModel):
 def execute_sql(req: SqlRequest):
     """Execute a parametric SQL file against the Oracle DB (if available)."""
     try:
-        from interface_grafica.services.sql_service import SqlService
         svc = SqlService()
         result = svc.executar_sql(req.sql, params=req.params, cnpj=req.cnpj)
-        rows = [dict(row) for row in (result or [])]
+        rows = [_safe_value(dict(row)) for row in (result or [])]
         return {"rows": rows, "count": len(rows)}
     except Exception as exc:
-        raise HTTPException(500, f"Erro SQL: {exc}")
+        raise HTTPException(500, f"Erro SQL: {exc}") from exc
 
 
 @router.get("/file")
 def read_sql_file(path: str):
-    try:
-        p = Path(path).resolve()
-        allowed_dirs = [Path(d).resolve() for d in [SQL_DIR] + EXTRA_SQL_DIRS]
-        if not any(p.is_relative_to(d) for d in allowed_dirs):
-            raise ValueError("Path outside allowed directories")
-    except Exception:
-        raise HTTPException(400, "Caminho inválido ou acesso negado")
+    sql_id = normalize_sql_id(path)
+    if sql_id is None:
+        raise HTTPException(400, "Caminho invalido ou SQL fora do catalogo")
 
-    if not p.exists() or p.suffix != ".sql":
-        raise HTTPException(404, "Arquivo SQL não encontrado")
-    return {"content": p.read_text(encoding="utf-8", errors="replace")}
+    try:
+        return {"content": SqlService.read_sql(sql_id)}
+    except FileNotFoundError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(500, f"Erro ao ler SQL: {exc}") from exc

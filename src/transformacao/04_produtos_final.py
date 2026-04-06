@@ -1,4 +1,4 @@
-"""
+﻿"""
 04_produtos_final.py
 
 Objetivo: inicializar a camada de agrupamento manual e gerar a tabela final
@@ -16,11 +16,12 @@ import re
 import sys
 from collections import Counter
 from pathlib import Path
+from utilitarios.project_paths import PROJECT_ROOT
 
 import polars as pl
 from rich import print as rprint
 
-ROOT_DIR = Path(r"c:\funcoes - Copia")
+ROOT_DIR = PROJECT_ROOT
 SRC_DIR = ROOT_DIR / "src"
 UTILITARIOS_DIR = SRC_DIR / "utilitarios"
 DADOS_DIR = ROOT_DIR / "dados"
@@ -258,3 +259,5 @@ if __name__ == "__main__":
         produtos_agrupados(sys.argv[1])
     else:
         produtos_agrupados(input("CNPJ: "))
+
+
