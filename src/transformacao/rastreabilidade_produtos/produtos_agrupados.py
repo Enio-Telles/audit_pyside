@@ -30,13 +30,6 @@ except ImportError as e:
     sys.exit(1)
 
 
-def _normalizar_descricao_para_match(texto: str | None) -> str:
-    """Normaliza texto igual ao pipeline de produtos: remove acento, upper, trim, espaco unico."""
-    if texto is None:
-        return ""
-    return " ".join((remove_accents(texto) or "").upper().strip().split())
-
-
 def _primeira_descricao_valida(df: pl.DataFrame) -> str | None:
     if "descricao" not in df.columns:
         return None
@@ -121,7 +114,15 @@ def inicializar_produtos_agrupados(cnpj: str, pasta_cnpj: Path | None = None) ->
     rprint(f"[bold cyan]Inicializando produtos_agrupados para CNPJ: {cnpj}[/bold cyan]")
 
     df_prod = pl.read_parquet(arq_produtos)
-    df_base = pl.read_parquet(arq_base)
+    df_base = pl.read_parquet(arq_base).with_columns(
+        pl.col("descricao")
+        .map_elements(remove_accents, return_dtype=pl.String)
+        .str.to_uppercase()
+        .str.strip_chars()
+        .str.replace_all(r"\s+", " ")
+        .fill_null("")
+        .alias("descricao_normalizada_temp")
+    )
 
     grupos = []
     
@@ -160,10 +161,12 @@ def inicializar_produtos_agrupados(cnpj: str, pasta_cnpj: Path | None = None) ->
         
         if desc_norms:
             df_base_filtered = df_base.filter(
-                pl.col("descricao").map_elements(_normalizar_descricao_para_match, return_dtype=pl.String).is_in(desc_norms)
+                pl.col("descricao_normalizada_temp").is_in(desc_norms)
             )
         else:
             df_base_filtered = df_base.filter(pl.lit(False))
+
+        df_base_filtered = df_base_filtered.drop("descricao_normalizada_temp", strict=False)
 
         padrao = calcular_atributos_padrao(df_base_filtered)
 
