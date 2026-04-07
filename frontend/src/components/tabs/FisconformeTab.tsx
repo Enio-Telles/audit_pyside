@@ -69,6 +69,13 @@ const MONTH_LABELS = [
   "dez",
 ];
 
+// ⚡ Bolt Optimization: Use cached Intl.DateTimeFormat instance instead of Date.prototype.toLocaleString()
+// This avoids repeatedly allocating locale data and parsing options on every render, improving performance.
+const intlDateTime = new Intl.DateTimeFormat("pt-BR", {
+  dateStyle: "short",
+  timeStyle: "medium",
+});
+
 function Card({
   children,
   className = "",
@@ -174,7 +181,7 @@ function formatDateTime(value: string): string {
   if (!value) return "-";
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleString("pt-BR");
+  return intlDateTime.format(parsed);
 }
 
 function buildDsfHeadline(

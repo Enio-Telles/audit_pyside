@@ -1,6 +1,10 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { estoqueApi } from "../../api/client";
+
+// ⚡ Bolt Optimization: Use cached Intl.NumberFormat instance instead of Number.prototype.toLocaleString()
+// This avoids repeatedly allocating locale data and parsing options on every render, improving performance.
+const intlInteger = new Intl.NumberFormat("pt-BR");
 import { useAppStore } from "../../store/appStore";
 import { DataTable } from "../table/DataTable";
 import { ColumnToggle } from "../table/ColumnToggle";
@@ -50,7 +54,10 @@ function EstoqueSubTab({ cnpj, sub }: { cnpj: string; sub: SubTab }) {
     "bg-slate-800 border border-slate-600 rounded px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-blue-500";
   const btnCls =
     "px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-colors";
-  const colunasDisponiveis = useMemo(() => data?.columns ?? [], [data?.columns]);
+  const colunasDisponiveis = useMemo(
+    () => data?.columns ?? [],
+    [data?.columns],
+  );
   const {
     ordemColunas,
     largurasColunas,
@@ -251,7 +258,7 @@ function EstoqueSubTab({ cnpj, sub }: { cnpj: string; sub: SubTab }) {
           <span className="text-xs text-slate-400">
             {isLoading
               ? "Carregando..."
-              : `Exibindo ${filteredRows.length.toLocaleString("pt-BR")} de ${(data?.total_rows ?? 0).toLocaleString("pt-BR")} linhas.`}
+              : `Exibindo ${intlInteger.format(filteredRows.length)} de ${intlInteger.format(data?.total_rows ?? 0)} linhas.`}
           </span>
           {hasFilters && (
             <span className="text-xs text-amber-400">
@@ -370,9 +377,7 @@ export function EstoqueTab() {
             style={subTab === st.key ? { background: "#0f1b33" } : {}}
           >
             {st.label}
-            {st.count !== undefined
-              ? ` (${st.count.toLocaleString("pt-BR")})`
-              : ""}
+            {st.count !== undefined ? ` (${intlInteger.format(st.count)})` : ""}
           </button>
         ))}
       </div>

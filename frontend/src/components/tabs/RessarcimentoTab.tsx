@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { pipelineApi, ressarcimentoApi } from "../../api/client";
+
+// ⚡ Bolt Optimization: Use cached Intl.NumberFormat instance instead of Number.prototype.toLocaleString()
+// This avoids repeatedly allocating locale data and parsing options on every render, improving performance.
+const intlInteger = new Intl.NumberFormat("pt-BR");
 import { useAppStore } from "../../store/appStore";
 import { DataTable } from "../table/DataTable";
 import { ColumnToggle } from "../table/ColumnToggle";
@@ -27,7 +31,10 @@ function RessarcimentoGrid({ cnpj, subTab }: { cnpj: string; subTab: SubTab }) {
     placeholderData: (prev) => prev,
   });
 
-  const colunasDisponiveis = useMemo(() => data?.columns ?? [], [data?.columns]);
+  const colunasDisponiveis = useMemo(
+    () => data?.columns ?? [],
+    [data?.columns],
+  );
   const rows = useMemo(() => {
     const termo = search.toLowerCase();
     if (!termo) return data?.rows ?? [];
@@ -46,7 +53,10 @@ function RessarcimentoGrid({ cnpj, subTab }: { cnpj: string; subTab: SubTab }) {
     definirOrdemColunas,
     definirLarguraColuna,
     redefinirPreferenciasColunas,
-  } = usePreferenciasColunas(`ressarcimento_${subTab}_colunas_v1`, colunasDisponiveis);
+  } = usePreferenciasColunas(
+    `ressarcimento_${subTab}_colunas_v1`,
+    colunasDisponiveis,
+  );
 
   const btnCls =
     "px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-colors";
@@ -58,7 +68,9 @@ function RessarcimentoGrid({ cnpj, subTab }: { cnpj: string; subTab: SubTab }) {
       <div className="px-3 py-2 border-b border-slate-700">
         <div className="flex gap-2 items-center flex-wrap">
           <button
-            className={btnCls + " bg-slate-700 hover:bg-slate-600 text-slate-200"}
+            className={
+              btnCls + " bg-slate-700 hover:bg-slate-600 text-slate-200"
+            }
             onClick={() => refetch()}
             disabled={isLoading}
           >
@@ -94,7 +106,7 @@ function RessarcimentoGrid({ cnpj, subTab }: { cnpj: string; subTab: SubTab }) {
         <div className="mt-2 text-xs text-slate-400">
           {isLoading
             ? "Carregando..."
-            : `Exibindo ${rows.length.toLocaleString("pt-BR")} de ${(data?.total_rows ?? 0).toLocaleString("pt-BR")} linhas.`}
+            : `Exibindo ${intlInteger.format(rows.length)} de ${intlInteger.format(data?.total_rows ?? 0)} linhas.`}
         </div>
       </div>
 
@@ -147,7 +159,8 @@ export function RessarcimentoTab() {
   }, [pipelineStatus?.status, pipelineWatchCnpj, queryClient, selectedCnpj]);
 
   const processMutation = useMutation({
-    mutationFn: () => pipelineApi.run({ cnpj: selectedCnpj!, tabelas: ["ressarcimento_st"] }),
+    mutationFn: () =>
+      pipelineApi.run({ cnpj: selectedCnpj!, tabelas: ["ressarcimento_st"] }),
     onSuccess: () => {
       startPipelineMonitor(selectedCnpj!, {
         status: "queued",
@@ -195,8 +208,8 @@ export function RessarcimentoTab() {
               Ressarcimento ST
             </div>
             <div className="text-xs text-slate-400 mt-1">
-              Recalcula o ressarcimento com base em C176, agregação por id_agrupado,
-              conversão para unid_ref, Fronteira e E111.
+              Recalcula o ressarcimento com base em C176, agregação por
+              id_agrupado, conversão para unid_ref, Fronteira e E111.
             </div>
           </div>
 
@@ -226,7 +239,9 @@ export function RessarcimentoTab() {
               Itens
             </div>
             <div className="text-lg font-semibold text-slate-100 mt-1">
-              {resumoLoading ? "..." : (resumo?.qtd_itens ?? 0).toLocaleString("pt-BR")}
+              {resumoLoading
+                ? "..."
+                : intlInteger.format(resumo?.qtd_itens ?? 0)}
             </div>
           </div>
           <div className="rounded border border-slate-700 bg-slate-900/50 p-3">
@@ -236,7 +251,7 @@ export function RessarcimentoTab() {
             <div className="text-lg font-semibold text-amber-300 mt-1">
               {resumoLoading
                 ? "..."
-                : (resumo?.pendencias_conversao ?? 0).toLocaleString("pt-BR")}
+                : intlInteger.format(resumo?.pendencias_conversao ?? 0)}
             </div>
           </div>
           <div className="rounded border border-slate-700 bg-slate-900/50 p-3">

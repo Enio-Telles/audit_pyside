@@ -112,20 +112,16 @@ function matchesRule(
       return cellVal.toLowerCase().includes(v.toLowerCase());
     case "maior":
       return (
-        parseFloat(cellVal.replace(",", ".")) >
-        parseFloat(v.replace(",", "."))
+        parseFloat(cellVal.replace(",", ".")) > parseFloat(v.replace(",", "."))
       );
     case "menor":
       return (
-        parseFloat(cellVal.replace(",", ".")) <
-        parseFloat(v.replace(",", "."))
+        parseFloat(cellVal.replace(",", ".")) < parseFloat(v.replace(",", "."))
       );
     case "e_nulo":
       return cellVal === "" || cellVal === "null" || cellVal === "undefined";
     case "nao_e_nulo":
-      return (
-        cellVal !== "" && cellVal !== "null" && cellVal !== "undefined"
-      );
+      return cellVal !== "" && cellVal !== "null" && cellVal !== "undefined";
     default:
       return false;
   }
@@ -416,7 +412,10 @@ export function DataTable({
                         className="px-2 py-2 text-left text-slate-300 font-semibold border-b border-slate-700 truncate select-none cursor-pointer hover:bg-slate-700 transition-colors group relative"
                         style={{
                           width: obterLarguraColuna(columnWidths, h.column.id),
-                          maxWidth: obterLarguraColuna(columnWidths, h.column.id),
+                          maxWidth: obterLarguraColuna(
+                            columnWidths,
+                            h.column.id,
+                          ),
                         }}
                         title={`${h.column.id} - clique para ordenar`}
                         draggable={podeReordenarColunas}
@@ -557,7 +556,10 @@ export function DataTable({
                           key={cell.id}
                           className="px-2 py-1.5 border-b border-slate-800 truncate"
                           style={{
-                            width: obterLarguraColuna(columnWidths, cell.column.id),
+                            width: obterLarguraColuna(
+                              columnWidths,
+                              cell.column.id,
+                            ),
                             maxWidth: obterLarguraColuna(
                               columnWidths,
                               cell.column.id,
@@ -601,7 +603,7 @@ export function DataTable({
           </button>
           <span>
             Pagina {page} / {totalPages} | Linhas filtradas:{" "}
-            {(totalRows ?? 0).toLocaleString("pt-BR")}
+            {intlInteger.format(totalRows ?? 0)}
           </span>
           <button
             onClick={() => onPageChange(page + 1)}
