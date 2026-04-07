@@ -17,6 +17,7 @@ from rich.console import Console
 
 from src.utilitarios.salvar_para_parquet import salvar_para_parquet
 from src.utilitarios.text import remove_accents
+from src.transformacao.auxiliares.logs import log_exception
 
 CURRENT_FILE = Path(__file__).resolve()
 ROOT_DIR = CURRENT_FILE.parent.parent.parent
@@ -117,8 +118,11 @@ def gerar_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         return True
 
     except Exception as exc:
-        ERR_CONSOLE.print(f"[red]Erro fatal no processamento de produtos para {cnpj}:[/red] {exc}")
-        raise
+        # SECURITY CONCERN: To prevent Information Exposure Through an Error Message (CWE-209),
+        # do not output the raw exception to standard error or the user. Log it securely instead.
+        log_exception(exc)
+        ERR_CONSOLE.print(f"[red]Erro fatal no processamento de produtos para {cnpj}. Consulte os logs para mais detalhes.[/red]")
+        raise RuntimeError(f"Erro fatal no processamento de produtos para {cnpj}. Consulte os logs para mais detalhes.") from None
 
 
 if __name__ == "__main__":

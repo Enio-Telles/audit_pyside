@@ -15,3 +15,7 @@
 **Vulnerability:** `src/orquestrador_pipeline.py` leaked raw exception details and full stack traces directly to `stdout` (`rprint`), potentially exposing sensitive internal application structure, paths, and database execution states during exceptions.
 **Learning:** Even CLI utilities or top-level orchestrators must fail securely. Exposing `{e}` or `traceback.format_exc()` on standard output provides attackers with critical footprinting information.
 **Prevention:** Catch blocks should output generic, sanitized error messages to the user while logging the full exception internally using a secure centralized logging utility, such as `transformacao.auxiliares.logs.log_exception`.
+## 2024-04-07 - Prevent Exception Chaining from Leaking Secrets
+**Vulnerability:** When replacing raw exceptions printed to `stderr` with a generic `RuntimeError` wrapper using `raise RuntimeError(...) from exc`, Python's default behavior chains the original exception (`exc`). If this bubbles up to an unhandled context (e.g. CLI top-level), the full original stack trace (and any secrets contained within) will still be printed.
+**Learning:** Exception chaining (`from exc`) defeats the purpose of exception sanitization if the wrapper exception is not explicitly handled and silenced down the line.
+**Prevention:** To fully sanitize an error that must be re-raised to halt execution, always use `raise SanitizedException(...) from None`. This explicitly cuts off the stack trace linkage, preventing CWE-209 Information Exposure.
