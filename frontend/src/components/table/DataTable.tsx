@@ -2,7 +2,9 @@ import {
   useMemo,
   useRef,
   useState,
+  useCallback,
   type MouseEvent as EventoMouseReact,
+  type ReactNode,
 } from "react";
 import {
   useReactTable,
@@ -12,7 +14,25 @@ import {
   type ColumnDef,
   type SortingState,
 } from "@tanstack/react-table";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import type { HighlightRule } from "../../api/types";
+import { TableSkeleton } from "../ui/TableSkeleton";
+import { RowDetailDrawer } from "../ui/RowDetailDrawer";
+import { formatCell } from "./formatCell";
+
+export type TableDensity = "compact" | "normal" | "comfortable";
+
+const densityRowCls: Record<TableDensity, string> = {
+  compact: "py-0.5 px-1 text-[10px]",
+  normal: "py-1 px-2 text-xs",
+  comfortable: "py-2 px-3 text-sm",
+};
+
+const densityRowHeight: Record<TableDensity, number> = {
+  compact: 20,
+  normal: 28,
+  comfortable: 36,
+};
 
 interface DataTableProps {
   columns: string[];
@@ -41,24 +61,13 @@ interface DataTableProps {
   onColumnFilterChange?: (col: string, val: string) => void;
   showColumnFilters?: boolean;
   highlightRules?: HighlightRule[];
-}
-
-const intlInteger = new Intl.NumberFormat("pt-BR");
-const intlDecimal = new Intl.NumberFormat("pt-BR", {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
-
-function formatCell(value: unknown): string {
-  if (value === null || value === undefined) return "";
-  if (Array.isArray(value)) return value.join(" | ");
-  if (typeof value === "number") {
-    // ⚡ Bolt Optimization: Use cached Intl.NumberFormat instances instead of Number.prototype.toLocaleString()
-    // This avoids repeatedly allocating locale data and parsing options on every cell render, improving performance up to ~100x for number formatting.
-    if (Number.isInteger(value)) return intlInteger.format(value);
-    return intlDecimal.format(value);
-  }
-  return String(value);
+  density?: TableDensity;
+  onRowClick?: (row: Record<string, unknown>) => void;
+  onHeaderClick?: (col: string) => void;
+  renderCell?: (col: string, value: unknown, row: Record<string, unknown>) => ReactNode | null;
+  getRowBackground?: (row: Record<string, unknown>, idx: number) => string | undefined;
+  pageSize?: number;
+  showBarCharts?: boolean;
 }
 
 function obterLarguraColuna(
@@ -157,6 +166,13 @@ export function DataTable({
   onColumnFilterChange,
   showColumnFilters,
   highlightRules,
+  density = "normal",
+  onRowClick,
+  onHeaderClick,
+  renderCell,
+  getRowBackground,
+  pageSize = 200,
+  showBarCharts = false,
 }: DataTableProps) {
   const selectable = !!onRowSelect && !!rowKey;
   const shouldAutoHighlight = autoHighlight ?? highlightRows ?? false;
@@ -170,6 +186,9 @@ export function DataTable({
   >({});
   const colunaArrastadaRef = useRef<string | null>(null);
   const momentoUltimaInteracaoCabecalhoRef = useRef(0);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [detailRow, setDetailRow] = useState<Record<string, unknown> | null>(null);
+  const closeDetail = useCallback(() => setDetailRow(null), []);
 
   const effectiveColFilters =
     columnFilters !== undefined ? columnFilters : localColFilters;
@@ -213,6 +232,25 @@ export function DataTable({
     return ordemBaseColunas.filter((coluna) => !hiddenColumns.has(coluna));
   }, [hiddenColumns, ordemBaseColunas]);
 
+  const colRanges = useMemo(() => {
+    if (!showBarCharts) return {} as Record<string, { min: number; max: number }>;
+    const ranges: Record<string, { min: number; max: number }> = {};
+    for (const col of visibleCols) {
+      let min = Infinity;
+      let max = -Infinity;
+      for (const row of rows) {
+        const v = row[col];
+        const n = typeof v === "number" ? v : typeof v === "string" ? parseFloat(v) : NaN;
+        if (isFinite(n)) {
+          if (n < min) min = n;
+          if (n > max) max = n;
+        }
+      }
+      if (isFinite(min) && min !== max) ranges[col] = { min, max };
+    }
+    return ranges;
+  }, [showBarCharts, rows, visibleCols]);
+
   const colDefs = useMemo<ColumnDef<Record<string, unknown>>[]>(
     () =>
       visibleCols.map((col) => ({
@@ -236,6 +274,20 @@ export function DataTable({
     manualPagination: true,
   });
 
+  const tableRows = table.getRowModel().rows;
+  const rowVirtualizer = useVirtualizer({
+    count: tableRows.length,
+    getScrollElement: () => scrollContainerRef.current,
+    estimateSize: () => densityRowHeight[density],
+    overscan: 10,
+  });
+  const virtualItems = rowVirtualizer.getVirtualItems();
+  const paddingTop = virtualItems.length > 0 ? virtualItems[0].start : 0;
+  const paddingBottom =
+    rowVirtualizer.getTotalSize() - (virtualItems.at(-1)?.end ?? 0);
+  const colSpanTotal =
+    visibleCols.length + 1 + (selectable ? 1 : 0);
+
   const handleHeaderClick = (colId: string) => {
     if (isServerSort) {
       const newDesc = sortBy === colId ? !(sortDesc ?? false) : false;
@@ -250,6 +302,7 @@ export function DataTable({
         setLocalSort([]);
       }
     }
+    onHeaderClick?.(colId);
   };
 
   const getSortIcon = (colId: string): string => {
@@ -349,11 +402,9 @@ export function DataTable({
 
   return (
     <div className="flex flex-col h-full">
-      <div className="overflow-auto flex-1">
+      <div ref={scrollContainerRef} className="overflow-auto flex-1">
         {loading ? (
-          <div className="flex items-center justify-center h-32 text-slate-400">
-            Carregando...
-          </div>
+          <TableSkeleton rows={8} cols={Math.min(visibleCols.length || 5, 8)} />
         ) : (
           <table
             className="w-full border-collapse text-xs"
@@ -483,7 +534,14 @@ export function DataTable({
               )}
             </thead>
             <tbody>
-              {table.getRowModel().rows.map((row, idx) => {
+              {paddingTop > 0 && (
+                <tr>
+                  <td style={{ height: paddingTop }} colSpan={colSpanTotal} />
+                </tr>
+              )}
+              {virtualItems.map((vi) => {
+                const row = tableRows[vi.index];
+                const idx = vi.index;
                 const tipoOp = row.original["Tipo_operacao"] as
                   | string
                   | undefined;
@@ -511,25 +569,31 @@ export function DataTable({
                       : idx % 2 === 0
                         ? "#0f1b33"
                         : "#0a1628";
+                const customBg = getRowBackground?.(row.original, idx);
+                const resolvedBg = customBg ?? bg;
+                const cellCls = densityRowCls[density];
                 return (
                   <tr
                     key={row.id}
+                    data-index={vi.index}
                     style={{
-                      background: bg,
+                      background: resolvedBg,
                       outline: isSelected
                         ? "1px solid rgba(59,130,246,0.5)"
                         : undefined,
-                      cursor: selectable ? "pointer" : undefined,
+                      cursor: selectable || onRowClick ? "pointer" : undefined,
                     }}
                     className="hover:brightness-125 transition-all"
                     onClick={
                       selectable
                         ? () => onRowSelect?.(rowKeyVal, !isSelected)
-                        : undefined
+                        : onRowClick
+                          ? () => { setDetailRow(row.original); onRowClick(row.original); }
+                          : undefined
                     }
                   >
                     {selectable && (
-                      <td className="px-2 py-1.5 border-b border-slate-800 text-center">
+                      <td className={`${cellCls} border-b border-slate-800 text-center`} style={{ width: 36 }}>
                         <input
                           type="checkbox"
                           aria-label={`Selecionar linha ${rowKeyVal}`}
@@ -544,18 +608,29 @@ export function DataTable({
                         />
                       </td>
                     )}
-                    <td className="px-2 py-1.5 text-slate-500 text-right border-b border-slate-800">
-                      {(page - 1) * 200 + idx + 1}
+                    <td className={`${cellCls} text-slate-500 text-right border-b border-slate-800`} style={{ width: 40 }}>
+                      {(page - 1) * pageSize + idx + 1}
                     </td>
                     {row.getVisibleCells().map((cell) => {
                       const cellColor = getCellHighlightColor(
                         cell.column.id,
                         row.original,
                       );
+                      const customContent = renderCell
+                        ? renderCell(cell.column.id, cell.getValue(), row.original)
+                        : null;
+                      const barRange = showBarCharts ? colRanges[cell.column.id] : undefined;
+                      const rawVal = cell.getValue();
+                      const numVal = barRange
+                        ? (typeof rawVal === "number" ? rawVal : typeof rawVal === "string" ? parseFloat(rawVal) : NaN)
+                        : NaN;
+                      const barPct = (barRange && isFinite(numVal))
+                        ? Math.max(0, Math.min(100, ((numVal - barRange.min) / (barRange.max - barRange.min)) * 100))
+                        : null;
                       return (
                         <td
                           key={cell.id}
-                          className="px-2 py-1.5 border-b border-slate-800 truncate"
+                          className={`${cellCls} border-b border-slate-800 truncate${barPct !== null ? " relative overflow-hidden" : ""}`}
                           style={{
                             width: obterLarguraColuna(columnWidths, cell.column.id),
                             maxWidth: obterLarguraColuna(
@@ -564,18 +639,33 @@ export function DataTable({
                             ),
                             background: cellColor ?? undefined,
                           }}
-                          title={formatCell(cell.getValue())}
+                          title={customContent == null ? formatCell(cell.getValue()) : undefined}
                         >
-                          {flexRender(
-                            cell.column.columnDef.cell,
-                            cell.getContext(),
-                          )}
+                          {barPct !== null && customContent == null ? (
+                            <>
+                              <div
+                                className="absolute inset-y-0 left-0 bg-blue-500/20 pointer-events-none"
+                                style={{ width: `${barPct}%` }}
+                              />
+                              <span className="relative">{formatCell(rawVal)}</span>
+                            </>
+                          ) : customContent != null
+                            ? customContent
+                            : flexRender(
+                                cell.column.columnDef.cell,
+                                cell.getContext(),
+                              )}
                         </td>
                       );
                     })}
                   </tr>
                 );
               })}
+              {paddingBottom > 0 && (
+                <tr>
+                  <td style={{ height: paddingBottom }} colSpan={colSpanTotal} />
+                </tr>
+              )}
             </tbody>
           </table>
         )}
@@ -621,6 +711,7 @@ export function DataTable({
           </button>
         </div>
       )}
+      <RowDetailDrawer row={detailRow} onClose={closeDetail} />
     </div>
   );
 }

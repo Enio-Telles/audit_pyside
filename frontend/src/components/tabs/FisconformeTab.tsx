@@ -1669,7 +1669,7 @@ export function FisconformeTab() {
             onDraftChange={updateDraft}
             onAuditorChange={updateAuditor}
             onPdfChange={setPdfFile}
-            onSaveDraft={persistCurrentDsf}
+            onSaveDraft={async () => { await persistCurrentDsf(); }}
             onConsultar={handleConsultar}
           />
         )}

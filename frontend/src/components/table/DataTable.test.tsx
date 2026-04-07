@@ -2,6 +2,28 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { vi } from "vitest";
 import { DataTable } from "./DataTable";
 
+vi.mock("@tanstack/react-virtual", () => ({
+  useVirtualizer: (opts: {
+    count: number;
+    estimateSize: () => number;
+    overscan?: number;
+  }) => {
+    const size = opts.estimateSize();
+    const items = Array.from({ length: opts.count }, (_, i) => ({
+      index: i,
+      start: i * size,
+      end: (i + 1) * size,
+      size,
+      key: i,
+      lane: 0,
+    }));
+    return {
+      getVirtualItems: () => items,
+      getTotalSize: () => opts.count * size,
+    };
+  },
+}));
+
 describe("DataTable", () => {
   it("respeita a ordem e a largura configuradas para as colunas", () => {
     const { container } = render(

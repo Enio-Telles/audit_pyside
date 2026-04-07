@@ -1,12 +1,20 @@
 import { useMemo, useState } from "react";
+import * as XLSX from "xlsx";
 import { useQuery } from "@tanstack/react-query";
 import { parquetApi, cnpjApi } from "../../api/client";
 import { useAppStore } from "../../store/appStore";
 import { DataTable } from "../table/DataTable";
+import type { TableDensity } from "../table/DataTable";
 import { FilterBar } from "../table/FilterBar";
 import { ColumnToggle } from "../table/ColumnToggle";
 import { HighlightRulesPanel } from "../table/HighlightRulesPanel";
 import { usePreferenciasColunas } from "../../hooks/usePreferenciasColunas";
+import { useAutoHighlight } from "../../hooks/useAutoHighlight";
+import type { AutoHighlightMode } from "../../hooks/useAutoHighlight";
+import { SummaryCards } from "../ui/SummaryCards";
+import { DensityToggle } from "../ui/DensityToggle";
+import { ColumnStatsPanel } from "../ui/ColumnStatsPanel";
+import { FilterPresets } from "../ui/FilterPresets";
 
 const CHAVE_PREFERENCIAS_COLUNAS_CONSULTA = "consulta_colunas_v1";
 
@@ -21,8 +29,8 @@ export function ConsultaTab() {
     consultaVisibleCols,
     consultaPage,
     setConsultaPage,
-    consultaSort,
-    setConsultaSort,
+    consultaSortList,
+    setConsultaSortList,
     consultaColumnFilters,
     setConsultaColumnFilter,
     clearConsultaColumnFilters,
@@ -35,11 +43,22 @@ export function ConsultaTab() {
   } = useAppStore();
 
   const [showColFilters, setShowColFilters] = useState(false);
+  const [density, setDensity] = useState<TableDensity>("normal");
+  const [statsCol, setStatsCol] = useState<string | null>(null);
+  const [autoHighlightMode, setAutoHighlightMode] = useState<AutoHighlightMode | null>(null);
+  const [showBarCharts, setShowBarCharts] = useState(false);
 
   const { data: schema } = useQuery({
     queryKey: ['schema', selectedCnpj, selectedFile?.path],
     queryFn: () => cnpjApi.getSchema(selectedCnpj!, selectedFile!.path),
     enabled: !!selectedCnpj && !!selectedFile,
+  });
+
+  const { data: metadata } = useQuery({
+    queryKey: ['parquet-metadata', selectedFile?.path],
+    queryFn: () => parquetApi.metadata(selectedFile!.path),
+    enabled: !!selectedFile,
+    staleTime: 5 * 60_000,
   });
 
   const allCols = useMemo(() => schema?.columns ?? [], [schema?.columns]);
@@ -67,7 +86,7 @@ export function ConsultaTab() {
       allFilters,
       visibleCols,
       consultaPage,
-      consultaSort,
+      consultaSortList,
     ],
     queryFn: () =>
       parquetApi.query({
@@ -76,12 +95,26 @@ export function ConsultaTab() {
         visible_columns: visibleCols,
         page: consultaPage,
         page_size: 200,
-        sort_by: consultaSort?.col,
-        sort_desc: consultaSort?.desc,
+        sort_by: consultaSortList[0]?.col,
+        sort_desc: consultaSortList[0]?.desc,
+        sort_by_list: consultaSortList.map((s) => s.col),
       }),
     enabled: !!selectedFile,
     placeholderData: (prev) => prev,
   });
+
+  const autoHighlightRules = useAutoHighlight(
+    visibleCols,
+    data?.rows ?? [],
+    autoHighlightMode ?? "nulls",
+  );
+  const effectiveHighlightRules = useMemo(
+    () =>
+      autoHighlightMode !== null
+        ? [...autoHighlightRules, ...consultaHighlightRules]
+        : consultaHighlightRules,
+    [autoHighlightMode, autoHighlightRules, consultaHighlightRules],
+  );
 
   const btnCls =
     'px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-colors';
@@ -117,6 +150,15 @@ export function ConsultaTab() {
         rules={consultaHighlightRules}
         onAdd={addConsultaHighlightRule}
         onRemove={removeConsultaHighlightRule}
+      />
+
+      {/* Filter presets */}
+      <FilterPresets
+        columns={allCols}
+        onApply={(f) => {
+          addConsultaFilter(f);
+          setConsultaPage(1);
+        }}
       />
 
       {/* Toolbar */}
@@ -157,26 +199,91 @@ export function ConsultaTab() {
           </button>
         )}
 
+        {/* Auto-highlight toggle */}
+        <button
+          className={
+            btnCls +
+            (autoHighlightMode !== null
+              ? ' bg-amber-700 hover:bg-amber-600 text-white'
+              : ' bg-slate-700 hover:bg-slate-600 text-slate-200')
+          }
+          title={
+            autoHighlightMode === null
+              ? 'Ativar destaque automático de nulos'
+              : autoHighlightMode === 'nulls'
+              ? 'Modo: nulos — clique para ativar destaque de outliers'
+              : 'Modo: nulos + outliers — clique para desativar'
+          }
+          onClick={() => {
+            setAutoHighlightMode((prev) =>
+              prev === null ? 'nulls' : prev === 'nulls' ? 'all' : null,
+            );
+          }}
+        >
+          {autoHighlightMode === null
+            ? 'Auto ✦'
+            : autoHighlightMode === 'nulls'
+            ? 'Auto ✦ nulos'
+            : 'Auto ✦ nulos+outliers'}
+        </button>
+
         <button
           className={btnCls + ' bg-slate-700 hover:bg-slate-600 text-slate-200'}
-          onClick={() => {
-            if (!data) return;
-            const csv = [
-              visibleCols.join(","),
-              ...data.rows.map((r) =>
-                visibleCols.map((c) => JSON.stringify(r[c] ?? "")).join(","),
-              ),
-            ].join("\n");
-            const blob = new Blob([csv], { type: "text/csv" });
+          onClick={async () => {
+            if (!selectedFile) return;
+            const blob = await parquetApi.exportCsv({
+              path: selectedFile.path,
+              filters: allFilters,
+              visible_columns: visibleCols,
+              sort_by: consultaSortList[0]?.col,
+              sort_desc: consultaSortList[0]?.desc,
+              sort_by_list: consultaSortList.map((s) => s.col),
+            });
+            const url = URL.createObjectURL(blob);
             const a = document.createElement("a");
-            a.href = URL.createObjectURL(blob);
-            a.download = "export.csv";
+            a.href = url;
+            a.download = `${selectedFile.name.replace(/\.parquet$/, "")}.csv`;
             a.click();
+            URL.revokeObjectURL(url);
           }}
         >
           Exportar CSV
         </button>
+
+        <button
+          className={btnCls + ' bg-emerald-800 hover:bg-emerald-700 text-slate-200'}
+          onClick={() => {
+            if (!data || !data.rows.length) return;
+            const ws = XLSX.utils.json_to_sheet(
+              data.rows.map((r) =>
+                Object.fromEntries(visibleCols.map((c) => [c, r[c] ?? ""])),
+              ),
+            );
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Dados");
+            const fname = selectedFile?.name.replace(/\.parquet$/, "") ?? "export";
+            XLSX.writeFile(wb, `${fname}.xlsx`);
+          }}
+        >
+          Exportar XLSX
+        </button>
+
+        <DensityToggle value={density} onChange={setDensity} />
+        <button
+          className={btnCls + (showBarCharts ? ' bg-blue-700 text-white' : ' bg-slate-700 hover:bg-slate-600 text-slate-300')}
+          title="Barras inline em células numéricas"
+          onClick={() => setShowBarCharts((v) => !v)}
+        >
+          ▦ Barras
+        </button>
       </div>
+
+      {/* Summary cards */}
+      <SummaryCards
+        totalRows={data?.total_rows ?? 0}
+        currentPageRows={data?.rows?.length ?? 0}
+        loading={isLoading}
+      />
 
       {/* Table */}
       <div className="flex-1 overflow-hidden border border-slate-700 rounded">
@@ -194,10 +301,10 @@ export function ConsultaTab() {
           onPageChange={(p) => {
             setConsultaPage(p);
           }}
-          sortBy={consultaSort?.col}
-          sortDesc={consultaSort?.desc}
+          sortBy={consultaSortList[0]?.col}
+          sortDesc={consultaSortList[0]?.desc}
           onSortChange={(col, desc) => {
-            setConsultaSort({ col, desc });
+            setConsultaSortList([{ col, desc }]);
             setConsultaPage(1);
           }}
           hiddenColumns={consultaHiddenCols}
@@ -207,9 +314,18 @@ export function ConsultaTab() {
             setConsultaPage(1);
           }}
           showColumnFilters={showColFilters}
-          highlightRules={consultaHighlightRules}
+          highlightRules={effectiveHighlightRules}
+          density={density}
+          onHeaderClick={setStatsCol}
+          showBarCharts={showBarCharts}
         />
       </div>
+
+      <ColumnStatsPanel
+        col={statsCol}
+        metadata={metadata ?? null}
+        onClose={() => setStatsCol(null)}
+      />
     </div>
   );
 }

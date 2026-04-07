@@ -3,6 +3,7 @@ import type {
   CNPJRecord,
   ParquetFile,
   PageResult,
+  ParquetMetadata,
   FilterItem,
   PipelineStatus,
   SqlFile,
@@ -47,7 +48,25 @@ export const parquetApi = {
     page_size: number;
     sort_by?: string;
     sort_desc?: boolean;
+    sort_by_list?: string[];
   }) => api.post<PageResult>("/parquet/query", payload).then((r) => r.data),
+
+  metadata: (path: string) =>
+    api
+      .get<ParquetMetadata>("/parquet/metadata", { params: { path } })
+      .then((r) => r.data),
+
+  exportCsv: (payload: {
+    path: string;
+    filters: FilterItem[];
+    visible_columns: string[];
+    sort_by?: string;
+    sort_desc?: boolean;
+    sort_by_list?: string[];
+  }) =>
+    api
+      .post("/parquet/export-csv", payload, { responseType: "blob" })
+      .then((r) => r.data as Blob),
 };
 
 // ---- Pipeline ----
@@ -59,10 +78,7 @@ export const pipelineApi = {
     data_limite?: string;
     incluir_extracao?: boolean;
     incluir_processamento?: boolean;
-  }) =>
-    api
-      .post("/pipeline/run", payload)
-      .then((r) => r.data),
+  }) => api.post("/pipeline/run", payload).then((r) => r.data),
   status: (cnpj: string) =>
     api.get<PipelineStatus>(`/pipeline/status/${cnpj}`).then((r) => r.data),
 };
@@ -154,7 +170,9 @@ export const ressarcimentoApi = {
       })
       .then((r) => r.data),
   resumo: (cnpj: string) =>
-    api.get<RessarcimentoResumo>(`/ressarcimento/${cnpj}/resumo`).then((r) => r.data),
+    api
+      .get<RessarcimentoResumo>(`/ressarcimento/${cnpj}/resumo`)
+      .then((r) => r.data),
 };
 
 // ---- Aggregation ----
@@ -180,12 +198,21 @@ export const sqlApi = {
     api
       .get<{ content: string }>("/sql/file", { params: { path } })
       .then((r) => r.data),
-  execute: (sql: string, cnpj?: string, params?: Record<string, string>) =>
+  execute: (
+    sql: string,
+    cnpj?: string,
+    params?: Record<string, string>,
+    page = 1,
+    page_size = 200,
+  ) =>
     api
       .post<{
         rows: Record<string, unknown>[];
         count: number;
-      }>("/sql/execute", { sql, cnpj, params })
+        page: number;
+        page_size: number;
+        total_pages: number;
+      }>("/sql/execute", { sql, cnpj, params, page, page_size })
       .then((r) => r.data),
 };
 

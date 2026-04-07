@@ -1,12 +1,12 @@
-import { create } from 'zustand';
+import { create } from "zustand";
 import type {
   FilterItem,
   HighlightRule,
   ParquetFile,
   PipelineStatus,
-} from '../api/types';
+} from "../api/types";
 
-export type AppMode = 'audit' | 'fisconforme' | null;
+export type AppMode = "audit" | "fisconforme" | null;
 
 interface AppStore {
   // App mode (null = landing page)
@@ -38,6 +38,11 @@ interface AppStore {
   // Consulta tab state — sort
   consultaSort: { col: string; desc: boolean } | null;
   setConsultaSort: (s: { col: string; desc: boolean } | null) => void;
+  // Multi-sort: all active sorts (primary first)
+  consultaSortList: { col: string; desc: boolean }[];
+  setConsultaSortList: (list: { col: string; desc: boolean }[]) => void;
+  addConsultaSortColumn: (col: string, desc?: boolean) => void;
+  removeConsultaSortColumn: (col: string) => void;
 
   // Consulta tab state — inline column filters (server-side)
   consultaColumnFilters: Record<string, string>;
@@ -62,10 +67,7 @@ interface AppStore {
   pipelineWatchCnpj: string | null;
   pipelineStatus: PipelineStatus | null;
   pipelinePolling: boolean;
-  startPipelineMonitor: (
-    cnpj: string,
-    status: PipelineStatus | null,
-  ) => void;
+  startPipelineMonitor: (cnpj: string, status: PipelineStatus | null) => void;
   updatePipelineStatus: (status: PipelineStatus | null) => void;
   stopPipelineMonitor: () => void;
 }
@@ -75,7 +77,9 @@ export const useAppStore = create<AppStore>((set) => ({
   setAppMode: (mode) => set({ appMode: mode }),
 
   selectedCnpj: null,
-  setSelectedCnpj: (cnpj) =>
+  setSelectedCnpj: (cnpj) => {
+    if (cnpj !== null) localStorage.setItem("audit_cnpj", cnpj);
+    else localStorage.removeItem("audit_cnpj");
     set({
       selectedCnpj: cnpj,
       selectedFile: null,
@@ -83,9 +87,11 @@ export const useAppStore = create<AppStore>((set) => ({
       consultaFilters: [],
       consultaVisibleCols: [],
       consultaSort: null,
+      consultaSortList: [],
       consultaColumnFilters: {},
       consultaHiddenCols: new Set<string>(),
-    }),
+    });
+  },
 
   selectedFile: null,
   setSelectedFile: (file) =>
@@ -95,12 +101,22 @@ export const useAppStore = create<AppStore>((set) => ({
       consultaFilters: [],
       consultaVisibleCols: [],
       consultaSort: null,
+      consultaSortList: [],
       consultaColumnFilters: {},
       consultaHiddenCols: new Set<string>(),
     }),
 
-  activeTab: 'consulta',
-  setActiveTab: (tab) => set({ activeTab: tab }),
+  activeTab: ((): string => {
+    try {
+      return localStorage.getItem("audit_tab") ?? "consulta";
+    } catch {
+      return "consulta";
+    }
+  })(),
+  setActiveTab: (tab) => {
+    try { localStorage.setItem("audit_tab", tab); } catch { /* noop */ }
+    set({ activeTab: tab });
+  },
 
   consultaFilters: [],
   addConsultaFilter: (f) =>
@@ -118,7 +134,24 @@ export const useAppStore = create<AppStore>((set) => ({
   setConsultaPage: (p) => set({ consultaPage: p }),
 
   consultaSort: null,
-  setConsultaSort: (s) => set({ consultaSort: s }),
+  setConsultaSort: (s) => set((prev) => ({
+    consultaSort: s,
+    consultaSortList: s ? [s, ...prev.consultaSortList.filter((x) => x.col !== s.col)] : [],
+  })),
+
+  consultaSortList: [],
+  setConsultaSortList: (list) => set({ consultaSortList: list, consultaSort: list[0] ?? null }),
+  addConsultaSortColumn: (col, desc = false) =>
+    set((s) => {
+      const filtered = s.consultaSortList.filter((x) => x.col !== col);
+      const next = [...filtered, { col, desc }];
+      return { consultaSortList: next, consultaSort: next[0] ?? null };
+    }),
+  removeConsultaSortColumn: (col) =>
+    set((s) => {
+      const next = s.consultaSortList.filter((x) => x.col !== col);
+      return { consultaSortList: next, consultaSort: next[0] ?? null };
+    }),
 
   consultaColumnFilters: {},
   setConsultaColumnFilter: (col, val) =>
@@ -135,8 +168,7 @@ export const useAppStore = create<AppStore>((set) => ({
       else next.add(col);
       return { consultaHiddenCols: next };
     }),
-  resetConsultaHiddenCols: () =>
-    set({ consultaHiddenCols: new Set<string>() }),
+  resetConsultaHiddenCols: () => set({ consultaHiddenCols: new Set<string>() }),
 
   consultaHighlightRules: [],
   addConsultaHighlightRule: (r) =>
@@ -167,7 +199,7 @@ export const useAppStore = create<AppStore>((set) => ({
     set({
       pipelineStatus: status,
       pipelinePolling:
-        status?.status === 'done' || status?.status === 'error' ? false : true,
+        status?.status === "done" || status?.status === "error" ? false : true,
     }),
   stopPipelineMonitor: () =>
     set({

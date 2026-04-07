@@ -27,7 +27,10 @@ function RessarcimentoGrid({ cnpj, subTab }: { cnpj: string; subTab: SubTab }) {
     placeholderData: (prev) => prev,
   });
 
-  const colunasDisponiveis = useMemo(() => data?.columns ?? [], [data?.columns]);
+  const colunasDisponiveis = useMemo(
+    () => data?.columns ?? [],
+    [data?.columns],
+  );
   const rows = useMemo(() => {
     const termo = search.toLowerCase();
     if (!termo) return data?.rows ?? [];
@@ -46,7 +49,10 @@ function RessarcimentoGrid({ cnpj, subTab }: { cnpj: string; subTab: SubTab }) {
     definirOrdemColunas,
     definirLarguraColuna,
     redefinirPreferenciasColunas,
-  } = usePreferenciasColunas(`ressarcimento_${subTab}_colunas_v1`, colunasDisponiveis);
+  } = usePreferenciasColunas(
+    `ressarcimento_${subTab}_colunas_v1`,
+    colunasDisponiveis,
+  );
 
   const btnCls =
     "px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-colors";
@@ -58,7 +64,9 @@ function RessarcimentoGrid({ cnpj, subTab }: { cnpj: string; subTab: SubTab }) {
       <div className="px-3 py-2 border-b border-slate-700">
         <div className="flex gap-2 items-center flex-wrap">
           <button
-            className={btnCls + " bg-slate-700 hover:bg-slate-600 text-slate-200"}
+            className={
+              btnCls + " bg-slate-700 hover:bg-slate-600 text-slate-200"
+            }
             onClick={() => refetch()}
             disabled={isLoading}
           >
@@ -147,7 +155,8 @@ export function RessarcimentoTab() {
   }, [pipelineStatus?.status, pipelineWatchCnpj, queryClient, selectedCnpj]);
 
   const processMutation = useMutation({
-    mutationFn: () => pipelineApi.run({ cnpj: selectedCnpj!, tabelas: ["ressarcimento_st"] }),
+    mutationFn: () =>
+      pipelineApi.run({ cnpj: selectedCnpj!, tabelas: ["ressarcimento_st"] }),
     onSuccess: () => {
       startPipelineMonitor(selectedCnpj!, {
         status: "queued",
@@ -195,8 +204,8 @@ export function RessarcimentoTab() {
               Ressarcimento ST
             </div>
             <div className="text-xs text-slate-400 mt-1">
-              Recalcula o ressarcimento com base em C176, agregação por id_agrupado,
-              conversão para unid_ref, Fronteira e E111.
+              Recalcula o ressarcimento com base em C176, agregação por
+              id_agrupado, conversão para unid_ref, Fronteira e E111.
             </div>
           </div>
 
@@ -226,7 +235,9 @@ export function RessarcimentoTab() {
               Itens
             </div>
             <div className="text-lg font-semibold text-slate-100 mt-1">
-              {resumoLoading ? "..." : (resumo?.qtd_itens ?? 0).toLocaleString("pt-BR")}
+              {resumoLoading
+                ? "..."
+                : (resumo?.qtd_itens ?? 0).toLocaleString("pt-BR")}
             </div>
           </div>
           <div className="rounded border border-slate-700 bg-slate-900/50 p-3">

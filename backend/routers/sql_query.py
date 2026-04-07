@@ -31,6 +31,8 @@ class SqlRequest(BaseModel):
     sql: str
     cnpj: str | None = None
     params: dict[str, str] = {}
+    page: int = 1
+    page_size: int = 200
 
 
 @router.post("/execute")
@@ -39,8 +41,19 @@ def execute_sql(req: SqlRequest):
     try:
         svc = SqlService()
         result = svc.executar_sql(req.sql, params=req.params, cnpj=req.cnpj)
-        rows = [_safe_value(dict(row)) for row in (result or [])]
-        return {"rows": rows, "count": len(rows)}
+        all_rows = [_safe_value(dict(row)) for row in (result or [])]
+        total_count = len(all_rows)
+        page_size = min(max(1, req.page_size), 2000)
+        offset = (max(1, req.page) - 1) * page_size
+        rows = all_rows[offset : offset + page_size]
+        total_pages = max(1, math.ceil(total_count / page_size))
+        return {
+            "rows": rows,
+            "count": total_count,
+            "page": req.page,
+            "page_size": page_size,
+            "total_pages": total_pages,
+        }
     except Exception as exc:
         raise HTTPException(500, f"Erro SQL: {exc}") from exc
 

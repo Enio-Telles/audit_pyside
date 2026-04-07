@@ -43,10 +43,10 @@ def gerar_ressarcimento_st_conciliacao(cnpj: str, pasta_cnpj: Path | None = None
     contagens = (
         df_item.group_by("mes_ref").agg(
             pl.len().alias("qtd_itens_c176"),
-            pl.sum(pl.when(pl.col("status_calculo") == "pendente_conversao").then(1).otherwise(0)).alias("qtd_pendencias_conversao"),
-            pl.sum(pl.when(pl.col("status_calculo") == "parcial_pos_2022").then(1).otherwise(0)).alias("qtd_parcial_pos_2022"),
-            pl.sum(pl.when(pl.col("possui_st_calc_ate_2022")).then(1).otherwise(0)).alias("qtd_itens_com_st_calc"),
-            pl.sum(pl.when(pl.col("possui_fronteira")).then(1).otherwise(0)).alias("qtd_itens_com_fronteira"),
+            pl.when(pl.col("status_calculo") == "pendente_conversao").then(1).otherwise(0).sum().alias("qtd_pendencias_conversao"),
+            pl.when(pl.col("status_calculo") == "parcial_pos_2022").then(1).otherwise(0).sum().alias("qtd_parcial_pos_2022"),
+            pl.when(pl.col("possui_st_calc_ate_2022")).then(1).otherwise(0).sum().alias("qtd_itens_com_st_calc"),
+            pl.when(pl.col("possui_fronteira")).then(1).otherwise(0).sum().alias("qtd_itens_com_fronteira"),
         )
         .with_columns(
             pl.when(pl.col("qtd_itens_c176") > 0)

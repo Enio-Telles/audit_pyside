@@ -27,6 +27,15 @@ export interface PageResult {
   rows: Record<string, unknown>[];
 }
 
+export interface ParquetMetadata {
+  path: string;
+  total_rows: number;
+  columns: string[];
+  dtypes: Record<string, string>;
+  sample: Record<string, unknown>[];
+  numeric_stats: Record<string, { min: number | null; max: number | null; mean: number | null; null_count: number }>;
+}
+
 export interface PipelineStatus {
   status: "idle" | "queued" | "running" | "done" | "error";
   progresso: string[];

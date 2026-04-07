@@ -1,18 +1,44 @@
-﻿import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+﻿import { lazy, Suspense } from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useAppStore } from "./store/appStore";
 import { LeftPanel } from "./components/layout/LeftPanel";
-import { ConsultaTab } from "./components/tabs/ConsultaTab";
-import { ConsultaSqlTab } from "./components/tabs/ConsultaSqlTab";
-import { AgregacaoTab } from "./components/tabs/AgregacaoTab";
-import { ConversaoTab } from "./components/tabs/ConversaoTab";
-import { EstoqueTab } from "./components/tabs/EstoqueTab";
-import { LogsTab } from "./components/tabs/LogsTab";
 import { LandingPage } from "./components/LandingPage";
-import { FisconformeTab } from "./components/tabs/FisconformeTab";
-import { RessarcimentoTab } from "./components/tabs/RessarcimentoTab";
+import { useUrlSync } from "./hooks/useUrlSync";
+
+const ConsultaTab = lazy(() =>
+  import("./components/tabs/ConsultaTab").then((m) => ({ default: m.ConsultaTab }))
+);
+const ConsultaSqlTab = lazy(() =>
+  import("./components/tabs/ConsultaSqlTab").then((m) => ({ default: m.ConsultaSqlTab }))
+);
+const AgregacaoTab = lazy(() =>
+  import("./components/tabs/AgregacaoTab").then((m) => ({ default: m.AgregacaoTab }))
+);
+const ConversaoTab = lazy(() =>
+  import("./components/tabs/ConversaoTab").then((m) => ({ default: m.ConversaoTab }))
+);
+const EstoqueTab = lazy(() =>
+  import("./components/tabs/EstoqueTab").then((m) => ({ default: m.EstoqueTab }))
+);
+const LogsTab = lazy(() =>
+  import("./components/tabs/LogsTab").then((m) => ({ default: m.LogsTab }))
+);
+const FisconformeTab = lazy(() =>
+  import("./components/tabs/FisconformeTab").then((m) => ({ default: m.FisconformeTab }))
+);
+const RessarcimentoTab = lazy(() =>
+  import("./components/tabs/RessarcimentoTab").then((m) => ({ default: m.RessarcimentoTab }))
+);
 
 const queryClient = new QueryClient({
-  defaultOptions: { queries: { retry: 1, staleTime: 30_000 } },
+  defaultOptions: {
+    queries: {
+      retry: 1,
+      staleTime: 30_000,
+      gcTime: 5 * 60_000,
+      refetchOnWindowFocus: false,
+    },
+  },
 });
 
 const TABS = [
@@ -26,21 +52,36 @@ const TABS = [
 ];
 
 function MainContent() {
-  const { activeTab, setActiveTab, leftPanelVisible, toggleLeftPanel, selectedFile, selectedCnpj, appMode, setAppMode } = useAppStore();
+  useUrlSync();
+  const {
+    activeTab,
+    setActiveTab,
+    leftPanelVisible,
+    toggleLeftPanel,
+    selectedFile,
+    selectedCnpj,
+    appMode,
+    setAppMode,
+  } = useAppStore();
 
   if (appMode === null) {
     return <LandingPage onSelect={setAppMode} />;
   }
 
-  if (appMode === 'fisconforme') {
+  if (appMode === "fisconforme") {
     return (
-      <div className="flex h-screen overflow-hidden" style={{ background: "#0a1628" }}>
+      <div
+        className="flex h-screen overflow-hidden"
+        style={{ background: "#0a1628" }}
+      >
         <div className="flex flex-col flex-1 overflow-hidden">
           <div
             className="flex items-center justify-between px-3 py-1 border-b border-slate-700"
             style={{ background: "#0d1f3c", minHeight: 32 }}
           >
-            <span className="text-xs text-slate-400 font-semibold">Fisconforme — Análise em Lote</span>
+            <span className="text-xs text-slate-400 font-semibold">
+              Fisconforme — Análise em Lote
+            </span>
             <button
               onClick={() => setAppMode(null)}
               className="text-xs text-blue-400 hover:text-blue-200 px-2 py-1 rounded bg-slate-800 border border-slate-700"
@@ -49,7 +90,15 @@ function MainContent() {
             </button>
           </div>
           <div className="flex-1 overflow-hidden">
-            <FisconformeTab />
+            <Suspense
+              fallback={
+                <div className="flex items-center justify-center h-full text-slate-500 text-sm">
+                  Carregando...
+                </div>
+              }
+            >
+              <FisconformeTab />
+            </Suspense>
           </div>
         </div>
       </div>
@@ -57,7 +106,10 @@ function MainContent() {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden" style={{ background: "#0a1628" }}>
+    <div
+      className="flex h-screen overflow-hidden"
+      style={{ background: "#0a1628" }}
+    >
       {/* Left panel */}
       {leftPanelVisible && <LeftPanel />}
 
@@ -72,12 +124,7 @@ function MainContent() {
             {selectedCnpj && (
               <>
                 CNPJ: {selectedCnpj}
-                {selectedFile && (
-                  <>
-                    {" "}
-                    | Arquivo: {selectedFile.name}
-                  </>
-                )}
+                {selectedFile && <> | Arquivo: {selectedFile.name}</>}
               </>
             )}
           </div>
@@ -85,7 +132,9 @@ function MainContent() {
             onClick={toggleLeftPanel}
             className="text-xs text-blue-400 hover:text-blue-200 px-2 py-1 rounded bg-slate-800 border border-slate-700"
           >
-            {leftPanelVisible ? "<< Ocultar Painel Lateral" : ">> Mostrar Painel Lateral"}
+            {leftPanelVisible
+              ? "<< Ocultar Painel Lateral"
+              : ">> Mostrar Painel Lateral"}
           </button>
           <button
             onClick={() => setAppMode(null)}
@@ -117,14 +166,25 @@ function MainContent() {
         </div>
 
         {/* Tab content */}
-        <div className="flex-1 overflow-hidden" style={{ background: "#0a1628" }}>
-          {activeTab === "consulta" && <ConsultaTab />}
-          {activeTab === "sql" && <ConsultaSqlTab />}
-          {activeTab === "agregacao" && <AgregacaoTab />}
-          {activeTab === "conversao" && <ConversaoTab />}
-          {activeTab === "ressarcimento" && <RessarcimentoTab />}
-          {activeTab === "estoque" && <EstoqueTab />}
-          {activeTab === "logs" && <LogsTab />}
+        <div
+          className="flex-1 overflow-hidden"
+          style={{ background: "#0a1628" }}
+        >
+          <Suspense
+            fallback={
+              <div className="flex items-center justify-center h-full text-slate-500 text-sm">
+                Carregando...
+              </div>
+            }
+          >
+            {activeTab === "consulta" && <ConsultaTab />}
+            {activeTab === "sql" && <ConsultaSqlTab />}
+            {activeTab === "agregacao" && <AgregacaoTab />}
+            {activeTab === "conversao" && <ConversaoTab />}
+            {activeTab === "ressarcimento" && <RessarcimentoTab />}
+            {activeTab === "estoque" && <EstoqueTab />}
+            {activeTab === "logs" && <LogsTab />}
+          </Suspense>
         </div>
       </div>
     </div>

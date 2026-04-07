@@ -278,6 +278,7 @@ class ParquetService:
         page_size: int = DEFAULT_PAGE_SIZE,
         sort_by: str | None = None,
         sort_desc: bool = False,
+        sort_by_list: list[str] | None = None,
     ) -> PageResult:
         inicio_total = perf_counter()
         page = max(page, 1)
@@ -288,6 +289,7 @@ class ParquetService:
             tuple(visible_columns or ()),
             sort_by or "",
             sort_desc,
+            tuple(sort_by_list or ()),
             page,
             page_size,
         )
@@ -352,8 +354,11 @@ class ParquetService:
         if not visible_columns:
             visible_columns = all_columns[:]
         offset = (page - 1) * page_size
-        if sort_by and sort_by in all_columns:
-            lf_all = lf_all.sort(sort_by, descending=sort_desc)
+        effective_sort = [c for c in (sort_by_list or []) if c in all_columns]
+        if not effective_sort and sort_by and sort_by in all_columns:
+            effective_sort = [sort_by]
+        if effective_sort:
+            lf_all = lf_all.sort(effective_sort, descending=sort_desc)
         inicio_collect = perf_counter()
         df_all = lf_all.slice(offset, page_size).collect()
         registrar_evento_performance(

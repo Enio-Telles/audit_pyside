@@ -1,39 +1,23 @@
 import {
   useState,
   useMemo,
-  useRef,
-  type MouseEvent as EventoMouseReact,
+  useCallback,
+  type ReactNode,
 } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { estoqueApi } from "../../api/client";
 import { useAppStore } from "../../store/appStore";
 import { ColumnToggle } from "../table/ColumnToggle";
+import { DataTable } from "../table/DataTable";
 import { usePreferenciasColunas } from "../../hooks/usePreferenciasColunas";
 
 type Row = Record<string, unknown>;
 
+const ROWS_PER_PAGE = 150;
 const CHAVE_PREFERENCIAS_COLUNAS_CONVERSAO = "conversao_colunas_v1";
 
 function rowKey(r: Row) {
   return `${r["id_agrupado"]}__${r["id_produtos"]}`;
-}
-
-function moverColunaNaOrdem(
-  ordemAtual: string[],
-  colunaOrigem: string,
-  colunaDestino: string,
-): string[] {
-  if (colunaOrigem === colunaDestino) return ordemAtual;
-
-  const proximaOrdem = [...ordemAtual];
-  const indiceOrigem = proximaOrdem.indexOf(colunaOrigem);
-  const indiceDestino = proximaOrdem.indexOf(colunaDestino);
-
-  if (indiceOrigem < 0 || indiceDestino < 0) return ordemAtual;
-
-  const [colunaMovida] = proximaOrdem.splice(indiceOrigem, 1);
-  proximaOrdem.splice(indiceDestino, 0, colunaMovida);
-  return proximaOrdem;
 }
 
 const LARGURAS_INICIAIS_COLUNAS: Record<string, number> = {
@@ -75,7 +59,7 @@ export function ConversaoTab() {
   const [editValue, setEditValue] = useState("");
   const [newUnidRef, setNewUnidRef] = useState("");
   const [hiddenCols, setHiddenCols] = useState<Set<string>>(new Set());
-  const colunaArrastadaRef = useRef<string | null>(null);
+  const [page, setPage] = useState(1);
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ["fatores_conversao", selectedCnpj],
@@ -132,8 +116,9 @@ export function ConversaoTab() {
     LARGURAS_INICIAIS_COLUNAS,
   );
 
-  const displayCols = ordemColunas.filter(
-    (c) => DISPLAY_COLS_ORDER.includes(c) && !hiddenCols.has(c),
+  const displayCols = useMemo(
+    () => ordemColunas.filter((c) => DISPLAY_COLS_ORDER.includes(c)),
+    [ordemColunas],
   );
 
   // Unique id_agrupadoes for the filter dropdown
@@ -178,6 +163,13 @@ export function ConversaoTab() {
       return true;
     });
   }, [allRows, filterIdAgrupado, filterDesc, showSingleUnit, singleUnitIds]);
+
+  const totalFiltered = filteredRows.length;
+  const totalPages = Math.max(1, Math.ceil(totalFiltered / ROWS_PER_PAGE));
+  const pagedRows = useMemo(
+    () => filteredRows.slice((page - 1) * ROWS_PER_PAGE, page * ROWS_PER_PAGE),
+    [filteredRows, page],
+  );
 
   // Available units for the selected id_agrupado's unid_ref panel
   const availableUnids = useMemo(
@@ -225,28 +217,34 @@ export function ConversaoTab() {
     }
   }
 
-  function handleFatorClick(e: React.MouseEvent, r: Row) {
+  const handleFatorClick = useCallback((e: React.MouseEvent, r: Row) => {
     e.stopPropagation();
     setEditingKey(rowKey(r));
     setEditValue(String(r["fator"] ?? ""));
-  }
+  }, []);
 
-  function handleFatorKeyDown(e: React.KeyboardEvent, r: Row) {
-    if (e.key === "Enter") commitFator(r);
-    if (e.key === "Escape") setEditingKey(null);
-  }
+  const commitFator = useCallback(
+    (r: Row) => {
+      const newVal = parseFloat(editValue.replace(",", "."));
+      if (!isNaN(newVal)) {
+        updateMutation.mutate({
+          id_agrupado: String(r["id_agrupado"]),
+          id_produtos: String(r["id_produtos"]),
+          fator: newVal,
+        });
+      }
+      setEditingKey(null);
+    },
+    [editValue, updateMutation],
+  );
 
-  function commitFator(r: Row) {
-    const newVal = parseFloat(editValue.replace(",", "."));
-    if (!isNaN(newVal)) {
-      updateMutation.mutate({
-        id_agrupado: String(r["id_agrupado"]),
-        id_produtos: String(r["id_produtos"]),
-        fator: newVal,
-      });
-    }
-    setEditingKey(null);
-  }
+  const handleFatorKeyDown = useCallback(
+    (e: React.KeyboardEvent, r: Row) => {
+      if (e.key === "Enter") commitFator(r);
+      if (e.key === "Escape") setEditingKey(null);
+    },
+    [commitFator],
+  );
 
   function applyUnidRef() {
     if (!selectedIdAgrupado || !newUnidRef) return;
@@ -256,47 +254,63 @@ export function ConversaoTab() {
     });
   }
 
-  function iniciarArrasteColuna(nomeColuna: string) {
-    colunaArrastadaRef.current = nomeColuna;
-  }
+  const convRenderCell = useCallback(
+    (col: string, value: unknown, row: Row): ReactNode | null => {
+      if (col === "fator") {
+        const k = rowKey(row);
+        const isEditing = k === editingKey;
+        if (isEditing) {
+          return (
+            <input
+              type="number"
+              step="any"
+              value={editValue}
+              onChange={(e) => setEditValue(e.target.value)}
+              onBlur={() => commitFator(row)}
+              onKeyDown={(e) => handleFatorKeyDown(e, row)}
+              onFocus={(e) => e.target.select()}
+              autoFocus
+              onClick={(e) => e.stopPropagation()}
+              className="w-full bg-slate-900 border border-blue-500 rounded px-1 text-white focus:outline-none"
+              style={{ minWidth: "4rem", fontSize: "inherit" }}
+            />
+          );
+        }
+        return (
+          <span
+            onClick={(e) => handleFatorClick(e, row)}
+            className="hover:bg-blue-900/40 rounded px-1 cursor-text inline-block w-full"
+            title="Clique para editar"
+          >
+            {value != null ? Number(value).toFixed(4) : "—"}
+          </span>
+        );
+      }
+      if (col === "fator_manual" || col === "unid_ref_manual") {
+        return value === true ? (
+          <span className="inline-block px-1 bg-amber-700/80 text-amber-200 rounded text-xs">
+            M
+          </span>
+        ) : (
+          <span className="text-slate-700">—</span>
+        );
+      }
+      return null;
+    },
+    [editingKey, editValue, commitFator, handleFatorClick, handleFatorKeyDown],
+  );
 
-  function finalizarArrasteColuna() {
-    colunaArrastadaRef.current = null;
-  }
-
-  function soltarColuna(nomeColunaDestino: string) {
-    const colunaOrigem = colunaArrastadaRef.current;
-    if (!colunaOrigem) return;
-
-    definirOrdemColunas(
-      moverColunaNaOrdem(ordemColunas, colunaOrigem, nomeColunaDestino),
-    );
-    finalizarArrasteColuna();
-  }
-
-  function iniciarRedimensionamentoColuna(
-    evento: EventoMouseReact<HTMLDivElement>,
-    nomeColuna: string,
-  ) {
-    evento.preventDefault();
-    evento.stopPropagation();
-
-    const posicaoInicial = evento.clientX;
-    const larguraInicial = largurasColunas[nomeColuna] ?? 120;
-
-    const aoMoverMouse = (movimento: MouseEvent) => {
-      const deslocamento = movimento.clientX - posicaoInicial;
-      definirLarguraColuna(nomeColuna, larguraInicial + deslocamento);
-    };
-
-    const aoSoltarMouse = () => {
-      window.removeEventListener("mousemove", aoMoverMouse);
-      window.removeEventListener("mouseup", aoSoltarMouse);
-    };
-
-    window.addEventListener("mousemove", aoMoverMouse);
-    window.addEventListener("mouseup", aoSoltarMouse);
-  }
+  const convGetRowBg = useCallback(
+    (r: Row): string | undefined => {
+      const isGroupSelected =
+        selectedIdAgrupado !== null &&
+        String(r["id_agrupado"] ?? "") === selectedIdAgrupado;
+      if (isGroupSelected) return "#1a3558";
+      if (r["fator_manual"] === true) return "#2a1e00";
+      return undefined;
+    },
+    [selectedIdAgrupado],
+  );
 
   if (!selectedCnpj) {
     return (
@@ -341,7 +355,7 @@ export function ConversaoTab() {
           <input
             type="checkbox"
             checked={showSingleUnit}
-            onChange={(e) => setShowSingleUnit(e.target.checked)}
+            onChange={(e) => { setShowSingleUnit(e.target.checked); setPage(1); }}
             className="rounded"
           />
           Mostrar itens de unidade única
@@ -373,6 +387,7 @@ export function ConversaoTab() {
           value={filterIdAgrupado}
           onChange={(e) => {
             setFilterIdAgrupado(e.target.value);
+            setPage(1);
             // auto-select product when chosen from dropdown
             if (e.target.value) {
               setSelectedIdAgrupado(e.target.value);
@@ -397,7 +412,7 @@ export function ConversaoTab() {
           className={inputCls + " flex-1"}
           placeholder="Filtrar descr_padrao"
           value={filterDesc}
-          onChange={(e) => setFilterDesc(e.target.value)}
+          onChange={(e) => { setFilterDesc(e.target.value); setPage(1); }}
         />
         {(filterIdAgrupado || filterDesc) && (
           <button
@@ -407,6 +422,7 @@ export function ConversaoTab() {
             onClick={() => {
               setFilterIdAgrupado("");
               setFilterDesc("");
+              setPage(1);
             }}
           >
             Limpar filtros
@@ -486,158 +502,55 @@ export function ConversaoTab() {
       </div>
 
       {/* Table */}
-      <div
-        className="flex-1 overflow-auto border border-slate-700 rounded"
-        style={{ fontSize: "0.72rem" }}
-      >
-        <table
-          className="w-full border-collapse"
-          style={{
-            tableLayout: "fixed",
-            minWidth: `${displayCols.reduce((total, col) => total + (largurasColunas[col] ?? 120), 0)}px`,
-          }}
-        >
-          <colgroup>
-            {displayCols.map((c) => (
-              <col key={c} style={{ width: `${largurasColunas[c] ?? 120}px` }} />
-            ))}
-          </colgroup>
-          <thead
-            className="sticky top-0 z-10"
-            style={{ background: "#0d1b2e" }}
-          >
-            <tr>
-              {displayCols.map((c) => (
-                <th
-                  key={c}
-                  className="px-2 py-1.5 text-left text-slate-400 font-semibold border-b border-slate-700 truncate relative select-none cursor-move"
-                  draggable
-                  onDragStart={() => iniciarArrasteColuna(c)}
-                  onDragOver={(evento) => evento.preventDefault()}
-                  onDrop={() => soltarColuna(c)}
-                  onDragEnd={finalizarArrasteColuna}
-                  title={`${c} - arraste para reordenar`}
-                >
-                  {c}
-                  <div
-                    className="absolute top-0 right-0 h-full w-2 cursor-col-resize"
-                    onMouseDown={(evento) =>
-                      iniciarRedimensionamentoColuna(evento, c)
-                    }
-                    title={`Redimensionar ${c}`}
-                  />
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {filteredRows.length === 0 && (
-              <tr>
-                <td
-                  colSpan={displayCols.length}
-                  className="text-center py-8 text-slate-500"
-                >
-                  {isLoading ? "Carregando..." : "Nenhum registro."}
-                </td>
-              </tr>
-            )}
-            {filteredRows.map((r, idx) => {
-              const k = rowKey(r);
-              const isGroupSelected =
-                selectedIdAgrupado !== null &&
-                String(r["id_agrupado"] ?? "") === selectedIdAgrupado;
-              const isManual = r["fator_manual"] === true;
-              const isEditing = k === editingKey;
-              let rowBg: string;
-              if (isGroupSelected) rowBg = "#1a3558";
-              else if (isManual) rowBg = "#2a1e00";
-              else if (idx % 2 === 0) rowBg = "#1e293b";
-              else rowBg = "#0f172a";
-
-              return (
-                <tr
-                  key={k}
-                  onClick={() => handleRowClick(r)}
-                  style={{ background: rowBg, cursor: "pointer" }}
-                  className="hover:brightness-110"
-                >
-                  {displayCols.map((col) => {
-                    if (col === "fator") {
-                      return (
-                        <td
-                          key={col}
-                          className="px-2 py-1 border-b border-slate-800/60"
-                        >
-                          {isEditing ? (
-                            <input
-                              type="number"
-                              step="any"
-                              value={editValue}
-                              onChange={(e) => setEditValue(e.target.value)}
-                              onBlur={() => commitFator(r)}
-                              onKeyDown={(e) => handleFatorKeyDown(e, r)}
-                              onFocus={(e) => e.target.select()}
-                              autoFocus
-                              onClick={(e) => e.stopPropagation()}
-                              className="w-full bg-slate-900 border border-blue-500 rounded px-1 text-white focus:outline-none"
-                              style={{ minWidth: "4rem", fontSize: "inherit" }}
-                            />
-                          ) : (
-                            <span
-                              onClick={(e) => handleFatorClick(e, r)}
-                              className="hover:bg-blue-900/40 rounded px-1 cursor-text inline-block w-full"
-                              title="Clique para editar"
-                            >
-                              {r[col] != null ? Number(r[col]).toFixed(4) : "—"}
-                            </span>
-                          )}
-                        </td>
-                      );
-                    }
-
-                    if (col === "fator_manual" || col === "unid_ref_manual") {
-                      const val = r[col];
-                      return (
-                        <td
-                          key={col}
-                          className="px-2 py-1 border-b border-slate-800/60 text-center"
-                        >
-                          {val === true ? (
-                            <span className="inline-block px-1 bg-amber-700/80 text-amber-200 rounded text-xs">
-                              M
-                            </span>
-                          ) : (
-                            <span className="text-slate-700">—</span>
-                          )}
-                        </td>
-                      );
-                    }
-
-                    const val = r[col];
-                    return (
-                      <td
-                        key={col}
-                        className="px-2 py-1 border-b border-slate-800/60 truncate"
-                        title={val != null ? String(val) : ""}
-                      >
-                        {val != null ? String(val) : "—"}
-                      </td>
-                    );
-                  })}
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+      <div className="flex-1 min-h-0">
+        <DataTable
+          columns={dataColumns.filter((c) => DISPLAY_COLS_ORDER.includes(c))}
+          orderedColumns={displayCols}
+          columnWidths={largurasColunas}
+          onOrderedColumnsChange={definirOrdemColunas}
+          onColumnWidthChange={definirLarguraColuna}
+          rows={pagedRows}
+          loading={isLoading}
+          page={page}
+          pageSize={ROWS_PER_PAGE}
+          hiddenColumns={hiddenCols}
+          onRowClick={handleRowClick}
+          renderCell={convRenderCell}
+          getRowBackground={convGetRowBg}
+          density="compact"
+        />
       </div>
 
       {/* Status bar */}
-      <div className="text-xs text-slate-500">
-        {filteredRows.length} de {allRows.length} registros
-        {!showSingleUnit && singleUnitIds.size > 0 && (
-          <span className="ml-2 text-slate-600">
-            ({singleUnitIds.size} produto(s) de unidade única oculto(s))
-          </span>
+      <div className="flex items-center justify-between text-xs text-slate-500">
+        <span>
+          {filteredRows.length} de {allRows.length} registros
+          {!showSingleUnit && singleUnitIds.size > 0 && (
+            <span className="ml-2 text-slate-600">
+              ({singleUnitIds.size} produto(s) de unidade única oculto(s))
+            </span>
+          )}
+        </span>
+        {totalPages > 1 && (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1}
+              className="px-2 py-0.5 rounded bg-slate-700 hover:bg-slate-600 disabled:opacity-40"
+            >
+              ‹
+            </button>
+            <span>
+              Pág. {page}/{totalPages}
+            </span>
+            <button
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page >= totalPages}
+              className="px-2 py-0.5 rounded bg-slate-700 hover:bg-slate-600 disabled:opacity-40"
+            >
+              ›
+            </button>
+          </div>
         )}
       </div>
     </div>

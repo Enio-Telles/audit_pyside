@@ -154,15 +154,17 @@ def gerar_ressarcimento_st_item(cnpj: str, pasta_cnpj: Path | None = None) -> bo
             .then(pl.col("fronteira_valor_icms_total_item") / pl.col("qtd_entrada_xml_unid_ref"))
             .otherwise(None)
             .alias("vl_unit_st_fronteira_unid_ref"),
+            pl.col("calc_st_total_item").is_not_null().alias("possui_st_calc_ate_2022"),
+            pl.col("fronteira_valor_icms_total_item").is_not_null().alias("possui_fronteira"),
+            (pl.col("chave_nfe_ultima_entrada").is_not_null() & (pl.col("chave_nfe_ultima_entrada") != "") & pl.col("prod_nitem_entrada").is_not_null()).alias("possui_entrada_vinculada"),
+        )
+        .with_columns(
             (pl.coalesce([pl.col("vl_unit_st_decl_unid_ref"), pl.lit(0.0)]) * pl.coalesce([pl.col("qtd_saida_unid_ref"), pl.lit(0.0)])).alias("vl_st_decl_total_considerado"),
             pl.when(pl.col("ano_ref") <= 2022)
             .then(pl.coalesce([pl.col("vl_unit_st_calc_unid_ref"), pl.lit(0.0)]) * pl.coalesce([pl.col("qtd_saida_unid_ref"), pl.lit(0.0)]))
             .otherwise(None)
             .alias("vl_st_calc_total_considerado"),
             (pl.coalesce([pl.col("vl_unit_st_fronteira_unid_ref"), pl.lit(0.0)]) * pl.coalesce([pl.col("qtd_saida_unid_ref"), pl.lit(0.0)])).alias("vl_st_fronteira_total_considerado"),
-            pl.col("calc_st_total_item").is_not_null().alias("possui_st_calc_ate_2022"),
-            pl.col("fronteira_valor_icms_total_item").is_not_null().alias("possui_fronteira"),
-            (pl.col("chave_nfe_ultima_entrada").is_not_null() & (pl.col("chave_nfe_ultima_entrada") != "") & pl.col("prod_nitem_entrada").is_not_null()).alias("possui_entrada_vinculada"),
         )
         .with_columns(
             pl.when(

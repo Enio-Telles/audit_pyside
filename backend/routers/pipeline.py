@@ -7,6 +7,7 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel
 
 from interface_grafica.services.pipeline_funcoes_service import (
+    expandir_tabelas_dependentes,
     enriquecer_consultas_dependentes,
 )
 from interface_grafica.services.registry_service import RegistryService
@@ -90,6 +91,7 @@ def _resolver_execucao(
     )
 
     svc = ServicoPipelineCompleto()
+    tabelas = expandir_tabelas_dependentes(tabelas)
     consultas = [
         str(item)
         for item in enriquecer_consultas_dependentes(consultas, tabelas)

@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { cnpjApi, pipelineApi } from "../../api/client";
 import { useAppStore } from "../../store/appStore";
+import { usePipelineStatus } from "../../hooks/usePipelineStatus";
 
 const inputCls =
   "w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500";
@@ -25,11 +26,11 @@ export function LeftPanel() {
   const {
     selectedCnpj,
     setSelectedCnpj,
-    pipelineWatchCnpj,
+    selectedFile,
+    setSelectedFile,
     pipelineStatus,
     pipelinePolling,
     startPipelineMonitor,
-    updatePipelineStatus,
   } = useAppStore();
 
   const [newCnpj, setNewCnpj] = useState("");
@@ -91,17 +92,7 @@ export function LeftPanel() {
     setSelectedCnpj(cnpj);
   };
 
-  useEffect(() => {
-    if (!pipelinePolling || !pipelineWatchCnpj) return;
-    const id = setInterval(async () => {
-      const s = await pipelineApi.status(pipelineWatchCnpj);
-      updatePipelineStatus(s);
-      if (s.status === "done" || s.status === "error") {
-        queryClient.invalidateQueries({ queryKey: ["files", pipelineWatchCnpj] });
-      }
-    }, 1500);
-    return () => clearInterval(id);
-  }, [pipelinePolling, pipelineWatchCnpj, queryClient, updatePipelineStatus]);
+  usePipelineStatus();
 
   const progressValue = pipelineStatus?.percentual ?? 0;
   const etapasConcluidas = pipelineStatus?.etapas_concluidas ?? 0;
@@ -143,8 +134,7 @@ export function LeftPanel() {
 
   return (
     <div
-      className="flex flex-col h-full p-2 gap-2 overflow-y-auto"
-      style={{ background: "#0d1f3c", width: 260, minWidth: 260 }}
+      className="flex flex-col h-full p-2 gap-2 overflow-y-auto bg-[#0d1f3c] w-[260px] min-w-[260px]"
     >
       {/* Header */}
       <div className="text-center py-2 border-b border-slate-700">
@@ -272,15 +262,7 @@ export function LeftPanel() {
               />
             </div>
           </div>
-          <div
-            className="overflow-auto"
-            style={{
-              maxHeight: 100,
-              background: "#060e1f",
-              padding: 6,
-              borderRadius: 4,
-            }}
-          >
+          <div className="overflow-auto max-h-[100px] bg-[#060e1f] p-1.5 rounded">
             {pipelineStatus.progresso.slice(-20).map((msg, i) => (
               <div key={i} className="text-slate-300 font-mono">
                 {msg}
@@ -344,7 +326,7 @@ export function LeftPanel() {
             <span>Arquivo</span>
             <span>Local</span>
           </div>
-          <div className="overflow-y-auto" style={{ maxHeight: 200 }}>
+          <div className="overflow-y-auto max-h-[200px]">
             {files.map((f) => (
               <button
                 key={f.path}

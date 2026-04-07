@@ -40,19 +40,19 @@ def _resumo_e111(df: pl.DataFrame) -> pl.DataFrame:
     )
 
     return base.group_by("mes_ref").agg(
-        pl.sum(
-            pl.when(
-                ((pl.col("mes_ref") < pl.date(2025, 1, 1)) & (pl.col("codigo_ajuste") == "RO020022"))
-                | ((pl.col("mes_ref") >= pl.date(2025, 1, 1)) & (pl.col("codigo_ajuste") == "RO020047"))
-            )
-            .then(pl.col("valor_ajuste"))
-            .otherwise(0.0)
-        ).alias("vl_e111_st_mes"),
-        pl.sum(
-            pl.when(pl.col("codigo_ajuste") == "RO020048")
-            .then(pl.col("valor_ajuste"))
-            .otherwise(0.0)
-        ).alias("vl_e111_st_extemporaneo_mes"),
+        pl.when(
+            ((pl.col("mes_ref") < pl.date(2025, 1, 1)) & (pl.col("codigo_ajuste") == "RO020022"))
+            | ((pl.col("mes_ref") >= pl.date(2025, 1, 1)) & (pl.col("codigo_ajuste") == "RO020047"))
+        )
+        .then(pl.col("valor_ajuste"))
+        .otherwise(0.0)
+        .sum()
+        .alias("vl_e111_st_mes"),
+        pl.when(pl.col("codigo_ajuste") == "RO020048")
+        .then(pl.col("valor_ajuste"))
+        .otherwise(0.0)
+        .sum()
+        .alias("vl_e111_st_extemporaneo_mes"),
     )
 
 
@@ -70,9 +70,9 @@ def gerar_ressarcimento_st_mensal(cnpj: str, pasta_cnpj: Path | None = None) -> 
 
     resumo_item = df_item.group_by("mes_ref").agg(
         pl.len().alias("qtd_itens_c176"),
-        pl.sum(pl.coalesce([pl.col("vl_st_decl_total_considerado"), pl.lit(0.0)])).alias("vl_st_decl_total_mes"),
-        pl.sum(pl.coalesce([pl.col("vl_st_calc_total_considerado"), pl.lit(0.0)])).alias("vl_st_calc_total_mes"),
-        pl.sum(pl.coalesce([pl.col("vl_st_fronteira_total_considerado"), pl.lit(0.0)])).alias("vl_st_fronteira_total_mes"),
+        pl.coalesce([pl.col("vl_st_decl_total_considerado"), pl.lit(0.0)]).sum().alias("vl_st_decl_total_mes"),
+        pl.coalesce([pl.col("vl_st_calc_total_considerado"), pl.lit(0.0)]).sum().alias("vl_st_calc_total_mes"),
+        pl.coalesce([pl.col("vl_st_fronteira_total_considerado"), pl.lit(0.0)]).sum().alias("vl_st_fronteira_total_mes"),
     )
     resumo_e111 = _resumo_e111(ler_parquet_opcional(caminho_e111))
 

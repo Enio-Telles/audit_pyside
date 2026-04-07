@@ -184,6 +184,28 @@ def enriquecer_consultas_dependentes(
     return consultas_enriquecidas
 
 
+def expandir_tabelas_dependentes(tabelas: list[str]) -> list[str]:
+    from orquestrador_pipeline import REGISTO_TABELAS
+
+    visitados: set[str] = set()
+    ordem: list[str] = []
+
+    def _visitar(tab_id: str) -> None:
+        if tab_id in visitados:
+            return
+        visitados.add(tab_id)
+        registro = REGISTO_TABELAS.get(tab_id)
+        if registro is not None:
+            for dep in registro.deps:
+                _visitar(dep)
+        ordem.append(tab_id)
+
+    for tab_id in tabelas:
+        _visitar(tab_id)
+
+    return ordem
+
+
 class ServicoExtracao:
     """Executa consultas SQL Oracle e salva os resultados como Parquet."""
 
@@ -364,6 +386,7 @@ class ServicoTabelas:
                 progresso(texto)
 
         cnpj = re.sub(r"\D", "", cnpj)
+        tabelas_selecionadas = expandir_tabelas_dependentes(tabelas_selecionadas)
         ServicoTabelas.limpar_arquivos_legados(cnpj)
         pasta_cnpj = CNPJ_ROOT / cnpj
         geradas: list[str] = []
@@ -449,6 +472,7 @@ class ServicoPipelineCompleto:
         progresso: Callable[[str], None] | None = None,
     ) -> ResultadoPipeline:
         cnpj = ServicoExtracao.sanitizar_cnpj(cnpj)
+        tabelas = expandir_tabelas_dependentes(tabelas)
         consultas = enriquecer_consultas_dependentes(consultas, tabelas)
         resultado = ResultadoPipeline(ok=True, cnpj=cnpj)
 

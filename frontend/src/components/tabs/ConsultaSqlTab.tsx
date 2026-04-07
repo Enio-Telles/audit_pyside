@@ -5,10 +5,19 @@ import { useAppStore } from '../../store/appStore';
 import { DataTable } from '../table/DataTable';
 import { ColumnToggle } from '../table/ColumnToggle';
 
+interface SqlResult {
+  rows: Record<string, unknown>[];
+  count: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+}
+
 export function ConsultaSqlTab() {
   const { selectedCnpj } = useAppStore();
   const [sqlText, setSqlText] = useState('');
-  const [result, setResult] = useState<{ rows: Record<string, unknown>[]; count: number } | null>(null);
+  const [result, setResult] = useState<SqlResult | null>(null);
+  const [page, setPage] = useState(1);
   const [error, setError] = useState('');
   const [hiddenCols, setHiddenCols] = useState<Set<string>>(new Set());
 
@@ -18,8 +27,9 @@ export function ConsultaSqlTab() {
   });
 
   const execMutation = useMutation({
-    mutationFn: () => sqlApi.execute(sqlText, selectedCnpj ?? undefined),
-    onSuccess: (data) => { setResult(data); setError(''); },
+    mutationFn: (p: number) =>
+      sqlApi.execute(sqlText, selectedCnpj ?? undefined, undefined, p, 200),
+    onSuccess: (data, p) => { setResult(data); setPage(p); setError(''); },
     onError: (err: Error) => setError(err.message),
   });
 
@@ -59,7 +69,7 @@ export function ConsultaSqlTab() {
 
       <div className="flex gap-2 flex-wrap items-center">
         <button
-          onClick={() => execMutation.mutate()}
+          onClick={() => execMutation.mutate(1)}
           disabled={!sqlText.trim() || execMutation.isPending}
           className={btnCls + ' bg-blue-600 hover:bg-blue-500 text-white disabled:opacity-40'}
         >
@@ -84,16 +94,39 @@ export function ConsultaSqlTab() {
           />
         )}
         {result && <span className="text-xs text-green-400 self-center">{result.count} registros</span>}
+        {result && result.total_pages > 1 && (
+          <span className="text-xs text-slate-400 self-center">
+            Pág.{' '}
+            <button
+              className="text-blue-400 hover:text-blue-300 disabled:opacity-40"
+              disabled={page <= 1 || execMutation.isPending}
+              onClick={() => execMutation.mutate(page - 1)}
+            >
+              ‹
+            </button>
+            {' '}{page}/{result.total_pages}{' '}
+            <button
+              className="text-blue-400 hover:text-blue-300 disabled:opacity-40"
+              disabled={page >= result.total_pages || execMutation.isPending}
+              onClick={() => execMutation.mutate(page + 1)}
+            >
+              ›
+            </button>
+          </span>
+        )}
         {error && <span className="text-xs text-red-400 self-center">{error}</span>}
       </div>
 
       {result && result.rows.length > 0 && (
-        <div className="flex-1 overflow-hidden border border-slate-700 rounded">
+        <div
+          className="flex-1 overflow-hidden border border-slate-700 rounded"
+        >
           <DataTable
             columns={resultCols}
             rows={result.rows}
             totalRows={result.count}
             hiddenColumns={hiddenCols}
+            loading={execMutation.isPending}
           />
         </div>
       )}
