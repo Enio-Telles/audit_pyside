@@ -48,6 +48,31 @@ def _df_to_response(df: pl.DataFrame, page: int = 1, page_size: int = 300) -> di
     }
 
 
+def _enriquecer_lista_descr_compl(df: pl.DataFrame, cnpj: str) -> pl.DataFrame:
+    """Junta lista_descr_compl (do C170) agrupada por id_agrupado."""
+    arq_c170 = CNPJ_ROOT / cnpj / "arquivos_parquet" / f"c170_xml_{cnpj}.parquet"
+    if not arq_c170.exists() or "id_agrupado" not in df.columns:
+        return df
+    try:
+        df_c170 = pl.scan_parquet(arq_c170).select(["id_agrupado", "Descr_compl"]).collect()
+        df_agg = (
+            df_c170
+            .filter(
+                pl.col("Descr_compl").is_not_null()
+                & (pl.col("Descr_compl").str.strip_chars() != "")
+            )
+            .group_by("id_agrupado")
+            .agg(pl.col("Descr_compl").unique().sort().alias("lista_descr_compl"))
+        )
+        df = df.join(df_agg, on="id_agrupado", how="left")
+        df = df.with_columns(
+            pl.col("lista_descr_compl").fill_null([]).cast(pl.List(pl.String))
+        )
+    except Exception:
+        pass
+    return df
+
+
 @router.get("/{cnpj}/tabela_agrupada")
 def get_tabela_agrupada(cnpj: str, page: int = 1, page_size: int = 300):
     cnpj = _sanitize(cnpj)
@@ -60,6 +85,7 @@ def get_tabela_agrupada(cnpj: str, page: int = 1, page_size: int = 300):
     if path is None:
         raise HTTPException(404, "Tabela agrupada não encontrada")
     df = pl.read_parquet(path)
+    df = _enriquecer_lista_descr_compl(df, cnpj)
     return _df_to_response(df, page, page_size)
 
 
@@ -75,11 +101,13 @@ def merge_agrupados(req: AggregateRequest):
     try:
         from interface_grafica.services.aggregation_service import ServicoAgregacao
         svc = ServicoAgregacao()
-        svc.merge_id_agrupados(
-            cnpj=cnpj,
-            id_agrupado_destino=req.id_agrupado_destino,
-            ids_origem=req.ids_origem,
-        )
-        return {"ok": True}
+        # O primeiro elemento da lista é o id canônico (destino); os demais são as origens.
+        ids_ordenados = [req.id_agrupado_destino] + [
+            i for i in req.ids_origem if i != req.id_agrupado_destino
+        ]
+        resultado = svc.agregar_linhas(cnpj=cnpj, ids_agrupados_selecionados=ids_ordenados)
+        return {"ok": True, "resultado": resultado}
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
     except Exception as exc:
         raise HTTPException(500, str(exc))

@@ -21,7 +21,7 @@ import polars as pl
 from extracao.extracao_oracle_eficiente import descobrir_consultas_sql, executar_extracao_oracle
 from interface_grafica.config import CNPJ_ROOT, SQL_DIR
 
-from utilitarios.sql_catalog import get_sql_id, list_sql_entries, normalize_sql_id, resolve_sql_path
+from utilitarios.sql_catalog import list_sql_entries
 
 from utilitarios.extrair_parametros import extrair_parametros_sql
 
@@ -49,13 +49,6 @@ class ResultadoGeracaoTabelas:
 
 
 TABELAS_DISPONIVEIS: list[dict[str, str]] = [
-    {
-        "id": "efd_atomizacao",
-        "nome": "0. EFD Atomizada",
-        "descricao": "Materializa a camada atomizada tipada de 0200, C100, C170, C176 e Bloco H",
-        "modulo": "efd_atomizacao",
-        "funcao": "gerar_efd_atomizacao",
-    },
     {
         "id": "tb_documentos",
         "nome": "Consolidacao de Documentos",
@@ -120,68 +113,27 @@ TABELAS_DISPONIVEIS: list[dict[str, str]] = [
         "funcao": "gerar_c176_xml",
     },
     {
-        "id": "ressarcimento_st",
-        "nome": "9. Ressarcimento ST",
-        "descricao": "Concilia C176, fatores de conversao, ST material, Fronteira e E111 em parquets dedicados",
-        "modulo": "ressarcimento_st",
-        "funcao": "gerar_ressarcimento_st",
-    },
-    {
         "id": "movimentacao_estoque",
-        "nome": "10. Movimentacao de Estoque (Final)",
+        "nome": "9. Movimentacao de Estoque (Final)",
         "descricao": "Gera a tabela final consolidada com pauta Sefin e inventario",
         "modulo": "movimentacao_estoque",
         "funcao": "gerar_movimentacao_estoque",
     },
     {
         "id": "calculos_mensais",
-        "nome": "11. Calculos Mensais",
+        "nome": "10. Calculos Mensais",
         "descricao": "Gera a aba mensal resumida a partir da movimentacao de estoque",
         "modulo": "calculos_mensais",
         "funcao": "gerar_calculos_mensais",
     },
     {
         "id": "calculos_anuais",
-        "nome": "12. Calculos Anuais",
+        "nome": "11. Calculos Anuais",
         "descricao": "Gera a aba anual resumida a partir da movimentacao de estoque",
         "modulo": "calculos_anuais",
         "funcao": "gerar_calculos_anuais",
     },
 ]
-
-
-CONSULTAS_RESSARCIMENTO_ST_ORACLE = [
-    "arquivos_parquet/atomizadas/ressarcimento_st/oracle/01_parametros_ultima_efd.sql",
-    "arquivos_parquet/atomizadas/ressarcimento_st/oracle/07_sefin_vigencia.sql",
-    "arquivos_parquet/atomizadas/ressarcimento_st/oracle/08_rateio_frete_cte.sql",
-    "arquivos_parquet/atomizadas/ressarcimento_st/oracle/10_st_calc_ate_2022.sql",
-    "arquivos_parquet/atomizadas/ressarcimento_st/oracle/11_fronteira_item_simples.sql",
-    "arquivos_parquet/atomizadas/ressarcimento_st/oracle/12_fronteira_item_completo.sql",
-]
-
-
-def enriquecer_consultas_dependentes(
-    consultas: list[str | Path],
-    tabelas: list[str],
-) -> list[str | Path]:
-    if "ressarcimento_st" not in tabelas or consultas == ["*"]:
-        return consultas
-
-    consultas_enriquecidas = list(consultas)
-    ids_atuais = {
-        sql_id
-        for item in consultas_enriquecidas
-        for sql_id in [normalize_sql_id(item) or get_sql_id(item)]
-        if sql_id
-    }
-
-    for sql_id in CONSULTAS_RESSARCIMENTO_ST_ORACLE:
-        if sql_id in ids_atuais:
-            continue
-        consultas_enriquecidas.append(resolve_sql_path(sql_id))
-        ids_atuais.add(sql_id)
-
-    return consultas_enriquecidas
 
 
 class ServicoExtracao:
@@ -371,7 +323,6 @@ class ServicoTabelas:
         tempos: dict[str, float] = {}
 
         ordem = [
-            "efd_atomizacao",
             "tb_documentos",
             "item_unidades",
             "itens",
@@ -381,7 +332,6 @@ class ServicoTabelas:
             "fatores_conversao",
             "c170_xml",
             "c176_xml",
-            "ressarcimento_st",
             "movimentacao_estoque",
             "calculos_mensais",
             "calculos_anuais",
@@ -449,7 +399,6 @@ class ServicoPipelineCompleto:
         progresso: Callable[[str], None] | None = None,
     ) -> ResultadoPipeline:
         cnpj = ServicoExtracao.sanitizar_cnpj(cnpj)
-        consultas = enriquecer_consultas_dependentes(consultas, tabelas)
         resultado = ResultadoPipeline(ok=True, cnpj=cnpj)
 
         def _msg(texto: str) -> None:

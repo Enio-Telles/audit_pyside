@@ -1,7 +1,12 @@
 import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { cnpjApi, pipelineApi } from "../../api/client";
+import { cnpjApi, pipelineApi, sqlApi } from "../../api/client";
 import { useAppStore } from "../../store/appStore";
+import { ExtrairSelecaoModal } from "../modals/ExtrairSelecaoModal";
+import { GerenciarConsultasModal } from "../modals/GerenciarConsultasModal";
+import { GerenciarCnpjModal } from "../modals/GerenciarCnpjModal";
+
+const LS_KEY = "fiscalParquet.selectedConsultas";
 
 const inputCls =
   "w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500";
@@ -25,15 +30,23 @@ export function LeftPanel() {
   const {
     selectedCnpj,
     setSelectedCnpj,
+    selectedFile,
+    setSelectedFile,
     pipelineWatchCnpj,
     pipelineStatus,
     pipelinePolling,
     startPipelineMonitor,
     updatePipelineStatus,
+    selectedConsultas,
+    setSelectedConsultas,
   } = useAppStore();
 
   const [newCnpj, setNewCnpj] = useState("");
   const [dataLimite, setDataLimite] = useState("12/03/2026");
+  const [showSqlSelector, setShowSqlSelector] = useState(false);
+  const [showExtrairModal, setShowExtrairModal] = useState(false);
+  const [showGerenciarModal, setShowGerenciarModal] = useState(false);
+  const [gerenciarCnpj, setGerenciarCnpj] = useState<{ cnpj: string; razaoSocial: string | null } | null>(null);
 
   const { data: cnpjs = [] } = useQuery({
     queryKey: ["cnpjs"],
@@ -45,6 +58,33 @@ export function LeftPanel() {
     queryFn: () => cnpjApi.listFiles(selectedCnpj!),
     enabled: !!selectedCnpj,
   });
+
+  const { data: sqlFiles = [] } = useQuery({
+    queryKey: ["sqlFiles"],
+    queryFn: sqlApi.listFiles,
+    staleTime: Infinity,
+  });
+
+  // Restaurar seleção persistida do localStorage após sqlFiles carregarem
+  useEffect(() => {
+    if (sqlFiles.length === 0) return;
+    try {
+      const raw = localStorage.getItem(LS_KEY);
+      if (!raw) return;
+      const parsed: unknown = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return;
+      const validPaths = new Set(sqlFiles.map((f) => f.path));
+      const filtered = (parsed as unknown[]).filter(
+        (p) => typeof p === "string" && validPaths.has(p as string),
+      ) as string[];
+      if (filtered.length > 0 && filtered.length < sqlFiles.length) {
+        setSelectedConsultas(filtered);
+      }
+    } catch {
+      // ignorar erros de parse
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sqlFiles]);
 
   const addMutation = useMutation({
     mutationFn: (cnpj: string) => cnpjApi.add(cnpj),
@@ -85,7 +125,12 @@ export function LeftPanel() {
         modo === "process" || modo === "atomized" ? undefined : dataLimite,
       incluir_extracao: modo !== "process",
       incluir_processamento: modo !== "extract" && modo !== "atomized",
-      consultas: modo === "atomized" ? CONSULTAS_ATOMIZADAS_PADRAO : undefined,
+      consultas:
+        modo === "atomized"
+          ? CONSULTAS_ATOMIZADAS_PADRAO
+          : modo === "extract" && selectedConsultas !== null
+            ? selectedConsultas
+            : undefined,
       tabelas: modo === "atomized" ? ["efd_atomizacao"] : undefined,
     });
     setSelectedCnpj(cnpj);
@@ -197,7 +242,7 @@ export function LeftPanel() {
             className={
               btnCls + " bg-slate-700 hover:bg-slate-600 text-slate-200"
             }
-            onClick={() => void runPipeline("extract")}
+            onClick={() => setShowExtrairModal(true)}
             disabled={(!selectedCnpj && !newCnpj.trim()) || pipelinePolling}
           >
             Extrair Tabelas Brutas
@@ -243,6 +288,86 @@ export function LeftPanel() {
           >
             Abrir pasta
           </button>
+        </div>
+
+        {/* SQL query selector */}
+        <div className="mt-1 border border-slate-700 rounded text-xs">
+          <button
+            className="w-full flex items-center justify-between px-2 py-1.5 text-slate-300 hover:bg-slate-700 rounded"
+            onClick={() => setShowSqlSelector((s) => !s)}
+          >
+            <span>
+              {selectedConsultas === null
+                ? `Consultas SQL: todas (${sqlFiles.length})`
+                : `Consultas SQL: ${selectedConsultas.length} de ${sqlFiles.length}`}
+            </span>
+            <span className="text-slate-500">{showSqlSelector ? "▲" : "▼"}</span>
+          </button>
+          {showSqlSelector && (
+            <div className="border-t border-slate-700 p-1.5">
+              <div className="flex gap-1 mb-1.5 flex-wrap">
+                <button
+                  className="px-1.5 py-0.5 rounded bg-blue-800 hover:bg-blue-700 text-blue-100 text-[10px]"
+                  onClick={() => setSelectedConsultas(null)}
+                >
+                  Todas
+                </button>
+                <button
+                  className="px-1.5 py-0.5 rounded bg-slate-700 hover:bg-slate-600 text-slate-300 text-[10px]"
+                  onClick={() => setSelectedConsultas([])}
+                >
+                  Nenhuma
+                </button>
+                <button
+                  className="px-1.5 py-0.5 rounded bg-slate-600 hover:bg-slate-500 text-slate-300 text-[10px] ml-auto"
+                  onClick={() => setShowGerenciarModal(true)}
+                  title="Adicionar ou excluir consultas"
+                >
+                  ⚙ Gerenciar
+                </button>
+              </div>
+              <div className="overflow-y-auto flex flex-col gap-0.5" style={{ maxHeight: 200 }}>
+                {sqlFiles.map((f) => {
+                  const checked =
+                    selectedConsultas === null ||
+                    selectedConsultas.includes(f.path);
+                  return (
+                    <label
+                      key={f.path}
+                      className="flex items-center gap-1.5 px-1 py-0.5 rounded hover:bg-slate-700 cursor-pointer"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        className="accent-blue-500 shrink-0"
+                        onChange={() => {
+                          if (selectedConsultas === null) {
+                            setSelectedConsultas(
+                              sqlFiles.map((x) => x.path).filter((p) => p !== f.path),
+                            );
+                          } else if (checked) {
+                            const next = selectedConsultas.filter((p) => p !== f.path);
+                            setSelectedConsultas(next.length === 0 ? [] : next);
+                          } else {
+                            const next = [...selectedConsultas, f.path];
+                            setSelectedConsultas(
+                              next.length === sqlFiles.length ? null : next,
+                            );
+                          }
+                        }}
+                      />
+                      <span
+                        className="text-[10px] text-slate-300 truncate"
+                        title={f.path}
+                      >
+                        {f.path}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -317,21 +442,29 @@ export function LeftPanel() {
         <div className={sectionTitleCls}>CNPJs registrados</div>
         <div className="flex flex-col gap-0.5">
           {cnpjs.map((r) => (
-            <button
-              key={r.cnpj}
-              onClick={() => setSelectedCnpj(r.cnpj)}
-              className={`text-left px-2 py-1.5 rounded text-xs transition-colors ${
-                selectedCnpj === r.cnpj
-                  ? "bg-blue-700 text-white"
-                  : "text-slate-300 hover:bg-slate-700"
-              }`}
-              title={r.razao_social ? `${r.cnpj} - ${r.razao_social}` : r.cnpj}
-            >
-              <div className="font-semibold">{r.cnpj}</div>
-              <div className="truncate text-[11px] text-slate-400">
-                {r.razao_social ?? "Razão social não disponível"}
-              </div>
-            </button>
+            <div key={r.cnpj} className="flex items-center gap-0.5 group">
+              <button
+                onClick={() => setSelectedCnpj(r.cnpj)}
+                className={`flex-1 text-left px-2 py-1.5 rounded text-xs transition-colors ${
+                  selectedCnpj === r.cnpj
+                    ? "bg-blue-700 text-white"
+                    : "text-slate-300 hover:bg-slate-700"
+                }`}
+                title={r.razao_social ? `${r.cnpj} - ${r.razao_social}` : r.cnpj}
+              >
+                <div className="font-semibold">{r.cnpj}</div>
+                <div className="truncate text-[11px] text-slate-400">
+                  {r.razao_social ?? "Razão social não disponível"}
+                </div>
+              </button>
+              <button
+                onClick={() => setGerenciarCnpj({ cnpj: r.cnpj, razaoSocial: r.razao_social })}
+                title="Gerenciar dados do CNPJ"
+                className="shrink-0 px-1.5 py-1.5 rounded text-slate-500 hover:text-slate-200 hover:bg-slate-700 opacity-0 group-hover:opacity-100 transition-opacity text-[11px]"
+              >
+                ⚙
+              </button>
+            </div>
           ))}
         </div>
       </div>
@@ -367,6 +500,36 @@ export function LeftPanel() {
       <div className="text-xs text-slate-500 py-1 border-t border-slate-700">
         CNPJ selecionado: {selectedCnpj ?? "—"}
       </div>
+
+      {/* Modal: seleção de consultas para extração */}
+      {showExtrairModal && (
+        <ExtrairSelecaoModal
+          key={String(showExtrairModal)}
+          onClose={() => setShowExtrairModal(false)}
+          onConfirm={(sel) => {
+            setSelectedConsultas(sel);
+            setShowExtrairModal(false);
+            void runPipeline("extract");
+          }}
+          sqlFiles={sqlFiles}
+        />
+      )}
+
+      {/* Modal: gerenciar arquivos SQL */}
+      <GerenciarConsultasModal
+        isOpen={showGerenciarModal}
+        onClose={() => setShowGerenciarModal(false)}
+      />
+
+      {/* Modal: gerenciar dados do CNPJ */}
+      {gerenciarCnpj && (
+        <GerenciarCnpjModal
+          cnpj={gerenciarCnpj.cnpj}
+          razaoSocial={gerenciarCnpj.razaoSocial}
+          isOpen={true}
+          onClose={() => setGerenciarCnpj(null)}
+        />
+      )}
     </div>
   );
 }

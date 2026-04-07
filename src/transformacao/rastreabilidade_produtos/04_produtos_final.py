@@ -159,9 +159,18 @@ def produtos_agrupados(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         rprint("[yellow]descricao_produtos esta vazio.[/yellow]")
         return False
 
-    for col in ["lista_unid", "fontes", "lista_co_sefin", "lista_id_item_unid", "lista_id_item"]:
+    for col in ["lista_unid", "fontes", "lista_co_sefin", "lista_id_item_unid", "lista_id_item",
+                  "lista_ncm", "lista_cest", "lista_gtin", "lista_desc_compl"]:
         if col not in df_descricoes.columns:
             df_descricoes = df_descricoes.with_columns(pl.lit([]).cast(pl.List(pl.String)).alias(col))
+
+    # Cast any List(Null) columns to List(String) — happens when all source values were null
+    _list_str_cols = ["lista_ncm", "lista_cest", "lista_gtin", "lista_unid", "lista_co_sefin", "lista_desc_compl"]
+    df_descricoes = df_descricoes.with_columns([
+        pl.col(c).cast(pl.List(pl.String), strict=False)
+        for c in _list_str_cols
+        if c in df_descricoes.columns
+    ])
 
     df_item_unid_norm = (
         df_item_unid
@@ -234,7 +243,25 @@ def produtos_agrupados(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
                 }
             )
 
-    df_mestra = pl.DataFrame(registros_mestra)
+    df_mestra = pl.DataFrame(
+        registros_mestra,
+        schema_overrides={
+            "descr_padrao": pl.String,
+            "ncm_padrao": pl.String,
+            "cest_padrao": pl.String,
+            "gtin_padrao": pl.String,
+            "co_sefin_padrao": pl.String,
+            "lista_chave_produto": pl.List(pl.String),
+            "lista_ncm": pl.List(pl.String),
+            "lista_cest": pl.List(pl.String),
+            "lista_gtin": pl.List(pl.String),
+            "lista_co_sefin": pl.List(pl.String),
+            "lista_unidades": pl.List(pl.String),
+            "lista_descricoes": pl.List(pl.String),
+            "lista_desc_compl": pl.List(pl.String),
+            "fontes": pl.List(pl.String),
+        },
+    )
     df_ponte = pl.DataFrame(registros_ponte)
 
     ok_mestra = salvar_para_parquet(df_mestra, pasta_analises, f"produtos_agrupados_{cnpj}.parquet")

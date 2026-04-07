@@ -3,7 +3,7 @@ WITH
 PARAMETROS AS (
     SELECT
         :CNPJ AS cnpj_filtro,
-        NVL(TO_DATE(:data_inicial, 'DD/MM/YYYY'), DATE '1900-01-01') AS dt_ini_filtro,
+        NVL(TO_DATE(:data_inicial, 'DD/MM/YYYY'), DATE '2020-01-01') AS dt_ini_filtro,
         NVL(TO_DATE(:data_final, 'DD/MM/YYYY'), TRUNC(SYSDATE)) AS dt_fim_filtro,
         NVL(TO_DATE(:data_limite_processamento, 'DD/MM/YYYY'), TRUNC(SYSDATE)) AS dt_corte
     FROM dual

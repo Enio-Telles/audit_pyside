@@ -2,6 +2,7 @@ import axios from "axios";
 import type {
   CNPJRecord,
   ParquetFile,
+  StorageSummary,
   PageResult,
   FilterItem,
   PipelineStatus,
@@ -35,6 +36,24 @@ export const cnpjApi = {
     api
       .get<{ columns: string[] }>(`/cnpj/${cnpj}/schema`, { params: { path } })
       .then((r) => r.data),
+  deleteParquetFile: (cnpj: string, path: string) =>
+    api
+      .delete<{ deleted: string }>(`/cnpj/${cnpj}/parquets/single`, { data: { path } })
+      .then((r) => r.data),
+  deleteAllParquets: (cnpj: string) =>
+    api
+      .delete<{ deleted: string[]; count: number }>(`/cnpj/${cnpj}/parquets/all`)
+      .then((r) => r.data),
+  deleteAgregacao: (cnpj: string) =>
+    api
+      .delete<{ deleted: string[]; count: number }>(`/cnpj/${cnpj}/analises/agregacao`)
+      .then((r) => r.data),
+  deleteConversao: (cnpj: string) =>
+    api
+      .delete<{ deleted: string[]; count: number }>(`/cnpj/${cnpj}/analises/conversao`)
+      .then((r) => r.data),
+  getStorage: (cnpj: string) =>
+    api.get<StorageSummary>(`/cnpj/${cnpj}/storage`).then((r) => r.data),
 };
 
 // ---- Parquet Query ----
@@ -125,6 +144,54 @@ export const estoqueApi = {
         unid_ref,
       })
       .then((r) => r.data),
+  blocoH: (
+    cnpj: string,
+    page = 1,
+    page_size = 500,
+    filtros?: {
+      dt_inv?: string;
+      cod_mot_inv?: string;
+      indicador_propriedade?: string;
+    },
+  ) =>
+    api
+      .get<PageResult>(`/estoque/${cnpj}/bloco_h`, {
+        params: { page, page_size, ...filtros },
+      })
+      .then((r) => r.data),
+  blocoHH005: (
+    cnpj: string,
+    page = 1,
+    page_size = 500,
+    filtros?: {
+      dt_inv?: string;
+      cod_mot_inv?: string;
+      indicador_propriedade?: string;
+    },
+  ) =>
+    api
+      .get<PageResult>(`/estoque/${cnpj}/bloco_h_h005`, {
+        params: { page, page_size, ...filtros },
+      })
+      .then((r) => r.data),
+  blocoHResumo: (
+    cnpj: string,
+    filtros?: {
+      dt_inv?: string;
+      cod_mot_inv?: string;
+      indicador_propriedade?: string;
+    },
+  ) =>
+    api
+      .get<{
+        inventarios_h005: number;
+        total_produtos_codigo_produto: number;
+        total_linhas_h010: number;
+        valor_total_itens: number;
+        motivos: Array<{ cod_mot_inv: string; mot_inv_desc?: string | null; qtd_itens: number }>;
+        propriedade: Array<{ indicador_propriedade: string; qtd_itens: number }>;
+      }>(`/estoque/${cnpj}/bloco_h_resumo`, { params: { ...filtros } })
+      .then((r) => r.data),
 };
 
 // ---- Ressarcimento ST ----
@@ -186,6 +253,14 @@ export const sqlApi = {
         rows: Record<string, unknown>[];
         count: number;
       }>("/sql/execute", { sql, cnpj, params })
+      .then((r) => r.data),
+  createFile: (payload: { name: string; folder: string; content: string }) =>
+    api
+      .post<{ path: string }>("/sql/files", payload)
+      .then((r) => r.data),
+  deleteFile: (path: string) =>
+    api
+      .delete<{ deleted: string }>("/sql/files", { params: { path } })
       .then((r) => r.data),
 };
 
@@ -295,6 +370,10 @@ export const fisconformeApi = {
     pdf_base64?: string;
   }) =>
     api.post("/fisconforme/gerar-notificacoes-lote", payload, {
+      responseType: "blob",
+    }),
+  gerarDocx: (payload: GerarNotificacaoRequest) =>
+    api.post("/fisconforme/gerar-docx", payload, {
       responseType: "blob",
     }),
 };

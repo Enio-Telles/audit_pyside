@@ -54,6 +54,10 @@ interface AppStore {
   addConsultaHighlightRule: (r: HighlightRule) => void;
   removeConsultaHighlightRule: (i: number) => void;
 
+  // SQL query selection for extraction (null = all)
+  selectedConsultas: string[] | null;
+  setSelectedConsultas: (ids: string[] | null) => void;
+
   // Left panel visibility
   leftPanelVisible: boolean;
   toggleLeftPanel: () => void;
@@ -149,6 +153,9 @@ export const useAppStore = create<AppStore>((set) => ({
         (_, idx) => idx !== i,
       ),
     })),
+
+  selectedConsultas: null,
+  setSelectedConsultas: (ids) => set({ selectedConsultas: ids }),
 
   leftPanelVisible: true,
   toggleLeftPanel: () =>

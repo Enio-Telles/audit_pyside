@@ -6,9 +6,7 @@ from pathlib import Path
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel
 
-from interface_grafica.services.pipeline_funcoes_service import (
-    enriquecer_consultas_dependentes,
-)
+
 from interface_grafica.services.registry_service import RegistryService
 from utilitarios.sql_catalog import list_sql_entries, normalize_sql_id, resolve_sql_path
 
@@ -90,10 +88,7 @@ def _resolver_execucao(
     )
 
     svc = ServicoPipelineCompleto()
-    consultas = [
-        str(item)
-        for item in enriquecer_consultas_dependentes(consultas, tabelas)
-    ]
+    consultas = [str(item) for item in consultas]
     consultas_disponiveis = list_sql_entries()
     consultas_por_nome = {entry.path.name.lower(): entry.path for entry in consultas_disponiveis}
     consultas_por_id = {entry.sql_id.lower(): entry.path for entry in consultas_disponiveis}

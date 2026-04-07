@@ -128,14 +128,20 @@ class SqlService:
         except Exception as exc:
             raise RuntimeError("Nao foi possivel inicializar a conexao Oracle.") from exc
 
-        binds = dict(params or {})
-        if cnpj:
-            binds.setdefault("CNPJ", cnpj)
+        values = dict(params or {})
+        if cnpj and not any(str(k).lower() == "cnpj" for k in values):
+            values["CNPJ"] = cnpj
+
+        # Envia apenas bind variables existentes no SQL para evitar DPY-4008.
+        binds = SqlService.build_binds(sql, values)
 
         conn = _conectar_oracle_fallback()
         try:
             with conn.cursor() as cursor:
-                cursor.execute(sql, binds)
+                if binds:
+                    cursor.execute(sql, binds)
+                else:
+                    cursor.execute(sql)
                 columns = [desc[0] for desc in cursor.description or []]
                 rows = cursor.fetchall()
             if not rows:

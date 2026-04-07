@@ -28,14 +28,16 @@ from interface_grafica.config import CNPJ_ROOT
 from utilitarios.project_paths import APP_STATE_ROOT, ENV_PATH
 from utilitarios.sql_catalog import resolve_sql_path
 
+from services.report_docx_service import ReportDocxService
+
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
-SQL_CADASTRAL = resolve_sql_path("fisconforme/cadastro/dados_cadastrais.sql")
-SQL_MALHA = resolve_sql_path("fisconforme/malhas/Fisconforme_malha_cnpj.sql")
+SQL_CADASTRAL = resolve_sql_path("dados_cadastrais.sql")
+SQL_MALHA = resolve_sql_path("Fisconforme_malha_cnpj.sql")
 FISCONFORME_ENV = ENV_PATH
 AUDITOR_CONFIG_PATH = APP_STATE_ROOT / "fisconforme_auditor.json"
 DSF_ACERVO_PATH = APP_STATE_ROOT / "fisconforme_dsfs.json"
@@ -287,10 +289,16 @@ def _extrair_cadastral_oracle(cnpj: str) -> Optional[Dict[str, Any]]:
     sql = _ler_sql(SQL_CADASTRAL)
     if not sql:
         return None
+    binds = _montar_binds_sql(sql, {
+        "cnpj": cnpj,
+        "co_cnpj_cpf": cnpj,
+        "cnpj_cpf": cnpj,
+        "cpf_cnpj": cnpj,
+    })
     conn = _conectar_oracle()
     try:
         with conn.cursor() as cur:
-            cur.execute(sql, {"cnpj": cnpj})
+            cur.execute(sql, binds)
             cols = [c[0].upper() for c in cur.description]
             row = cur.fetchone()
             if not row:
@@ -314,16 +322,43 @@ def _periodo_para_oracle(periodo: str, default: str) -> str:
     return default
 
 
+def _montar_binds_sql(sql: str, candidatos: Dict[str, Any]) -> Dict[str, Any]:
+    """Monta binds somente para placeholders existentes no SQL (case-insensitive)."""
+    placeholders: List[str] = []
+    vistos = set()
+    for match in re.finditer(r":([A-Za-z_][A-Za-z0-9_]*)", sql):
+        nome = match.group(1)
+        if nome not in vistos:
+            vistos.add(nome)
+            placeholders.append(nome)
+
+    candidatos_ci = {str(chave).lower(): valor for chave, valor in (candidatos or {}).items()}
+    binds: Dict[str, Any] = {}
+    for nome in placeholders:
+        chave = nome.lower()
+        if chave in candidatos_ci:
+            binds[nome] = candidatos_ci[chave]
+    return binds
+
+
 def _extrair_malhas_oracle(cnpj: str, data_inicio: str, data_fim: str) -> List[Dict[str, Any]]:
     sql = _ler_sql(SQL_MALHA)
     if not sql:
         return []
     d_ini = _periodo_para_oracle(data_inicio, "190001")
     d_fim = _periodo_para_oracle(data_fim, "209912")
+    binds = _montar_binds_sql(
+        sql,
+        {
+            "cnpj": cnpj,
+            "data_inicio": d_ini,
+            "data_fim": d_fim,
+        },
+    )
     conn = _conectar_oracle()
     try:
         with conn.cursor() as cur:
-            cur.execute(sql, {"cnpj": cnpj, "data_inicio": d_ini, "data_fim": d_fim})
+            cur.execute(sql, binds)
             cols = [c[0].upper() for c in cur.description]
             rows = cur.fetchall()
             resultado = []
@@ -808,11 +843,15 @@ def _salvar_notificacao_em_disco(
     nome_arquivo: str,
     output_dir: str,
 ) -> str:
-    target_dir = Path(output_dir).expanduser()
-    target_dir.mkdir(parents=True, exist_ok=True)
-    target_path = target_dir / nome_arquivo
-    target_path.write_text(conteudo, encoding="utf-8")
-    return str(target_path)
+    try:
+        target_dir = Path(output_dir).expanduser()
+        target_dir.mkdir(parents=True, exist_ok=True)
+        target_path = target_dir / nome_arquivo
+        target_path.write_text(conteudo, encoding="utf-8")
+        return str(target_path)
+    except OSError as exc:
+        logger.warning("Não foi possível salvar notificação em disco (%s): %s", output_dir, exc)
+        return ""
 
 
 def _montar_notificacao(
@@ -999,9 +1038,57 @@ def gerar_notificacoes_lote(req: GerarNotificacoesLoteRequest):
     nome_zip = f"notificacoes_fisconforme_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
     headers = {"Content-Disposition": f'attachment; filename="{nome_zip}"'}
     if output_dir:
-        target_dir = Path(output_dir).expanduser()
-        target_dir.mkdir(parents=True, exist_ok=True)
-        (target_dir / nome_zip).write_bytes(zip_buffer.getvalue())
-        headers["X-Saved-To"] = str(target_dir)
-        headers["X-Saved-Count"] = str(len(cnpjs_validos))
+        try:
+            target_dir = Path(output_dir).expanduser()
+            target_dir.mkdir(parents=True, exist_ok=True)
+            (target_dir / nome_zip).write_bytes(zip_buffer.getvalue())
+            headers["X-Saved-To"] = str(target_dir)
+            headers["X-Saved-Count"] = str(len(cnpjs_validos))
+        except OSError as exc:
+            logger.warning("Não foi possível salvar ZIP em disco (%s): %s", output_dir, exc)
     return StreamingResponse(zip_buffer, media_type="application/zip", headers=headers)
+
+@router.post("/gerar-docx")
+def gerar_docx(req: GerarNotificacaoRequest):
+    """
+    Gera um relatório customizado em Word (.docx) baseado no template original.
+    Mantém logotipos e visual clássico conforme solicitado.
+    """
+    try:
+        # Prepara o serviço de geração
+        service = ReportDocxService()
+        
+        # Nome único para o arquivo gerado
+        filename = f"notificacao_{_limpar_cnpj(req.cnpj)}_{uuid4().hex[:8]}.docx"
+        
+        # Mapeia os dados da requisição para o formato esperado pelo template Word
+        # Nota: 'malhas' devem ser enviadas no corpo da requisição ou buscadas no cache
+        dados_cadastrais = _ler_cache_cadastral(_limpar_cnpj(req.cnpj)) or {}
+        
+        contexto = {
+            "RAZAO_SOCIAL": dados_cadastrais.get("NO_RAZAO_SOCIAL", "NOME NÃO ENCONTRADO"),
+            "CNPJ": req.cnpj,
+            "IE": dados_cadastrais.get("CO_CAD_ICMS", ""),
+            "DSF": req.dsf,
+            "AUDITOR": req.auditor,
+            "CARGO_TITULO": req.cargo_titulo,
+            "MATRICULA": req.matricula,
+            "CONTATO": req.contato,
+            "ORGAO_ORIGEM": req.orgao_origem,
+            # Placeholder para tabela de pendências (pode ser expandido conforme necessidade)
+            "TABELA": _ler_cache_malha(_limpar_cnpj(req.cnpj)) or []
+        }
+        
+        # Executa a geração técnica do arquivo
+        relatorio_path = service.gerar_relatorio(contexto, filename)
+        
+        # Retorna o arquivo para download
+        return StreamingResponse(
+            open(relatorio_path, "rb"),
+            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            headers={"Content-Disposition": f"attachment; filename={filename}"}
+        )
+        
+    except Exception as exc:
+        logger.error("Erro ao gerar DOCX: %s", exc)
+        raise HTTPException(500, f"Erro interno ao gerar Word: {str(exc)}")

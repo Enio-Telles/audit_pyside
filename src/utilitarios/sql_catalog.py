@@ -29,6 +29,9 @@ def _normalizar_texto_relativo(value: str) -> str:
     return value.replace("\\", "/").strip().lstrip("./")
 
 
+_SQL_ARQUIVOS_PARQUET_ROOT = SQL_ROOT / "arquivos_parquet"
+
+
 def _iter_sql_paths(include_archive: bool = False) -> Iterable[Path]:
     if not SQL_ROOT.exists():
         return []
@@ -37,6 +40,12 @@ def _iter_sql_paths(include_archive: bool = False) -> Iterable[Path]:
     for path in SQL_ROOT.rglob("*"):
         if not path.is_file() or path.suffix.lower() != ".sql":
             continue
+        # Excluir a subpasta arquivos_parquet/ (SQLs atomizados)
+        try:
+            path.relative_to(_SQL_ARQUIVOS_PARQUET_ROOT)
+            continue
+        except ValueError:
+            pass
         if not include_archive:
             try:
                 path.relative_to(SQL_ARCHIVE_ROOT)

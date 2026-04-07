@@ -22,6 +22,12 @@ import webbrowser
 from pathlib import Path
 from threading import Thread
 
+# Garante que stdout use UTF-8 para evitar erros de encoding com logs do uvicorn
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[attr-defined]
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[attr-defined]
+
 
 def _find_pnpm() -> str | None:
     """Localiza o pnpm quando ele estiver disponivel no ambiente."""
@@ -44,7 +50,11 @@ def _print(msg: str, *, color: str = "") -> None:
     codes = {"green": "\033[92m", "yellow": "\033[93m", "red": "\033[91m", "cyan": "\033[96m", "reset": "\033[0m"}
     prefix = codes.get(color, "")
     reset = codes["reset"] if prefix else ""
-    print(f"{prefix}{msg}{reset}", flush=True)
+    try:
+        print(f"{prefix}{msg}{reset}", flush=True)
+    except UnicodeEncodeError:
+        safe = f"{prefix}{msg}{reset}".encode(sys.stdout.encoding or "utf-8", errors="replace").decode(sys.stdout.encoding or "utf-8")
+        print(safe, flush=True)
 
 
 def _find_npm() -> str:

@@ -78,7 +78,15 @@ def _consolidar_grupo_id_agrupado(df_grupo: pl.DataFrame) -> pl.DataFrame:
             "lista_desc_compl": [sorted(descricoes_complementares)],
             "lista_codigos": [sorted(codigos)],
             "lista_unidades": [sorted(unidades)],
-        }
+        },
+        schema_overrides={
+            "id_agrupado": pl.String,
+            "descr_padrao": pl.String,
+            "lista_descricoes": pl.List(pl.String),
+            "lista_desc_compl": pl.List(pl.String),
+            "lista_codigos": pl.List(pl.String),
+            "lista_unidades": pl.List(pl.String),
+        },
     )
 
 

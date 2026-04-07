@@ -31,8 +31,8 @@ PARQUET_DIR = ROOT_DIR / "dados" / "fisconforme" / "data_parquet"
 PARQUET_DIR.mkdir(parents=True, exist_ok=True)
 
 # Arquivos SQL
-SQL_DADOS_CADASTRAIS = resolve_sql_path("fisconforme/cadastro/dados_cadastrais.sql")
-SQL_MALHA_CNPJ = resolve_sql_path("fisconforme/malhas/Fisconforme_malha_cnpj.sql")
+SQL_DADOS_CADASTRAIS = resolve_sql_path("dados_cadastrais.sql")
+SQL_MALHA_CNPJ = resolve_sql_path("Fisconforme_malha_cnpj.sql")
 
 # Arquivos Parquet de cache
 PARQUET_CADASTRAIS = PARQUET_DIR / "dados_cadastrais.parquet"

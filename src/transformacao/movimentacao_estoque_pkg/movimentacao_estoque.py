@@ -304,7 +304,7 @@ def gerar_movimentacao_estoque(cnpj: str, pasta_cnpj: Path | None = None) -> boo
         # Uma heuristic rapida para descobrir dependencias: vars() de orig
         for m in mapeamento:
             v = str(m[key_map])
-            if v and v not in ["(vazio)", "correspondÃªncia com chave NF", "icms_orig & icms_cst ou icms_csosn", "prod_ceantrib ou caso for nulo -> prod_cean", "vl_item-vl_desc", "prod_vprod+prod_vfrete+prod_vseg+prod_voutro-prod_vdesc", "\"gerado\" ou \"registro\" (se estÃ¡ no bloco_h)"]:
+            if v and v not in ["(vazio)", "correspondÃªncia com chave NF", "icms_orig & icms_cst ou icms_csosn", "prod_ceantrib ou caso for nulo -> prod_cean", "vl_item-vl_desc", "prod_vprod+prod_vfrete+prod_vseg+prod_voutro-prod_vdesc", "\"gerado\" ou \"registro\" (se está no bloco_h)"]:
                 if not v.startswith('"'):
                     cols_required.add(v)
         

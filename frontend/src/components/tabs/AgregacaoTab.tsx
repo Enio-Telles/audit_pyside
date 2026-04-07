@@ -34,8 +34,12 @@ function MergeModal({ cnpj, selected, onClose, onSuccess }: MergeModalProps) {
       await aggregationApi.merge(cnpj, destino, idsOrigem);
       onSuccess();
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
-      setError(msg || "Erro ao agregar.");
+      const axiosErr = e as { response?: { data?: { detail?: string } }; message?: string };
+      const msg =
+        axiosErr?.response?.data?.detail ??
+        axiosErr?.message ??
+        "Erro ao agregar.";
+      setError(msg);
     } finally {
       setLoading(false);
     }

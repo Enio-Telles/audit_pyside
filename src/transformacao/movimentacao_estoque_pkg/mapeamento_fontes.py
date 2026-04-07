@@ -118,7 +118,7 @@ def parse_expression(expr_str: str, col_alias: str) -> pl.Expr:
             return pl.lit(None).alias(col_alias)
         return pl.lit(None).alias(col_alias)
 
-    if expr_str == '"gerado" ou "registro" (se estÃ¡ no bloco_h)':
+    if expr_str == '"gerado" ou "registro" (se está no bloco_h)':
         return pl.lit("registro").alias(col_alias)
 
     # Fallback to column name

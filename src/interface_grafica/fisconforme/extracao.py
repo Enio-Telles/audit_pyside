@@ -34,9 +34,9 @@ from utilitarios.sql_catalog import resolve_sql_path
 # DiretÃ³rio raiz do projeto Fisconforme_nao_atendidos
 ROOT_DIR = get_root_dir()
 
-# Arquivos SQL especÃ­ficos do catÃ¡logo canÃ´nico
-SQL_DADOS_CADASTRAIS = resolve_sql_path("fisconforme/cadastro/dados_cadastrais.sql")
-SQL_MALHA_CNPJ = resolve_sql_path("fisconforme/malhas/Fisconforme_malha_cnpj.sql")
+# Arquivos SQL específicos do catálogo canônico
+SQL_DADOS_CADASTRAIS = resolve_sql_path("dados_cadastrais.sql")
+SQL_MALHA_CNPJ = resolve_sql_path("Fisconforme_malha_cnpj.sql")
 
 
 def validar_cnpj(cnpj: str) -> bool:

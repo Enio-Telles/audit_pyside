@@ -1,5 +1,6 @@
-﻿import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+﻿import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { useAppStore } from "./store/appStore";
+import { cnpjApi } from "./api/client";
 import { LeftPanel } from "./components/layout/LeftPanel";
 import { ConsultaTab } from "./components/tabs/ConsultaTab";
 import { ConsultaSqlTab } from "./components/tabs/ConsultaSqlTab";
@@ -9,7 +10,6 @@ import { EstoqueTab } from "./components/tabs/EstoqueTab";
 import { LogsTab } from "./components/tabs/LogsTab";
 import { LandingPage } from "./components/LandingPage";
 import { FisconformeTab } from "./components/tabs/FisconformeTab";
-import { RessarcimentoTab } from "./components/tabs/RessarcimentoTab";
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 30_000 } },
@@ -20,13 +20,19 @@ const TABS = [
   { id: "sql", label: "Consulta SQL" },
   { id: "agregacao", label: "Agregacao" },
   { id: "conversao", label: "Conversao" },
-  { id: "ressarcimento", label: "Ressarcimento ST" },
   { id: "estoque", label: "Estoque" },
   { id: "logs", label: "Logs" },
 ];
 
 function MainContent() {
   const { activeTab, setActiveTab, leftPanelVisible, toggleLeftPanel, selectedFile, selectedCnpj, appMode, setAppMode } = useAppStore();
+
+  const { data: cnpjs = [] } = useQuery({
+    queryKey: ["cnpjs"],
+    queryFn: cnpjApi.list,
+  });
+
+  const selectedRecord = cnpjs.find((r) => r.cnpj === selectedCnpj) ?? null;
 
   if (appMode === null) {
     return <LandingPage onSelect={setAppMode} />;
@@ -68,15 +74,22 @@ function MainContent() {
           className="flex items-center justify-between px-3 py-1 border-b border-slate-700"
           style={{ background: "#0d1f3c", minHeight: 32 }}
         >
-          <div className="text-xs text-slate-400">
+          <div className="text-xs text-slate-400 flex items-center gap-2 min-w-0 overflow-hidden">
             {selectedCnpj && (
               <>
-                CNPJ: {selectedCnpj}
+                <span className="font-mono text-slate-300 shrink-0">{selectedCnpj}</span>
+                {selectedRecord?.razao_social && (
+                  <span className="text-slate-400 truncate max-w-[280px]" title={selectedRecord.razao_social}>
+                    | {selectedRecord.razao_social}
+                  </span>
+                )}
+                {selectedRecord?.nome_fantasia && selectedRecord.nome_fantasia !== selectedRecord.razao_social && (
+                  <span className="text-slate-500 truncate max-w-[200px]" title={selectedRecord.nome_fantasia}>
+                    ({selectedRecord.nome_fantasia})
+                  </span>
+                )}
                 {selectedFile && (
-                  <>
-                    {" "}
-                    | Arquivo: {selectedFile.name}
-                  </>
+                  <span className="text-slate-500 truncate shrink-0">| {selectedFile.name}</span>
                 )}
               </>
             )}
@@ -122,7 +135,6 @@ function MainContent() {
           {activeTab === "sql" && <ConsultaSqlTab />}
           {activeTab === "agregacao" && <AgregacaoTab />}
           {activeTab === "conversao" && <ConversaoTab />}
-          {activeTab === "ressarcimento" && <RessarcimentoTab />}
           {activeTab === "estoque" && <EstoqueTab />}
           {activeTab === "logs" && <LogsTab />}
         </div>

@@ -1,6 +1,7 @@
 export interface CNPJRecord {
   cnpj: string;
   razao_social: string | null;
+  nome_fantasia: string | null;
   added_at: string;
   last_run_at: string | null;
 }
@@ -9,6 +10,19 @@ export interface ParquetFile {
   name: string;
   path: string;
   size: number;
+}
+
+export interface StorageSectionInfo {
+  bytes: number;
+  count: number;
+}
+
+export interface StorageSummary {
+  cnpj: string;
+  parquet: StorageSectionInfo;
+  agregacao: StorageSectionInfo;
+  conversao: StorageSectionInfo;
+  total_bytes: number;
 }
 
 export interface FilterItem {

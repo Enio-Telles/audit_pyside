@@ -1036,6 +1036,7 @@ function DadosAuditorStep({
   onSaveAuditor: () => Promise<void>;
 }) {
   const [gerando, setGerando] = useState<string | null>(null);
+  const [gerandoDocx, setGerandoDocx] = useState<string | null>(null);
   const [gerandoLote, setGerandoLote] = useState(false);
   const [salvandoPerfil, setSalvandoPerfil] = useState(false);
   const [statusPerfil, setStatusPerfil] = useState("");
@@ -1101,6 +1102,35 @@ function DadosAuditorStep({
       setErros((current) => ({ ...current, [result.cnpj]: message }));
     } finally {
       setGerando(null);
+    }
+  }
+
+  async function handleGerarDocx(result: FisconformeConsultaResult) {
+    setGerandoDocx(result.cnpj);
+    setErros((current) => ({ ...current, [result.cnpj]: "" }));
+    setStatusPerfil("");
+
+    try {
+      const payload: GerarNotificacaoRequest = {
+        cnpj: result.cnpj,
+        ...(await montarPayloadBase()),
+      };
+      const response = await fisconformeApi.gerarDocx(payload);
+      const fileName = extractFileName(
+        response.headers["content-disposition"],
+        `notificacao_${result.cnpj}.docx`,
+      );
+      downloadBlob(
+        new Blob([response.data], {
+          type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        }),
+        fileName,
+      );
+    } catch (exc: unknown) {
+      const message = exc instanceof Error ? exc.message : String(exc);
+      setErros((current) => ({ ...current, [result.cnpj]: message }));
+    } finally {
+      setGerandoDocx(null);
     }
   }
 
@@ -1420,13 +1450,27 @@ function DadosAuditorStep({
                 </div>
               )}
 
-              <div className="flex justify-end">
+              <div className="flex justify-end gap-3">
+                <SecondaryBtn
+                  onClick={() => handleGerarDocx(result)}
+                  disabled={
+                    !draft.auditorData.auditor ||
+                    gerando !== null ||
+                    gerandoDocx !== null ||
+                    gerandoLote
+                  }
+                >
+                  {gerandoDocx === result.cnpj
+                    ? "Gerando..."
+                    : "Gerar notificação Word"}
+                </SecondaryBtn>
                 <PrimaryBtn
                   onClick={() => handleGerar(result)}
                   loading={gerando === result.cnpj}
                   disabled={
                     !draft.auditorData.auditor ||
                     gerando !== null ||
+                    gerandoDocx !== null ||
                     gerandoLote
                   }
                 >
@@ -1676,7 +1720,7 @@ export function FisconformeTab() {
             onDraftChange={updateDraft}
             onAuditorChange={updateAuditor}
             onPdfChange={setPdfFile}
-            onSaveDraft={persistCurrentDsf}
+            onSaveDraft={async () => { await persistCurrentDsf(); }}
             onConsultar={handleConsultar}
           />
         )}
