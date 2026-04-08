@@ -16,6 +16,8 @@ from utilitarios.project_paths import PROJECT_ROOT
 import polars as pl
 from rich import print as rprint
 
+from transformacao.movimentacao_estoque_pkg.mapeamento_fontes import normalizar_descricao_expr
+
 ROOT_DIR = PROJECT_ROOT
 SRC_DIR = ROOT_DIR / "src"
 DADOS_DIR = ROOT_DIR / "dados"
@@ -34,19 +36,9 @@ except ImportError as e:
     sys.exit(1)
 
 
-def _norm(text: str | None) -> str:
-    if text is None:
-        return ""
-    return re.sub(r"\s+", " ", (remove_accents(text) or "").upper().strip())
-
 
 def _normalizar_descricao_expr(col: str) -> pl.Expr:
-    return (
-        pl.col(col)
-        .cast(pl.Utf8, strict=False)
-        .map_elements(_norm, return_dtype=pl.String)
-        .alias("descricao_normalizada")
-    )
+    return normalizar_descricao_expr(col).alias("descricao_normalizada")
 
 
 def _salvar_log_sem_compra(df_sem_compra: pl.DataFrame, pasta_analises: Path, cnpj: str) -> None:
@@ -225,10 +217,7 @@ def _construir_mapa_descricoes_canonicas(df_agrupamento_canonico: pl.DataFrame) 
         .with_columns(
             [
                 pl.col("descricao_texto").cast(pl.Utf8, strict=False).fill_null("").str.strip_chars().alias("descricao_texto"),
-                pl.col("descricao_texto")
-                .cast(pl.Utf8, strict=False)
-                .map_elements(_norm, return_dtype=pl.String)
-                .alias("descricao_normalizada_match"),
+                normalizar_descricao_expr("descricao_texto").alias("descricao_normalizada_match"),
             ]
         )
         .filter(pl.col("descricao_normalizada_match") != "")
@@ -314,12 +303,8 @@ def _reconciliar_fatores_existentes_com_agrupamento_atual(
         .with_columns(
             [
                 (pl.col("fator_manual") | pl.col("unid_ref_manual")).alias("__eh_manual__"),
-                pl.col("descr_padrao").map_elements(_norm, return_dtype=pl.String).alias("__descr_padrao_norm__"),
-                pl.col("descr_padrao_canonico")
-                .cast(pl.Utf8, strict=False)
-                .fill_null("")
-                .map_elements(_norm, return_dtype=pl.String)
-                .alias("__descr_padrao_canonico_norm__"),
+                normalizar_descricao_expr("descr_padrao").alias("__descr_padrao_norm__"),
+                normalizar_descricao_expr("descr_padrao_canonico").alias("__descr_padrao_canonico_norm__"),
             ]
         )
         .with_columns(
