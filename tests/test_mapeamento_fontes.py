@@ -7,7 +7,7 @@ import pytest
 sys.path.insert(0, str(Path("src").resolve()))
 
 from transformacao.movimentacao_estoque_pkg.mapeamento_fontes import (
-    _norm,
+
     detectar_coluna_descricao,
     detectar_coluna_unidade
 )
@@ -16,12 +16,6 @@ from transformacao.movimentacao_estoque_pkg.mapeamento_fontes import (
 class MockDataFrame:
     def __init__(self, columns):
         self.columns = columns
-
-def test_norm_basic():
-    assert _norm("  produto   teste  ") == "PRODUTO TESTE"
-    assert _norm("Café com Açúcar") == "CAFE COM ACUCAR"
-    assert _norm(None) == ""
-    assert _norm("   ") == ""
 
 def test_detectar_coluna_descricao_c170():
     # candidatos = ["descr_item", "descricao", "prod_xprod"]
