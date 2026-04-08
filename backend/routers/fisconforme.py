@@ -451,7 +451,7 @@ def configurar_db(req: DbConfigRequest):
         FISCONFORME_ENV.write_text("\n".join(new_lines), encoding="latin-1")
         return {"ok": True}
     except Exception as exc:
-        raise HTTPException(500, f"Erro ao salvar config: {exc}")
+        raise HTTPException(500, "Erro interno ao salvar configurações.") from exc
 
 
 @router.get("/testar-conexao")
@@ -924,7 +924,7 @@ def salvar_auditor_config(req: AuditorConfigRequest):
         _salvar_auditor_config(req)
         return {"ok": True}
     except Exception as exc:
-        raise HTTPException(500, f"Erro ao salvar dados do auditor: {exc}") from exc
+        raise HTTPException(500, "Erro interno ao salvar dados do auditor.") from exc
 
 
 @router.post("/gerar-notificacao")
@@ -1091,4 +1091,4 @@ def gerar_docx(req: GerarNotificacaoRequest):
         
     except Exception as exc:
         logger.error("Erro ao gerar DOCX: %s", exc)
-        raise HTTPException(500, f"Erro interno ao gerar Word: {str(exc)}")
+        raise HTTPException(500, "Erro interno ao gerar arquivo Word.") from exc

@@ -49,7 +49,7 @@ def execute_sql(req: SqlRequest):
         rows = [_safe_value(dict(row)) for row in (result or [])]
         return {"rows": rows, "count": len(rows)}
     except Exception as exc:
-        raise HTTPException(500, f"Erro SQL: {exc}") from exc
+        raise HTTPException(500, "Erro interno ao executar SQL.") from exc
 
 
 @router.get("/file")
@@ -61,9 +61,9 @@ def read_sql_file(path: str):
     try:
         return {"content": SqlService.read_sql(sql_id)}
     except FileNotFoundError as exc:
-        raise HTTPException(404, str(exc)) from exc
+        raise HTTPException(404, "Arquivo SQL não encontrado.") from exc
     except Exception as exc:
-        raise HTTPException(500, f"Erro ao ler SQL: {exc}") from exc
+        raise HTTPException(500, "Erro interno ao ler arquivo SQL.") from exc
 
 
 class SqlFileCreate(BaseModel):

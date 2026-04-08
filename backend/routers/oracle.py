@@ -185,7 +185,7 @@ def salvar_config(req: SalvarConfigRequest):
         _ENV_PATH.write_text(conteudo.strip() + "\n", encoding="utf-8")
         return {"ok": True}
     except Exception as exc:
-        raise HTTPException(500, str(exc)) from exc
+        raise HTTPException(500, "Erro interno ao salvar as configurações.") from exc
 
 
 @router.get("/verificar/{slot}", response_model=TestarConexaoResponse)

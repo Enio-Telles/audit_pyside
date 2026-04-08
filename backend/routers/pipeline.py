@@ -253,7 +253,7 @@ def run_pipeline(req: PipelineRequest, background_tasks: BackgroundTasks):
     try:
         consultas_resolvidas, tabelas_resolvidas = _resolver_execucao(consultas, tabelas)
     except ValueError as exc:
-        raise HTTPException(400, str(exc)) from exc
+        raise HTTPException(400, "Erro ao resolver as etapas do pipeline. Verifique as configurações.") from exc
 
     total_etapas = len(consultas_resolvidas) + len(tabelas_resolvidas)
     _pipeline_status[cnpj] = _criar_status(
