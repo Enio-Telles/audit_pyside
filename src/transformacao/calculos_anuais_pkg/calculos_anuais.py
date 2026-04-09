@@ -100,8 +100,8 @@ def _carregar_referencia_st_anual(df_anual: pl.DataFrame) -> pl.DataFrame:
         )
         .with_columns(
             [
-                pl.col("ano").map_elements(lambda ano: date(int(ano), 1, 1), return_dtype=pl.Date).alias("__ano_ini__"),
-                pl.col("ano").map_elements(lambda ano: date(int(ano), 12, 31), return_dtype=pl.Date).alias("__ano_fim__"),
+                pl.date(pl.col("ano"), 1, 1).alias("__ano_ini__"),
+                pl.date(pl.col("ano"), 12, 31).alias("__ano_fim__"),
             ]
         )
     )
