@@ -584,7 +584,8 @@ def consulta_cadastral(req: ConsultaCnpjRequest):
             if dados:
                 _salvar_cache_cadastral(cnpj, dados)
         except Exception as exc:
-            raise HTTPException(503, f"Erro ao consultar Oracle: {exc}")
+            logger.error(f"Erro ao consultar Oracle para CNPJ {cnpj}: {exc}")
+            raise HTTPException(503, "Erro interno ao consultar o banco de dados. Verifique os logs do servidor.") from exc
 
     # Malhas
     malhas_cache = None if req.forcar_atualizacao else _ler_cache_malha(cnpj)
