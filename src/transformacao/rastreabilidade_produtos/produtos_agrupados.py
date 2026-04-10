@@ -31,11 +31,24 @@ except ImportError as e:
     sys.exit(1)
 
 
-def _normalizar_descricao_para_match(texto: str | None) -> str:
-    """Normaliza texto igual ao pipeline de produtos: remove acento, upper, trim, espaco unico."""
-    if texto is None:
-        return ""
-    return " ".join((remove_accents(texto) or "").upper().strip().split())
+def _expr_normalizar_descricao(coluna: str) -> pl.Expr:
+    return (
+        pl.when(pl.col(coluna).is_null())
+        .then(pl.lit(""))
+        .otherwise(
+            pl.col(coluna)
+            .cast(pl.Utf8, strict=False)
+            .str.replace_all(r"[áàãâäÁÀÃÂÄ]", "A")
+            .str.replace_all(r"[éèêëÉÈÊË]", "E")
+            .str.replace_all(r"[íìîïÍÌÎÏ]", "I")
+            .str.replace_all(r"[óòõôöÓÒÕÔÖ]", "O")
+            .str.replace_all(r"[úùûüÚÙÛÜ]", "U")
+            .str.replace_all(r"[çÇ]", "C")
+            .str.to_uppercase()
+            .str.strip_chars()
+            .str.replace_all(r"\s+", " ")
+        )
+    )
 
 
 def _primeira_descricao_valida(df: pl.DataFrame) -> str | None:
@@ -161,7 +174,7 @@ def inicializar_produtos_agrupados(cnpj: str, pasta_cnpj: Path | None = None) ->
         
         if desc_norms:
             df_base_filtered = df_base.filter(
-                pl.col("descricao").map_elements(_normalizar_descricao_para_match, return_dtype=pl.String).is_in(desc_norms)
+                _expr_normalizar_descricao("descricao").is_in(desc_norms)
             )
         else:
             df_base_filtered = df_base.filter(pl.lit(False))
