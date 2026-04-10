@@ -11,7 +11,7 @@ from interface_grafica.config import CNPJ_ROOT
 
 
 try:
-    from transformacao.produtos_agrupados import calcular_atributos_padrao
+    from transformacao.rastreabilidade_produtos.produtos_agrupados import calcular_atributos_padrao
 except ImportError:
     calcular_atributos_padrao = None
     
@@ -118,9 +118,24 @@ class ServicoAgregacao:
         ]
 
     @staticmethod
-    def _normalizar_descricao_para_match(texto: str | None):
-        from utilitarios.text import remove_accents
-        return " ".join((remove_accents(texto) or "").upper().strip().split()) if texto is not None else ""
+    def _expr_normalizar_descricao(coluna: str) -> pl.Expr:
+        return (
+            pl.when(pl.col(coluna).is_null())
+            .then(pl.lit(""))
+            .otherwise(
+                pl.col(coluna)
+                .cast(pl.Utf8, strict=False)
+                .str.replace_all(r"[áàãâäÁÀÃÂÄ]", "A")
+                .str.replace_all(r"[éèêëÉÈÊË]", "E")
+                .str.replace_all(r"[íìîïÍÌÎÏ]", "I")
+                .str.replace_all(r"[óòõôöÓÒÕÔÖ]", "O")
+                .str.replace_all(r"[úùûüÚÙÛÜ]", "U")
+                .str.replace_all(r"[çÇ]", "C")
+                .str.to_uppercase()
+                .str.strip_chars()
+                .str.replace_all(r"\s+", " ")
+            )
+        )
 
     @staticmethod
     def _primeira_descricao_por_chaves(df_prod: pl.DataFrame, chaves: list[str]) -> str | None:
@@ -523,8 +538,7 @@ class ServicoAgregacao:
             self.caminho_itens_unidades(cnpj),
             ["descricao", "ncm", "cest", "gtin", "co_sefin_item", "fontes", "fonte"],
         ).with_columns(
-            pl.col("descricao")
-            .map_elements(self._normalizar_descricao_para_match, return_dtype=pl.String)
+            self._expr_normalizar_descricao("descricao")
             .alias("descricao_normalizada_temp")
         )
 
@@ -1070,8 +1084,7 @@ class ServicoAgregacao:
             )
         )
         df_base = self._ler_parquet_colunas(path_base, ["descricao", "fonte", "fontes", "ncm", "cest", "gtin", "co_sefin_item"]).with_columns(
-            pl.col("descricao")
-            .map_elements(self._normalizar_descricao_para_match, return_dtype=pl.String)
+            self._expr_normalizar_descricao("descricao")
             .alias("descricao_normalizada_temp")
         )
 
@@ -1269,8 +1282,7 @@ class ServicoAgregacao:
                 df_base
                 .with_columns(
                     [
-                        pl.col("descricao")
-                        .map_elements(self._normalizar_descricao_para_match, return_dtype=pl.String)
+                        self._expr_normalizar_descricao("descricao")
                         .alias("descricao_normalizada"),
                         pl.col("compras").cast(pl.Float64, strict=False).fill_null(0.0).alias("compras"),
                         pl.col("qtd_compras").cast(pl.Float64, strict=False).fill_null(0.0).alias("qtd_compras"),
