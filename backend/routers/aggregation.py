@@ -108,6 +108,6 @@ def merge_agrupados(req: AggregateRequest):
         resultado = svc.agregar_linhas(cnpj=cnpj, ids_agrupados_selecionados=ids_ordenados)
         return {"ok": True, "resultado": resultado}
     except ValueError as exc:
-        raise HTTPException(400, str(exc))
+        raise HTTPException(400, "Parâmetros inválidos para agregação.") from exc
     except Exception as exc:
-        raise HTTPException(500, str(exc))
+        raise HTTPException(500, "Erro interno ao processar agregação.") from exc
