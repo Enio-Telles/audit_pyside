@@ -184,7 +184,12 @@ def produtos_agrupados(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         )
     )
 
-    df_item_unid_norm_dict = df_item_unid_norm.partition_by("__descricao_upper", as_dict=True)
+    # Optimization: Replace partition_by(as_dict=True) with a dictionary of grouped records to prevent creating numerous tiny DataFrames and OOM errors.
+    grouped_df = df_item_unid_norm.group_by("__descricao_upper").agg(pl.all())
+    df_item_unid_norm_dict = {
+        row["__descricao_upper"]: row
+        for row in grouped_df.to_dicts()
+    }
     empty_df = df_item_unid_norm.clear()
 
     registros_mestra: list[dict] = []
@@ -194,9 +199,9 @@ def produtos_agrupados(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         id_agrupado = _gerar_id_agrupado(seq)
         desc_norm = row.get("descricao_normalizada")
 
-        if desc_norm:
+        if desc_norm and desc_norm in df_item_unid_norm_dict:
             df_base = (
-                df_item_unid_norm_dict.get((desc_norm,), empty_df)
+                pl.DataFrame(df_item_unid_norm_dict[desc_norm])
                 .drop("__descricao_upper")
             )
         else:
