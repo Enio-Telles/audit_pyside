@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import re
 from pathlib import Path
 
@@ -9,6 +10,8 @@ from pydantic import BaseModel
 
 from interface_grafica.services.registry_service import RegistryService
 from utilitarios.sql_catalog import list_sql_entries, normalize_sql_id, resolve_sql_path
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 registry = RegistryService()
@@ -208,11 +211,12 @@ def _run_pipeline(
                 item_atual=_pipeline_status[cnpj].get("item_atual"),
             )
     except Exception as exc:
+        logger.error("Erro interno durante execução do pipeline para CNPJ %s", cnpj, exc_info=exc)
         atual = _pipeline_status.get(cnpj, _criar_status("error", total_etapas=total_etapas))
         _pipeline_status[cnpj] = _criar_status(
             "error",
             progresso=atual["progresso"],
-            erros=[str(exc)],
+            erros=["Erro interno durante execução do pipeline."],
             etapas_concluidas=int(atual.get("etapas_concluidas", 0)),
             total_etapas=total_etapas,
             etapa_atual="erro",

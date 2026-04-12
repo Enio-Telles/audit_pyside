@@ -462,7 +462,8 @@ def testar_conexao():
         conn.close()
         return {"ok": True, "message": "Conexão estabelecida com sucesso"}
     except Exception as exc:
-        return {"ok": False, "message": str(exc)}
+        logger.error("Erro ao testar conexao Oracle", exc_info=exc)
+        return {"ok": False, "message": "Falha na conexão. Consulte os logs do servidor."}
 
 
 @router.get("/config")
@@ -584,7 +585,8 @@ def consulta_cadastral(req: ConsultaCnpjRequest):
             if dados:
                 _salvar_cache_cadastral(cnpj, dados)
         except Exception as exc:
-            raise HTTPException(503, f"Erro ao consultar Oracle: {exc}")
+            logger.error("Erro ao consultar dados cadastrais Oracle para %s", cnpj, exc_info=exc)
+            raise HTTPException(503, "Falha na conexão com o banco de dados Oracle. Verifique logs do servidor.") from exc
 
     # Malhas
     malhas_cache = None if req.forcar_atualizacao else _ler_cache_malha(cnpj)
@@ -626,7 +628,8 @@ def consulta_lote(req: ConsultaLoteRequest):
                 if dados:
                     _salvar_cache_cadastral(cnpj, dados)
             except Exception as exc:
-                resultados.append({"cnpj": cnpj, "error": str(exc), "dados_cadastrais": None, "malhas": [], "from_cache": False})
+                logger.error("Erro ao consultar dados cadastrais Oracle para lote %s", cnpj, exc_info=exc)
+                resultados.append({"cnpj": cnpj, "error": "Falha na conexão com o banco de dados", "dados_cadastrais": None, "malhas": [], "from_cache": False})
                 continue
 
         malhas_cache = None if req.forcar_atualizacao else _ler_cache_malha(cnpj)

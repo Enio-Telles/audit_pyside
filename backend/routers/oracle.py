@@ -9,12 +9,15 @@ Expõe:
 """
 from __future__ import annotations
 
+import logging
 import re
 from pathlib import Path
 from time import perf_counter
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -149,8 +152,9 @@ def testar_conexao(req: TestarConexaoRequest):
     except ImportError:
         return {"ok": False, "message": "oracledb não instalado.", "tempo_ms": 0}
     except Exception as exc:  # noqa: BLE001
+        logger.error("Erro ao testar conexao Oracle", exc_info=exc)
         tempo_ms = int((perf_counter() - t0) * 1000)
-        return {"ok": False, "message": str(exc), "tempo_ms": tempo_ms}
+        return {"ok": False, "message": "Falha na conexão com o banco de dados.", "tempo_ms": tempo_ms}
 
 
 @router.post("/salvar")
