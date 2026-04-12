@@ -12,6 +12,7 @@ import re
 import sys
 from pathlib import Path
 from typing import Callable
+from transformacao.auxiliares.logs import log_exception
 
 from rich import print as rprint
 
