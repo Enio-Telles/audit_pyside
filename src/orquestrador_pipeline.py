@@ -114,9 +114,9 @@ def executar_pipeline_completo(
             )
             rprint("[green]Extracao concluida.[/green]")
         except Exception as e:
-            from transformacao.auxiliares.logs import log_exception
-            log_exception(e)
-            rprint(f"[red]Falha critica na extracao para {cnpj}. Verifique os logs de erro.[/red]")
+            from transformacao.auxiliares.logs import setup_logging
+            setup_logging().error(f"Falha critica na extracao para {cnpj}", exc_info=e)
+            rprint(f"[red]Falha critica na extracao para {cnpj}. Consulte os logs para mais detalhes.[/red]")
             return False
 
     if tabelas_selecionadas:
@@ -150,8 +150,9 @@ def executar_pipeline_completo(
                     etapas_executadas.add(tab_id)
                     rprint(f"[green]{tab_id} finalizada.[/green]")
             except Exception as e:
-                log_exception(e)
-                rprint(f"[red]Erro inesperado na etapa {tab_id}. Verifique os logs de erro.[/red]")
+                from transformacao.auxiliares.logs import setup_logging
+                setup_logging().error(f"Erro inesperado na etapa {tab_id}", exc_info=e)
+                rprint(f"[red]Erro inesperado na etapa {tab_id}. Consulte os logs para mais detalhes.[/red]")
                 sucesso_global = False
 
     if sucesso_global:

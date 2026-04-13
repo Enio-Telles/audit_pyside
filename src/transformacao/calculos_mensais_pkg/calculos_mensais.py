@@ -563,11 +563,9 @@ if __name__ == "__main__":
         else:
             c = input("CNPJ: ")
             gerar_calculos_mensais(c)
-    except Exception:
-        import traceback
-
-        with open(TRACEBACK_PATH, "w", encoding="utf-8") as f:
-            traceback.print_exc(file=f)
+    except Exception as e:
+        from transformacao.auxiliares.logs import setup_logging
+        setup_logging().error("Erro na geracao de calculos mensais", exc_info=e)
         raise
 
 
