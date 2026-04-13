@@ -152,7 +152,7 @@ def testar_conexao(req: TestarConexaoRequest):
     except ImportError:
         return {"ok": False, "message": "oracledb não instalado.", "tempo_ms": 0}
     except Exception as exc:  # noqa: BLE001
-        logger.error("Erro ao testar conexao Oracle", exc_info=exc)
+        logger.exception("Erro ao testar conexao Oracle")
         tempo_ms = int((perf_counter() - t0) * 1000)
         return {"ok": False, "message": "Falha na conexão com o banco de dados.", "tempo_ms": tempo_ms}
 
