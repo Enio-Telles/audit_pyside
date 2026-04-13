@@ -1,4 +1,4 @@
-"""
+﻿"""
 03_descricao_produtos.py
 
 Objetivo: Gerar a tabela consolidada de descricoes normalizadas e unicas.
@@ -12,11 +12,12 @@ from __future__ import annotations
 import re
 import sys
 from pathlib import Path
+from utilitarios.project_paths import PROJECT_ROOT
 
 import polars as pl
 from rich import print as rprint
 
-ROOT_DIR = Path(r"c:\funcoes - Copia")
+ROOT_DIR = PROJECT_ROOT
 SRC_DIR = ROOT_DIR / "src"
 DADOS_DIR = ROOT_DIR / "dados"
 CNPJ_ROOT = DADOS_DIR / "CNPJ"
@@ -40,9 +41,15 @@ def _normalizar_descricao_expr(col: str) -> pl.Expr:
     return (
         pl.col(col)
         .cast(pl.Utf8, strict=False)
-        .map_elements(remove_accents, return_dtype=pl.String)
         .fill_null("")
         .str.to_uppercase()
+        .str.replace_all(r"[ÃÃ€Ã‚ÃƒÃ„]", "A")
+        .str.replace_all(r"[Ã‰ÃˆÃŠÃ‹]", "E")
+        .str.replace_all(r"[ÃÃŒÃŽÃ]", "I")
+        .str.replace_all(r"[Ã“Ã’Ã”Ã•Ã–]", "O")
+        .str.replace_all(r"[ÃšÃ™Ã›Ãœ]", "U")
+        .str.replace_all(r"Ã‡", "C")
+        .str.replace_all(r"Ã‘", "N")
         .str.strip_chars()
         .str.replace_all(r"\s+", " ")
         .alias("descricao_normalizada")
@@ -197,3 +204,5 @@ if __name__ == "__main__":
         descricao_produtos(sys.argv[1])
     else:
         descricao_produtos(input("CNPJ: "))
+
+

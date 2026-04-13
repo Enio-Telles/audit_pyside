@@ -10,3 +10,4 @@ oracledb
 python-dotenv
 PySide6
 python-docx
+pymupdf>=1.22.0

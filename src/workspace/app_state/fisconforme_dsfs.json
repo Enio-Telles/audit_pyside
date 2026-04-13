@@ -1,0 +1,29 @@
+[
+  {
+    "id": "c4ce4cf6-f401-4f76-9787-febfb6153b73",
+    "dsf": "20263710400285",
+    "referencia": "2026-04",
+    "cnpjs": [
+      "63614176000153",
+      "06114176000150",
+      "04565289011696",
+      "04565289005378",
+      "04565289008040",
+      "04565289005297",
+      "36374709000102",
+      "24205517000185"
+    ],
+    "data_inicio": "01/2021",
+    "data_fim": "12/2025",
+    "forcar_atualizacao": true,
+    "auditor": "Enio Carstens Telles",
+    "cargo_titulo": "Auditor",
+    "matricula": "300201625",
+    "contato": "enio.telles@sefin.ro.gov.br",
+    "orgao_origem": "GEFIS",
+    "output_dir": "C:\\Users\\eniot\\OneDrive - SECRETARIA DE ESTADO DE FINANCAS\\GEFIS_ENIO\\ACERVO\\202604_Enio",
+    "pdf_file_name": "DSF_20263710400285.pdf",
+    "created_at": "2026-04-05T15:09:34.687844",
+    "updated_at": "2026-04-06T11:56:16.125824"
+  }
+]

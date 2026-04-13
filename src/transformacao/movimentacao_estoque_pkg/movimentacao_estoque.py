@@ -1,10 +1,11 @@
-import sys
+﻿import sys
 import re
 from pathlib import Path
+from utilitarios.project_paths import PROJECT_ROOT, TRACEBACK_PATH
 import polars as pl
 from rich import print as rprint
 
-ROOT_DIR = Path(r"c:\funcoes - Copia")
+ROOT_DIR = PROJECT_ROOT
 SRC_DIR = ROOT_DIR / "src"
 DADOS_DIR = ROOT_DIR / "dados"
 CNPJ_ROOT = DADOS_DIR / "CNPJ"
@@ -36,7 +37,7 @@ except ImportError as e:
     sys.exit(1)
 
 
-# --- Funções utilitárias extraídas para sub-módulos ---
+# --- FunÃ§Ãµes utilitÃ¡rias extraÃ­das para sub-mÃ³dulos ---
 # calculo_saldos.py: _padronizar_tipo_operacao_expr, _boolish_expr,
 #                    gerar_eventos_estoque, calcular_saldo_estoque_anual
 # mapeamento_fontes.py: normalizar_descricao_expr, detectar_coluna_descricao,
@@ -291,19 +292,19 @@ def gerar_movimentacao_estoque(cnpj: str, pasta_cnpj: Path | None = None) -> boo
                 # valida se as dependencias de coluna da expressao existem no df
                 # se "col("x") is missing, we put null"
                 # um try no select isolado descobre
-                # Para producao, uma funcao check columns é melhor, faremos um fallback basico
+                # Para producao, uma funcao check columns Ã© melhor, faremos um fallback basico
                 
                 exprs.append(e)
             except Exception as ex:
                 exprs.append(pl.lit(None).alias(target))
                 
         # Polars: try selecting. Se alguma coluna referenciada falhar, ele crasheia.
-        # Entao adicionamos as colunas q não existem como nulas antes.
+        # Entao adicionamos as colunas q nÃ£o existem como nulas antes.
         cols_required = set()
         # Uma heuristic rapida para descobrir dependencias: vars() de orig
         for m in mapeamento:
             v = str(m[key_map])
-            if v and v not in ["(vazio)", "correspondência com chave NF", "icms_orig & icms_cst ou icms_csosn", "prod_ceantrib ou caso for nulo -> prod_cean", "vl_item-vl_desc", "prod_vprod+prod_vfrete+prod_vseg+prod_voutro-prod_vdesc", "\"gerado\" ou \"registro\" (se está no bloco_h)"]:
+            if v and v not in ["(vazio)", "correspondÃªncia com chave NF", "icms_orig & icms_cst ou icms_csosn", "prod_ceantrib ou caso for nulo -> prod_cean", "vl_item-vl_desc", "prod_vprod+prod_vfrete+prod_vseg+prod_voutro-prod_vdesc", "\"gerado\" ou \"registro\" (se está no bloco_h)"]:
                 if not v.startswith('"'):
                     cols_required.add(v)
         
@@ -442,7 +443,7 @@ def gerar_movimentacao_estoque(cnpj: str, pasta_cnpj: Path | None = None) -> boo
         .drop(["__data_ord__", "__nsu_ord__", "__ord_tipo__"], strict=False)
     )
 
-    # Reordenar colunas para exibição: Descr_item e Descr_compl logo após Tipo_operacao
+    # Reordenar colunas para exibiÃ§Ã£o: Descr_item e Descr_compl logo apÃ³s Tipo_operacao
     cols = list(df_final.columns)
     if "Tipo_operacao" in cols:
         for coluna in ["fonte", "Descr_item", "Descr_compl"]:
@@ -501,8 +502,9 @@ def gerar_movimentacao_estoque(cnpj: str, pasta_cnpj: Path | None = None) -> boo
                 .then(q_conv_valido_expr)
                 .otherwise(pl.lit(0.0))
                 .alias("__qtd_decl_final_audit__"),
-                # q_conv: estoque inicial e final agora sao capturados independente da data
+                # q_conv: estoque inicial, entradas, saidas e final capturados independente da data
                 # para permitir auditoria anual completa
+                # Nota: estoque final tem q_conv populado, mas nao afeta o saldo sequencial
                 pl.when(
                     pl.col("Tipo_operacao").cast(pl.Utf8, strict=False).str.starts_with("0 - ESTOQUE INICIAL")
                 )
@@ -511,9 +513,14 @@ def gerar_movimentacao_estoque(cnpj: str, pasta_cnpj: Path | None = None) -> boo
                 .then(q_conv_valido_expr)
                 .when(pl.col("Tipo_operacao") == "2 - SAIDAS")
                 .then(q_conv_valido_expr)
+                .when(
+                    pl.col("Tipo_operacao").cast(pl.Utf8, strict=False).str.starts_with("3 - ESTOQUE FINAL")
+                )
+                .then(q_conv_valido_expr)
                 .otherwise(pl.lit(0.0))
                 .alias("q_conv"),
-                # __q_conv_sinal__: mesmo principio - estoque inicial/final capturado em qualquer data
+                # __q_conv_sinal__: usado no calculo sequencial de saldo
+                # estoque final nao entra aqui para nao afetar o saldo acumulado
                 pl.when(
                     pl.col("Tipo_operacao").cast(pl.Utf8, strict=False).str.starts_with("0 - ESTOQUE INICIAL")
                 )
@@ -564,3 +571,5 @@ if __name__ == "__main__":
         from transformacao.auxiliares.logs import setup_logging
         setup_logging().error("Erro na geracao de movimentacao de estoque", exc_info=e)
         raise
+
+

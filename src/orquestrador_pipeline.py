@@ -105,7 +105,11 @@ def executar_pipeline_completo(
         rprint(f"[bold blue]Fase 1: extraindo {len(consultas_selecionadas)} tabelas brutas...[/bold blue]")
         try:
             from extracao.extrair_dados_cnpj import extrair_dados
-            extrair_dados(cnpj=cnpj, data_limite_input=data_limite)
+            extrair_dados(
+                cnpj_input=cnpj,
+                data_limite_input=data_limite,
+                consultas_selecionadas=consultas_selecionadas,
+            )
             rprint("[green]Extracao concluida.[/green]")
         except Exception as e:
             from transformacao.auxiliares.logs import setup_logging

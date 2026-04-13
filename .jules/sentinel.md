@@ -1,7 +1,7 @@
-## YYYY-MM-DD - [Prevent Information Exposure Through Error Messages]
-**Vulnerability:** The exception `e` or `exc` was directly cast to string and emitted to the UI or standard output (`rprint`) in `src/interface_grafica/services/query_worker.py` and `src/utilitarios/conectar_oracle.py`.
-**Learning:** Emitting the raw `str(exc)` from `oracledb` could expose internal database schema or connection details (Information Exposure Through an Error Message - CWE-209).
-**Prevention:** Avoid exposing `str(e)` directly to the user or standard output. Always use generic error messages for the UI/stdout and log the actual error internally for debugging.
+## 2024-05-18 - Prevent Information Leakage in UI Error Messages
+**Vulnerability:** The application was exposing raw database exceptions (`str(exc)`) directly to the PySide UI in `QueryWorker.run()`, which could leak sensitive information such as database schema, query structures, or connection credentials to end users.
+**Learning:** PySide asynchronous workers often propagate exceptions back to the main thread UI via signals (`self.failed.emit`). If these strings are not sanitized, they create Information Disclosure vulnerabilities.
+**Prevention:** Always catch exceptions in worker threads, log the full traceback securely on the backend (using `rprint` or a logging framework), and emit only generic, safe error messages to the UI.
 
 ## 2024-04-01 - Prevent Information Leakage in UI Error Handlers
 **Vulnerability:** A `try...except` block in the PySide6 UI layer was directly printing a raw stack trace via `traceback.print_exc()` to standard output and passing the raw exception object (`str(e)`) to the user-facing `QMessageBox` via `self.show_error()`. This risked disclosing sensitive internal application state, file paths, and potential data formats to unprivileged users.

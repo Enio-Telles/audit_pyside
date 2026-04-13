@@ -14,7 +14,8 @@ CNPJ/
 *.xlsx
 *.csv
 *.sql
-!consultas_fonte/*.sql
+!sql/**/*.sql
+!sql/**/*.SQL
 
 # IDE
 .vscode/
@@ -28,3 +29,4 @@ Thumbs.db
 # Logs
 logs/
 *.log
+workspace/

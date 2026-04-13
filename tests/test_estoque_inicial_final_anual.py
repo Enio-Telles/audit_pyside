@@ -11,9 +11,10 @@ import polars as pl
 from pathlib import Path
 import sys
 from datetime import date
+from src.utilitarios.project_paths import PROJECT_ROOT
 
 # Adicionar src ao path para imports
-ROOT_DIR = Path(r"c:\funcoes - Copia")
+ROOT_DIR = PROJECT_ROOT
 sys.path.insert(0, str(ROOT_DIR / "src"))
 
 from transformacao.calculos_anuais_pkg.calculos_anuais import calcular_aba_anual_dataframe

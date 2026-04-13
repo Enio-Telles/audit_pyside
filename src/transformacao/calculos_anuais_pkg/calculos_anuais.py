@@ -1,13 +1,14 @@
-import sys
+﻿import sys
 import re
 from datetime import date
 from pathlib import Path
+from utilitarios.project_paths import PROJECT_ROOT, TRACEBACK_PATH
 from time import perf_counter
 
 import polars as pl
 from rich import print as rprint
 
-ROOT_DIR = Path(r"c:\funcoes - Copia")
+ROOT_DIR = PROJECT_ROOT
 SRC_DIR = ROOT_DIR / "src"
 DADOS_DIR = ROOT_DIR / "dados"
 CNPJ_ROOT = DADOS_DIR / "CNPJ"
@@ -38,7 +39,7 @@ def _boolish_expr(col_name: str) -> pl.Expr:
     return (
         pl.when(col.is_in(["1", "TRUE", "T", "S", "SIM", "Y", "YES"]))
         .then(pl.lit(True))
-        .when(col.is_in(["0", "FALSE", "F", "N", "NAO", "NÃO", "NO", ""]))
+        .when(col.is_in(["0", "FALSE", "F", "N", "NAO", "NÃƒO", "NO", ""]))
         .then(pl.lit(False))
         .otherwise(pl.col(col_name).cast(pl.Int64, strict=False).fill_null(0) != 0)
     )
@@ -68,7 +69,7 @@ def _format_st_periodos_anuais(registros) -> str:
 
     periodos.sort(key=lambda item: (item[1], item[2], item[0]))
     return ";".join(
-        f"['{status}' de {dt_ini.strftime('%d/%m/%Y')} até {dt_fim.strftime('%d/%m/%Y')}]"
+        f"['{status}' de {dt_ini.strftime('%d/%m/%Y')} atÃ© {dt_fim.strftime('%d/%m/%Y')}]"
         for status, dt_ini, dt_fim in periodos
     )
 
@@ -99,8 +100,8 @@ def _carregar_referencia_st_anual(df_anual: pl.DataFrame) -> pl.DataFrame:
         )
         .with_columns(
             [
-                pl.col("ano").map_elements(lambda ano: date(int(ano), 1, 1), return_dtype=pl.Date).alias("__ano_ini__"),
-                pl.col("ano").map_elements(lambda ano: date(int(ano), 12, 31), return_dtype=pl.Date).alias("__ano_fim__"),
+                pl.date(pl.col("ano"), 1, 1).alias("__ano_ini__"),
+                pl.date(pl.col("ano"), 12, 31).alias("__ano_fim__"),
             ]
         )
     )
@@ -436,3 +437,5 @@ if __name__ == "__main__":
         from transformacao.auxiliares.logs import setup_logging
         setup_logging().error("Erro na geracao de calculos anuais", exc_info=e)
         raise
+
+
