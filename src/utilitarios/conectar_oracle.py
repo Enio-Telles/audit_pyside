@@ -73,12 +73,13 @@ def obter_conexao_oracle(user=None, password=None):
             conn.close()
             # rprint("[blue]DEBUG: Conexão Oracle encerrada com segurança.[/blue]")
         except Exception as e:
-            rprint("[yellow]Aviso:[/yellow] Falha ao encerrar a conexão Oracle com segurança.")
+            logging.error(f"Erro ao encerrar a conexão Oracle: {e}")
+            rprint("[yellow]Aviso: Ocorreu um erro ao tentar fechar a conexão com o banco de dados.[/yellow]")
 
 if __name__ == "__main__":    
     try:
         with obter_conexao_oracle() as conn:
             rprint("[green]Conexão via Context Manager estabelecida com sucesso![/green]")
     except Exception as e:
-        logging.error(f"Teste de conexão falhou: {e}")
+        logging.error(f"Erro no teste de conexão Oracle: {e}")
         rprint("[red]Falha no teste de conexão. Verifique as credenciais e as configurações de rede.[/red]")

@@ -1,4 +1,4 @@
-## 2024-05-24 - Fix Information Disclosure in Oracle Connection
-**Vulnerability:** Information Exposure (CWE-209) through `rprint` outputting detailed exception string (`{e}`) in `conectar_oracle.py`.
-**Learning:** Detailed runtime exceptions regarding the environment setup were logged directly to the end-user CLI when they failed, potentially exposing host environment data.
-**Prevention:** Catch exception context using the standard logging module for developers and display generic, sanitized errors via user-facing functions like `rprint` to avoid Information Disclosure.
+## 2024-03-29 - [Information Disclosure in Oracle Configuration]
+**Vulnerability:** Raw exception objects (`e`) were being printed directly to standard output via `rprint` during database configuration and connection failures. This could expose internal environment details, file paths, or network stack traces to the user. Additionally, exceptions during connection closure were silently swallowed with `pass`, making resource leaks difficult to track securely.
+**Learning:** Exception details must be sanitized before being displayed to users, even in CLI tools, as they can reveal system information.
+**Prevention:** Catch exceptions securely, log the raw `e` object internally (e.g., using `logging.error`), and emit a generic, safe error message to the console. Never use bare `except:` or swallow exceptions silently with `pass` without logging.
