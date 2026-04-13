@@ -1,5 +1,7 @@
 import pandas as pd
-excel_path = r"c:\funcoes - Copia\dados\referencias\Tabela_estoques.xlsx"
+from src.utilitarios.project_paths import DATA_ROOT
+
+excel_path = str(DATA_ROOT / "referencias" / "Tabela_estoques.xlsx")
 df = pd.read_excel(excel_path)
 
 # Atualiza a linha onde Campo/tabela é 'Ser' para o C170

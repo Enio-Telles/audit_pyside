@@ -7,7 +7,6 @@ Emite sinais de progresso, sucesso e falha.
 from __future__ import annotations
 
 import os
-from pathlib import Path
 from time import perf_counter
 from typing import Any
 
@@ -15,6 +14,7 @@ import polars as pl
 from PySide6.QtCore import QThread, Signal
 from rich import print as rprint
 from utilitarios.perf_monitor import registrar_evento_performance
+from utilitarios.project_paths import ENV_PATH
 
 # ---------------------------------------------------------------------------
 # Reutiliza funcoes do pipeline existente quando possivel

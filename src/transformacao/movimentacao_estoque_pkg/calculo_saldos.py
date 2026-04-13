@@ -184,6 +184,7 @@ def gerar_eventos_estoque(df_mov: pl.DataFrame) -> pl.DataFrame:
                     pl.lit(0).cast(pl.Float64).alias("Vl_item"),
                     pl.lit(None).alias("Unid"),
                     pl.lit("gerado").alias("Ser"),
+                    pl.lit("gerado").alias("fonte"),
                 ]
             )
             .with_columns(
@@ -228,6 +229,7 @@ def gerar_eventos_estoque(df_mov: pl.DataFrame) -> pl.DataFrame:
                     .alias("Tipo_operacao"),
                     pl.col("__data_inicial__").cast(dt_doc_dtype, strict=False).alias("Dt_doc"),
                     pl.col("__data_inicial__").cast(dt_es_dtype, strict=False).alias("Dt_e_s"),
+                    pl.lit("gerado").alias("fonte"),
                 ]
             )
         )
@@ -282,6 +284,7 @@ def gerar_eventos_estoque(df_mov: pl.DataFrame) -> pl.DataFrame:
                     pl.lit(0).cast(pl.Float64).alias("Vl_item"),
                     pl.lit(None).alias("Unid"),
                     pl.lit("gerado").alias("Ser"),
+                    pl.lit("gerado").alias("fonte"),
                 ]
             )
             .with_columns(
@@ -329,6 +332,31 @@ def calcular_saldo_estoque_anual(df: pl.DataFrame) -> pl.DataFrame:
     q_sinal_arr = df["__q_conv_sinal__"].cast(pl.Float64, strict=False).fill_null(0.0).to_numpy()
     preco_arr = df["preco_item"].cast(pl.Float64, strict=False).fill_null(0.0).to_numpy()
     qtd_decl_arr = df["__qtd_decl_final_audit__"].cast(pl.Float64, strict=False).fill_null(0.0).to_numpy()
+    finnfe_arr = (
+        df["finnfe"].cast(pl.Utf8, strict=False).fill_null("").to_list()
+        if "finnfe" in df.columns
+        else [""] * n
+    )
+    dev_simples_arr = (
+        df["dev_simples"].to_list()
+        if "dev_simples" in df.columns
+        else [False] * n
+    )
+    dev_venda_arr = (
+        df["dev_venda"].to_list()
+        if "dev_venda" in df.columns
+        else [False] * n
+    )
+    dev_compra_arr = (
+        df["dev_compra"].to_list()
+        if "dev_compra" in df.columns
+        else [False] * n
+    )
+    dev_ent_simples_arr = (
+        df["dev_ent_simples"].to_list()
+        if "dev_ent_simples" in df.columns
+        else [False] * n
+    )
 
     saldos = np.empty(n, dtype=np.float64)
     entradas_desacob = np.empty(n, dtype=np.float64)
@@ -344,6 +372,14 @@ def calcular_saldo_estoque_anual(df: pl.DataFrame) -> pl.DataFrame:
         q_sinal = q_sinal_arr[i]
         preco_item = preco_arr[i]
         qtd_decl_final = qtd_decl_arr[i]
+        finnfe = str(finnfe_arr[i]).strip()
+        is_devolucao = (
+            finnfe == "4"
+            or _valor_bool(dev_simples_arr[i])
+            or _valor_bool(dev_venda_arr[i])
+            or _valor_bool(dev_compra_arr[i])
+            or _valor_bool(dev_ent_simples_arr[i])
+        )
 
         entr_desac = 0.0
 
@@ -351,7 +387,11 @@ def calcular_saldo_estoque_anual(df: pl.DataFrame) -> pl.DataFrame:
             # ESTOQUE INICIAL ou ENTRADA
             if q_sinal > 0:
                 saldo_qtd += q_sinal
-                saldo_valor += preco_item
+                if tipo == "1 - ENTRADA" and is_devolucao:
+                    # Devolucoes retornam quantidade sem alterar o custo medio vigente.
+                    saldo_valor += q_sinal * custo_medio
+                else:
+                    saldo_valor += preco_item
                 custo_medio = (saldo_valor / saldo_qtd) if saldo_qtd > 0 else 0.0
 
         elif tipo == "2 - SAIDAS":
@@ -374,9 +414,11 @@ def calcular_saldo_estoque_anual(df: pl.DataFrame) -> pl.DataFrame:
                         custo_medio = saldo_valor / saldo_qtd
 
         elif tipo[:1] == "3":
-            # ESTOQUE FINAL
-            if qtd_decl_final > saldo_qtd:
-                entr_desac = qtd_decl_final - saldo_qtd
+            # ESTOQUE FINAL apenas audita a quantidade declarada em
+            # __qtd_decl_final_audit__. A regra de negocio vigente exige
+            # que essa linha permaneça neutra para entradas desacobertadas,
+            # saldo fisico e custo medio.
+            pass
 
         saldos[i] = round(saldo_qtd, 6)
         entradas_desacob[i] = round(entr_desac, 6)

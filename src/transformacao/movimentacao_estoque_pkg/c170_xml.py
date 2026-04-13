@@ -1,4 +1,4 @@
-"""
+﻿"""
 c170_xml.py
 
 Objetivo:
@@ -15,11 +15,12 @@ from __future__ import annotations
 import re
 import sys
 from pathlib import Path
+from utilitarios.project_paths import PROJECT_ROOT
 
 import polars as pl
 from rich import print as rprint
 
-ROOT_DIR = Path(r"c:\funcoes - Copia")
+ROOT_DIR = PROJECT_ROOT
 SRC_DIR = ROOT_DIR / "src"
 DADOS_DIR = ROOT_DIR / "dados"
 CNPJ_ROOT = DADOS_DIR / "CNPJ"
@@ -27,6 +28,10 @@ CNPJ_ROOT = DADOS_DIR / "CNPJ"
 
 try:
     from utilitarios.salvar_para_parquet import salvar_para_parquet
+    from utilitarios.validacao_schema import (
+        SchemaValidacaoError,
+        validar_parquet_essencial,
+    )
     from transformacao.co_sefin_class import enriquecer_co_sefin_class
     from utilitarios.text import remove_accents
 except ImportError as e:
@@ -41,11 +46,21 @@ def _norm_text(value: str | None) -> str:
 
 
 def _norm_text_expr(col: str, alias: str | None = None) -> pl.Expr:
+    # Optimization: Replace .map_elements with native Polars string operations to preserve vectorization
     expr = (
         pl.col(col)
         .cast(pl.Utf8, strict=False)
         .fill_null("")
-        .map_elements(_norm_text, return_dtype=pl.String)
+        .str.to_uppercase()
+        .str.replace_all(r"[ÁÀÂÃÄ]", "A")
+        .str.replace_all(r"[ÉÈÊË]", "E")
+        .str.replace_all(r"[ÍÌÎÏ]", "I")
+        .str.replace_all(r"[ÓÒÔÕÖ]", "O")
+        .str.replace_all(r"[ÚÙÛÜ]", "U")
+        .str.replace_all(r"Ç", "C")
+        .str.replace_all(r"Ñ", "N")
+        .str.strip_chars()
+        .str.replace_all(r"\s+", " ")
     )
     return expr.alias(alias or col)
 
@@ -210,6 +225,31 @@ def gerar_c170_xml(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
             return False
 
     rprint(f"[bold cyan]Gerando c170_xml para CNPJ: {cnpj}[/bold cyan]")
+
+    try:
+        validar_parquet_essencial(
+            arq_c170,
+            ["chv_nfe", "num_item", "cod_item", "cod_ncm", "descr_item"],
+            contexto="c170_xml/c170",
+        )
+        validar_parquet_essencial(
+            arq_c170_agr,
+            ["chv_nfe", "num_item", "cod_item", "id_agrupado", "co_sefin_agr"],
+            contexto="c170_xml/c170_agr",
+        )
+        validar_parquet_essencial(
+            arq_nfe_agr,
+            ["chave_acesso", "id_agrupado"],
+            contexto="c170_xml/nfe_agr",
+        )
+        validar_parquet_essencial(
+            arq_nfce_agr,
+            ["chave_acesso", "id_agrupado"],
+            contexto="c170_xml/nfce_agr",
+        )
+    except SchemaValidacaoError as exc:
+        rprint(f"[red]{exc}[/red]")
+        return False
 
     df_c170 = pl.read_parquet(arq_c170)
     df_c170_agr = pl.read_parquet(arq_c170_agr)
@@ -468,3 +508,5 @@ if __name__ == "__main__":
         gerar_c170_xml(sys.argv[1])
     else:
         gerar_c170_xml(input("CNPJ: "))
+
+

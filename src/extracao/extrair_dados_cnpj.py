@@ -1,5 +1,5 @@
-import sys
-import os
+from __future__ import annotations
+
 import re
 import threading
 import logging
@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 import polars as pl
 import concurrent.futures
 
-thread_local = threading.local()
+from rich import print as rprint
 
 def get_thread_connection():
     if not hasattr(thread_local, "conexao"):
@@ -29,16 +29,13 @@ def get_thread_connection():
         thread_local.conexao = conn
     return thread_local.conexao
 
-def close_thread_connection():
-    if hasattr(thread_local, "conexao") and thread_local.conexao:
-        try:
-            thread_local.conexao.close()
-        except Exception:
-            pass
-        thread_local.conexao = None
 
-from pathlib import Path
-from rich import print as rprint
+def extrair_dados(
+    cnpj_input: str,
+    data_limite_input: str | None = None,
+    consultas_selecionadas: Sequence[Path | str] | None = None,
+) -> bool:
+    """Extrai as consultas SQL em parquet usando escrita incremental por lotes."""
 
 ROOT_DIR        = Path(r"c:\funcoes - Copia")
 SRC_DIR         = ROOT_DIR / "src"
@@ -123,71 +120,38 @@ def processar_arquivo(arq_sql, cnpj_limpo, data_limite_input, consultas_dir, pas
 
 def extrair_dados(cnpj_input, data_limite_input=None):
     if not validar_cnpj(cnpj_input):
-        rprint(f"[red]Erro:[/red] CNPJ '{cnpj_input}' inválido!")
+        rprint(f"[red]Erro:[/red] CNPJ '{cnpj_input}' invalido!")
         return False
-        
-    cnpj_limpo = re.sub(r'[^0-9]', '', cnpj_input)
-    
-    # Formatar msg
-    msg_inicio = f"[bold green]Iniciando extração para o CNPJ: {cnpj_limpo}[/bold green]"
+
+    cnpj_limpo = re.sub(r"[^0-9]", "", cnpj_input)
+    msg_inicio = f"[bold green]Iniciando extracao para o CNPJ: {cnpj_limpo}[/bold green]"
     if data_limite_input:
         msg_inicio += f" [cyan](Data Limite: {data_limite_input})[/cyan]"
     rprint(msg_inicio)
-    
-    pasta_saida = CNPJ_ROOT / cnpj_limpo
+
+    pasta_saida = CNPJ_ROOT / cnpj_limpo / "arquivos_parquet"
     pasta_saida.mkdir(parents=True, exist_ok=True)
-    
-    rprint("[yellow]Estabelecendo conexão com o banco Oracle...[/yellow]")
-    conexao = conectar()
-    if not conexao:
-        rprint("[red]Falha na conexão com o banco de dados. Encerrando.[/red]")
-        return False
-        
-    consultas_dir = SQL_DIR
-    arquivos_sql = list(consultas_dir.rglob("*.sql"))
-    
-    if not arquivos_sql:
-        rprint("[yellow]Nenhum arquivo .sql encontrado na pasta consultas_fonte.[/yellow]")
-        conexao.close()
-        return False
-        
-    rprint(f"[cyan]Encontrados {len(arquivos_sql)} arquivos de consulta para execução.[/cyan]")
-    
-    sucesso_geral = True
-    
-    # Fechar a conexão de teste que só serviu para verificar se o banco estava online
-    conexao.close()
 
-    try:
-        # We use initializer to open connection per thread, but we can also just rely on thread_local in task
-        # To close, we can just let Python GC the thread and close connection,
-        # or we can explicitly submit a close task, but Oracle DB connections close on GC.
-        # Alternatively, using thread-local is fine.
-        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
-            futuros = {
-                executor.submit(processar_arquivo, arq_sql, cnpj_limpo, data_limite_input, consultas_dir, pasta_saida): arq_sql
-                for arq_sql in arquivos_sql
-            }
-            
-            for futuro in concurrent.futures.as_completed(futuros):
-                arq_sql = futuros[futuro]
-                try:
-                    sucesso = futuro.result()
-                    if not sucesso:
-                        sucesso_geral = False
-                except Exception as e_futuro:
-                    rprint(f"[red]  [FUTURO] Erro ao executar tarefa para {arq_sql.name}: {e_futuro}[/red]")
-                    sucesso_geral = False
-                    
-            # Enqueue connection close tasks for all workers
-            for _ in range(5):
-                executor.submit(close_thread_connection)
-    finally:
-        rprint("\n[bold green]Processamento concluído.[/bold green]")
-        
-    return sucesso_geral
+    consultas = descobrir_consultas_sql(consultas_selecionadas=consultas_selecionadas)
+    if not consultas:
+        rprint("[yellow]Nenhum arquivo .sql encontrado para extracao.[/yellow]")
+        return False
 
-def main():
+    rprint(f"[cyan]Encontradas {len(consultas)} consultas SQL para execucao.[/cyan]")
+    resultados = executar_extracao_oracle(
+        cnpj_input=cnpj_limpo,
+        data_limite_input=data_limite_input,
+        consultas_selecionadas=[consulta.caminho for consulta in consultas],
+        pasta_saida_base=pasta_saida,
+        max_workers=5,
+        progresso=lambda texto: rprint(texto),
+    )
+
+    rprint("\n[bold green]Processamento concluido.[/bold green]")
+    return imprimir_resumo_extracao(resultados)
+
+
+def main() -> None:
     data_limite_arg = None
     if len(sys.argv) > 1:
         cnpj_arg = sys.argv[1]
@@ -195,22 +159,24 @@ def main():
             data_limite_arg = sys.argv[2]
     else:
         try:
-            cnpj_arg = input("Informe o CNPJ para extração: ").strip()
+            cnpj_arg = input("Informe o CNPJ para extracao: ").strip()
             if cnpj_arg:
                 data_limite_arg = input("Data Limite Processamento (DD/MM/YYYY) [opcional, Enter para pular]: ").strip()
                 if not data_limite_arg:
                     data_limite_arg = None
         except KeyboardInterrupt:
-            rprint("\n[yellow]Operação cancelada pelo usuário.[/yellow]")
+            rprint("\n[yellow]Operacao cancelada pelo usuario.[/yellow]")
             sys.exit(0)
         except EOFError:
             sys.exit(0)
-            
+
     if not cnpj_arg:
-        rprint("[red]Erro: CNPJ não fornecido.[/red]")
+        rprint("[red]Erro: CNPJ nao fornecido.[/red]")
         sys.exit(1)
-        
-    extrair_dados(cnpj_arg, data_limite_arg)
+
+    sucesso = extrair_dados(cnpj_arg, data_limite_arg)
+    sys.exit(0 if sucesso else 1)
+
 
 if __name__ == "__main__":
     main()

@@ -1,13 +1,14 @@
-import sys
+﻿import sys
 import re
 from datetime import date
 from pathlib import Path
+from utilitarios.project_paths import PROJECT_ROOT, TRACEBACK_PATH
 from time import perf_counter
 
 import polars as pl
 from rich import print as rprint
 
-ROOT_DIR = Path(r"c:\funcoes - Copia")
+ROOT_DIR = PROJECT_ROOT
 SRC_DIR = ROOT_DIR / "src"
 DADOS_DIR = ROOT_DIR / "dados"
 CNPJ_ROOT = DADOS_DIR / "CNPJ"
@@ -38,7 +39,7 @@ def _boolish_expr(col_name: str) -> pl.Expr:
     return (
         pl.when(col.is_in(["1", "TRUE", "T", "S", "SIM", "Y", "YES"]))
         .then(pl.lit(True))
-        .when(col.is_in(["0", "FALSE", "F", "N", "NAO", "NÃO", "NO", ""]))
+        .when(col.is_in(["0", "FALSE", "F", "N", "NAO", "NÃƒO", "NO", ""]))
         .then(pl.lit(False))
         .otherwise(pl.col(col_name).cast(pl.Int64, strict=False).fill_null(0) != 0)
     )
@@ -68,7 +69,7 @@ def _format_st_periodos_anuais(registros) -> str:
 
     periodos.sort(key=lambda item: (item[1], item[2], item[0]))
     return ";".join(
-        f"['{status}' de {dt_ini.strftime('%d/%m/%Y')} até {dt_fim.strftime('%d/%m/%Y')}]"
+        f"['{status}' de {dt_ini.strftime('%d/%m/%Y')} atÃ© {dt_fim.strftime('%d/%m/%Y')}]"
         for status, dt_ini, dt_fim in periodos
     )
 
@@ -99,8 +100,8 @@ def _carregar_referencia_st_anual(df_anual: pl.DataFrame) -> pl.DataFrame:
         )
         .with_columns(
             [
-                pl.col("ano").map_elements(lambda ano: date(int(ano), 1, 1), return_dtype=pl.Date).alias("__ano_ini__"),
-                pl.col("ano").map_elements(lambda ano: date(int(ano), 12, 31), return_dtype=pl.Date).alias("__ano_fim__"),
+                pl.date(pl.col("ano"), 1, 1).alias("__ano_ini__"),
+                pl.date(pl.col("ano"), 12, 31).alias("__ano_fim__"),
             ]
         )
     )
@@ -189,6 +190,7 @@ def calcular_aba_anual_dataframe(df: pl.DataFrame, df_aux_st: pl.DataFrame | Non
         "preco_item",
         "entr_desac_anual",
         "q_conv",
+        "__qtd_decl_final_audit__",
         "co_sefin_agr",
         "saldo_estoque_anual",
         "ordem_operacoes",
@@ -200,7 +202,7 @@ def calcular_aba_anual_dataframe(df: pl.DataFrame, df_aux_st: pl.DataFrame | Non
         if c not in df.columns:
             if c in {"dev_simples", "excluir_estoque"}:
                 df = df.with_columns(pl.lit(False).alias(c))
-            elif c in {"Vl_item", "preco_item", "entr_desac_anual", "q_conv", "it_pc_interna", "saldo_estoque_anual"}:
+            elif c in {"Vl_item", "preco_item", "entr_desac_anual", "q_conv", "__qtd_decl_final_audit__", "it_pc_interna", "saldo_estoque_anual"}:
                 df = df.with_columns(pl.lit(0.0).alias(c))
             else:
                 df = df.with_columns(pl.lit(None).alias(c))
@@ -211,6 +213,19 @@ def calcular_aba_anual_dataframe(df: pl.DataFrame, df_aux_st: pl.DataFrame | Non
             pl.col("Vl_item").cast(pl.Float64, strict=False),
             pl.lit(0.0),
         ]
+    )
+    q_conv_positiva_expr = pl.col("q_conv").cast(pl.Float64, strict=False).fill_null(0.0) > 0
+    entrada_valida_media_expr = (
+        pl.col("Tipo_operacao").str.starts_with("1 - ENTRADA")
+        & ~_boolish_expr("dev_simples").fill_null(False)
+        & ~_boolish_expr("excluir_estoque").fill_null(False)
+        & q_conv_positiva_expr
+    )
+    saida_valida_media_expr = (
+        pl.col("Tipo_operacao").str.starts_with("2 - SAIDA")
+        & ~_boolish_expr("dev_simples").fill_null(False)
+        & ~_boolish_expr("excluir_estoque").fill_null(False)
+        & q_conv_positiva_expr
     )
 
     df_anual = (
@@ -223,27 +238,15 @@ def calcular_aba_anual_dataframe(df: pl.DataFrame, df_aux_st: pl.DataFrame | Non
                 pl.when(pl.col("Tipo_operacao").str.starts_with("0 - ESTOQUE INICIAL")).then(pl.col("q_conv")).otherwise(0.0).sum().alias("estoque_inicial"),
                 pl.when(pl.col("Tipo_operacao").str.starts_with("1 - ENTRADA")).then(pl.col("q_conv")).otherwise(0.0).sum().alias("entradas"),
                 pl.when(pl.col("Tipo_operacao").str.starts_with("2 - SAIDA")).then(pl.col("q_conv")).otherwise(0.0).sum().alias("saidas"),
-                pl.when(pl.col("Tipo_operacao").str.starts_with("3 - ESTOQUE FINAL")).then(pl.col("q_conv")).otherwise(0.0).sum().alias("estoque_final"),
-                pl.when(
-                    pl.col("Tipo_operacao").str.starts_with("1 - ENTRADA")
-                    & ~_boolish_expr("dev_simples").fill_null(False)
-                    & ~_boolish_expr("excluir_estoque").fill_null(False)
-                ).then(valor_item_expr).otherwise(0.0).sum().alias("soma_valor_entradas"),
-                pl.when(
-                    pl.col("Tipo_operacao").str.starts_with("1 - ENTRADA")
-                    & ~_boolish_expr("dev_simples").fill_null(False)
-                    & ~_boolish_expr("excluir_estoque").fill_null(False)
-                ).then(pl.col("q_conv")).otherwise(0.0).sum().alias("soma_qtd_entradas"),
-                pl.when(
-                    pl.col("Tipo_operacao").str.starts_with("2 - SAIDA")
-                    & ~_boolish_expr("dev_simples").fill_null(False)
-                    & ~_boolish_expr("excluir_estoque").fill_null(False)
-                ).then(valor_item_expr).otherwise(0.0).sum().alias("soma_valor_saidas"),
-                pl.when(
-                    pl.col("Tipo_operacao").str.starts_with("2 - SAIDA")
-                    & ~_boolish_expr("dev_simples").fill_null(False)
-                    & ~_boolish_expr("excluir_estoque").fill_null(False)
-                ).then(pl.col("q_conv")).otherwise(0.0).sum().alias("soma_qtd_saidas"),
+                pl.when(pl.col("Tipo_operacao").str.starts_with("3 - ESTOQUE FINAL"))
+                .then(pl.col("__qtd_decl_final_audit__").cast(pl.Float64, strict=False).fill_null(0.0))
+                .otherwise(0.0)
+                .sum()
+                .alias("estoque_final"),
+                pl.when(entrada_valida_media_expr).then(valor_item_expr).otherwise(0.0).sum().alias("soma_valor_entradas"),
+                pl.when(entrada_valida_media_expr).then(pl.col("q_conv")).otherwise(0.0).sum().alias("soma_qtd_entradas"),
+                pl.when(saida_valida_media_expr).then(valor_item_expr).otherwise(0.0).sum().alias("soma_valor_saidas"),
+                pl.when(saida_valida_media_expr).then(pl.col("q_conv")).otherwise(0.0).sum().alias("soma_qtd_saidas"),
                 pl.col("entr_desac_anual").sum().alias("entradas_desacob"),
                 pl.col("saldo_estoque_anual").sort_by("ordem_operacoes").last().alias("saldo_final"),
                 pl.col("it_pc_interna").cast(pl.Float64, strict=False).drop_nulls().last().alias("aliq_interna_mov"),
@@ -252,11 +255,17 @@ def calcular_aba_anual_dataframe(df: pl.DataFrame, df_aux_st: pl.DataFrame | Non
         .with_columns(
             [
                 (pl.col("estoque_inicial") + pl.col("entradas") + pl.col("entradas_desacob") - pl.col("estoque_final")).alias("saidas_calculadas"),
+                # Os cenarios sao opostos por construcao:
+                # estoque declarado acima do saldo sistemico indica saida desacobertada;
+                # saldo sistemico acima do estoque declarado indica estoque final desacoberto.
+                pl.when(pl.col("estoque_final") > pl.col("saldo_final"))
+                .then(pl.col("estoque_final") - pl.col("saldo_final"))
+                .otherwise(0.0)
+                .alias("saidas_desacob"),
                 pl.when(pl.col("saldo_final") > pl.col("estoque_final"))
                 .then(pl.col("saldo_final") - pl.col("estoque_final"))
                 .otherwise(0.0)
-                .alias("saidas_desacob"),
-                pl.col("saldo_final").alias("estoque_final_desacob"),
+                .alias("estoque_final_desacob"),
                 pl.when(pl.col("soma_qtd_entradas") > 0)
                 .then(pl.col("soma_valor_entradas") / pl.col("soma_qtd_entradas"))
                 .otherwise(0.0)
@@ -290,18 +299,21 @@ def calcular_aba_anual_dataframe(df: pl.DataFrame, df_aux_st: pl.DataFrame | Non
             pl.coalesce([pl.col("__aliq_ref__"), pl.col("aliq_interna_mov"), pl.lit(0.0)]).alias("aliq_interna"),
             pl.col("__tem_st_ano__").fill_null(False).alias("__tem_st_ano__"),
             pl.col("ST").fill_null("").alias("ST"),
+            # O PMS anual exibido na tabela e o mesmo PMS usado no calculo do ICMS.
+            # Isso evita divergencia entre o valor mostrado ao usuario e a base monetaria aplicada.
+            pl.col("pms").round(2).alias("__pms_icms__"),
         ]
     )
 
     aliq_factor = pl.col("aliq_interna").cast(pl.Float64, strict=False).fill_null(0.0) / 100.0
     base_saida = (
-        pl.when(pl.col("pms") > 0)
-        .then(pl.col("saidas_desacob") * pl.col("pms"))
+        pl.when(pl.col("__pms_icms__") > 0)
+        .then(pl.col("saidas_desacob") * pl.col("__pms_icms__"))
         .otherwise(pl.col("saidas_desacob") * pl.col("pme") * pl.lit(1.30))
     )
     base_estoque = (
-        pl.when(pl.col("pms") > 0)
-        .then(pl.col("estoque_final_desacob") * pl.col("pms"))
+        pl.when(pl.col("__pms_icms__") > 0)
+        .then(pl.col("estoque_final_desacob") * pl.col("__pms_icms__"))
         .otherwise(pl.col("estoque_final_desacob") * pl.col("pme") * pl.lit(1.30))
     )
 
@@ -423,6 +435,8 @@ if __name__ == "__main__":
             gerar_calculos_anuais(c)
     except Exception as e:
         import traceback
-        with open(r"c:\funcoes - Copia\traceback.txt", "w") as f:
+        with open(TRACEBACK_PATH, "w", encoding="utf-8") as f:
             traceback.print_exc(file=f)
         raise
+
+

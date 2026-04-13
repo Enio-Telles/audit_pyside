@@ -1,4 +1,4 @@
-"""
+﻿"""
 co_sefin.py
 
 Script para inferir o codigo co_sefin_inferido com base no NCM e CEST
@@ -7,11 +7,12 @@ utilizando tabelas de referencia sitafe.
 
 import sys
 from pathlib import Path
+from utilitarios.project_paths import PROJECT_ROOT
 
 import polars as pl
 from rich import print as rprint
 
-ROOT_DIR = Path(r"c:\funcoes - Copia")
+ROOT_DIR = PROJECT_ROOT
 SRC_DIR = ROOT_DIR / "src"
 DADOS_DIR = ROOT_DIR / "dados"
 CNPJ_ROOT = DADOS_DIR / "CNPJ"
@@ -186,3 +187,5 @@ if __name__ == "__main__":
 
     sucesso = co_sefin(cnpj_arg)
     sys.exit(0 if sucesso else 1)
+
+

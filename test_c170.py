@@ -2,9 +2,10 @@ import sys
 import os
 from pathlib import Path
 import polars as pl
+from src.utilitarios.project_paths import PROJECT_ROOT
 
 # Setup paths
-ROOT_DIR = Path(r"c:\funcoes - Copia")
+ROOT_DIR = PROJECT_ROOT
 SRC_DIR = ROOT_DIR / "src"
 sys.path.insert(0, str(SRC_DIR / "utilitarios"))
 
@@ -14,7 +15,7 @@ from salvar_para_parquet import salvar_para_parquet
 
 def test_c170():
     cnpj = "37671507000187"
-    sql_path = ROOT_DIR / "sql" / "c170.sql"
+    sql_path = ROOT_DIR / "sql" / "fiscal" / "efd" / "c170.sql"
     
     print(f"Lendo {sql_path}...")
     sql_text = ler_sql(sql_path)
