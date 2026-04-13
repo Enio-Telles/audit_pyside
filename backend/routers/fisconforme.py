@@ -585,8 +585,8 @@ def consulta_cadastral(req: ConsultaCnpjRequest):
             if dados:
                 _salvar_cache_cadastral(cnpj, dados)
         except Exception as exc:
-            logger.error("Erro ao consultar dados cadastrais Oracle para %s", cnpj, exc_info=exc)
-            raise HTTPException(503, "Falha na conexão com o banco de dados Oracle. Verifique logs do servidor.") from exc
+            logger.exception("Erro ao consultar dados cadastrais Oracle para %s", cnpj)
+            raise HTTPException(503, "Falha na conexão com o banco de dados Oracle.") from exc
 
     # Malhas
     malhas_cache = None if req.forcar_atualizacao else _ler_cache_malha(cnpj)
