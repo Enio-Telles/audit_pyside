@@ -150,7 +150,6 @@ def executar_pipeline_completo(
                     etapas_executadas.add(tab_id)
                     rprint(f"[green]{tab_id} finalizada.[/green]")
             except Exception as e:
-                from transformacao.auxiliares.logs import log_exception
                 log_exception(e)
                 rprint(f"[red]Erro inesperado na etapa {tab_id}. Verifique os logs de erro.[/red]")
                 sucesso_global = False
