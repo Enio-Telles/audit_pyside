@@ -1,6 +1,6 @@
-## 2025-02-24 - [Avoid Redundant Polars DataFrame Conversions]
-**Learning:** `executar_sql` fetched rows, converted them to a Polars DataFrame with inferred schema, and immediately dumped them back to Python dicts via `.to_dicts()`. This bypasses Polars' vectorization capabilities entirely, creating pure O(N) overhead for no benefit.
-**Action:** When SQL results are only needed as Python dictionaries (e.g., for JSON APIs or UI models), construct and return the `[dict(zip(columns, row)) for row in rows]` directly. Only create a Polars DataFrame if vectorized operations will be performed on it.
+## 2024-04-03 - Avoid `partition_by` for row-by-row lookups
+**Learning:** Using `partition_by(..., as_dict=True)` on a high-cardinality key (like item IDs) to optimize Python loop lookups creates tens of thousands of tiny DataFrames. This is a severe Polars anti-pattern that leads to high overhead and OOM crashes.
+**Action:** Do not use `partition_by` to build dictionaries of DataFrames for row-by-row looping. Instead, hoist redundant `.filter()` calls inside the loop, or fully refactor to vectorized `.join()` or `.group_by()` operations.
 
 ## 2025-02-24 - [Avoid `partition_by(..., as_dict=True)` for Iteration]
 **Learning:** In `04_produtos_final.py`, using `df.partition_by('__descricao_upper', as_dict=True)` to create dictionaries of DataFrames for row-by-row iteration in Polars creates huge numbers of tiny DataFrames. This leads to high overhead and OOM errors, especially on larger datasets.
