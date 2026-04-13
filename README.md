@@ -1,87 +1,108 @@
-# Fiscal Parquet Analyzer (Refatorado)
+﻿# Fiscal Parquet Analyzer
 
-Solução de alta performance para análise, extração e transformação de dados fiscais (Oracle -> Parquet) com interface gráfica moderna em **PySide6**.
+Ferramenta de extraÃ§Ã£o, transformaÃ§Ã£o e auditoria de dados fiscais com persistÃªncia em Parquet, pipeline modular em `src/transformacao/` e interface grÃ¡fica em PySide6.
 
-## 🛠️ Requisitos do Sistema
+## Objetivo
 
-- **Python 3.9+**
-- **Oracle Instant Client** (necessário para extração via `oracledb`)
-- Espaço em disco para armazenamento de arquivos Parquet (otimizados com compressão Snappy)
+O projeto organiza o fluxo fiscal em trÃªs camadas:
 
-## 📦 Instalação
+- extraÃ§Ã£o Oracle para Parquet por CNPJ;
+- transformaÃ§Ã£o analÃ­tica com foco em rastreabilidade e auditoria;
+- consulta e operaÃ§Ã£o do pipeline pela interface grÃ¡fica.
 
-Recomenda-se o uso de um ambiente virtual (venv). Instale as dependências básicas:
+O princÃ­pio central Ã© preservar a linha original do documento fiscal e permitir que qualquer total analÃ­tico seja auditado de volta Ã  origem.
+
+## Pipeline oficial
+
+A ordem ativa do pipeline estÃ¡ em `src/orquestrador_pipeline.py`:
+
+1. `tb_documentos`
+2. `item_unidades`
+3. `itens`
+4. `descricao_produtos`
+5. `produtos_final`
+6. `fontes_produtos`
+7. `fatores_conversao`
+8. `c170_xml`
+9. `c176_xml`
+10. `movimentacao_estoque`
+11. `calculos_mensais`
+12. `calculos_anuais`
+
+Os wrappers em `src/transformacao/` existem em boa parte para compatibilidade. Ao corrigir ou evoluir regras, a implementaÃ§Ã£o real costuma estar nos subpacotes `*_pkg`.
+
+## ExecuÃ§Ã£o rÃ¡pida
+
+InstalaÃ§Ã£o mÃ­nima:
 
 ```bash
 pip install polars PySide6 openpyxl python-docx python-dotenv rich oracledb
 ```
 
-## 🚀 Como Inicializar
-
-Para abrir a interface gráfica, execute o lançador na raiz do projeto:
+Abrir a aplicaÃ§Ã£o:
 
 ```bash
 python app.py
 ```
 
-O `app.py` configura automaticamente o ambiente as pastas necessárias (`workspace/`, `CNPJ/`, etc.) e garante que os módulos internos sejam carregados corretamente.
-
-## 🏗️ Nova Arquitetura de Transformação (5 Módulos)
-
-O projeto foi refatorado para seguir um fluxo lógico de "Plano Físico", garantindo total rastreabilidade dos dados:
-
-1.  **Movimentações por Unidade (`produtos_unidades`)**: Consolida C170, NFe e NFCe com granularidade de unidade de medida.
-2.  **Registro de Produtos (`produtos`)**: Deduplicação por descrição normalizada e atribuição de IDs únicos.
-3.  **Agrupamento e Padrões (`produtos_agrupados`)**: Interface para agregação manual e definição automática de NCM/CEST padrão (via moda estatística).
-4.  **Produtos Final (`produtos_final`)**: Integra `produtos` + `produtos_agrupados` em uma visão final recalculável.
-5.  **Fatores de Conversão (`fatores_conversao`)**: Cálculo de multiplicadores entre unidades baseado em preço médio consolidado.
-
-### Regras de Mapeamento (Produtos)
-
-- `cest` é um campo próprio (`cest` / `prod_cest`) e não deve ser misturado com código de barras.
-- `gtin` (código de barras) vem de `cod_barra` (SPED) ou `prod_ceantrib` / `prod_cean` (NFe/NFCe, com fallback).
-- Quando não há preço médio de compra por unidade, o cálculo usa fallback de venda e registra logs em:
-  `log_sem_preco_medio_compra_<cnpj>.parquet` e `log_sem_preco_medio_compra_<cnpj>.json`.
-
-## 📁 Estrutura de Pastas
-
-- `src/interface_grafica`: Código da UI (PySide6), modelos e serviços.
-- `src/transformacao`: Os 4 módulos do "Plano Físico".
-- `src/extracao`: Lógica de interface com Oracle e geração de tabelas brutas.
-- `src/utilitarios`: Funções compartilhadas de texto, data e exportação.
-- `CNPJ/`: Onde residem os dados processados organizados por contribuinte.
-
-## 🧪 Testes
-
-Execute os testes unitários via `pytest`:
+Rodar a suÃ­te de testes:
 
 ```bash
 python -m pytest
 ```
 
-## Funcionalidades Principais
-
-- **Visualização de Parquet e Integração Banco de Dados**: Consulta arquivos Parquet localizados ou no banco de dados, lidando com NFe, NFCe, C170, e outros dados fiscais.
-- **Parametrização Dinâmica de SQL**: Extração e identificação automática de parâmetros (`:parametro`) a partir de arquivos e textos de consultas SQL, permitindo preenchimento através da interface gráfica com validação.
-- **Exportação para Excel**: Geração de relatórios através de Pandas e Polars para arquivos Excel formatados.
-- **Análise de Fator de Conversão e Códigos Mercadoria**: Mecanismos customizados de hashing (`MD5`) e tratativas de deduplicação usando as funções otimizadas do pacote `polars`.
-
-## Instalação e Execução
-
-O ambiente e as dependências estão gerenciados e documentados (via `.env.example`).
-Execute a aplicação via terminal usando:
+Rodar testes direcionados:
 
 ```bash
-python3 app.py
+python -m pytest tests/test_movimentacao_estoque.py
+python -m pytest tests/test_calculos_mensais.py
+python -m pytest tests/test_calculos_anuais.py
 ```
 
-## Execução dos Testes
+## DocumentaÃ§Ã£o oficial
 
-O projeto utiliza o `pytest` para rodar os testes unitários.
-Certifique-se de executar no diretório raiz do projeto definindo a variável `PYTHONPATH`:
+Os documentos ativos do projeto ficam na raiz de `docs/`:
 
-```bash
-PYTHONPATH=./funcoes_auxiliares:. python3 -m pytest
+- [MovimentaÃ§Ã£o de Estoque](docs/mov_estoque.md)
+- [Tabela Mensal](docs/tabela_mensal.md)
+- [Tabela Anual](docs/tabela_anual.md)
+- [ConversÃ£o de Unidades](docs/conversao_unidades.md)
+- [AgregaÃ§Ã£o de Produtos](docs/agregacao_produtos.md)
+
+## ConvenÃ§Ãµes importantes
+
+- `id_agrupado` Ã© a chave mestra de produto no pipeline.
+- `id_agregado` aparece em algumas saÃ­das analÃ­ticas como alias de apresentaÃ§Ã£o de `id_agrupado`.
+- `__qtd_decl_final_audit__` guarda a quantidade declarada no estoque final para auditoria, sem alterar o saldo fÃ­sico.
+- ajustes manuais de conversÃ£o e agrupamento devem ser preservados em reprocessamentos.
+
+## DocumentaÃ§Ã£o histÃ³rica
+
+Materiais antigos, planos intermediÃ¡rios, diagnÃ³sticos e anexos foram movidos para `docs/archive/`. Eles permanecem como histÃ³rico e apoio, mas a referÃªncia operacional atual Ã© somente a documentaÃ§Ã£o oficial listada acima.
+
+
+## CatÃ¡logo SQL canÃ´nico
+
+Todas as consultas ativas do sistema ficam exclusivamente dentro de `sql/`, organizada por domÃ­nio:
+
+```text
+sql/
+  fiscal/
+    efd/
+    documentos/
+    fronteira/
+    validacao/
+  fisconforme/
+    cadastro/
+    malhas/
+  apoio/
+    dicionarios/
+    verificacoes/
+  archive/
 ```
 
-Isso garante que todos os módulos (incluindo testes que fazem mock e testam funções auxiliares de extração e tabelas) sejam corretamente resolvidos.
+Regras operacionais:
+
+- `sql/` Ã© a Ãºnica fonte de verdade das consultas usadas pelo backend, frontend e desktop.
+- seleÃ§Ãµes persistidas usam IDs relativos ao catÃ¡logo, como `fiscal/efd/c170.sql`.
+- `sql/archive/` preserva material histÃ³rico, mas nÃ£o entra na descoberta automÃ¡tica do pipeline.

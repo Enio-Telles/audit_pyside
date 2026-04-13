@@ -1,150 +1,92 @@
 """
-Serviço para leitura, parse e extração de parâmetros de arquivos SQL.
+Servico para leitura, parse e execucao de arquivos SQL do catalogo local.
 
 Responsabilidades:
-- Listar arquivos .sql de múltiplos diretórios
-- Ler conteúdo SQL com fallback de encoding
-- Extrair bind variables Oracle (:param) e inferir tipo de widget
-- Construir dicionário de binds para execução
+- listar arquivos .sql apenas da arvore canonica do projeto;
+- ler conteudo SQL com fallback de encoding;
+- extrair bind variables Oracle (:param) e inferir tipo de widget;
+- construir dicionario de binds para execucao.
 """
 from __future__ import annotations
 
 import re
-import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from interface_grafica.config import SQL_DIR, EXTRA_SQL_DIRS
-
-# ---------------------------------------------------------------------------
-# Importação da função de extração de parâmetros de c:\funcoes - Copia
-# ---------------------------------------------------------------------------
-_FUNCOES_AUX = Path(r"c:\funcoes - Copia\funcoes_auxiliares")
-if str(_FUNCOES_AUX) not in sys.path:
-    sys.path.insert(0, str(_FUNCOES_AUX))
-
-try:
-    from utilitarios.extrair_parametros import extrair_parametros_sql as _extrair_raw
-except ImportError:
-    # Fallback caso o import falhe (ex.: ambiente sem c:\funcoes - Copia)
-    def _extrair_raw(sql: str) -> set[str]:  # type: ignore[misc]
-        return set(re.findall(r":(\w+)", sql))
+from utilitarios.extrair_parametros import extrair_parametros_sql
+from utilitarios.sql_catalog import list_sql_entries, resolve_sql_path
 
 
-# ---------------------------------------------------------------------------
-# Tipos auxiliares
-# ---------------------------------------------------------------------------
 WIDGET_DATE = "date"
 WIDGET_TEXT = "text"
 
 
 @dataclass
 class ParamInfo:
-    """Informações sobre um parâmetro SQL detectado."""
+    """Informacoes sobre um parametro SQL detectado."""
+
     name: str
-    widget_type: str = WIDGET_TEXT  # "date" | "text"
+    widget_type: str = WIDGET_TEXT
     placeholder: str = ""
 
 
 @dataclass
 class SqlFileInfo:
-    """Metadados de um arquivo SQL."""
+    """Metadados de um arquivo SQL do catalogo local."""
+
+    sql_id: str
     path: Path
     display_name: str
-    source_dir: str  # identificação da origem
+    source_dir: str
 
 
-# ---------------------------------------------------------------------------
-# Diretórios extras de SQL (c:\funcoes - Copia\consultas_fonte)
-# ---------------------------------------------------------------------------
-_EXTRA_SQL_DIRS: list[Path] = [Path(p) for p in EXTRA_SQL_DIRS]
-
-
-# ---------------------------------------------------------------------------
-# Serviço
-# ---------------------------------------------------------------------------
 class SqlService:
-
-    def __init__(
-        self,
-        primary_dir: Path = SQL_DIR,
-        extra_dirs: list[Path] | None = None,
-    ) -> None:
-        self.primary_dir = primary_dir
-        self.extra_dirs = extra_dirs if extra_dirs is not None else _EXTRA_SQL_DIRS
-
-    # ------------------------------------------------------------------
-    # Listagem
-    # ------------------------------------------------------------------
     def list_sql_files(self) -> list[SqlFileInfo]:
-        """Retorna todos os arquivos .sql encontrados nos diretórios configurados."""
         result: list[SqlFileInfo] = []
-        seen: set[str] = set()
-
-        for sql_dir, label in self._iter_dirs():
-            if not sql_dir.exists():
-                continue
-            for p in sorted(sql_dir.rglob("*.sql"), key=lambda x: x.name.lower()):
-                key = p.name.lower()
-                if key in seen:
-                    continue
-                seen.add(key)
-                result.append(SqlFileInfo(
-                    path=p,
-                    display_name=p.stem,
-                    source_dir=label,
-                ))
+        for entry in list_sql_entries():
+            result.append(
+                SqlFileInfo(
+                    sql_id=entry.sql_id,
+                    path=entry.path,
+                    display_name=entry.display_name,
+                    source_dir=entry.source_label,
+                )
+            )
         return result
 
-    def _iter_dirs(self):
-        yield self.primary_dir, "projeto"
-        for d in self.extra_dirs:
-            yield d, d.name
-
-    # ------------------------------------------------------------------
-    # Leitura
-    # ------------------------------------------------------------------
     @staticmethod
-    def read_sql(path: Path) -> str:
-        """Lê arquivo SQL com fallback de encoding."""
+    def read_sql(path_or_id: Path | str) -> str:
+        path = resolve_sql_path(path_or_id)
         for enc in ("utf-8", "latin-1", "cp1252", "iso-8859-1"):
             try:
                 return path.read_text(encoding=enc).strip().rstrip(";")
             except UnicodeDecodeError:
                 continue
-        raise RuntimeError(f"Não foi possível ler o SQL: {path}")
+        raise RuntimeError(f"Nao foi possivel ler o SQL: {path}")
 
-    # ------------------------------------------------------------------
-    # Extração de parâmetros
-    # ------------------------------------------------------------------
     @staticmethod
     def extract_params(sql: str) -> list[ParamInfo]:
-        """
-        Extrai parâmetros Oracle :bind do texto SQL.
-
-        Usa ``extrair_parametros_sql`` de c:\\funcoes quando disponível,
-        com fallback para regex simples.  Retorna lista sem duplicatas,
-        na ordem de aparição no SQL.
-        """
-        # Conjunto de nomes (sem dois-pontos)
-        raw_names = _extrair_raw(sql)
-
-        # Manter a ordem de aparição no SQL (o set perde a ordem)
+        raw_names = extrair_parametros_sql(sql)
         all_matches = re.findall(r"(?<!\[):([A-Za-z_]\w*)", sql)
         seen: set[str] = set()
         ordered: list[str] = []
         for name in all_matches:
             low = name.lower()
-            if low not in seen:
-                seen.add(low)
-                ordered.append(name)
+            if low in seen or name not in raw_names:
+                continue
+            seen.add(low)
+            ordered.append(name)
 
         params: list[ParamInfo] = []
         for name in ordered:
-            wtype = SqlService._infer_widget_type(name)
-            placeholder = SqlService._infer_placeholder(name)
-            params.append(ParamInfo(name=name, widget_type=wtype, placeholder=placeholder))
+            params.append(
+                ParamInfo(
+                    name=name,
+                    widget_type=SqlService._infer_widget_type(name),
+                    placeholder=SqlService._infer_placeholder(name),
+                )
+            )
         return params
 
     @staticmethod
@@ -158,24 +100,50 @@ class SqlService:
     def _infer_placeholder(name: str) -> str:
         low = name.lower()
         if "cnpj" in low:
-            return "Somente dígitos"
+            return "Somente digitos"
         if low.startswith(("data_", "dt_")):
             return "DD/MM/AAAA"
         return ""
 
-    # ------------------------------------------------------------------
-    # Construção de binds
-    # ------------------------------------------------------------------
     @staticmethod
     def build_binds(sql: str, values: dict[str, Any]) -> dict[str, Any]:
-        """Constrói dict de binds para execução, mapeando nomes encontrados no SQL."""
         provided = {k.lower(): v for k, v in values.items()}
         binds: dict[str, Any] = {}
         matches = re.findall(r"(?<!\[):([A-Za-z_]\w*)", sql)
         seen: set[str] = set()
         for name in matches:
             low = name.lower()
-            if low not in seen:
-                seen.add(low)
-                binds[name] = provided.get(low)
+            if low in seen:
+                continue
+            seen.add(low)
+            binds[name] = provided.get(low)
         return binds
+
+    @staticmethod
+    def executar_sql(sql: str, params: dict[str, Any] | None = None, cnpj: str | None = None) -> list[dict[str, Any]]:
+        try:
+            from interface_grafica.services.query_worker import _conectar_oracle_fallback
+        except Exception as exc:
+            raise RuntimeError("Nao foi possivel inicializar a conexao Oracle.") from exc
+
+        values = dict(params or {})
+        if cnpj and not any(str(k).lower() == "cnpj" for k in values):
+            values["CNPJ"] = cnpj
+
+        # Envia apenas bind variables existentes no SQL para evitar DPY-4008.
+        binds = SqlService.build_binds(sql, values)
+
+        conn = _conectar_oracle_fallback()
+        try:
+            with conn.cursor() as cursor:
+                if binds:
+                    cursor.execute(sql, binds)
+                else:
+                    cursor.execute(sql)
+                columns = [desc[0] for desc in cursor.description or []]
+                rows = cursor.fetchall()
+            if not rows:
+                return []
+            return [dict(zip(columns, row)) for row in rows]
+        finally:
+            conn.close()

@@ -1,0 +1,117 @@
+[
+  {
+    "tipo": "agregacao",
+    "id_destino": "AGR_1",
+    "ids_unidos": [
+      "AGR_1",
+      "AGR_2"
+    ],
+    "ids_origem_agrupamento": [
+      "AGR_1",
+      "AGR_2"
+    ],
+    "nova_descr": "Produto B",
+    "lista_itens_agrupados": [
+      "Produto A",
+      "Produto B"
+    ],
+    "grupos_origem": [
+      {
+        "id_agrupado": "AGR_1",
+        "descr_padrao": "Produto A",
+        "lista_chave_produto": [
+          "desc_1"
+        ],
+        "lista_descricoes": [
+          "Produto A"
+        ],
+        "lista_desc_compl": [
+          "Comp A"
+        ],
+        "ids_origem_agrupamento": [
+          "AGR_1"
+        ],
+        "lista_itens_agrupados": [
+          "Produto A"
+        ],
+        "lista_ncm": [
+          "1000"
+        ],
+        "lista_cest": [
+          "3000"
+        ],
+        "lista_gtin": [
+          "789"
+        ],
+        "lista_co_sefin": [
+          "2290"
+        ],
+        "co_sefin_padrao": "2290",
+        "co_sefin_agr": "2290",
+        "lista_unidades": [
+          "UN"
+        ],
+        "co_sefin_divergentes": false,
+        "fontes": [
+          "c170"
+        ]
+      },
+      {
+        "id_agrupado": "AGR_2",
+        "descr_padrao": "Produto B",
+        "lista_chave_produto": [
+          "desc_2"
+        ],
+        "lista_descricoes": [
+          "Produto B"
+        ],
+        "lista_desc_compl": [
+          "Comp B"
+        ],
+        "ids_origem_agrupamento": [
+          "AGR_2"
+        ],
+        "lista_itens_agrupados": [
+          "Produto B"
+        ],
+        "lista_ncm": [
+          "2000"
+        ],
+        "lista_cest": [
+          "4000"
+        ],
+        "lista_gtin": [
+          "456"
+        ],
+        "lista_co_sefin": [
+          "2291"
+        ],
+        "co_sefin_padrao": "2291",
+        "co_sefin_agr": "2291",
+        "lista_unidades": [
+          "CX"
+        ],
+        "co_sefin_divergentes": false,
+        "fontes": [
+          "nfe"
+        ]
+      }
+    ],
+    "timestamp": "2026-04-06T12:06:10.831182",
+    "revertida": true,
+    "revertida_em": "2026-04-06T12:06:10.887104"
+  },
+  {
+    "tipo": "desagrupacao",
+    "id_destino": "AGR_1",
+    "ids_restaurados": [
+      "AGR_1",
+      "AGR_2"
+    ],
+    "lista_itens_agrupados": [
+      "Produto A",
+      "Produto B"
+    ],
+    "timestamp": "2026-04-06T12:06:10.898353"
+  }
+]
