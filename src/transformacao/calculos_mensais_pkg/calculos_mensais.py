@@ -1,13 +1,14 @@
-import sys
+﻿import sys
 import re
 from datetime import date
 from pathlib import Path
+from utilitarios.project_paths import PROJECT_ROOT, TRACEBACK_PATH
 from time import perf_counter
 
 import polars as pl
 from rich import print as rprint
 
-ROOT_DIR = Path(r"c:\funcoes - Copia")
+ROOT_DIR = PROJECT_ROOT
 SRC_DIR = ROOT_DIR / "src"
 DADOS_DIR = ROOT_DIR / "dados"
 CNPJ_ROOT = DADOS_DIR / "CNPJ"
@@ -97,23 +98,10 @@ def _carregar_referencia_st_mensal(df_base: pl.DataFrame, df_aux_st: pl.DataFram
             ]
         )
         .with_columns(
-            [
-                pl.struct(["ano", "mes"]).map_elements(
-                    lambda registro: date(int(registro["ano"]), int(registro["mes"]), 1),
-                    return_dtype=pl.Date,
-                ).alias("__mes_ini__"),
-                pl.struct(["ano", "mes"]).map_elements(
-                    lambda registro: (
-                        date(int(registro["ano"]) + 1, 1, 1)
-                        if int(registro["mes"]) == 12
-                        else date(int(registro["ano"]), int(registro["mes"]) + 1, 1)
-                    ),
-                    return_dtype=pl.Date,
-                ).alias("__prox_mes_ini__"),
-            ]
+            pl.date(pl.col("ano"), pl.col("mes"), 1).alias("__mes_ini__")
         )
         .with_columns(
-            (pl.col("__prox_mes_ini__") - pl.duration(days=1)).alias("__mes_fim__")
+            pl.col("__mes_ini__").dt.month_end().alias("__mes_fim__")
         )
     )
     if df_chaves.is_empty():
@@ -258,6 +246,9 @@ def calcular_aba_mensal_dataframe(df: pl.DataFrame, df_aux_st: pl.DataFrame | No
         "entr_desac_anual",
         "saldo_estoque_anual",
         "custo_medio_anual",
+        "entr_desac_periodo",
+        "saldo_estoque_periodo",
+        "custo_medio_periodo",
         "Aliq_icms",
         "it_pc_interna",
         "it_pc_mva",
@@ -299,7 +290,8 @@ def calcular_aba_mensal_dataframe(df: pl.DataFrame, df_aux_st: pl.DataFrame | No
         | _finnfe_4_expr()
     ).fill_null(False)
     is_excluida = _boolish_expr("excluir_estoque").fill_null(False)
-    is_valida_media = ~is_devolucao & ~is_excluida
+    is_q_conv_positiva = pl.col("q_conv").cast(pl.Float64, strict=False).fill_null(0.0) > 0
+    is_valida_media = ~is_devolucao & ~is_excluida & is_q_conv_positiva
 
     df_base = (
         df.with_columns(
@@ -312,6 +304,9 @@ def calcular_aba_mensal_dataframe(df: pl.DataFrame, df_aux_st: pl.DataFrame | No
                 pl.col("entr_desac_anual").cast(pl.Float64, strict=False).fill_null(0.0).alias("__entr_desac_calc__"),
                 pl.col("saldo_estoque_anual").cast(pl.Float64, strict=False).fill_null(0.0).alias("__saldo_calc__"),
                 pl.col("custo_medio_anual").cast(pl.Float64, strict=False).fill_null(0.0).alias("__custo_calc__"),
+                pl.col("entr_desac_periodo").cast(pl.Float64, strict=False).fill_null(0.0).alias("__entr_desac_periodo_calc__"),
+                pl.col("saldo_estoque_periodo").cast(pl.Float64, strict=False).fill_null(0.0).alias("__saldo_periodo_calc__"),
+                pl.col("custo_medio_periodo").cast(pl.Float64, strict=False).fill_null(0.0).alias("__custo_periodo_calc__"),
                 pl.col("Aliq_icms").cast(pl.Float64, strict=False).fill_null(0.0).alias("__aliq_inter_calc__"),
                 pl.col("it_pc_interna").cast(pl.Float64, strict=False).fill_null(0.0).alias("__aliq_mes_calc__"),
                 pl.col("it_pc_mva").cast(pl.Float64, strict=False).fill_null(0.0).alias("__mva_pct_calc__"),
@@ -347,6 +342,9 @@ def calcular_aba_mensal_dataframe(df: pl.DataFrame, df_aux_st: pl.DataFrame | No
                 pl.col("__entr_desac_calc__").sum().alias("entradas_desacob"),
                 pl.col("__saldo_calc__").last().alias("saldo_mes"),
                 pl.col("__custo_calc__").last().alias("custo_medio_mes"),
+                pl.col("__entr_desac_periodo_calc__").sum().alias("entradas_desacob_periodo"),
+                pl.col("__saldo_periodo_calc__").last().alias("saldo_mes_periodo"),
+                pl.col("__custo_periodo_calc__").last().alias("custo_medio_mes_periodo"),
                 pl.col("__aliq_mes_calc__").drop_nulls().last().alias("__aliq_mes__"),
                 pl.col("__aliq_inter_calc__").drop_nulls().last().alias("__aliq_inter_mes__"),
                 pl.col("__mva_pct_calc__").drop_nulls().last().alias("__mva_pct_mes__"),
@@ -375,6 +373,10 @@ def calcular_aba_mensal_dataframe(df: pl.DataFrame, df_aux_st: pl.DataFrame | No
                 .then(pl.col("__mva_pct_mes__").cast(pl.Float64, strict=False).fill_null(0.0))
                 .otherwise(pl.lit(None, dtype=pl.Float64))
                 .alias("MVA"),
+                # As medias exibidas na tabela mensal devem ser as mesmas usadas na base do ICMS,
+                # evitando diferenca entre o valor mostrado e o valor efetivamente multiplicado.
+                pl.col("pme_mes").round(2).alias("__pme_mes_icms__"),
+                pl.col("pms_mes").round(2).alias("__pms_mes_icms__"),
                 pl.when(
                     pl.col("__tem_st_mes__")
                     & (
@@ -397,26 +399,50 @@ def calcular_aba_mensal_dataframe(df: pl.DataFrame, df_aux_st: pl.DataFrame | No
                     pl.col("saldo_mes").cast(pl.Float64, strict=False).fill_null(0.0)
                     * pl.col("custo_medio_mes").cast(pl.Float64, strict=False).fill_null(0.0)
                 ).alias("valor_estoque"),
+                (
+                    pl.col("saldo_mes_periodo").cast(pl.Float64, strict=False).fill_null(0.0)
+                    * pl.col("custo_medio_mes_periodo").cast(pl.Float64, strict=False).fill_null(0.0)
+                ).alias("valor_estoque_periodo"),
                 pl.when(
                     pl.col("__tem_st_mes__")
                     & (pl.col("entradas_desacob") > 0)
                 )
                 .then(
-                    pl.when(pl.col("pms_mes") > 0)
+                    pl.when(pl.col("__pms_mes_icms__") > 0)
                     .then(
-                        pl.col("pms_mes")
+                        pl.col("__pms_mes_icms__")
                         * pl.col("entradas_desacob")
                         * (pl.col("__aliq_mes__") / 100.0)
                     )
                     .otherwise(
-                        pl.col("pme_mes")
+                        pl.col("__pme_mes_icms__")
                         * pl.col("entradas_desacob")
                         * (pl.col("__aliq_mes__") / 100.0)
                         * pl.col("__mva_mes__")
                     )
                 )
                 .otherwise(0.0)
-                .alias("ICMS_entr_desacob")
+                .alias("ICMS_entr_desacob"),
+                pl.when(
+                    pl.col("__tem_st_mes__")
+                    & (pl.col("entradas_desacob_periodo") > 0)
+                )
+                .then(
+                    pl.when(pl.col("__pms_mes_icms__") > 0)
+                    .then(
+                        pl.col("__pms_mes_icms__")
+                        * pl.col("entradas_desacob_periodo")
+                        * (pl.col("__aliq_mes__") / 100.0)
+                    )
+                    .otherwise(
+                        pl.col("__pme_mes_icms__")
+                        * pl.col("entradas_desacob_periodo")
+                        * (pl.col("__aliq_mes__") / 100.0)
+                        * pl.col("__mva_mes__")
+                    )
+                )
+                .otherwise(0.0)
+                .alias("ICMS_entr_desacob_periodo")
             ]
         )
         .with_columns(
@@ -432,6 +458,11 @@ def calcular_aba_mensal_dataframe(df: pl.DataFrame, df_aux_st: pl.DataFrame | No
                 pl.col("custo_medio_mes").round(4),
                 pl.col("valor_estoque").round(2),
                 pl.col("ICMS_entr_desacob").round(2),
+                pl.col("entradas_desacob_periodo").round(4),
+                pl.col("saldo_mes_periodo").round(4),
+                pl.col("custo_medio_mes_periodo").round(4),
+                pl.col("valor_estoque_periodo").round(2),
+                pl.col("ICMS_entr_desacob_periodo").round(2),
                 pl.col("qtd_entradas").round(4),
                 pl.col("qtd_saidas").round(4),
             ]
@@ -459,6 +490,11 @@ def calcular_aba_mensal_dataframe(df: pl.DataFrame, df_aux_st: pl.DataFrame | No
                 "saldo_mes",
                 "custo_medio_mes",
                 "valor_estoque",
+                "entradas_desacob_periodo",
+                "ICMS_entr_desacob_periodo",
+                "saldo_mes_periodo",
+                "custo_medio_mes_periodo",
+                "valor_estoque_periodo",
             ]
         )
         .sort(["ano", "mes", "id_agregado"])
@@ -530,6 +566,8 @@ if __name__ == "__main__":
     except Exception:
         import traceback
 
-        with open(r"c:\funcoes - Copia\traceback.txt", "w") as f:
+        with open(TRACEBACK_PATH, "w", encoding="utf-8") as f:
             traceback.print_exc(file=f)
         raise
+
+

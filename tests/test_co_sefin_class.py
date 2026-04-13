@@ -114,3 +114,48 @@ def test_enriquecer_co_sefin_class_faz_fallback_para_lookup_legado_por_linha(tmp
     assert resultado.height == 1
     assert resultado["co_sefin_agr"][0] == "123"
     assert resultado["it_pc_interna"][0] == 9.5
+
+
+def test_enriquecer_co_sefin_class_nao_preenche_it_pc_interna_sem_vigencia_compativel(tmp_path, monkeypatch):
+    dados_dir, sefin_dir = _configurar_ambiente_tmp(tmp_path, monkeypatch)
+    cnpj = "12345678000199"
+
+    _salvar_produtos_agrupados(
+        dados_dir,
+        cnpj,
+        [{"id_agrupado": "id_agr_1", "co_sefin_padrao": "9017"}],
+    )
+
+    pl.DataFrame(
+        {
+            "it_nu_cest": ["2222"],
+            "it_nu_ncm": ["1111"],
+            "it_co_sefin": ["9017"],
+        }
+    ).write_parquet(sefin_dir / "sitafe_cest_ncm.parquet")
+
+    pl.DataFrame(
+        {
+            "it_co_sefin": ["9017", "9017"],
+            "it_da_inicio": ["20160320", "20240112"],
+            "it_da_final": ["20240111", None],
+            "it_pc_interna": [17.5, 19.5],
+            "it_in_st": ["N", "N"],
+        }
+    ).write_parquet(sefin_dir / "sitafe_produto_sefin_aux.parquet")
+
+    df_mov = pl.DataFrame(
+        {
+            "id_agrupado": ["id_agr_1"],
+            "ncm_padrao": ["1111"],
+            "cest_padrao": ["2222"],
+            "Dt_doc": [date(2010, 12, 31)],
+            "Dt_e_s": [None],
+        }
+    )
+
+    resultado = mod.enriquecer_co_sefin_class(df_mov, cnpj)
+
+    assert resultado.height == 1
+    assert resultado["co_sefin_agr"][0] == "9017"
+    assert resultado["it_pc_interna"][0] is None

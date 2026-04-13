@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from datetime import date, datetime
+from decimal import Decimal
+import math
+import numbers
 import re
 import unicodedata
 from typing import Any
@@ -32,10 +36,58 @@ def natural_sort_key(value: str | None) -> list[Any]:
     return [int(part) if part.isdigit() else part.lower() for part in re.split(r"(\d+)", text)]
 
 
-def display_cell(value: Any) -> str:
+def _normalizar_nome_coluna(column_name: str | None) -> str:
+    return "" if column_name is None else str(column_name).strip().lower()
+
+
+def is_year_column_name(column_name: str | None) -> bool:
+    nome = _normalizar_nome_coluna(column_name)
+    if not nome:
+        return False
+    return nome == "ano" or nome.startswith("ano_") or nome.endswith("_ano")
+
+
+def _formatar_numero_br(valor: numbers.Real | Decimal, casas_decimais: int) -> str:
+    if isinstance(valor, Decimal):
+        numero = float(valor)
+    else:
+        numero = float(valor)
+    texto = f"{numero:,.{casas_decimais}f}"
+    return texto.replace(",", "_").replace(".", ",").replace("_", ".")
+
+
+def _formatar_data(valor: date | datetime) -> str:
+    if isinstance(valor, datetime):
+        return valor.strftime("%d/%m/%Y %H:%M:%S")
+    return valor.strftime("%d/%m/%Y")
+
+
+def _parse_data_iso(texto: str) -> datetime | date | None:
+    texto = texto.strip()
+    if not texto:
+        return None
+
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", texto):
+        try:
+            return datetime.strptime(texto, "%Y-%m-%d").date()
+        except ValueError:
+            return None
+
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2})?(\.\d{1,6})?", texto):
+        normalizado = texto.replace("T", " ")
+        formatos = ("%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M")
+        for formato in formatos:
+            try:
+                return datetime.strptime(normalizado, formato)
+            except ValueError:
+                continue
+    return None
+
+
+def display_cell(value: Any, column_name: str | None = None) -> str:
     if value is None:
         return ""
-    
+
     # Handle Polars Series or other objects with to_list()
     if hasattr(value, "to_list") and callable(getattr(value, "to_list")):
         try:
@@ -45,9 +97,40 @@ def display_cell(value: Any) -> str:
 
     if isinstance(value, (list, tuple)):
         # Join elements, recursively calling display_cell for each
-        return ", ".join(display_cell(v) for v in value if v is not None)
-    
+        return ", ".join(display_cell(v, column_name=column_name) for v in value if v is not None)
+
     if isinstance(value, bool):
         return "true" if value else "false"
-    
+
+    if isinstance(value, datetime):
+        return _formatar_data(value)
+
+    if isinstance(value, date):
+        return _formatar_data(value)
+
+    if isinstance(value, str):
+        if is_year_column_name(column_name):
+            return value.strip()
+        valor_data = _parse_data_iso(value)
+        if valor_data is not None:
+            return _formatar_data(valor_data)
+        return value
+
+    if isinstance(value, Decimal):
+        if math.isnan(float(value)) or math.isinf(float(value)):
+            return ""
+        if is_year_column_name(column_name):
+            return str(int(value))
+        return _formatar_numero_br(value, 2)
+
+    if isinstance(value, numbers.Real):
+        numero = float(value)
+        if math.isnan(numero) or math.isinf(numero):
+            return ""
+        if is_year_column_name(column_name):
+            return str(int(numero))
+        if isinstance(value, numbers.Integral):
+            return _formatar_numero_br(value, 0)
+        return _formatar_numero_br(value, 2)
+
     return str(value)

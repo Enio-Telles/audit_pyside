@@ -1,0 +1,3 @@
+SELECT * FROM bi.fato_det_notificacao
+WHERE CO_CNPJ_NOTIF = :CNPJ 
+  AND ID_FISCONFORME IS NOT NULL;

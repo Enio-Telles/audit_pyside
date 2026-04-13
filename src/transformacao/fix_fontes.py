@@ -1,6 +1,7 @@
 import os
+from utilitarios.project_paths import SRC_ROOT
 
-path = r'c:\funcoes - Copia\src\transformacao\fontes_produtos.py'
+path = str(SRC_ROOT / 'transformacao' / 'fontes_produtos.py')
 with open(path, 'r', encoding='utf-8') as f:
     text = f.read()
 

@@ -10,9 +10,9 @@ from __future__ import annotations
 
 import re
 import sys
-import traceback
 from pathlib import Path
 from typing import Callable
+from transformacao.auxiliares.logs import log_exception
 
 from rich import print as rprint
 
@@ -63,6 +63,7 @@ _registar("c176_xml",            "transformacao.c176_xml:gerar_c176_xml",       
 _registar("movimentacao_estoque","transformacao.movimentacao_estoque:gerar_movimentacao_estoque", deps=["c170_xml", "c176_xml"])
 _registar("calculos_mensais",    "transformacao.calculos_mensais:gerar_calculos_mensais", deps=["movimentacao_estoque"])
 _registar("calculos_anuais",     "transformacao.calculos_anuais:gerar_calculos_anuais",   deps=["movimentacao_estoque"])
+_registar("calculos_periodos",   "transformacao.calculos_periodo_pkg:gerar_calculos_periodos", deps=["movimentacao_estoque"])
 
 
 def _ordem_topologica(selecionadas: list[str]) -> list[str]:
@@ -106,10 +107,16 @@ def executar_pipeline_completo(
         rprint(f"[bold blue]Fase 1: extraindo {len(consultas_selecionadas)} tabelas brutas...[/bold blue]")
         try:
             from extracao.extrair_dados_cnpj import extrair_dados
-            extrair_dados(cnpj=cnpj, data_limite_input=data_limite)
+            extrair_dados(
+                cnpj_input=cnpj,
+                data_limite_input=data_limite,
+                consultas_selecionadas=consultas_selecionadas,
+            )
             rprint("[green]Extracao concluida.[/green]")
         except Exception as e:
-            rprint(f"[red]Falha critica na extracao para {cnpj}:[/red] {e}")
+            from transformacao.auxiliares.logs import log_exception
+            log_exception(e)
+            rprint(f"[red]Falha critica na extracao para {cnpj}. Verifique os logs de erro.[/red]")
             return False
 
     if tabelas_selecionadas:
@@ -143,8 +150,8 @@ def executar_pipeline_completo(
                     etapas_executadas.add(tab_id)
                     rprint(f"[green]{tab_id} finalizada.[/green]")
             except Exception as e:
-                rprint(f"[red]Erro inesperado na etapa {tab_id}:[/red] {e}")
-                rprint(f"[dim]{traceback.format_exc()}[/dim]")
+                log_exception(e)
+                rprint(f"[red]Erro inesperado na etapa {tab_id}. Verifique os logs de erro.[/red]")
                 sucesso_global = False
 
     if sucesso_global:
