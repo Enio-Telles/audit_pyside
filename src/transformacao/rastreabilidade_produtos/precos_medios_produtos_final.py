@@ -1,4 +1,4 @@
-"""
+﻿"""
 precos_medios_produtos_final.py
 
 Objetivo: Calcular preco medio por produto agrupado/unidade a partir da base final.
@@ -11,11 +11,14 @@ import json
 import re
 import sys
 from pathlib import Path
+from utilitarios.project_paths import PROJECT_ROOT
 
 import polars as pl
 from rich import print as rprint
 
-ROOT_DIR = Path(r"c:\funcoes - Copia")
+from transformacao.movimentacao_estoque_pkg.mapeamento_fontes import normalizar_descricao_expr
+
+ROOT_DIR = PROJECT_ROOT
 SRC_DIR = ROOT_DIR / "src"
 DADOS_DIR = ROOT_DIR / "dados"
 CNPJ_ROOT = DADOS_DIR / "CNPJ"
@@ -28,11 +31,6 @@ except ImportError as e:
     rprint(f"[red]Erro ao importar modulos utilitarios:[/red] {e}")
     sys.exit(1)
 
-
-def _norm(text: str | None) -> str:
-    if text is None:
-        return ""
-    return re.sub(r"\s+", " ", (remove_accents(text) or "").upper().strip())
 
 
 def calcular_precos_medios_produtos_final(
@@ -83,10 +81,7 @@ def calcular_precos_medios_produtos_final(
         df_link = (
             df_unid
             .with_columns(
-                pl.col("descricao")
-                .cast(pl.Utf8, strict=False)
-                .map_elements(_norm, return_dtype=pl.String)
-                .alias("descricao_normalizada")
+                normalizar_descricao_expr("descricao").alias("descricao_normalizada")
             )
             .join(df_final, on="descricao_normalizada", how="left")
             .drop("descricao_normalizada")
@@ -181,3 +176,5 @@ if __name__ == "__main__":
         c = input("CNPJ: ")
         d1, d2 = calcular_precos_medios_produtos_final(c)
         rprint(f"[green]OK[/green] precos_medios={d1.height}, sem_compra={d2.height}")
+
+

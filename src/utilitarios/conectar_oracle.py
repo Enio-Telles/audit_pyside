@@ -24,9 +24,9 @@ def _get_required_env(key: str) -> str:
     return val.strip()
 
 try:
-    HOST = os.getenv("ORACLE_HOST", 'exa01-scan.sefin.ro.gov.br').strip()
-    PORTA = int(os.getenv("ORACLE_PORT", '1521').strip())
-    SERVICO = os.getenv("ORACLE_SERVICE", 'sefindw').strip()
+    HOST = _get_required_env("ORACLE_HOST")
+    PORTA = int(_get_required_env("ORACLE_PORT"))
+    SERVICO = _get_required_env("ORACLE_SERVICE")
 except Exception as e:
     logging.error(f"Detalhes internos do erro de rede Oracle: {e}")
     rprint("[red]Erro na configuração das variáveis de rede Oracle. Verifique o arquivo .env.[/red]")
@@ -54,8 +54,7 @@ def conectar(cpf_usuario=None, senha=None):
             
         return conexao
     except Exception as e:
-        logging.error(f"Detalhes internos do erro de conexão Oracle: {e}")
-        rprint("[red]Erro de conexão Oracle. Verifique suas configurações e o status do banco de dados.[/red]")
+        rprint("[red]Erro de conexão Oracle:[/red] Falha ao estabelecer conexão com o banco de dados. Verifique suas credenciais e configurações de rede.")
         return None
 
 @contextmanager

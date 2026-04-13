@@ -1,7 +1,7 @@
 """
 Lançador principal do Fiscal Parquet Analyzer.
 
-Executa a interface gráfica a partir da raiz do projeto c:\\funcoes,
+Executa a interface gráfica a partir da raiz do projeto C:\\Sistema_pysisde,
 configurando o sys.path para encontrar os pacotes dentro de src/.
 """
 from __future__ import annotations
