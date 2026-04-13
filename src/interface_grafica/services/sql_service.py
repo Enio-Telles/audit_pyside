@@ -144,8 +144,6 @@ class SqlService:
                 rows = cursor.fetchall()
             if not rows:
                 return []
-            # Optimization: returning the list of dicts directly avoids a redundant Polars DataFrame
-            # conversion (to_dicts), saving memory and CPU (O(1) vs O(N) conversion).
             return [dict(zip(columns, row)) for row in rows]
         finally:
             conn.close()
