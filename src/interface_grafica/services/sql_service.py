@@ -14,8 +14,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import polars as pl
-
 from utilitarios.extrair_parametros import extrair_parametros_sql
 from utilitarios.sql_catalog import list_sql_entries, resolve_sql_path
 
@@ -146,7 +144,6 @@ class SqlService:
                 rows = cursor.fetchall()
             if not rows:
                 return []
-            df = pl.DataFrame([dict(zip(columns, row)) for row in rows], infer_schema_length=min(len(rows), 1000))
-            return df.to_dicts()
+            return [dict(zip(columns, row)) for row in rows]
         finally:
             conn.close()
