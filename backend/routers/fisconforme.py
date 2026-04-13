@@ -628,7 +628,7 @@ def consulta_lote(req: ConsultaLoteRequest):
                 if dados:
                     _salvar_cache_cadastral(cnpj, dados)
             except Exception as exc:
-                logger.error("Erro ao consultar dados cadastrais Oracle para lote %s", cnpj, exc_info=exc)
+                logger.exception("Erro ao consultar dados cadastrais Oracle para lote %s", cnpj)
                 resultados.append({"cnpj": cnpj, "error": "Falha na conexão com o banco de dados", "dados_cadastrais": None, "malhas": [], "from_cache": False})
                 continue
 
