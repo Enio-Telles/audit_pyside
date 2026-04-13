@@ -31,11 +31,24 @@ except ImportError as e:
     sys.exit(1)
 
 
-def _normalizar_descricao_para_match(texto: str | None) -> str:
-    """Normaliza texto igual ao pipeline de produtos: remove acento, upper, trim, espaco unico."""
-    if texto is None:
-        return ""
-    return " ".join((remove_accents(texto) or "").upper().strip().split())
+def _expr_normalizar_descricao(coluna: str) -> pl.Expr:
+    return (
+        pl.when(pl.col(coluna).is_null())
+        .then(pl.lit(""))
+        .otherwise(
+            pl.col(coluna)
+            .cast(pl.Utf8, strict=False)
+            .str.replace_all(r"[áàãâäÁÀÃÂÄ]", "A")
+            .str.replace_all(r"[éèêëÉÈÊË]", "E")
+            .str.replace_all(r"[íìîïÍÌÎÏ]", "I")
+            .str.replace_all(r"[óòõôöÓÒÕÔÖ]", "O")
+            .str.replace_all(r"[úùûüÚÙÛÜ]", "U")
+            .str.replace_all(r"[çÇ]", "C")
+            .str.to_uppercase()
+            .str.strip_chars()
+            .str.replace_all(r"\s+", " ")
+        )
+    )
 
 
 def _primeira_descricao_valida(df: pl.DataFrame) -> str | None:
@@ -149,6 +162,15 @@ def inicializar_produtos_agrupados(cnpj: str, pasta_cnpj: Path | None = None) ->
         if not found:
             grupos.append([row])
 
+
+    df_base = df_base.with_columns(
+        pl.col("descricao")
+        .map_elements(_normalizar_descricao_para_match, return_dtype=pl.String)
+        .alias("__descricao_norm")
+    )
+    df_base_parts = df_base.partition_by("__descricao_norm", as_dict=True)
+    df_base_empty = df_base.filter(pl.lit(False))
+
     registros_mestra = []
     registros_ponte = []
     
@@ -160,11 +182,10 @@ def inicializar_produtos_agrupados(cnpj: str, pasta_cnpj: Path | None = None) ->
         desc_norms = [r.get("descricao_normalizada") for r in g if r.get("descricao_normalizada")]
         
         if desc_norms:
-            df_base_filtered = df_base.filter(
-                pl.col("descricao").map_elements(_normalizar_descricao_para_match, return_dtype=pl.String).is_in(desc_norms)
-            )
+            partes = [df_base_parts.get((n,), df_base_empty) for n in desc_norms]
+            df_base_filtered = pl.concat(partes, how="vertical_relaxed") if partes else df_base_empty
         else:
-            df_base_filtered = df_base.filter(pl.lit(False))
+            df_base_filtered = df_base_empty
 
         padrao = calcular_atributos_padrao(df_base_filtered)
 

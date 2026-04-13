@@ -131,6 +131,8 @@ def _detectar_preset(nome_base: str, df_pd: pd.DataFrame) -> str:
         return "nfe_bi_detalhe"
     if "c170" in nome:
         return "c170_sped"
+    if "mov_estoque" in nome:
+        return "mov_estoque"
 
     # Detecção por assinatura de colunas
     if {"descricao", "lista_chave_item_individualizado", "lista_cod_normalizado"}.issubset(cols):
@@ -743,6 +745,13 @@ def _obter_preset_config(preset: str) -> dict[str, Any]:
                 {"type": "equals", "column": "situação", "value": "VERIFICAR"},
                 {"type": "compare_columns", "left": "valor_pago", "op": "<", "right": "valor_devido"},
             ],
+        },
+        "mov_estoque": {
+            **base,
+            "zoom": 85,
+            "date_cols": {"dt_doc", "dt_e_s"},
+            "decimal_cols": {"qtd", "vl_item", "preco_item", "q_conv", "preco_unit", "saldo_estoque_anual", "entr_desac_anual", "custo_medio_anual"},
+            "texto_forcado": base["texto_forcado"] | {"id_agrupado", "chv_nfe", "nsu", "finnfe", "infprot_cstat", "cfop"},
         },
         "generico": base,
     }

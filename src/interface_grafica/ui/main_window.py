@@ -398,6 +398,12 @@ class MainWindow(QMainWindow):
             foreground_resolver=self._aba_anual_foreground,
             background_resolver=self._aba_anual_background,
         )
+        self.aba_periodos_model = PolarsTableModel(
+            df=pl.DataFrame(),
+            checkable=True,
+            foreground_resolver=self._aba_anual_foreground,
+            background_resolver=self._aba_anual_background,
+        )
         self._aba_anual_file_path: Path | None = None
         self._aba_anual_df: pl.DataFrame = pl.DataFrame()
         self.aba_mensal_model = PolarsTableModel(
@@ -584,8 +590,10 @@ class MainWindow(QMainWindow):
         actions_row3 = QHBoxLayout()
         self.btn_apagar_dados = QPushButton("Apagar Dados do CNPJ")
         self.btn_apagar_dados.setStyleSheet("QPushButton { color: #e57373; }")
+        self.btn_apagar_dados.setToolTip("Apaga todos os parquets e análises do CNPJ (mantém o registro)")
         self.btn_apagar_cnpj = QPushButton("Apagar CNPJ")
         self.btn_apagar_cnpj.setStyleSheet("QPushButton { color: #ef5350; font-weight: bold; }")
+        self.btn_apagar_cnpj.setToolTip("Remove permanentemente a pasta inteira e os registros no banco")
         actions_row3.addWidget(self.btn_apagar_dados)
         actions_row3.addWidget(self.btn_apagar_cnpj)
         cnpj_layout.addLayout(actions_row3)
@@ -1573,6 +1581,8 @@ class MainWindow(QMainWindow):
 
         self.tab_aba_anual = self._build_tab_aba_anual()
         self.estoque_tabs.addTab(self.tab_aba_anual, "Tabela anual")
+        self.tab_aba_periodos = self._build_tab_aba_periodos()
+        self.estoque_tabs.addTab(self.tab_aba_periodos, "Tabela períodos")
 
         self.tab_resumo_global = self._build_tab_resumo_global()
         self.estoque_tabs.addTab(self.tab_resumo_global, "Resumo Global")
@@ -2095,8 +2105,197 @@ class MainWindow(QMainWindow):
             "QTableCornerButton::section { background: #18181b; border: 1px solid #3f3f46; }"
         )
         layout.addWidget(self.aba_anual_table, 1)
+        return tab
+
+    def _build_tab_aba_periodos(self) -> QWidget:
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        tab.setStyleSheet(self.tab_aba_anual.styleSheet()) 
+
+        self.lbl_aba_periodos_titulo = QLabel("Tabela: aba_periodos")
+        self.lbl_aba_periodos_titulo.setStyleSheet(self.lbl_aba_anual_titulo.styleSheet())
+        layout.addWidget(self.lbl_aba_periodos_titulo)
+
+        toolbar = QHBoxLayout()
+        self.btn_refresh_aba_periodos = QPushButton("Recarregar")
+        self.btn_refresh_aba_periodos.setIcon(QApplication.style().standardIcon(QApplication.style().StandardPixmap.SP_BrowserReload))
+        self.btn_apply_aba_periodos_filters = QPushButton("Aplicar filtros")
+        self.btn_clear_aba_periodos_filters = QPushButton("Limpar filtros")
+        self.btn_export_aba_periodos = QPushButton("Exportar Excel")
+        self.btn_destacar_aba_periodos = self._criar_botao_destacar()
+        
+        toolbar.addWidget(self.btn_refresh_aba_periodos)
+        toolbar.addWidget(self.btn_apply_aba_periodos_filters)
+        toolbar.addWidget(self.btn_clear_aba_periodos_filters)
+        toolbar.addStretch()
+        toolbar.addWidget(self.btn_destacar_aba_periodos)
+        toolbar.addWidget(self.btn_export_aba_periodos)
+        layout.addLayout(toolbar)
+
+        filtros = QHBoxLayout()
+        self.periodo_filter_id = QComboBox()
+        self.periodo_filter_id.setEditable(True)
+        self.periodo_filter_id.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+        self.periodo_filter_id.setMinimumWidth(220)
+        self.periodo_filter_id.lineEdit().setPlaceholderText("Filtrar id_agregado")
+        self.periodo_filter_desc = QLineEdit()
+        self.periodo_filter_desc.setPlaceholderText("Filtrar descriCAo")
+        self.periodo_filter_texto = QLineEdit()
+        self.periodo_filter_texto.setPlaceholderText("Busca ampla...")
+
+        for widget in [self.periodo_filter_id, self.periodo_filter_desc, self.periodo_filter_texto]:
+            filtros.addWidget(widget)
+        layout.addLayout(filtros)
+
+        filtros_avancados = QHBoxLayout()
+        self.periodo_filter_num_col = QComboBox()
+        self.periodo_filter_num_col.addItems(["entradas_desacob", "saidas_desacob", "estoque_final_desacob", "saldo_final", "estoque_final"])
+        self.periodo_filter_num_min = QLineEdit()
+        self.periodo_filter_num_min.setPlaceholderText("Min numerico")
+        self.periodo_filter_num_max = QLineEdit()
+        self.periodo_filter_num_max.setPlaceholderText("Max numerico")
+        self.periodo_profile = QComboBox()
+        self.periodo_profile.addItems(["Padrao", "Auditoria", "Estoque", "Custos"])
+        self.btn_periodo_profile = QPushButton("Perfil")
+        self.btn_periodo_save_profile = QPushButton("Salvar perfil")
+        self.btn_periodo_colunas = QPushButton("Colunas")
+        for widget in [
+            QLabel("Numero"),
+            self.periodo_filter_num_col,
+            self.periodo_filter_num_min,
+            self.periodo_filter_num_max,
+            self.periodo_profile,
+            self.btn_periodo_profile,
+            self.btn_periodo_save_profile,
+            self.btn_periodo_colunas,
+        ]:
+            filtros_avancados.addWidget(widget)
+        filtros_avancados.addStretch()
+        layout.addLayout(filtros_avancados)
+
+        self.lbl_aba_periodos_status = QLabel("Selecione um CNPJ para carregar a aba períodos.")
+        self.lbl_aba_periodos_status.setStyleSheet(self.lbl_aba_anual_status.styleSheet())
+        layout.addWidget(self.lbl_aba_periodos_status)
+
+        self.lbl_aba_periodos_filtros = QLabel("Filtros ativos: nenhum")
+        self.lbl_aba_periodos_filtros.setStyleSheet(self.lbl_aba_anual_filtros.styleSheet())
+        layout.addWidget(self.lbl_aba_periodos_filtros)
+
+        self.aba_periodos_table = QTableView()
+        self.aba_periodos_table.setModel(self.aba_periodos_model)
+        self.aba_periodos_table.setSelectionBehavior(QAbstractItemView.SelectItems)
+        self.aba_periodos_table.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        self.aba_periodos_table.setAlternatingRowColors(True)
+        self.aba_periodos_table.setSortingEnabled(True)
+        self.aba_periodos_table.setWordWrap(True)
+        self.aba_periodos_table.setStyleSheet(self.aba_anual_table.styleSheet())
+        self.aba_periodos_table.horizontalHeader().setStretchLastSection(True)
+        self.aba_periodos_table.horizontalHeader().setSectionsMovable(True)
+        self.aba_periodos_table.horizontalHeader().setContextMenuPolicy(Qt.CustomContextMenu)
+        layout.addWidget(self.aba_periodos_table, 1)
 
         return tab
+
+    def atualizar_aba_periodos(self) -> None:
+        if not self.cnpj_selecionado:
+            return
+        
+        self.lbl_aba_periodos_status.setText("Carregando aba períodos...")
+        from interface_grafica.services.parquet_service import ParquetService
+        parquet_service = ParquetService()
+        
+        def task():
+            caminho = Path(f"dados/CNPJ/{self.cnpj_selecionado}/analises/produtos/aba_periodos_{self.cnpj_selecionado}.parquet")
+            if not caminho.exists():
+                return None
+            return pl.read_parquet(caminho)
+
+        def on_finished(df):
+            if df is not None:
+                self.aba_periodos_table.setUpdatesEnabled(False)
+                self.aba_periodos_model.set_dataframe(df)
+                self.aba_periodos_table.setUpdatesEnabled(True)
+                
+                ids = sorted(df["id_agregado"].unique().to_list())
+                self.periodo_filter_id.clear()
+                self.periodo_filter_id.addItem("")
+                self.periodo_filter_id.addItems([str(x) for x in ids])
+                
+                self.lbl_aba_periodos_status.setText(f"Sucesso! {df.height} registros carregados.")
+                self._aplicar_preferencias_tabela("aba_periodos", self.aba_periodos_table, self.aba_periodos_model)
+            else:
+                self.aba_periodos_model.set_dataframe(pl.DataFrame())
+                self.lbl_aba_periodos_status.setText("Erro: Arquivo aba_periodos não encontrado.")
+
+        worker = ServiceTaskWorker(task)
+        worker.signals.finished.connect(on_finished)
+        self.threadpool.start(worker)
+
+    def aplicar_filtros_aba_periodos(self) -> None:
+        filtros = []
+        id_val = self.periodo_filter_id.currentText().strip()
+        if id_val:
+            filtros.append(f"ID={id_val}")
+            self.aba_periodos_model.add_filter("id_agregado", id_val, "equal")
+        else:
+            self.aba_periodos_model.remove_filter("id_agregado")
+
+        desc_val = self.periodo_filter_desc.text().strip()
+        if desc_val:
+            filtros.append(f"Desc~={desc_val}")
+            self.aba_periodos_model.add_filter("descr_padrao", desc_val, "contains")
+        else:
+            self.aba_periodos_model.remove_filter("descr_padrao")
+
+        texto_val = self.periodo_filter_texto.text().strip()
+        if texto_val:
+            filtros.append(f"Busca='{texto_val}'")
+            self.aba_periodos_model.add_filter("ANY", texto_val, "contains")
+        else:
+            self.aba_periodos_model.remove_filter("ANY")
+
+        num_col = self.periodo_filter_num_col.currentText()
+        v_min = self.periodo_filter_num_min.text().strip()
+        v_max = self.periodo_filter_num_max.text().strip()
+        if v_min or v_max:
+            try:
+                f_min = float(v_min) if v_min else None
+                f_max = float(v_max) if v_max else None
+                self.aba_periodos_model.add_numeric_filter(num_col, f_min, f_max)
+                filtros.append(f"{num_col} entre [{v_min or '-inf'}, {v_max or '+inf'}]")
+            except ValueError:
+                pass
+        else:
+            self.aba_periodos_model.remove_numeric_filter()
+
+        self.lbl_aba_periodos_filtros.setText(f"Filtros ativos: {', '.join(filtros) if filtros else 'nenhum'}")
+
+    def limpar_filtros_aba_periodos(self) -> None:
+        self.periodo_filter_id.setCurrentText("")
+        self.periodo_filter_desc.clear()
+        self.periodo_filter_texto.clear()
+        self.periodo_filter_num_min.clear()
+        self.periodo_filter_num_max.clear()
+        self.aba_periodos_model.clear_filters()
+        self.lbl_aba_periodos_filtros.setText("Filtros ativos: nenhum")
+
+    def exportar_aba_periodos_excel(self) -> None:
+        if self.aba_periodos_model.df_filtered.is_empty():
+            QMessageBox.warning(self, "Aviso", "Não há dados filtrados para exportar.")
+            return
+        
+        path, _ = QFileDialog.getSaveFileName(self, "Salvar Excel", f"aba_periodos_{self.cnpj_selecionado}.xlsx", "Excel Files (*.xlsx)")
+        if not path:
+            return
+            
+        from interface_grafica.services.export_service import ExportService
+        service = ExportService()
+        try:
+            service.export_excel(Path(path), self.aba_periodos_model.df_filtered, "Aba Periodos")
+            QMessageBox.information(self, "Sucesso", f"Arquivo exportado com sucesso: {path}")
+        except Exception as e:
+            QMessageBox.critical(self, "Erro", f"Erro ao exportar: {e}")
+
 
     def _build_tab_resumo_global(self) -> QWidget:
         tab = QWidget()
@@ -2407,6 +2606,23 @@ class MainWindow(QMainWindow):
         self.btn_filtrar_estoque_anual.clicked.connect(self.filtrar_estoque_pela_selecao_anual)
         self.btn_limpar_filtro_cruzado.clicked.connect(self.limpar_filtro_cruzado_anual)
         self.btn_export_aba_anual.clicked.connect(self.exportar_aba_anual_excel)
+        schedule_periodos = lambda: self._schedule_debounced("periodos_filters", self.aplicar_filtros_aba_periodos)
+        self.btn_refresh_aba_periodos.clicked.connect(self.atualizar_aba_periodos)
+        self.btn_apply_aba_periodos_filters.clicked.connect(self.aplicar_filtros_aba_periodos)
+        self.btn_clear_aba_periodos_filters.clicked.connect(self.limpar_filtros_aba_periodos)
+        self.btn_export_aba_periodos.clicked.connect(self.exportar_aba_periodos_excel)
+        self.periodo_filter_id.currentTextChanged.connect(lambda _value: schedule_periodos())
+        self.periodo_filter_desc.textChanged.connect(lambda _value: schedule_periodos())
+        self.periodo_filter_texto.textChanged.connect(lambda _value: schedule_periodos())
+        self.btn_periodo_profile.clicked.connect(lambda: self._aplicar_perfil_tabela("aba_periodos", self.aba_periodos_table, self.aba_periodos_model, self.periodo_profile.currentText(), "aba_periodos"))
+        self.btn_periodo_save_profile.clicked.connect(
+            lambda: self._salvar_perfil_tabela_com_dialogo("aba_periodos", self.aba_periodos_table, self.aba_periodos_model, self.periodo_profile, ["Exportar", "Padrao", "Auditoria", "Estoque", "Custos"])
+        )
+        self.btn_periodo_colunas.clicked.connect(lambda: self._abrir_menu_colunas_tabela("aba_periodos", self.aba_periodos_table))
+        self.btn_destacar_aba_periodos.clicked.connect(lambda: self._destacar_tabela("aba_periodos"))
+        self.aba_periodos_table.horizontalHeader().customContextMenuRequested.connect(
+            lambda pos: self._abrir_menu_colunas_tabela("aba_periodos", self.aba_periodos_table, pos)
+        )
         self.anual_filter_id.currentTextChanged.connect(lambda _value: schedule_anual())
         self.anual_filter_desc.textChanged.connect(lambda _value: schedule_anual())
         self.anual_filter_ano.currentIndexChanged.connect(lambda _index: schedule_anual())
@@ -3271,6 +3487,7 @@ class MainWindow(QMainWindow):
         self.atualizar_aba_mov_estoque()
         self.atualizar_aba_mensal()
         self.atualizar_aba_anual()
+        self.atualizar_aba_periodos()
         self.atualizar_aba_nfe_entrada()
         self.atualizar_aba_id_agrupados()
 
@@ -5357,6 +5574,13 @@ class MainWindow(QMainWindow):
         if self._produtos_selecionados_df.is_empty():
             QMessageBox.information(self, "Exportacao", "Nao ha dados consolidados para exportar.")
             return
+            
+        from interface_grafica.ui.dialogs import DialogoExportacaoEstoque
+        dlg = DialogoExportacaoEstoque(self)
+        if not dlg.exec():
+            return
+        dt_ini, dt_fim = dlg.obter_datas()
+        
         target = self._save_dialog("Exportar mov_estoque, mensal e anual", "Excel (*.xlsx)")
         if not target:
             return
@@ -5365,25 +5589,30 @@ class MainWindow(QMainWindow):
             if not ids:
                 QMessageBox.information(self, "Exportacao", "Marque pelo menos um id_agregado em Produtos selecionados.")
                 return
+                
+            df_mensal_export = self._filtrar_dataframe_produtos_selecionados_por_data(self._produtos_selecionados_mensal_df, dt_ini, dt_fim, "mensal")
+            df_anual_export = self._filtrar_dataframe_produtos_selecionados_por_data(self._produtos_selecionados_anual_df, dt_ini, dt_fim, "anual")
+            df_mov_export = self._filtrar_dataframe_produtos_selecionados_por_data(self._produtos_selecionados_mov_df, dt_ini, dt_fim, "mov_estoque")
+
             mensal = self._dataframe_colunas_perfil(
                 "aba_mensal",
                 "aba_mensal",
                 self.aba_mensal_model,
-                self._filtrar_dataframe_por_ids(self._produtos_selecionados_mensal_df, ids),
+                self._filtrar_dataframe_por_ids(df_mensal_export, ids),
                 perfil="Exportar",
             )
             anual = self._dataframe_colunas_perfil(
                 "aba_anual",
                 "aba_anual",
                 self.aba_anual_model,
-                self._filtrar_dataframe_por_ids(self._produtos_selecionados_anual_df, ids),
+                self._filtrar_dataframe_por_ids(df_anual_export, ids),
                 perfil="Exportar",
             )
             mov = self._dataframe_colunas_perfil(
                 "mov_estoque",
                 "mov_estoque",
                 self.mov_estoque_model,
-                self._filtrar_dataframe_por_ids(self._produtos_selecionados_mov_df, ids),
+                self._filtrar_dataframe_por_ids(df_mov_export, ids),
                 perfil="Exportar",
             )
             valores_consolidados = self._montar_valores_consolidados_produtos_selecionados(ids)
@@ -5990,14 +6219,14 @@ class MainWindow(QMainWindow):
 
     def apply_quick_filters(self) -> None:
         idx = self.tabs.currentIndex()
-        if idx == 0: # Consulta
+        if idx == 1: # Consulta
             fields = {
                 "descricao_normalizada": self.qf_norm.text().strip(),
                 "descricao": self.qf_desc.text().strip(),
                 "ncm_padrao": self.qf_ncm.text().strip(),
                 "cest_padrao": self.qf_cest.text().strip(),
             }
-        elif idx == 2: # Agregacao (Index 2 is "Agregacao", Index 1 is "SQL")
+        elif idx == 3: # Agregacao (Index 3 is "Agregacao", Index 2 is "SQL")
             fields = {
                 "descricao_normalizada": self.aqf_norm.text().strip(),
                 "descricao": self.aqf_desc.text().strip(),
@@ -6048,13 +6277,13 @@ class MainWindow(QMainWindow):
 
         # Na aba de Agregacao, o filtro rapido deve ser deterministico:
         # substitui totalmente os filtros anteriores para evitar "filtros ocultos".
-        if idx == 2:
+        if idx == 3:
             new_filters = []
         else:
             new_filters = [f for f in (self.state.filters or []) if f.column not in quick_target_cols]
         
         available_columns = self.state.all_columns or []
-        if idx == 2 and self._aggregation_file_path is not None:
+        if idx == 3 and self._aggregation_file_path is not None:
             try:
                 available_columns = self.parquet_service.get_schema(self._aggregation_file_path)
             except Exception:
@@ -6088,7 +6317,7 @@ class MainWindow(QMainWindow):
                 for termo in termos:
                     new_filters.append(FilterCondition(column=actual_col, operator="contem", value=termo))
         
-        if idx == 2:
+        if idx == 3:
             self._aggregation_filters = new_filters
             self._load_aggregation_table()
         else:
@@ -6102,7 +6331,7 @@ class MainWindow(QMainWindow):
         self.log_view.setPlainText("\n".join(logs))
 
     def apply_aggregation_results_filters(self) -> None:
-        if self.tabs.currentIndex() != 2:
+        if self.tabs.currentIndex() != 3:
             return
 
         fields = {
@@ -6270,7 +6499,7 @@ class MainWindow(QMainWindow):
         )
 
     def _aplicar_filtro_relacional_agregacao(self, destino: str, include_gtin: bool) -> None:
-        if self.tabs.currentIndex() != 2:
+        if self.tabs.currentIndex() != 3:
             return
 
         modo = "ncm_cest_gtin" if include_gtin else "ncm_cest"

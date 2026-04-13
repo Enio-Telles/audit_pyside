@@ -9,12 +9,15 @@ Expõe:
 """
 from __future__ import annotations
 
+import logging
 import re
 from pathlib import Path
 from time import perf_counter
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -123,6 +126,11 @@ def testar_conexao(req: TestarConexaoRequest):
             return {"ok": False, "message": "Preencha host, serviço, usuário e senha.", "tempo_ms": 0}
 
         porta = int(req.port) if req.port.isdigit() else 1521
+
+        ALLOWED_PORTS = {1521, 1522, 1523, 1524, 1525, 1526, 1527, 1528, 1529, 1530}
+        if porta not in ALLOWED_PORTS:
+            return {"ok": False, "message": f"Porta {porta} não permitida por segurança. Apenas portas Oracle padrão são aceitas.", "tempo_ms": 0}
+
         dsn = oracledb.makedsn(req.host, porta, service_name=req.service)
         conn = oracledb.connect(
             user=req.user,
@@ -149,8 +157,9 @@ def testar_conexao(req: TestarConexaoRequest):
     except ImportError:
         return {"ok": False, "message": "oracledb não instalado.", "tempo_ms": 0}
     except Exception as exc:  # noqa: BLE001
+        logger.exception("Erro ao testar conexao Oracle")
         tempo_ms = int((perf_counter() - t0) * 1000)
-        return {"ok": False, "message": str(exc), "tempo_ms": tempo_ms}
+        return {"ok": False, "message": "Falha na conexão com o banco de dados.", "tempo_ms": tempo_ms}
 
 
 @router.post("/salvar")

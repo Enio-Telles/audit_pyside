@@ -255,6 +255,9 @@ def test_reverter_agrupamento_restabelece_grupos_origem(monkeypatch, tmp_path: P
             "lista_desc_compl": [["Comp A"], ["Comp B"]],
             "ids_origem_agrupamento": [["AGR_1"], ["AGR_2"]],
             "lista_itens_agrupados": [["Produto A"], ["Produto B"]],
+            "lista_co_sefin": [["2290"], ["2291"]],
+            "lista_unidades": [["UN"], ["UN"]],
+            "co_sefin_divergentes": [False, False],
         }
     ).write_parquet(pasta_prod / f"produtos_agrupados_{cnpj}.parquet")
 

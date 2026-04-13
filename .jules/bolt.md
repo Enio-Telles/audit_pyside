@@ -1,7 +1,3 @@
-
-## 2024-05-24 - Number.prototype.toLocaleString vs Intl.NumberFormat performance
-**Learning:** Calling `Number.prototype.toLocaleString()` inside a render loop (like a table cell formatter) repeatedly allocates locale data and parses the options object, causing significant performance degradation in JS execution times. In a test with 80k iterations, `toLocaleString()` took ~7.5 seconds, while a cached `Intl.NumberFormat` instance took ~65 milliseconds, making it over 100x faster.
-**Action:** Always instantiate and cache `Intl.NumberFormat` objects outside of render loops or frequent operations when formatting large amounts of data in the frontend.
-## 2026-04-08 - Vectorized String Normalization and Unicode Mojibake Fix
-**Learning:** When refactoring legacy string manipulation or normalization functions, explicitly verify regular expressions for corrupted unicode characters (mojibake like `ÃƒÂÃƒÂ€`), which can cause functional regressions if migrated blindly to native Polars `str.replace_all`. Replacing `.map_elements()` with native Polars expressions drastically improves performance, but the expressions must be character-accurate.
-**Action:** Always verify regex matches with live data or unit tests, ensuring characters like accents are properly encoded before relying on `replace_all` in a vectorized environment.
+## 2024-05-18 - Avoid List Comprehension with Polars Initialization
+**Learning:** Initializing a Polars DataFrame by mapping a list of DB tuples into a list of dictionaries via a python list comprehension (e.g. `[dict(zip(cols, row)) for row in rows]`) is extremely slow and acts as a massive bottleneck for data ingestion.
+**Action:** Always create a `pl.DataFrame` directly from the raw list of tuples using the `orient="row"` argument. It bypasses python dictionary creation entirely and runs an order of magnitude faster.

@@ -493,6 +493,14 @@ def gerar_movimentacao_estoque(cnpj: str, pasta_cnpj: Path | None = None) -> boo
             ]
         )
         .with_columns(
+            pl.when(pl.col("Tipo_operacao").cast(pl.Utf8, strict=False).str.starts_with("0"))
+            .then(1)
+            .otherwise(0)
+            .cum_sum()
+            .over("id_agrupado")
+            .alias("periodo_inventario")
+        )
+        .with_columns(
             [
                 # __qtd_decl_final_audit__: captura a quantidade declarada em TODO estoque final do ano
                 # A restricao de 31/12 foi removida para permitir auditoria anual correta
@@ -541,6 +549,8 @@ def gerar_movimentacao_estoque(cnpj: str, pasta_cnpj: Path | None = None) -> boo
         )
         .group_by("id_agrupado", "__ano_saldo__", maintain_order=True)
         .map_groups(_calcular_saldo_estoque_anual)
+        .group_by("id_agrupado", "periodo_inventario", maintain_order=True)
+        .map_groups(_calcular_saldo_estoque_periodo)
         .drop(["__data_ref_calc__", "__q_conv_base__"], strict=False)
     )
 

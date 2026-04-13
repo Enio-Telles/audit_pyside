@@ -462,7 +462,8 @@ def testar_conexao():
         conn.close()
         return {"ok": True, "message": "Conexão estabelecida com sucesso"}
     except Exception as exc:
-        return {"ok": False, "message": str(exc)}
+        logger.exception("Erro ao testar conexao Oracle")
+        return {"ok": False, "message": "Falha na conexão com o banco de dados."}
 
 
 @router.get("/config")
@@ -628,7 +629,8 @@ def consulta_lote(req: ConsultaLoteRequest):
                 if dados:
                     _salvar_cache_cadastral(cnpj, dados)
             except Exception as exc:
-                resultados.append({"cnpj": cnpj, "error": str(exc), "dados_cadastrais": None, "malhas": [], "from_cache": False})
+                logger.exception("Erro ao consultar dados cadastrais Oracle para lote %s", cnpj)
+                resultados.append({"cnpj": cnpj, "error": "Falha na conexão com o banco de dados", "dados_cadastrais": None, "malhas": [], "from_cache": False})
                 continue
 
         malhas_cache = None if req.forcar_atualizacao else _ler_cache_malha(cnpj)

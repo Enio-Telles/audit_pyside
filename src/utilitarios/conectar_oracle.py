@@ -24,12 +24,11 @@ def _get_required_env(key: str) -> str:
     return val.strip()
 
 try:
-    HOST = os.getenv("ORACLE_HOST", 'exa01-scan.sefin.ro.gov.br').strip()
-    PORTA = int(os.getenv("ORACLE_PORT", '1521').strip())
-    SERVICO = os.getenv("ORACLE_SERVICE", 'sefindw').strip()
+    HOST = _get_required_env("ORACLE_HOST")
+    PORTA = int(_get_required_env("ORACLE_PORT"))
+    SERVICO = _get_required_env("ORACLE_SERVICE")
 except Exception as e:
-    logging.error("Detalhes internos do erro de rede Oracle", exc_info=e)
-    rprint("[red]Erro na configuração das variáveis de rede Oracle. Verifique as configurações do .env.[/red]")
+    rprint("[red]Erro na configuração das variáveis de rede Oracle.[/red]")
     HOST, PORTA, SERVICO = None, None, None
 
 def conectar(cpf_usuario=None, senha=None):
@@ -54,8 +53,7 @@ def conectar(cpf_usuario=None, senha=None):
             
         return conexao
     except Exception as e:
-        logging.error("Detalhes internos do erro de conexão Oracle", exc_info=e)
-        rprint("[red]Erro de conexão Oracle. Verifique suas configurações e o status do banco de dados.[/red]")
+        rprint("[red]Erro de conexão Oracle:[/red] Falha ao estabelecer conexão com o banco de dados. Verifique suas credenciais e configurações de rede.")
         return None
 
 @contextmanager
@@ -74,12 +72,11 @@ def obter_conexao_oracle(user=None, password=None):
             conn.close()
             # rprint("[blue]DEBUG: Conexão Oracle encerrada com segurança.[/blue]")
         except Exception as e:
-            logging.debug("Falha ao encerrar conexão Oracle", exc_info=e)
+            rprint("[yellow]Aviso:[/yellow] Falha ao encerrar a conexão Oracle com segurança.")
 
 if __name__ == "__main__":    
     try:
         with obter_conexao_oracle() as conn:
             rprint("[green]Conexão via Context Manager estabelecida com sucesso![/green]")
     except Exception as e:
-        logging.error("Detalhes internos da falha no teste de conexão", exc_info=e)
-        rprint("[red]Falha no teste de conexão. Verifique os logs para mais detalhes.[/red]")
+        rprint("[red]Falha no teste de conexão:[/red] Não foi possível estabelecer conexão com o banco de dados.")
