@@ -154,41 +154,52 @@ def produtos_agrupados(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         )
     )
 
-    # 1. Pre-calculate "padrao" attributes using Polars aggregations
-    df_mode_padrao = df_item_unid_norm.group_by("__descricao_upper").agg([
-        get_mode_expr("ncm").alias("ncm_padrao"),
-        get_mode_expr("cest").alias("cest_padrao"),
-        get_mode_expr("gtin").alias("gtin_padrao"),
-        get_mode_expr("co_sefin_item").alias("co_sefin_padrao")
-    ])
 
-    df_desc_cands = df_item_unid_norm.with_columns([
-        pl.col("descricao").cast(pl.Utf8, strict=False).fill_null("").str.strip_chars().alias("descricao_clean"),
-        (pl.col("ncm").cast(pl.Utf8, strict=False).str.strip_chars() != "").cast(pl.Int32).fill_null(0).alias("__has_ncm"),
-        (pl.col("cest").cast(pl.Utf8, strict=False).str.strip_chars() != "").cast(pl.Int32).fill_null(0).alias("__has_cest"),
-        (pl.col("gtin").cast(pl.Utf8, strict=False).str.strip_chars() != "").cast(pl.Int32).fill_null(0).alias("__has_gtin"),
-    ]).filter(pl.col("descricao_clean") != "")
+    df_item_unid_parts = df_item_unid_norm.partition_by("__descricao_upper", as_dict=True)
+    df_item_unid_empty = df_item_unid_norm.filter(pl.lit(False)).drop("__descricao_upper", strict=False)
 
-    df_desc_agg = df_desc_cands.group_by(["__descricao_upper", "descricao_clean"]).agg([
-        pl.len().alias("count"),
-        pl.col("__has_ncm").max().alias("has_ncm"),
-        pl.col("__has_cest").max().alias("has_cest"),
-        pl.col("__has_gtin").max().alias("has_gtin"),
-    ])
+    registros_mestra: list[dict] = []
+    registros_ponte: list[dict] = []
 
-    df_desc_scored = df_desc_agg.with_columns([
-        (pl.col("has_ncm") + pl.col("has_cest") + pl.col("has_gtin")).alias("preenchidos"),
-        pl.col("descricao_clean").str.len_chars().alias("len_desc")
-    ])
+    for seq, row in enumerate(df_descricoes.to_dicts(), start=1):
+        id_agrupado = _gerar_id_agrupado(seq)
+        desc_norm = row.get("descricao_normalizada")
 
-    df_descr_padrao = (
-        df_desc_scored
-        .sort(by=["__descricao_upper", "count", "preenchidos", "len_desc"], descending=[False, True, True, True])
-        .group_by("__descricao_upper")
-        .agg(pl.col("descricao_clean").first().alias("descr_padrao"))
-    )
+        if desc_norm:
+            df_base = df_item_unid_parts.get((desc_norm,), df_item_unid_empty)
+            if "__descricao_upper" in df_base.columns:
+                df_base = df_base.drop("__descricao_upper")
+        else:
+            df_base = df_item_unid_empty
 
-    df_padrao = df_mode_padrao.join(df_descr_padrao, on="__descricao_upper", how="left")
+        padrao = _calcular_atributos_padrao(df_base)
+        lista_co_sefin = _serie_limpa_lista(row.get("lista_co_sefin"))
+        lista_unidades = _serie_limpa_lista(row.get("lista_unid"))
+        fontes = _serie_limpa_lista(row.get("fontes"))
+        lista_ncm = _serie_limpa_lista(row.get("lista_ncm"))
+        lista_cest = _serie_limpa_lista(row.get("lista_cest"))
+        lista_gtin = _serie_limpa_lista(row.get("lista_gtin"))
+        lista_descricoes = _serie_limpa_lista([row.get("descricao")] + list(row.get("lista_desc_compl") or []))
+
+        registros_mestra.append(
+            {
+                "id_agrupado": id_agrupado,
+                "lista_chave_produto": [row.get("id_descricao")] if row.get("id_descricao") else [],
+                "descr_padrao": padrao.get("descr_padrao") or row.get("descricao"),
+                "ncm_padrao": padrao.get("ncm_padrao"),
+                "cest_padrao": padrao.get("cest_padrao"),
+                "gtin_padrao": padrao.get("gtin_padrao"),
+                "lista_ncm": lista_ncm,
+                "lista_cest": lista_cest,
+                "lista_gtin": lista_gtin,
+                "lista_descricoes": lista_descricoes,
+                "lista_co_sefin": lista_co_sefin,
+                "co_sefin_padrao": padrao.get("co_sefin_padrao"),
+                "lista_unidades": lista_unidades,
+                "co_sefin_divergentes": len(lista_co_sefin) > 1,
+                "fontes": fontes,
+            }
+        )
 
     # 2. Join the pre-calculated attributes back to df_descricoes
     df_descricoes = df_descricoes.with_row_index("seq", offset=1)

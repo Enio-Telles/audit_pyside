@@ -1,3 +1,3 @@
-## 2024-05-18 - [Vectorizing Group Operations in Polars]
-**Learning:** Using `df.group_by().map_groups(...)` with custom python functions and `to_dicts()` is extremely slow compared to native Polars vectorized aggregations. Even for complex logic like combining multiple lists, cleaning nulls, trimming, and sorting, we can achieve over 40x speedup by replacing `map_groups` with `concat_list` and `explode` inside `agg()`.
-**Action:** Always prefer vectorized operations in `group_by().agg()` using native Polars expressions like `pl.concat_list(...)`, `.explode()`, and `.list.eval()` over `.map_groups()` with `.to_dicts()` and iterative python loops.
+## 2024-03-31 - [Optimization using partition_by]
+**Learning:** Polars `filter` with `map_elements` or `is_in` inside a Python loop scaling over thousands of product groups leads to O(N*M) complexity and severely degraded performance due to redundant evaluation.
+**Action:** Always pre-calculate expensive transformations (e.g. string manipulation with `map_elements` or `str.to_uppercase()`) outside the loop, and use `df.partition_by('column', as_dict=True)` to convert the DataFrame into an O(1) dictionary indexed by the grouping key. Then, fetch partitioned chunks inside the loop via `dict.get()`, drastically reducing time complexity.
