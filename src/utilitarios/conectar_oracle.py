@@ -4,6 +4,7 @@ Usa credenciais do arquivo .env
 Implementa Context Manager para evitar vazamentos de recursos.
 """
 import os
+import logging
 import socket
 import oracledb
 from pathlib import Path
@@ -27,10 +28,12 @@ try:
     PORTA = int(_get_required_env("ORACLE_PORT"))
     SERVICO = _get_required_env("ORACLE_SERVICE")
 except Exception as e:
-    rprint(f"[red]Erro na configuração das variáveis de rede Oracle:[/red] {e}")
+    logging.error(f"Detalhes internos do erro de rede Oracle: {e}")
+    rprint("[red]Erro na configuração das variáveis de rede Oracle. Verifique o arquivo .env.[/red]")
     HOST, PORTA, SERVICO = None, None, None
 
 def conectar(cpf_usuario=None, senha=None):
+
     """
     Função legada para compatibilidade. 
     Recomendado usar 'obter_conexao_oracle' como context manager.
@@ -52,7 +55,7 @@ def conectar(cpf_usuario=None, senha=None):
             
         return conexao
     except Exception as e:
-        rprint(f"[red]Erro de conexão Oracle:[/red] {e}")
+        rprint("[red]Erro de conexão Oracle:[/red] Falha ao estabelecer conexão com o banco de dados. Verifique suas credenciais e configurações de rede.")
         return None
 
 @contextmanager
@@ -70,12 +73,13 @@ def obter_conexao_oracle(user=None, password=None):
         try:
             conn.close()
             # rprint("[blue]DEBUG: Conexão Oracle encerrada com segurança.[/blue]")
-        except:
-            pass
+        except Exception as e:
+            rprint("[yellow]Aviso:[/yellow] Falha ao encerrar a conexão Oracle com segurança.")
 
 if __name__ == "__main__":    
     try:
         with obter_conexao_oracle() as conn:
             rprint("[green]Conexão via Context Manager estabelecida com sucesso![/green]")
     except Exception as e:
-        rprint(f"[red]Falha no teste de conexão:[/red] {e}")
+        logging.error(f"Teste de conexão falhou: {e}")
+        rprint("[red]Falha no teste de conexão. Verifique as credenciais e as configurações de rede.[/red]")

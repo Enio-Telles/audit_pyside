@@ -62,6 +62,7 @@ from interface_grafica.services.export_service import ExportService
 from interface_grafica.services.parquet_service import FilterCondition, ParquetService
 from interface_grafica.services.pipeline_funcoes_service import ResultadoPipeline, ServicoPipelineCompleto
 from interface_grafica.services.pipeline_service import PipelineService
+from interface_grafica.services.profile_utils import ordenar_colunas_perfil, ordenar_colunas_visiveis
 from interface_grafica.services.query_worker import QueryWorker
 from interface_grafica.services.registry_service import RegistryService
 from interface_grafica.services.selection_persistence_service import SelectionPersistenceService
@@ -71,7 +72,7 @@ from interface_grafica.ui.dialogs import (
     DialogoSelecaoConsultas,
     DialogoSelecaoTabelas,
 )
-from utilitarios.text import display_cell, normalize_text, remove_accents
+from utilitarios.text import display_cell, is_year_column_name, normalize_text, remove_accents
 
 
 class FloatDelegate(QStyledItemDelegate):
@@ -91,7 +92,7 @@ class PipelineWorker(QThread):
         self,
         service: ServicoPipelineCompleto,
         cnpj: str,
-        consultas: list[Path],
+        consultas: list[str | Path],
         tabelas: list[str],
         data_limite: str | None = None,
     ) -> None:
@@ -112,7 +113,13 @@ class PipelineWorker(QThread):
                 progresso=self.progress.emit
             )
         except Exception as exc:  # pragma: nao cover - UI
-            self.failed.emit(str(exc))
+            from utilitarios.perf_monitor import registrar_evento_performance
+            registrar_evento_performance(
+                "pipeline_worker.erro",
+                contexto={"cnpj": self.cnpj, "erro": str(exc)},
+                status="error",
+            )
+            self.failed.emit("Ocorreu um erro no pipeline. Verifique os logs internos.")
             return
         
         if result.ok:
@@ -144,7 +151,13 @@ class ServiceTaskWorker(QThread):
                 pass
             resultado = self.func(*self.args, **call_kwargs)
         except Exception as exc:
-            self.failed.emit(str(exc))
+            from utilitarios.perf_monitor import registrar_evento_performance
+            registrar_evento_performance(
+                "service_task_worker.erro",
+                contexto={"func": getattr(self.func, '__name__', str(self.func)), "erro": str(exc)},
+                status="error",
+            )
+            self.failed.emit("Ocorreu um erro no processamento. Verifique os logs internos.")
             return
         self.finished_ok.emit(resultado)
 
@@ -385,6 +398,12 @@ class MainWindow(QMainWindow):
             foreground_resolver=self._aba_anual_foreground,
             background_resolver=self._aba_anual_background,
         )
+        self.aba_periodos_model = PolarsTableModel(
+            df=pl.DataFrame(),
+            checkable=True,
+            foreground_resolver=self._aba_anual_foreground,
+            background_resolver=self._aba_anual_background,
+        )
         self._aba_anual_file_path: Path | None = None
         self._aba_anual_df: pl.DataFrame = pl.DataFrame()
         self.aba_mensal_model = PolarsTableModel(
@@ -405,11 +424,16 @@ class MainWindow(QMainWindow):
         self._produtos_selecionados_mov_df: pl.DataFrame = pl.DataFrame()
         self._produtos_selecionados_mensal_df: pl.DataFrame = pl.DataFrame()
         self._produtos_selecionados_anual_df: pl.DataFrame = pl.DataFrame()
+        self.resumo_global_model = PolarsTableModel()
+        self._resumo_global_df: pl.DataFrame = pl.DataFrame()
         self._produtos_sel_preselecionado_cnpj: str | None = None
         self._filtro_cruzado_anuais_ids: list[str] = []
         self._aggregation_file_path: Path | None = None
         self._aggregation_filters: list[FilterCondition] = []
         self._aggregation_results_filters: list[FilterCondition] = []
+        self._aggregation_relational_mode: str | None = None
+        self._aggregation_results_relational_mode: str | None = None
+        self._sync_resumos_estoque_cnpj: str | None = None
         self._debounce_timers: dict[str, QTimer] = {}
         self._debounce_callbacks: dict[str, Callable[[], None]] = {}
         self._auto_resized_tables: set[str] = set()
@@ -423,6 +447,8 @@ class MainWindow(QMainWindow):
         self.refresh_cnpjs()
         self.refresh_logs()
         self._populate_sql_combo()
+        # verifica conexão Oracle automaticamente na abertura da aplicação
+        QTimer.singleShot(800, self._verificar_conexoes)
 
     def _executar_callback_debounce(self, key: str) -> None:
         callback = self._debounce_callbacks.get(key)
@@ -607,6 +633,7 @@ class MainWindow(QMainWindow):
         self.btn_toggle_panel.setCheckable(True)
         self.tabs.setCornerWidget(self.btn_toggle_panel, Qt.TopRightCorner)
 
+        self.tabs.addTab(self._build_tab_configuracoes(), "Configurações")
         self.tabs.addTab(self._build_tab_consulta(), "Consulta")
         self.tabs.addTab(self._build_tab_sql_query(), "Consulta SQL")
         self.tabs.addTab(self._build_tab_agregacao(), "Agregacao")
@@ -615,9 +642,346 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self._build_tab_estoque(), "Estoque")
         self.tab_nfe_entrada = self._build_tab_nfe_entrada()
         self.tabs.addTab(self.tab_nfe_entrada, "NFe Entrada")
+        self.tabs.addTab(self._build_tab_analise_lote_cnpj(), "Análise Lote CNPJ")
         self.tabs.addTab(self._build_tab_logs(), "Logs")
         layout.addWidget(self.tabs)
         return panel
+
+    # ------------------------------------------------------------------
+    # Aba: Configurações Oracle / Aplicativo
+    # ------------------------------------------------------------------
+
+    def _build_tab_configuracoes(self) -> QWidget:
+        """Aba de configuração de conexões Oracle e opções gerais da aplicação."""
+        from dotenv import dotenv_values
+        from interface_grafica.fisconforme.path_resolver import get_env_path
+
+        env_path = get_env_path()
+        env_vars = dotenv_values(env_path) if env_path.exists() else {}
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        container = QWidget()
+        scroll.setWidget(container)
+        root = QVBoxLayout(container)
+        root.setContentsMargins(16, 16, 16, 16)
+        root.setSpacing(12)
+
+        # ── helpers ──────────────────────────────────────────────────
+        def _field(key: str, placeholder: str = "", password: bool = False) -> QLineEdit:
+            le = QLineEdit()
+            le.setText(str(env_vars.get(key, "")))
+            if placeholder:
+                le.setPlaceholderText(placeholder)
+            if password:
+                le.setEchoMode(QLineEdit.Password)
+            return le
+
+        def _status_label() -> QLabel:
+            lbl = QLabel("—")
+            lbl.setWordWrap(True)
+            lbl.setMinimumHeight(36)
+            return lbl
+
+        def _test_button(texto: str = "Testar Conexão") -> QPushButton:
+            btn = QPushButton(texto)
+            btn.setFixedWidth(160)
+            return btn
+
+        # ── Status de Conexão — painel de destaque no topo ────────────
+        grp_status = QGroupBox("Status da Conexão Oracle")
+        sl = QVBoxLayout(grp_status)
+        sl.setSpacing(6)
+        sl.setContentsMargins(12, 8, 12, 8)
+
+        r1 = QHBoxLayout()
+        lbl_c1_title = QLabel("Conexão 1 — Principal:")
+        lbl_c1_title.setFixedWidth(190)
+        self._cfg_conn_lbl_1 = QLabel("— não verificado")
+        self._cfg_conn_lbl_1.setWordWrap(True)
+        r1.addWidget(lbl_c1_title)
+        r1.addWidget(self._cfg_conn_lbl_1)
+        r1.addStretch()
+        sl.addLayout(r1)
+
+        r2 = QHBoxLayout()
+        lbl_c2_title = QLabel("Conexão 2 — Secundária:")
+        lbl_c2_title.setFixedWidth(190)
+        self._cfg_conn_lbl_2 = QLabel("— não verificado")
+        self._cfg_conn_lbl_2.setWordWrap(True)
+        r2.addWidget(lbl_c2_title)
+        r2.addWidget(self._cfg_conn_lbl_2)
+        r2.addStretch()
+        sl.addLayout(r2)
+
+        btn_verify_all = QPushButton("↺  Verificar Conexões")
+        btn_verify_all.setFixedWidth(180)
+        btn_verify_all.clicked.connect(self._verificar_conexoes)
+        sl.addWidget(btn_verify_all)
+        root.addWidget(grp_status)
+
+        # ── Conexão Oracle 1 (Principal) ─────────────────────────────
+        grp1 = QGroupBox("Conexão Oracle 1 — Principal")
+        form1 = QFormLayout(grp1)
+        form1.setLabelAlignment(Qt.AlignRight)
+        form1.setFieldGrowthPolicy(QFormLayout.ExpandingFieldsGrow)
+        self._cfg_host = _field("ORACLE_HOST", "ex: exa01-scan.sefin.ro.gov.br")
+        self._cfg_port = _field("ORACLE_PORT", "1521")
+        self._cfg_service = _field("ORACLE_SERVICE", "ex: sefindw")
+        self._cfg_user = _field("DB_USER", "CPF ou usuário")
+        self._cfg_password = _field("DB_PASSWORD", "Senha", password=True)
+        form1.addRow("Host:", self._cfg_host)
+        form1.addRow("Porta:", self._cfg_port)
+        form1.addRow("Serviço:", self._cfg_service)
+        form1.addRow("Usuário:", self._cfg_user)
+        form1.addRow("Senha:", self._cfg_password)
+
+        self._cfg_test_status_1 = _status_label()
+        self._cfg_btn_test_1 = _test_button()
+        self._cfg_btn_test_1.clicked.connect(lambda: self._testar_conexao(
+            self._cfg_host, self._cfg_port, self._cfg_service,
+            self._cfg_user, self._cfg_password,
+            self._cfg_btn_test_1, self._cfg_test_status_1,
+            "_oracle_test_worker_1",
+        ))
+        test_row1 = QHBoxLayout()
+        test_row1.addWidget(self._cfg_btn_test_1)
+        test_row1.addWidget(self._cfg_test_status_1)
+        test_row1.addStretch()
+        form1.addRow("Teste:", test_row1)
+        root.addWidget(grp1)
+
+        # ── Conexão Oracle 2 (Secundária) ────────────────────────────
+        grp2 = QGroupBox("Conexão Oracle 2 — Secundária")
+        form2 = QFormLayout(grp2)
+        form2.setLabelAlignment(Qt.AlignRight)
+        form2.setFieldGrowthPolicy(QFormLayout.ExpandingFieldsGrow)
+        self._cfg_host_1 = _field("ORACLE_HOST_1", "ex: exacc-x10-sefinscan.sefin.ro.gov.br")
+        self._cfg_port_1 = _field("ORACLE_PORT_1", "1521")
+        self._cfg_service_1 = _field("ORACLE_SERVICE_1", "ex: svc.bi.users")
+        self._cfg_user_1 = _field("DB_USER_1", "CPF ou usuário")
+        self._cfg_password_1 = _field("DB_PASSWORD_1", "Senha", password=True)
+        form2.addRow("Host:", self._cfg_host_1)
+        form2.addRow("Porta:", self._cfg_port_1)
+        form2.addRow("Serviço:", self._cfg_service_1)
+        form2.addRow("Usuário:", self._cfg_user_1)
+        form2.addRow("Senha:", self._cfg_password_1)
+
+        self._cfg_test_status_2 = _status_label()
+        self._cfg_btn_test_2 = _test_button()
+        self._cfg_btn_test_2.clicked.connect(lambda: self._testar_conexao(
+            self._cfg_host_1, self._cfg_port_1, self._cfg_service_1,
+            self._cfg_user_1, self._cfg_password_1,
+            self._cfg_btn_test_2, self._cfg_test_status_2,
+            "_oracle_test_worker_2",
+        ))
+        test_row2 = QHBoxLayout()
+        test_row2.addWidget(self._cfg_btn_test_2)
+        test_row2.addWidget(self._cfg_test_status_2)
+        test_row2.addStretch()
+        form2.addRow("Teste:", test_row2)
+        root.addWidget(grp2)
+
+        # ── Configurações do Aplicativo ───────────────────────────────
+        grp3 = QGroupBox("Configurações do Aplicativo")
+        form3 = QFormLayout(grp3)
+        form3.setLabelAlignment(Qt.AlignRight)
+        form3.setFieldGrowthPolicy(QFormLayout.ExpandingFieldsGrow)
+
+        self._cfg_log_level = QComboBox()
+        self._cfg_log_level.addItems(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"])
+        current_level = env_vars.get("LOG_LEVEL", "INFO").upper()
+        idx = self._cfg_log_level.findText(current_level)
+        if idx >= 0:
+            self._cfg_log_level.setCurrentIndex(idx)
+
+        self._cfg_cache_enabled = QCheckBox("Ativar cache")
+        self._cfg_cache_enabled.setChecked(env_vars.get("CACHE_ENABLED", "true").lower() == "true")
+
+        self._cfg_cache_ttl = _field("CACHE_TTL", "3600 (segundos)")
+
+        self._cfg_theme = QComboBox()
+        self._cfg_theme.addItems(["dark", "light"])
+        current_theme = env_vars.get("DASHBOARD_THEME", "dark").lower()
+        theme_idx = self._cfg_theme.findText(current_theme)
+        if theme_idx >= 0:
+            self._cfg_theme.setCurrentIndex(theme_idx)
+
+        form3.addRow("Nível de log:", self._cfg_log_level)
+        form3.addRow("Cache:", self._cfg_cache_enabled)
+        form3.addRow("TTL do cache (s):", self._cfg_cache_ttl)
+        form3.addRow("Tema do dashboard:", self._cfg_theme)
+        root.addWidget(grp3)
+
+        # ── Botão salvar ──────────────────────────────────────────────
+        btn_row = QHBoxLayout()
+        self._cfg_status_label = QLabel("")
+        btn_salvar = QPushButton("Salvar Configurações")
+        btn_salvar.setStyleSheet(self._estilo_botao_destacar())
+        btn_salvar.clicked.connect(self._salvar_configuracoes)
+        btn_row.addStretch()
+        btn_row.addWidget(self._cfg_status_label)
+        btn_row.addWidget(btn_salvar)
+        root.addLayout(btn_row)
+        root.addStretch()
+
+        # init worker slots
+        self._oracle_test_worker_1: object | None = None
+        self._oracle_test_worker_2: object | None = None
+        self._oracle_verify_worker_1: object | None = None
+        self._oracle_verify_worker_2: object | None = None
+
+        return scroll
+
+    def _verificar_conexoes(self) -> None:
+        """Testa ambas as conexões Oracle e atualiza o painel de status no topo da aba."""
+        if not hasattr(self, "_cfg_host"):
+            return  # aba ainda não construída
+        self._testar_conexao_para_status(
+            self._cfg_host, self._cfg_port, self._cfg_service,
+            self._cfg_user, self._cfg_password,
+            self._cfg_conn_lbl_1, "_oracle_verify_worker_1",
+        )
+        self._testar_conexao_para_status(
+            self._cfg_host_1, self._cfg_port_1, self._cfg_service_1,
+            self._cfg_user_1, self._cfg_password_1,
+            self._cfg_conn_lbl_2, "_oracle_verify_worker_2",
+        )
+
+    def _testar_conexao_para_status(
+        self,
+        f_host: QLineEdit,
+        f_port: QLineEdit,
+        f_service: QLineEdit,
+        f_user: QLineEdit,
+        f_password: QLineEdit,
+        lbl: QLabel,
+        worker_attr: str,
+    ) -> None:
+        """Worker isolado que atualiza apenas o label de status (sem botão dedicado)."""
+        from interface_grafica.services.oracle_test_worker import OracleConnectionTestWorker
+
+        existing = getattr(self, worker_attr, None)
+        if existing is not None and existing.isRunning():
+            return
+
+        lbl.setText("⏳ verificando…")
+        lbl.setStyleSheet("color: #ccaa00;")
+
+        worker = OracleConnectionTestWorker(
+            host=f_host.text(), port=f_port.text(),
+            service=f_service.text(), user=f_user.text(),
+            password=f_password.text(), parent=self,
+        )
+        setattr(self, worker_attr, worker)
+
+        def _on(ok: bool, msg: str, ms: int) -> None:
+            first_line = msg.splitlines()[0] if msg else ""
+            if ok:
+                lbl.setText(f"✔ {first_line}")
+                lbl.setStyleSheet("color: #4caf50; font-weight: bold;")
+                self.status.showMessage(
+                    f"[Oracle] {lbl.parent().parent().parent().title() if False else worker_attr.replace('_oracle_verify_worker_','Conexão ')} — OK ({ms} ms)",
+                    5000,
+                )
+            else:
+                short = first_line[:100]
+                lbl.setText(f"✖ {short}")
+                lbl.setStyleSheet("color: #e57373;")
+            worker.deleteLater()
+            setattr(self, worker_attr, None)
+
+        worker.resultado.connect(_on)
+        worker.start()
+
+    def _testar_conexao(
+        self,
+        f_host: QLineEdit,
+        f_port: QLineEdit,
+        f_service: QLineEdit,
+        f_user: QLineEdit,
+        f_password: QLineEdit,
+        btn: QPushButton,
+        lbl: QLabel,
+        worker_attr: str,
+    ) -> None:
+        """Lança o teste de conexão Oracle em background (não bloqueia a UI)."""
+        from interface_grafica.services.oracle_test_worker import OracleConnectionTestWorker
+
+        # evitar múltiplos testes simultâneos no mesmo slot
+        existing: OracleConnectionTestWorker | None = getattr(self, worker_attr, None)
+        if existing is not None and existing.isRunning():
+            return
+
+        btn.setEnabled(False)
+        lbl.setText("⏳ Testando…")
+        lbl.setStyleSheet("color: #ccaa00;")
+
+        worker = OracleConnectionTestWorker(
+            host=f_host.text(),
+            port=f_port.text(),
+            service=f_service.text(),
+            user=f_user.text(),
+            password=f_password.text(),
+            parent=self,
+        )
+        setattr(self, worker_attr, worker)
+
+        def _on_result(ok: bool, msg: str, _ms: int) -> None:
+            if ok:
+                lbl.setText(f"✔ {msg}")
+                lbl.setStyleSheet("color: #4caf50;")
+            else:
+                lbl.setText(f"✖ {msg}")
+                lbl.setStyleSheet("color: #e57373;")
+            btn.setEnabled(True)
+            worker.deleteLater()
+            setattr(self, worker_attr, None)
+
+        worker.resultado.connect(_on_result)
+        worker.start()
+
+    def _salvar_configuracoes(self) -> None:
+        """Escreve todos os campos do painel de configurações no arquivo .env."""
+        from interface_grafica.fisconforme.path_resolver import get_env_path
+
+        env_path = get_env_path()
+        conteudo = env_path.read_text(encoding="utf-8") if env_path.exists() else ""
+
+        campos: dict[str, str] = {
+            "ORACLE_HOST": self._cfg_host.text().strip(),
+            "ORACLE_PORT": self._cfg_port.text().strip(),
+            "ORACLE_SERVICE": self._cfg_service.text().strip(),
+            "DB_USER": self._cfg_user.text().strip(),
+            "DB_PASSWORD": self._cfg_password.text().strip(),
+            "ORACLE_HOST_1": self._cfg_host_1.text().strip(),
+            "ORACLE_PORT_1": self._cfg_port_1.text().strip(),
+            "ORACLE_SERVICE_1": self._cfg_service_1.text().strip(),
+            "DB_USER_1": self._cfg_user_1.text().strip(),
+            "DB_PASSWORD_1": self._cfg_password_1.text().strip(),
+            "LOG_LEVEL": self._cfg_log_level.currentText(),
+            "CACHE_ENABLED": "true" if self._cfg_cache_enabled.isChecked() else "false",
+            "CACHE_TTL": self._cfg_cache_ttl.text().strip(),
+            "DASHBOARD_THEME": self._cfg_theme.currentText(),
+        }
+
+        for chave, valor in campos.items():
+            if re.search(rf"^{chave}=", conteudo, flags=re.MULTILINE):
+                conteudo = re.sub(
+                    rf"^{chave}=.*$",
+                    f"{chave}={valor}",
+                    conteudo,
+                    flags=re.MULTILINE,
+                )
+            else:
+                conteudo = conteudo.rstrip() + f"\n{chave}={valor}\n"
+
+        env_path.parent.mkdir(parents=True, exist_ok=True)
+        env_path.write_text(conteudo.strip() + "\n", encoding="utf-8")
+        self._cfg_status_label.setText("✔ Configurações salvas.")
+        self.status.showMessage("Configurações Oracle salvas com sucesso.", 4000)
+
+
 
     def _build_tab_consulta(self) -> QWidget:
         tab = QWidget()
@@ -858,10 +1222,16 @@ class MainWindow(QMainWindow):
         bottom_layout.addWidget(self.results_table)
 
         tb_acoes = QToolBar()
+        self.btn_reverter_agregacao = QPushButton(
+            QApplication.style().standardIcon(QApplication.style().StandardPixmap.SP_BrowserReload),
+            "Reverter agrupamento",
+        )
         self.btn_desfazer_agregacao = QPushButton(
             QApplication.style().standardIcon(QApplication.style().StandardPixmap.SP_ArrowLeft),
             "Desfazer selecao",
         )
+        self.btn_reverter_agregacao.clicked.connect(self.reverter_agregacao)
+        tb_acoes.addWidget(self.btn_reverter_agregacao)
         self.btn_desfazer_agregacao.clicked.connect(self._desfazer_agregacao)
         tb_acoes.addWidget(self.btn_desfazer_agregacao)
         bottom_layout.addWidget(tb_acoes)
@@ -1066,6 +1436,21 @@ class MainWindow(QMainWindow):
 
         return tab
 
+    def _build_tab_analise_lote_cnpj(self) -> QWidget:
+        """Retorna o painel Fisconforme não Atendido como aba do QTabWidget."""
+        try:
+            from ..fisconforme import FisconformeNaoAtendidoPanel
+            return FisconformeNaoAtendidoPanel()
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).warning(
+                "Não foi possível carregar o painel Fisconforme: %s", exc
+            )
+            from PySide6.QtWidgets import QLabel
+            lbl = QLabel(f"Painel Fisconforme indisponível: {exc}")
+            lbl.setWordWrap(True)
+            return lbl
+
     def _build_tab_logs(self) -> QWidget:
         tab = QWidget()
         layout = QVBoxLayout(tab)
@@ -1129,11 +1514,12 @@ class MainWindow(QMainWindow):
         self.mov_filter_num_max = QLineEdit()
         self.mov_filter_num_max.setPlaceholderText("Max numerico")
         self.mov_profile = QComboBox()
-        self.mov_profile.addItems(["Padrao", "Contribuinte", "Auditoria", "Estoque", "Custos"])
+        self.mov_profile.addItems(["Padrao", "Contribuinte", "Auditoria", "Auditoria Fiscal", "Estoque", "Custos"])
         self.btn_mov_profile = QPushButton("Perfil")
         self.btn_mov_save_profile = QPushButton("Salvar perfil")
         self.btn_mov_colunas = QPushButton("Colunas")
         self.btn_mov_destacar = self._criar_botao_destacar()
+        self.btn_export_mov_estoque = QPushButton("Exportar Excel")
         for widget in [
             QLabel("Data"),
             self.mov_filter_data_col,
@@ -1148,6 +1534,7 @@ class MainWindow(QMainWindow):
             self.btn_mov_save_profile,
             self.btn_mov_colunas,
             self.btn_mov_destacar,
+            self.btn_export_mov_estoque,
         ]:
             filtros_avancados.addWidget(widget)
         layout.addLayout(filtros_avancados)
@@ -1194,6 +1581,11 @@ class MainWindow(QMainWindow):
 
         self.tab_aba_anual = self._build_tab_aba_anual()
         self.estoque_tabs.addTab(self.tab_aba_anual, "Tabela anual")
+        self.tab_aba_periodos = self._build_tab_aba_periodos()
+        self.estoque_tabs.addTab(self.tab_aba_periodos, "Tabela períodos")
+
+        self.tab_resumo_global = self._build_tab_resumo_global()
+        self.estoque_tabs.addTab(self.tab_resumo_global, "Resumo Global")
 
         self.tab_produtos_selecionados = self._build_tab_produtos_selecionados()
         self.estoque_tabs.addTab(self.tab_produtos_selecionados, "Produtos selecionados")
@@ -1713,6 +2105,278 @@ class MainWindow(QMainWindow):
             "QTableCornerButton::section { background: #18181b; border: 1px solid #3f3f46; }"
         )
         layout.addWidget(self.aba_anual_table, 1)
+        return tab
+
+    def _build_tab_aba_periodos(self) -> QWidget:
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        tab.setStyleSheet(self.tab_aba_anual.styleSheet()) 
+
+        self.lbl_aba_periodos_titulo = QLabel("Tabela: aba_periodos")
+        self.lbl_aba_periodos_titulo.setStyleSheet(self.lbl_aba_anual_titulo.styleSheet())
+        layout.addWidget(self.lbl_aba_periodos_titulo)
+
+        toolbar = QHBoxLayout()
+        self.btn_refresh_aba_periodos = QPushButton("Recarregar")
+        self.btn_refresh_aba_periodos.setIcon(QApplication.style().standardIcon(QApplication.style().StandardPixmap.SP_BrowserReload))
+        self.btn_apply_aba_periodos_filters = QPushButton("Aplicar filtros")
+        self.btn_clear_aba_periodos_filters = QPushButton("Limpar filtros")
+        self.btn_export_aba_periodos = QPushButton("Exportar Excel")
+        self.btn_destacar_aba_periodos = self._criar_botao_destacar()
+        
+        toolbar.addWidget(self.btn_refresh_aba_periodos)
+        toolbar.addWidget(self.btn_apply_aba_periodos_filters)
+        toolbar.addWidget(self.btn_clear_aba_periodos_filters)
+        toolbar.addStretch()
+        toolbar.addWidget(self.btn_destacar_aba_periodos)
+        toolbar.addWidget(self.btn_export_aba_periodos)
+        layout.addLayout(toolbar)
+
+        filtros = QHBoxLayout()
+        self.periodo_filter_id = QComboBox()
+        self.periodo_filter_id.setEditable(True)
+        self.periodo_filter_id.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+        self.periodo_filter_id.setMinimumWidth(220)
+        self.periodo_filter_id.lineEdit().setPlaceholderText("Filtrar id_agregado")
+        self.periodo_filter_desc = QLineEdit()
+        self.periodo_filter_desc.setPlaceholderText("Filtrar descriCAo")
+        self.periodo_filter_texto = QLineEdit()
+        self.periodo_filter_texto.setPlaceholderText("Busca ampla...")
+
+        for widget in [self.periodo_filter_id, self.periodo_filter_desc, self.periodo_filter_texto]:
+            filtros.addWidget(widget)
+        layout.addLayout(filtros)
+
+        filtros_avancados = QHBoxLayout()
+        self.periodo_filter_num_col = QComboBox()
+        self.periodo_filter_num_col.addItems(["entradas_desacob", "saidas_desacob", "estoque_final_desacob", "saldo_final", "estoque_final"])
+        self.periodo_filter_num_min = QLineEdit()
+        self.periodo_filter_num_min.setPlaceholderText("Min numerico")
+        self.periodo_filter_num_max = QLineEdit()
+        self.periodo_filter_num_max.setPlaceholderText("Max numerico")
+        self.periodo_profile = QComboBox()
+        self.periodo_profile.addItems(["Padrao", "Auditoria", "Estoque", "Custos"])
+        self.btn_periodo_profile = QPushButton("Perfil")
+        self.btn_periodo_save_profile = QPushButton("Salvar perfil")
+        self.btn_periodo_colunas = QPushButton("Colunas")
+        for widget in [
+            QLabel("Numero"),
+            self.periodo_filter_num_col,
+            self.periodo_filter_num_min,
+            self.periodo_filter_num_max,
+            self.periodo_profile,
+            self.btn_periodo_profile,
+            self.btn_periodo_save_profile,
+            self.btn_periodo_colunas,
+        ]:
+            filtros_avancados.addWidget(widget)
+        filtros_avancados.addStretch()
+        layout.addLayout(filtros_avancados)
+
+        self.lbl_aba_periodos_status = QLabel("Selecione um CNPJ para carregar a aba períodos.")
+        self.lbl_aba_periodos_status.setStyleSheet(self.lbl_aba_anual_status.styleSheet())
+        layout.addWidget(self.lbl_aba_periodos_status)
+
+        self.lbl_aba_periodos_filtros = QLabel("Filtros ativos: nenhum")
+        self.lbl_aba_periodos_filtros.setStyleSheet(self.lbl_aba_anual_filtros.styleSheet())
+        layout.addWidget(self.lbl_aba_periodos_filtros)
+
+        self.aba_periodos_table = QTableView()
+        self.aba_periodos_table.setModel(self.aba_periodos_model)
+        self.aba_periodos_table.setSelectionBehavior(QAbstractItemView.SelectItems)
+        self.aba_periodos_table.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        self.aba_periodos_table.setAlternatingRowColors(True)
+        self.aba_periodos_table.setSortingEnabled(True)
+        self.aba_periodos_table.setWordWrap(True)
+        self.aba_periodos_table.setStyleSheet(self.aba_anual_table.styleSheet())
+        self.aba_periodos_table.horizontalHeader().setStretchLastSection(True)
+        self.aba_periodos_table.horizontalHeader().setSectionsMovable(True)
+        self.aba_periodos_table.horizontalHeader().setContextMenuPolicy(Qt.CustomContextMenu)
+        layout.addWidget(self.aba_periodos_table, 1)
+
+        return tab
+
+    def atualizar_aba_periodos(self) -> None:
+        if not self.cnpj_selecionado:
+            return
+        
+        self.lbl_aba_periodos_status.setText("Carregando aba períodos...")
+        from interface_grafica.services.parquet_service import ParquetService
+        parquet_service = ParquetService()
+        
+        def task():
+            caminho = Path(f"dados/CNPJ/{self.cnpj_selecionado}/analises/produtos/aba_periodos_{self.cnpj_selecionado}.parquet")
+            if not caminho.exists():
+                return None
+            return pl.read_parquet(caminho)
+
+        def on_finished(df):
+            if df is not None:
+                self.aba_periodos_table.setUpdatesEnabled(False)
+                self.aba_periodos_model.set_dataframe(df)
+                self.aba_periodos_table.setUpdatesEnabled(True)
+                
+                ids = sorted(df["id_agregado"].unique().to_list())
+                self.periodo_filter_id.clear()
+                self.periodo_filter_id.addItem("")
+                self.periodo_filter_id.addItems([str(x) for x in ids])
+                
+                self.lbl_aba_periodos_status.setText(f"Sucesso! {df.height} registros carregados.")
+                self._aplicar_preferencias_tabela("aba_periodos", self.aba_periodos_table, self.aba_periodos_model)
+            else:
+                self.aba_periodos_model.set_dataframe(pl.DataFrame())
+                self.lbl_aba_periodos_status.setText("Erro: Arquivo aba_periodos não encontrado.")
+
+        worker = ServiceTaskWorker(task)
+        worker.signals.finished.connect(on_finished)
+        self.threadpool.start(worker)
+
+    def aplicar_filtros_aba_periodos(self) -> None:
+        filtros = []
+        id_val = self.periodo_filter_id.currentText().strip()
+        if id_val:
+            filtros.append(f"ID={id_val}")
+            self.aba_periodos_model.add_filter("id_agregado", id_val, "equal")
+        else:
+            self.aba_periodos_model.remove_filter("id_agregado")
+
+        desc_val = self.periodo_filter_desc.text().strip()
+        if desc_val:
+            filtros.append(f"Desc~={desc_val}")
+            self.aba_periodos_model.add_filter("descr_padrao", desc_val, "contains")
+        else:
+            self.aba_periodos_model.remove_filter("descr_padrao")
+
+        texto_val = self.periodo_filter_texto.text().strip()
+        if texto_val:
+            filtros.append(f"Busca='{texto_val}'")
+            self.aba_periodos_model.add_filter("ANY", texto_val, "contains")
+        else:
+            self.aba_periodos_model.remove_filter("ANY")
+
+        num_col = self.periodo_filter_num_col.currentText()
+        v_min = self.periodo_filter_num_min.text().strip()
+        v_max = self.periodo_filter_num_max.text().strip()
+        if v_min or v_max:
+            try:
+                f_min = float(v_min) if v_min else None
+                f_max = float(v_max) if v_max else None
+                self.aba_periodos_model.add_numeric_filter(num_col, f_min, f_max)
+                filtros.append(f"{num_col} entre [{v_min or '-inf'}, {v_max or '+inf'}]")
+            except ValueError:
+                pass
+        else:
+            self.aba_periodos_model.remove_numeric_filter()
+
+        self.lbl_aba_periodos_filtros.setText(f"Filtros ativos: {', '.join(filtros) if filtros else 'nenhum'}")
+
+    def limpar_filtros_aba_periodos(self) -> None:
+        self.periodo_filter_id.setCurrentText("")
+        self.periodo_filter_desc.clear()
+        self.periodo_filter_texto.clear()
+        self.periodo_filter_num_min.clear()
+        self.periodo_filter_num_max.clear()
+        self.aba_periodos_model.clear_filters()
+        self.lbl_aba_periodos_filtros.setText("Filtros ativos: nenhum")
+
+    def exportar_aba_periodos_excel(self) -> None:
+        if self.aba_periodos_model.df_filtered.is_empty():
+            QMessageBox.warning(self, "Aviso", "Não há dados filtrados para exportar.")
+            return
+        
+        path, _ = QFileDialog.getSaveFileName(self, "Salvar Excel", f"aba_periodos_{self.cnpj_selecionado}.xlsx", "Excel Files (*.xlsx)")
+        if not path:
+            return
+            
+        from interface_grafica.services.export_service import ExportService
+        service = ExportService()
+        try:
+            service.export_excel(Path(path), self.aba_periodos_model.df_filtered, "Aba Periodos")
+            QMessageBox.information(self, "Sucesso", f"Arquivo exportado com sucesso: {path}")
+        except Exception as e:
+            QMessageBox.critical(self, "Erro", f"Erro ao exportar: {e}")
+
+
+    def _build_tab_resumo_global(self) -> QWidget:
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        tab.setStyleSheet(
+            """
+            QWidget {
+                background: #252526;
+                color: #f3f4f6;
+            }
+            QLabel {
+                color: #e5e7eb;
+            }
+            QPushButton {
+                background: #34373d;
+                color: #f9fafb;
+                border: 1px solid #4b5563;
+                border-radius: 4px;
+                padding: 6px 10px;
+            }
+            QPushButton:hover {
+                background: #40444b;
+            }
+            QPushButton:pressed {
+                background: #2f3338;
+            }
+            QTableView {
+                background: #1f1f1f;
+                alternate-background-color: #262626;
+                color: #f9fafb;
+                gridline-color: #3f3f46;
+                border: 1px solid #3f3f46;
+                selection-background-color: #0e639c;
+                selection-color: #ffffff;
+            }
+            QHeaderView::section {
+                background: #18181b;
+                color: #f9fafb;
+                border: 1px solid #3f3f46;
+                padding: 6px 8px;
+                font-weight: bold;
+            }
+            """
+        )
+
+        self.lbl_resumo_global_titulo = QLabel("Tabela: Resumo Global (Mensal e Anual)")
+        self.lbl_resumo_global_titulo.setStyleSheet(
+            "QLabel { font-weight: bold; color: #f8fafc; background: #1f2a44; border: 1px solid #334155; border-radius: 4px; padding: 6px 10px; }"
+        )
+        layout.addWidget(self.lbl_resumo_global_titulo)
+
+        toolbar = QHBoxLayout()
+        self.btn_refresh_resumo_global = QPushButton("Atualizar Resumo Global")
+        self.btn_export_resumo_global = QPushButton("Exportar Excel")
+        toolbar.addWidget(self.btn_refresh_resumo_global)
+        toolbar.addStretch()
+        toolbar.addWidget(self.btn_export_resumo_global)
+        layout.addLayout(toolbar)
+
+        self.lbl_resumo_global_status = QLabel("Aguardando carregamento da aba mensal e anual...")
+        self.lbl_resumo_global_status.setStyleSheet(
+            "QLabel { padding: 4px 8px; background: #101827; border: 1px solid #374151; border-radius: 4px; color: #e5e7eb; }"
+        )
+        layout.addWidget(self.lbl_resumo_global_status)
+
+        self.resumo_global_table = QTableView()
+        self.resumo_global_table.setModel(self.resumo_global_model)
+        self.resumo_global_table.setSelectionBehavior(QAbstractItemView.SelectItems)
+        self.resumo_global_table.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        self.resumo_global_table.setAlternatingRowColors(True)
+        self.resumo_global_table.setSortingEnabled(True)
+        self.resumo_global_table.setWordWrap(True)
+        self.resumo_global_table.verticalHeader().setDefaultSectionSize(40)
+        self.resumo_global_table.horizontalHeader().setMinimumSectionSize(80)
+        self.resumo_global_table.horizontalHeader().setDefaultSectionSize(180)
+        self.resumo_global_table.horizontalHeader().setStretchLastSection(True)
+        self.resumo_global_table.setStyleSheet(
+            "QTableView::item { padding: 4px 2px; }"
+            "QTableCornerButton::section { background: #18181b; border: 1px solid #3f3f46; }"
+        )
+        layout.addWidget(self.resumo_global_table, 1)
 
         return tab
 
@@ -1918,7 +2582,7 @@ class MainWindow(QMainWindow):
         self.mov_filter_num_max.textChanged.connect(lambda _value: schedule_mov())
         self.btn_mov_profile.clicked.connect(lambda: self._aplicar_perfil_tabela("mov_estoque", self.mov_estoque_table, self.mov_estoque_model, self.mov_profile.currentText(), "mov_estoque"))
         self.btn_mov_save_profile.clicked.connect(
-            lambda: self._salvar_perfil_tabela_com_dialogo("mov_estoque", self.mov_estoque_table, self.mov_estoque_model, self.mov_profile, ["Exportar", "Padrao", "Auditoria", "Estoque", "Custos"])
+            lambda: self._salvar_perfil_tabela_com_dialogo("mov_estoque", self.mov_estoque_table, self.mov_estoque_model, self.mov_profile, ["Exportar", "Padrao", "Auditoria", "Auditoria Fiscal", "Estoque", "Custos"])
         )
         self.btn_mov_colunas.clicked.connect(lambda: self._abrir_menu_colunas_tabela("mov_estoque", self.mov_estoque_table))
         self.btn_mov_destacar.clicked.connect(lambda: self._destacar_tabela("mov_estoque"))
@@ -1935,12 +2599,30 @@ class MainWindow(QMainWindow):
             lambda _index, _order: self._salvar_preferencias_tabela("mov_estoque", self.mov_estoque_table, self.mov_estoque_model)
         )
 
+        self.btn_export_mov_estoque.clicked.connect(self.exportar_mov_estoque_excel)
         self.btn_refresh_aba_anual.clicked.connect(self.atualizar_aba_anual)
         self.btn_apply_aba_anual_filters.clicked.connect(self.aplicar_filtros_aba_anual)
         self.btn_clear_aba_anual_filters.clicked.connect(self.limpar_filtros_aba_anual)
         self.btn_filtrar_estoque_anual.clicked.connect(self.filtrar_estoque_pela_selecao_anual)
         self.btn_limpar_filtro_cruzado.clicked.connect(self.limpar_filtro_cruzado_anual)
         self.btn_export_aba_anual.clicked.connect(self.exportar_aba_anual_excel)
+        schedule_periodos = lambda: self._schedule_debounced("periodos_filters", self.aplicar_filtros_aba_periodos)
+        self.btn_refresh_aba_periodos.clicked.connect(self.atualizar_aba_periodos)
+        self.btn_apply_aba_periodos_filters.clicked.connect(self.aplicar_filtros_aba_periodos)
+        self.btn_clear_aba_periodos_filters.clicked.connect(self.limpar_filtros_aba_periodos)
+        self.btn_export_aba_periodos.clicked.connect(self.exportar_aba_periodos_excel)
+        self.periodo_filter_id.currentTextChanged.connect(lambda _value: schedule_periodos())
+        self.periodo_filter_desc.textChanged.connect(lambda _value: schedule_periodos())
+        self.periodo_filter_texto.textChanged.connect(lambda _value: schedule_periodos())
+        self.btn_periodo_profile.clicked.connect(lambda: self._aplicar_perfil_tabela("aba_periodos", self.aba_periodos_table, self.aba_periodos_model, self.periodo_profile.currentText(), "aba_periodos"))
+        self.btn_periodo_save_profile.clicked.connect(
+            lambda: self._salvar_perfil_tabela_com_dialogo("aba_periodos", self.aba_periodos_table, self.aba_periodos_model, self.periodo_profile, ["Exportar", "Padrao", "Auditoria", "Estoque", "Custos"])
+        )
+        self.btn_periodo_colunas.clicked.connect(lambda: self._abrir_menu_colunas_tabela("aba_periodos", self.aba_periodos_table))
+        self.btn_destacar_aba_periodos.clicked.connect(lambda: self._destacar_tabela("aba_periodos"))
+        self.aba_periodos_table.horizontalHeader().customContextMenuRequested.connect(
+            lambda pos: self._abrir_menu_colunas_tabela("aba_periodos", self.aba_periodos_table, pos)
+        )
         self.anual_filter_id.currentTextChanged.connect(lambda _value: schedule_anual())
         self.anual_filter_desc.textChanged.connect(lambda _value: schedule_anual())
         self.anual_filter_ano.currentIndexChanged.connect(lambda _index: schedule_anual())
@@ -1966,6 +2648,9 @@ class MainWindow(QMainWindow):
         self.aba_anual_table.horizontalHeader().sortIndicatorChanged.connect(
             lambda _index, _order: self._salvar_preferencias_tabela("aba_anual", self.aba_anual_table, self.aba_anual_model)
         )
+
+        self.btn_refresh_resumo_global.clicked.connect(self.atualizar_aba_resumo_global)
+        self.btn_export_resumo_global.clicked.connect(self.exportar_resumo_global_excel)
 
         self.btn_refresh_aba_mensal.clicked.connect(self.atualizar_aba_mensal)
         self.btn_apply_aba_mensal_filters.clicked.connect(self.aplicar_filtros_aba_mensal)
@@ -2228,9 +2913,13 @@ class MainWindow(QMainWindow):
         pasta_analises = CNPJ_ROOT / self.state.current_cnpj / "analises" / "produtos"
         arquivos = list(pasta_analises.glob(f"*_enriquecido_{self.state.current_cnpj}.parquet"))
         dfs = []
+        filtro_id = [FilterCondition(column="id_agrupado", operator="igual", value=id_agrupado)]
         for arq in arquivos:
             try:
-                df = pl.read_parquet(arq).filter(pl.col("id_agrupado") == id_agrupado)
+                schema = self.parquet_service.get_schema(arq)
+                if "id_agrupado" not in schema:
+                    continue
+                df = self.parquet_service.load_dataset(arq, filtro_id)
                 if not df.is_empty():
                     df = df.with_columns(pl.lit(arq.name.split("_enriquecido")[0].upper()).alias("origem_fio_ouro"))
                     dfs.append(df)
@@ -2484,7 +3173,7 @@ class MainWindow(QMainWindow):
         if not dlg_sql.exec():
             return
         sql_selecionados = dlg_sql.consultas_selecionadas()
-        self.selection_service.set_selections("ultimas_consultas", [str(p) for p in sql_selecionados])
+        self.selection_service.set_selections("ultimas_consultas", sql_selecionados)
 
         # 2. Selecionar Tabelas
         tabelas_disp = self.servico_pipeline_funcoes.servico_tabelas.listar_tabelas()
@@ -2569,7 +3258,7 @@ class MainWindow(QMainWindow):
         if not dlg_sql.exec():
             return
         sql_selecionados = dlg_sql.consultas_selecionadas()
-        self.selection_service.set_selections("ultimas_consultas", [str(p) for p in sql_selecionados])
+        self.selection_service.set_selections("ultimas_consultas", sql_selecionados)
 
         self.btn_extrair_brutas.setEnabled(False)
         self.status.showMessage(f"Extraindo tabelas brutas para {cnpj}...")
@@ -2621,9 +3310,11 @@ class MainWindow(QMainWindow):
             return
 
         consultas_disp = self.servico_pipeline_funcoes.servico_extracao.listar_consultas()
-        sql_nfe = next((p for p in consultas_disp if p.name.lower() == "nfe.sql"), None)
-        if sql_nfe is None:
-            self.show_error("SQL nao encontrada", "Nao foi possivel localizar a consulta NFe.sql na pasta sql/.")
+        sql_nfe = next((sql_id for sql_id in consultas_disp if sql_id.lower().endswith("/nfe.sql")), None)
+        sql_nfce = next((sql_id for sql_id in consultas_disp if sql_id.lower().endswith("/nfce.sql")), None)
+        consultas_nfe_entrada = [p for p in [sql_nfe, sql_nfce] if p is not None]
+        if not consultas_nfe_entrada:
+            self.show_error("SQL nao encontrada", "Nao foi possivel localizar as consultas NFe.sql/NFCe.sql na pasta sql/.")
             return
 
         tabelas_necessarias = [
@@ -2639,7 +3330,7 @@ class MainWindow(QMainWindow):
         self.pipeline_worker = PipelineWorker(
             self.servico_pipeline_funcoes,
             cnpj,
-            [sql_nfe],
+            consultas_nfe_entrada,
             tabelas_necessarias,
             data_limite,
         )
@@ -2796,6 +3487,7 @@ class MainWindow(QMainWindow):
         self.atualizar_aba_mov_estoque()
         self.atualizar_aba_mensal()
         self.atualizar_aba_anual()
+        self.atualizar_aba_periodos()
         self.atualizar_aba_nfe_entrada()
         self.atualizar_aba_id_agrupados()
 
@@ -3076,9 +3768,21 @@ class MainWindow(QMainWindow):
     def _capturar_estado_tabela(self, table: QTableView, model: PolarsTableModel) -> dict:
         offset = 1 if getattr(model, "_checkable", False) else 0
         colunas = model.dataframe.columns
-        visiveis = [nome for idx, nome in enumerate(colunas) if not table.isColumnHidden(idx + offset)]
+        header = table.horizontalHeader()
+        visiveis = [
+            nome
+            for _visual, nome in sorted(
+                (
+                    (header.visualIndex(idx + offset), nome)
+                    for idx, nome in enumerate(colunas)
+                    if not table.isColumnHidden(idx + offset)
+                ),
+                key=lambda item: item[0],
+            )
+        ]
         estado = {
             "visible_columns": visiveis,
+            "column_order": visiveis,
             "header_state": self._serializar_estado_header(table),
         }
         if getattr(model, "_last_sort_column", None):
@@ -3108,6 +3812,48 @@ class MainWindow(QMainWindow):
         if isinstance(header_state, str) and header_state:
             aplicado = self._restaurar_estado_header(table, header_state) or aplicado
         return aplicado
+
+    def _colunas_estado_perfil(self, prefs: dict, model: PolarsTableModel) -> list[str] | None:
+        if not isinstance(prefs, dict) or model.dataframe.is_empty():
+            return None
+
+        raw = prefs.get("visible_columns")
+        if not isinstance(raw, list) or not raw:
+            return None
+
+        visiveis = ordenar_colunas_perfil(
+            list(model.dataframe.columns),
+            raw,
+            prefs.get("column_order") if isinstance(prefs.get("column_order"), list) else None,
+        )
+        if not visiveis:
+            return None
+
+        header_state = prefs.get("header_state")
+        if not isinstance(header_state, str) or not header_state:
+            return visiveis
+
+        probe = QTableView()
+        try:
+            probe.setModel(model)
+            if not self._restaurar_estado_header(probe, header_state):
+                return visiveis
+
+            offset = 1 if getattr(model, "_checkable", False) else 0
+            ordem = [
+                nome
+                for _visual, nome in sorted(
+                    (
+                        (probe.horizontalHeader().visualIndex(idx + offset), nome)
+                        for idx, nome in enumerate(model.dataframe.columns)
+                        if nome in visiveis
+                    ),
+                    key=lambda item: item[0],
+                )
+            ]
+            return ordenar_colunas_perfil(list(model.dataframe.columns), visiveis, ordem)
+        finally:
+            probe.setModel(None)
 
     def _nomes_perfis_nomeados_tabela(self, aba: str, scope: str | None = None) -> list[str]:
         prefs = self._carregar_preferencias_tabela(aba, scope)
@@ -3199,17 +3945,74 @@ class MainWindow(QMainWindow):
 
     def _obter_colunas_preset_perfil(self, perfil: str, colunas: list[str], contexto: str) -> list[str]:
         nome = (perfil or "").strip().lower()
-        if nome in {"", "padrao"}:
-            return colunas
-
         if contexto == "mov_estoque":
             mapa = {
-                "exportar": ["ordem_operacoes", "Tipo_operacao", "origem", "id_agrupado", "descr_padrao", "Descr_item", "Dt_doc", "Dt_e_s", "Cfop", "Qtd", "q_conv", "saldo_estoque_anual", "entr_desac_anual", "custo_medio_anual", "preco_item", "preco_unit", "unid_ref", "fator", "mov_rep", "dev_simples", "excluir_estoque"],
+                "padrao": [
+                    "ordem_operacoes", "Tipo_operacao", "fonte",
+                    "id_agrupado", "descr_padrao", "Descr_item", "Descr_compl", "Cod_item", "Cod_barra", "Ncm", "Cest", "Tipo_item",
+                    "Chv_nfe", "mod", "Ser", "num_nfe", "Num_item", "Dt_doc", "Dt_e_s", "nsu", "finnfe", "infprot_cstat", "co_uf_emit", "co_uf_dest",
+                    "Cfop", "Cst", "Aliq_icms", "Vl_bc_icms", "Vl_icms", "vl_bc_icms_st", "vl_icms_st", "aliq_st",
+                    "Qtd", "q_conv", "Unid", "unid_ref", "fator",
+                    "Vl_item", "preco_item", "preco_unit", "custo_medio_anual",
+                    "saldo_estoque_anual", "entr_desac_anual", "mov_rep", "excluir_estoque", "dev_simples", "dev_venda", "dev_compra", "dev_ent_simples",
+                    "ncm_padrao", "cest_padrao", "co_sefin_agr", "it_pc_interna", "it_in_st", "it_pc_mva", "it_in_mva_ajustado",
+                    "it_in_isento_icms", "it_in_reducao", "it_pc_reducao", "it_in_combustivel", "it_in_pmpf", "it_in_reducao_credito",
+                ],
+                "exportar": ["ordem_operacoes", "Tipo_operacao", "fonte", "id_agrupado", "descr_padrao", "Descr_item", "Dt_doc", "Dt_e_s", "Cfop", "Qtd", "q_conv", "saldo_estoque_anual", "entr_desac_anual", "custo_medio_anual", "preco_item", "preco_unit", "unid_ref", "fator", "mov_rep", "dev_simples", "excluir_estoque"],
                 "contribuinte": ["ordem_operacoes", "Tipo_operacao", "Dt_doc", "id_agrupado", "descr_padrao", "Qtd", "q_conv", "unid_ref", "preco_item", "preco_unit", "saldo_estoque_anual", "entr_desac_anual"],
-                "auditoria": ["ordem_operacoes", "Tipo_operacao", "origem", "id_agrupado", "descr_padrao", "Dt_doc", "Dt_e_s", "Cfop", "q_conv", "saldo_estoque_anual", "entr_desac_anual", "mov_rep", "dev_simples", "excluir_estoque"],
+                "auditoria": ["ordem_operacoes", "Tipo_operacao", "fonte", "id_agrupado", "descr_padrao", "Dt_doc", "Dt_e_s", "Cfop", "q_conv", "saldo_estoque_anual", "entr_desac_anual", "mov_rep", "dev_simples", "excluir_estoque"],
+                "auditoria fiscal": ["ordem_operacoes", "Tipo_operacao", "fonte", "id_agrupado", "descr_padrao", "Descr_item", "Descr_compl", "Cod_item", "Cod_barra", "Ncm", "Cest", "Tipo_item", "Chv_nfe", "mod", "Ser", "num_nfe", "Num_item", "Dt_doc", "Dt_e_s", "nsu", "finnfe", "infprot_cstat", "co_uf_emit", "co_uf_dest", "Cfop", "Cst", "Aliq_icms", "Vl_bc_icms", "Vl_icms", "vl_bc_icms_st", "vl_icms_st", "aliq_st", "Qtd", "q_conv", "Unid", "unid_ref", "fator", "Vl_item", "preco_item", "preco_unit", "custo_medio_anual", "saldo_estoque_anual", "entr_desac_anual", "mov_rep", "excluir_estoque", "dev_simples", "dev_venda", "dev_compra", "dev_ent_simples", "co_sefin_agr", "it_pc_interna", "it_in_st", "it_pc_mva", "it_in_mva_ajustado", "it_in_isento_icms", "it_in_reducao", "it_pc_reducao", "it_in_combustivel", "it_in_pmpf", "it_in_reducao_credito"],
                 "estoque": ["ordem_operacoes", "Tipo_operacao", "id_agrupado", "descr_padrao", "Dt_doc", "q_conv", "saldo_estoque_anual", "unid_ref", "fator"],
                 "custos": ["ordem_operacoes", "Tipo_operacao", "id_agrupado", "descr_padrao", "Dt_doc", "q_conv", "preco_item", "preco_unit", "custo_medio_anual", "saldo_estoque_anual"],
             }
+        elif contexto in {"agregacao_top", "agregacao_bottom"}:
+            mapa = {
+                "padrao": [
+                    "id_agrupado", "descr_padrao",
+                    "ids_origem_agrupamento",
+                    "preco_medio_compra", "preco_medio_venda",
+                    "total_entradas", "total_saidas", "total_movimentacao",
+                    "total_compras", "qtd_compras_total",
+                    "total_vendas", "qtd_vendas_total",
+                    "ncm_padrao", "cest_padrao", "gtin_padrao",
+                    "lista_itens_agrupados",
+                    "lista_ncm", "lista_cest", "lista_gtin", "lista_descricoes", "lista_desc_compl",
+                    "co_sefin_padrao", "co_sefin_agr", "lista_unidades", "fontes",
+                ],
+                "auditoria": [
+                    "id_agrupado", "descr_padrao",
+                    "ids_origem_agrupamento", "lista_itens_agrupados",
+                    "ncm_padrao", "cest_padrao", "gtin_padrao",
+                    "lista_ncm", "lista_cest", "lista_gtin", "lista_descricoes", "lista_desc_compl",
+                    "co_sefin_padrao", "co_sefin_agr", "lista_co_sefin",
+                    "co_sefin_divergentes", "lista_unidades", "fontes",
+                    "total_entradas", "total_saidas", "total_movimentacao",
+                    "total_compras", "qtd_compras_total", "preco_medio_compra",
+                    "total_vendas", "qtd_vendas_total", "preco_medio_venda",
+                    "lista_chave_produto",
+                ],
+                "estoque": [
+                    "id_agrupado", "descr_padrao",
+                    "ids_origem_agrupamento",
+                    "total_entradas", "total_saidas", "total_movimentacao",
+                    "total_compras", "qtd_compras_total",
+                    "total_vendas", "qtd_vendas_total",
+                    "lista_unidades", "lista_descricoes", "lista_desc_compl", "lista_itens_agrupados", "fontes",
+                    "ncm_padrao", "cest_padrao",
+                ],
+                "custos": [
+                    "id_agrupado", "descr_padrao",
+                    "ids_origem_agrupamento",
+                    "preco_medio_compra", "preco_medio_venda",
+                    "total_entradas", "total_saidas", "total_movimentacao",
+                    "total_compras", "qtd_compras_total",
+                    "total_vendas", "qtd_vendas_total",
+                    "lista_ncm", "lista_cest", "lista_gtin", "lista_descricoes", "lista_desc_compl", "lista_itens_agrupados",
+                    "lista_unidades", "fontes",
+                ],
+            }
+        elif nome in {"", "padrao"}:
+            return colunas
         elif contexto == "conversao":
             mapa = {
                 "auditoria": ["id_agrupado", "id_produtos", "descr_padrao", "lista_descricoes_produto", "unid", "unid_ref", "fator", "fator_calculado", "preco_medio", "preco_medio_ref", "origem_preco"],
@@ -3232,9 +4035,9 @@ class MainWindow(QMainWindow):
             }
         elif contexto == "nfe_entrada":
             mapa = {
-                "auditoria": ["data_classificacao", "tipo_operacao", "nnf", "prod_nitem", "id_agrupado", "descr_padrao", "prod_xprod", "prod_ncm", "prod_cest", "co_sefin_inferido", "co_sefin_agr", "it_pc_interna", "it_in_st", "it_in_isento_icms", "it_in_reducao", "it_pc_reducao", "it_pc_mva", "it_in_mva_ajustado", "xnome_emit", "xnome_dest", "chave_acesso"],
-                "estoque": ["data_classificacao", "id_agrupado", "descr_padrao", "prod_xprod", "prod_ncm", "prod_cest", "co_sefin_agr", "it_pc_interna", "it_in_st", "it_in_isento_icms", "it_in_reducao", "prod_ucom", "prod_qcom", "prod_vprod"],
-                "custos": ["data_classificacao", "id_agrupado", "descr_padrao", "prod_xprod", "co_sefin_agr", "it_pc_interna", "it_in_st", "it_in_isento_icms", "it_in_reducao", "it_pc_reducao", "it_pc_mva", "it_in_mva_ajustado", "prod_vuncom", "prod_vprod"],
+                "auditoria": ["data_classificacao", "fonte_documento", "tipo_operacao", "nnf", "prod_nitem", "id_agrupado", "descr_padrao", "prod_xprod", "prod_ncm", "prod_cest", "co_sefin_inferido", "co_sefin_agr", "it_pc_interna", "it_in_st", "it_in_isento_icms", "it_in_reducao", "it_pc_reducao", "it_pc_mva", "it_in_mva_ajustado", "xnome_emit", "xnome_dest", "chave_acesso"],
+                "estoque": ["data_classificacao", "fonte_documento", "id_agrupado", "descr_padrao", "prod_xprod", "prod_ncm", "prod_cest", "co_sefin_agr", "it_pc_interna", "it_in_st", "it_in_isento_icms", "it_in_reducao", "prod_ucom", "prod_qcom", "prod_vprod"],
+                "custos": ["data_classificacao", "fonte_documento", "id_agrupado", "descr_padrao", "prod_xprod", "co_sefin_agr", "it_pc_interna", "it_in_st", "it_in_isento_icms", "it_in_reducao", "it_pc_reducao", "it_pc_mva", "it_in_mva_ajustado", "prod_vuncom", "prod_vprod"],
             }
         elif contexto == "produtos_selecionados":
             mapa = {
@@ -3244,20 +4047,57 @@ class MainWindow(QMainWindow):
             }
         elif contexto == "id_agrupados":
             mapa = {
-                "auditoria": ["id_agrupado", "descr_padrao", "lista_descricoes", "lista_codigos", "lista_unidades"],
-                "estoque": ["id_agrupado", "descr_padrao", "lista_unidades", "lista_descricoes"],
+                "auditoria": ["id_agrupado", "descr_padrao", "lista_descricoes", "lista_desc_compl", "lista_codigos", "lista_unidades"],
+                "estoque": ["id_agrupado", "descr_padrao", "lista_unidades", "lista_descricoes", "lista_desc_compl"],
                 "custos": ["id_agrupado", "descr_padrao", "lista_codigos", "lista_unidades"],
             }
         else:
             mapa = {
-                "auditoria": ["cnpj", "periodo", "id_agrupado", "id_agregado", "descr_padrao", "descricao", "descr", "Descr_item", "Ncm", "ncm_padrao", "cest_padrao", "Cfop", "valor_item", "preco_item", "q_conv", "Qtd", "saldo_final", "entradas_desacob"],
-                "estoque": ["id_agrupado", "id_agregado", "descr_padrao", "descricao", "Descr_item", "ncm_padrao", "Ncm", "unid_ref", "q_conv", "Qtd", "saldo_final", "estoque_final"],
-                "custos": ["id_agrupado", "id_agregado", "descr_padrao", "descricao", "Descr_item", "preco_item", "preco_unit", "valor_item", "q_conv", "Qtd", "pme", "pms", "custo_medio_anual"],
+                "auditoria": ["cnpj", "periodo", "id_agrupado", "id_agregado", "descr_padrao", "descricao", "descr", "Descr_item", "Ncm", "ncm_padrao", "cest_padrao", "Cfop", "valor_item", "preco_item", "q_conv", "Qtd", "total_compras", "qtd_compras_total", "preco_medio_compra", "total_vendas", "qtd_vendas_total", "preco_medio_venda", "saldo_final", "entradas_desacob"],
+                "estoque": ["id_agrupado", "id_agregado", "descr_padrao", "descricao", "Descr_item", "ncm_padrao", "Ncm", "unid_ref", "q_conv", "Qtd", "total_entradas", "total_saidas", "total_movimentacao", "total_compras", "total_vendas", "saldo_final", "estoque_final"],
+                "custos": ["id_agrupado", "id_agregado", "descr_padrao", "descricao", "Descr_item", "total_entradas", "total_saidas", "total_movimentacao", "total_compras", "qtd_compras_total", "preco_medio_compra", "total_vendas", "qtd_vendas_total", "preco_medio_venda", "preco_item", "preco_unit", "valor_item", "q_conv", "Qtd", "pme", "pms", "custo_medio_anual"],
             }
 
         desejadas = mapa.get(nome, colunas)
         selecionadas = [c for c in desejadas if c in colunas]
         return selecionadas or colunas
+
+    def _aplicar_layout_padrao_agregacao(
+        self,
+        contexto: str,
+        table: QTableView,
+        model: PolarsTableModel,
+        perfil: str,
+    ) -> None:
+        if contexto not in {"agregacao_top", "agregacao_bottom"} or model.dataframe.is_empty():
+            return
+        ordem = self._obter_colunas_preset_perfil(perfil, model.dataframe.columns, contexto)
+        self._aplicar_ordem_colunas(table, ordem)
+        colunas = model.dataframe.columns
+        offset = 1 if getattr(model, "_checkable", False) else 0
+        larguras = {
+            "id_agrupado": 150,
+            "descr_padrao": 320,
+            "ids_origem_agrupamento": 180,
+            "preco_medio_compra": 150,
+            "preco_medio_venda": 150,
+            "total_entradas": 145,
+            "total_saidas": 145,
+            "total_movimentacao": 155,
+            "total_compras": 140,
+            "qtd_compras_total": 140,
+            "total_vendas": 140,
+            "qtd_vendas_total": 140,
+            "lista_ncm": 180,
+            "lista_cest": 180,
+            "lista_gtin": 180,
+            "lista_descricoes": 340,
+            "lista_desc_compl": 320,
+            "lista_itens_agrupados": 340,
+        }
+        for nome, largura in larguras.items():
+            if nome in colunas:
+                table.setColumnWidth(colunas.index(nome) + offset, largura)
 
     def _abrir_menu_colunas_tabela(self, aba: str, table: QTableView, pos=None, scope: str | None = None) -> None:
         model = table.model()
@@ -3271,7 +4111,12 @@ class MainWindow(QMainWindow):
                 key=lambda item: item[0],
             )
         ]
-        visiveis = [nome for idx, nome in enumerate(colunas) if not table.isColumnHidden(idx + offset)]
+        visiveis = [
+            nome
+            for nome in colunas
+            if nome in model.dataframe.columns
+            and not table.isColumnHidden(model.dataframe.columns.index(nome) + offset)
+        ]
         dialog = ColumnSelectorDialog(colunas, visiveis, self)
         if not dialog.exec():
             return
@@ -3301,6 +4146,7 @@ class MainWindow(QMainWindow):
             return
         visiveis = self._obter_colunas_preset_perfil(perfil, model.dataframe.columns, contexto)
         self._aplicar_preset_colunas(table, model.dataframe.columns, visiveis)
+        self._aplicar_layout_padrao_agregacao(contexto, table, model, perfil)
         self._salvar_preferencias_tabela(aba, table, model, scope)
 
     def _salvar_perfil_tabela_com_dialogo(
@@ -3349,8 +4195,11 @@ class MainWindow(QMainWindow):
     def _aplicar_preset_colunas(self, table: QTableView, colunas: list[str], visiveis: list[str]) -> None:
         visiveis_set = set(visiveis)
         model = table.model()
+        if not isinstance(model, PolarsTableModel):
+            return
         offset = 1 if getattr(model, "_checkable", False) else 0
-        for idx, nome in enumerate(colunas):
+        colunas_modelo = list(model.dataframe.columns)
+        for idx, nome in enumerate(colunas_modelo):
             table.setColumnHidden(idx + offset, nome not in visiveis_set)
 
     def _aplicar_ordem_colunas(self, table: QTableView, ordem_colunas: list[str]) -> None:
@@ -3374,8 +4223,16 @@ class MainWindow(QMainWindow):
             return base_df
         offset = 1 if getattr(model, "_checkable", False) else 0
         colunas_modelo = list(model.dataframe.columns)
+        header = table.horizontalHeader()
         visiveis = [nome for idx, nome in enumerate(colunas_modelo) if not table.isColumnHidden(idx + offset)]
-        visiveis = [nome for nome in visiveis if nome in base_df.columns]
+        ordem_visual = [
+            nome
+            for _visual, nome in sorted(
+                ((header.visualIndex(idx + offset), nome) for idx, nome in enumerate(colunas_modelo)),
+                key=lambda item: item[0],
+            )
+        ]
+        visiveis = ordenar_colunas_visiveis(list(base_df.columns), visiveis, ordem_visual)
         return base_df.select(visiveis) if visiveis else base_df
 
     def _dataframe_colunas_perfil(
@@ -3392,11 +4249,7 @@ class MainWindow(QMainWindow):
             return base_df
 
         estado_perfil = self._obter_estado_perfil_nomeado(aba, perfil, scope)
-        visiveis: list[str] | None = None
-        if isinstance(estado_perfil, dict):
-            raw = estado_perfil.get("visible_columns")
-            if isinstance(raw, list) and raw:
-                visiveis = [str(col) for col in raw if str(col) in base_df.columns]
+        visiveis = self._colunas_estado_perfil(estado_perfil, model)
 
         if not visiveis:
             visiveis = self._obter_colunas_preset_perfil(perfil, list(base_df.columns), contexto)
@@ -3410,7 +4263,7 @@ class MainWindow(QMainWindow):
             (self.top_profile, "agregacao_top", ["Padrao", "Auditoria", "Estoque", "Custos"], None),
             (self.bottom_profile, "agregacao_bottom", ["Padrao", "Auditoria", "Estoque", "Custos"], None),
             (self.conversao_profile, "conversao", ["Padrao", "Auditoria", "Estoque", "Custos"], None),
-            (self.mov_profile, "mov_estoque", ["Exportar", "Padrao", "Contribuinte", "Auditoria", "Estoque", "Custos"], None),
+            (self.mov_profile, "mov_estoque", ["Exportar", "Padrao", "Contribuinte", "Auditoria", "Auditoria Fiscal", "Estoque", "Custos"], None),
             (self.mensal_profile, "aba_mensal", ["Exportar", "Padrao", "Auditoria", "Estoque", "Custos"], None),
             (self.anual_profile, "aba_anual", ["Exportar", "Padrao", "Auditoria", "Estoque", "Custos"], None),
             (self.produtos_sel_profile, "produtos_selecionados", ["Padrao", "Auditoria", "Estoque", "Custos"], None),
@@ -3476,10 +4329,92 @@ class MainWindow(QMainWindow):
             return
         self._aplicar_perfil_tabela(aba, table, model, perfil, aba)
 
+    def _carregar_dataset_ui(
+        self,
+        path: Path,
+        conditions: list[FilterCondition] | None = None,
+        columns: list[str] | None = None,
+    ) -> pl.DataFrame:
+        colunas_solicitadas = columns
+        if columns is not None:
+            schema = set(self.parquet_service.get_schema(path))
+            colunas_solicitadas = [coluna for coluna in columns if coluna in schema]
+            if not colunas_solicitadas:
+                return pl.DataFrame()
+        return self.parquet_service.load_dataset(path, conditions or [], colunas_solicitadas)
+
+    def _limpar_aba_resumo_estoque(self, contexto: str, mensagem: str) -> None:
+        if contexto == "aba_mensal":
+            self.aba_mensal_model.set_dataframe(pl.DataFrame())
+            self._aba_mensal_df = pl.DataFrame()
+            self.lbl_aba_mensal_status.setText(mensagem)
+            self.lbl_aba_mensal_filtros.setText("Filtros ativos: nenhum")
+            self._atualizar_titulo_aba_mensal()
+            return
+        if contexto == "aba_anual":
+            self.aba_anual_model.set_dataframe(pl.DataFrame())
+            self._aba_anual_df = pl.DataFrame()
+            self.lbl_aba_anual_status.setText(mensagem)
+            self.lbl_aba_anual_filtros.setText("Filtros ativos: nenhum")
+            self._atualizar_titulo_aba_anual()
+
+    def _garantir_resumos_estoque_atualizados(self, cnpj: str) -> bool:
+        artefatos_defasados = self.servico_agregacao.artefatos_estoque_defasados(cnpj)
+        if not artefatos_defasados:
+            return True
+
+        if self._sync_resumos_estoque_cnpj == cnpj:
+            return False
+
+        if self.service_worker is not None and self.service_worker.isRunning():
+            self.status.showMessage("Aguardando o processamento atual para sincronizar as tabelas mensal/anual.")
+            return False
+
+        self._sync_resumos_estoque_cnpj = cnpj
+        nomes = {
+            "calculos_mensais": "mensal",
+            "calculos_anuais": "anual",
+        }
+        descricoes = ", ".join(nomes.get(item, item) for item in artefatos_defasados)
+
+        def _on_success(ok) -> None:
+            self._sync_resumos_estoque_cnpj = None
+            if ok:
+                self.refresh_file_tree(cnpj)
+                self.atualizar_aba_mensal()
+                self.atualizar_aba_anual()
+                self.atualizar_aba_produtos_selecionados()
+                self.atualizar_aba_resumo_global()
+                self.status.showMessage(f"Tabelas {descricoes} sincronizadas com a mov_estoque.")
+            else:
+                self.status.showMessage("Falha ao sincronizar as tabelas mensal/anual com a mov_estoque.")
+                self.show_error("Falha na sincronizacao", "Nao foi possivel atualizar as tabelas mensal/anual.")
+
+        def _on_failure(mensagem: str) -> None:
+            self._sync_resumos_estoque_cnpj = None
+            self.status.showMessage("Erro ao sincronizar as tabelas mensal/anual.")
+            self.show_error("Falha na sincronizacao", mensagem)
+
+        iniciado = self._executar_em_worker(
+            self.servico_agregacao.recalcular_resumos_estoque,
+            cnpj,
+            mensagem_inicial=f"Sincronizando tabelas {descricoes} com a mov_estoque...",
+            on_success=_on_success,
+            on_failure=_on_failure,
+        )
+        if not iniciado:
+            self._sync_resumos_estoque_cnpj = None
+            return False
+        return False
+
     def atualizar_aba_anual(self) -> None:
         cnpj = self.state.current_cnpj
         if not cnpj:
             self._atualizar_titulo_aba_anual()
+            return
+
+        if not self._garantir_resumos_estoque_atualizados(cnpj):
+            self._limpar_aba_resumo_estoque("aba_anual", "Sincronizando tabela anual com a mov_estoque atual...")
             return
             
         path = CNPJ_ROOT / cnpj / "analises" / "produtos" / f"aba_anual_{cnpj}.parquet"
@@ -3492,7 +4427,7 @@ class MainWindow(QMainWindow):
             return
             
         try:
-            self._aba_anual_df = pl.read_parquet(path)
+            self._aba_anual_df = self._carregar_dataset_ui(path)
             self._aba_anual_file_path = path
             self._reset_table_resize_flag("aba_anual")
 
@@ -3506,6 +4441,7 @@ class MainWindow(QMainWindow):
 
             self.aplicar_filtros_aba_anual()
             self.atualizar_aba_produtos_selecionados()
+            self.atualizar_aba_resumo_global()
         except Exception as e:
             self.show_error("Erro de leitura", f"Falha ao ler aba_anual: {e}")
 
@@ -3513,6 +4449,10 @@ class MainWindow(QMainWindow):
         cnpj = self.state.current_cnpj
         if not cnpj:
             self._atualizar_titulo_aba_mensal()
+            return
+
+        if not self._garantir_resumos_estoque_atualizados(cnpj):
+            self._limpar_aba_resumo_estoque("aba_mensal", "Sincronizando tabela mensal com a mov_estoque atual...")
             return
 
         path = CNPJ_ROOT / cnpj / "analises" / "produtos" / f"aba_mensal_{cnpj}.parquet"
@@ -3525,7 +4465,7 @@ class MainWindow(QMainWindow):
             return
 
         try:
-            self._aba_mensal_df = pl.read_parquet(path)
+            self._aba_mensal_df = self._carregar_dataset_ui(path)
             self._aba_mensal_file_path = path
             self._reset_table_resize_flag("aba_mensal")
 
@@ -3539,6 +4479,7 @@ class MainWindow(QMainWindow):
 
             self.aplicar_filtros_aba_mensal()
             self.atualizar_aba_produtos_selecionados()
+            self.atualizar_aba_resumo_global()
         except Exception as e:
             self.show_error("Erro de leitura", f"Falha ao ler aba_mensal: {e}")
 
@@ -3611,7 +4552,7 @@ class MainWindow(QMainWindow):
         self.aplicar_filtros_aba_mensal()
 
     def exportar_aba_mensal_excel_metodo(self) -> None:
-        df = self._dataframe_colunas_visiveis(self.aba_mensal_table, self.aba_mensal_model)
+        df = self._dataframe_colunas_perfil("aba_mensal", "aba_mensal", self.aba_mensal_model, self.aba_mensal_model.dataframe, perfil="Exportar")
         if df.is_empty():
             return
         target = self._save_dialog("Exportar Mensal", "Excel (*.xlsx)")
@@ -3714,7 +4655,7 @@ class MainWindow(QMainWindow):
         self.aplicar_filtros_mov_estoque()
 
     def exportar_aba_anual_excel_metodo(self) -> None:
-        df = self._dataframe_colunas_visiveis(self.aba_anual_table, self.aba_anual_model)
+        df = self._dataframe_colunas_perfil("aba_anual", "aba_anual", self.aba_anual_model, self.aba_anual_model.dataframe, perfil="Exportar")
         if df.is_empty(): return
         target = self._save_dialog(f"Exportar Anual", "Excel (*.xlsx)")
         if not target: return
@@ -3726,32 +4667,61 @@ class MainWindow(QMainWindow):
     def exportar_aba_anual_excel(self) -> None:
         self.exportar_aba_anual_excel_metodo()
 
+    def exportar_mov_estoque_excel(self) -> None:
+        if self.mov_estoque_model.dataframe.is_empty():
+            QMessageBox.information(self, "Exportacao", "Nao ha dados filtrados na mov_estoque para exportar.")
+            return
+        target = self._save_dialog("Exportar Movimentacao de Estoque", "Excel (*.xlsx)")
+        if not target:
+            return
+        try:
+            df_to_export = self._dataframe_colunas_visiveis(
+                self.mov_estoque_table,
+                self.mov_estoque_model,
+                self.mov_estoque_model.dataframe,
+            )
+            self.export_service.export_excel(target, df_to_export, sheet_name="Mov_Estoque")
+            # self.show_info("Exportacao concluida", f"Arquivo gerado em:\n{target}") # Export service shows its own message/bar maybe? I'll add one just in case 
+        except Exception as e:
+            self.show_error("Erro de exportacao", str(e))
+
     def atualizar_aba_nfe_entrada(self) -> None:
         self._atualizar_estado_botao_nfe_entrada()
         cnpj = self.state.current_cnpj
         if not cnpj:
             self.nfe_entrada_model.set_dataframe(pl.DataFrame())
             self._nfe_entrada_df = pl.DataFrame()
-            self.lbl_nfe_entrada_status.setText("Selecione um CPF/CNPJ para carregar as NFes de entrada.")
+            self.lbl_nfe_entrada_status.setText("Selecione um CPF/CNPJ para carregar as NFes/NFCes de entrada.")
             return
 
-        path = CNPJ_ROOT / cnpj / "arquivos_parquet" / f"nfe_agr_{cnpj}.parquet"
-        if not path.exists():
+        path_nfe = CNPJ_ROOT / cnpj / "arquivos_parquet" / f"nfe_agr_{cnpj}.parquet"
+        path_nfce = CNPJ_ROOT / cnpj / "arquivos_parquet" / f"nfce_agr_{cnpj}.parquet"
+        if not path_nfe.exists() and not path_nfce.exists():
             self.nfe_entrada_model.set_dataframe(pl.DataFrame())
             self._nfe_entrada_df = pl.DataFrame()
             base_nfe = CNPJ_ROOT / cnpj / "arquivos_parquet" / f"nfe_{cnpj}.parquet"
-            if base_nfe.exists():
-                self.lbl_nfe_entrada_status.setText("Arquivo 'nfe_agr' ainda nao foi gerado. Clique em Extrair para preparar a tabela.")
+            base_nfce = CNPJ_ROOT / cnpj / "arquivos_parquet" / f"nfce_{cnpj}.parquet"
+            if base_nfe.exists() or base_nfce.exists():
+                self.lbl_nfe_entrada_status.setText("Arquivos 'nfe_agr'/'nfce_agr' ainda nao foram gerados. Clique em Extrair para preparar a tabela.")
             else:
-                self.lbl_nfe_entrada_status.setText("Arquivo 'nfe_agr' nao encontrado para este CPF/CNPJ.")
+                self.lbl_nfe_entrada_status.setText("Arquivos 'nfe_agr'/'nfce_agr' nao encontrados para este CPF/CNPJ.")
             return
 
         try:
             from transformacao.co_sefin import inferir_co_sefin_dataframe
             from transformacao.co_sefin_class import enriquecer_co_sefin_class
 
-            df_nfe = pl.read_parquet(path)
-            self._nfe_entrada_file_path = path
+            df_partes: list[pl.DataFrame] = []
+            if path_nfe.exists():
+                df_partes.append(
+                    pl.read_parquet(path_nfe).with_columns(pl.lit("NFe").alias("fonte_documento"))
+                )
+            if path_nfce.exists():
+                df_partes.append(
+                    pl.read_parquet(path_nfce).with_columns(pl.lit("NFCe").alias("fonte_documento"))
+                )
+            df_nfe = pl.concat(df_partes, how="diagonal_relaxed") if df_partes else pl.DataFrame()
+            self._nfe_entrada_file_path = path_nfe if path_nfe.exists() else path_nfce
 
             if "tipo_operacao" in df_nfe.columns:
                 df_nfe = df_nfe.filter(
@@ -3763,8 +4733,12 @@ class MainWindow(QMainWindow):
             if df_nfe.is_empty():
                 self._nfe_entrada_df = pl.DataFrame()
                 self.nfe_entrada_model.set_dataframe(pl.DataFrame())
-                self.lbl_nfe_entrada_status.setText("Nenhuma NFe de entrada foi encontrada.")
+                self.lbl_nfe_entrada_status.setText("Nenhuma NFe/NFCe de entrada foi encontrada.")
                 return
+
+            for col in ["dhemi", "dhsaient", "prod_cest"]:
+                if col not in df_nfe.columns:
+                    df_nfe = df_nfe.with_columns(pl.lit(None).alias(col))
 
             df_nfe = df_nfe.with_columns(
                 [
@@ -3799,6 +4773,7 @@ class MainWindow(QMainWindow):
             colunas = list(df_enriquecido.columns)
             prioridade = [
                 "data_classificacao",
+                "fonte_documento",
                 "tipo_operacao",
                 "nnf",
                 "prod_nitem",
@@ -3883,7 +4858,7 @@ class MainWindow(QMainWindow):
                     self.nfe_entrada_model.dataframe.columns,
                     self._obter_colunas_preset_perfil("auditoria", self.nfe_entrada_model.dataframe.columns, "nfe_entrada"),
                 )
-            self.lbl_nfe_entrada_status.setText(f"Exibindo {df_filtrado.height:,} de {self._nfe_entrada_df.height:,} itens de NFe de entrada.")
+            self.lbl_nfe_entrada_status.setText(f"Exibindo {df_filtrado.height:,} de {self._nfe_entrada_df.height:,} itens de NFe/NFCe de entrada.")
             periodo = ""
             if data_ini is not None or data_fim is not None:
                 periodo = f"{data_ini.toString('dd/MM/yyyy') if data_ini is not None else '...'} ate {data_fim.toString('dd/MM/yyyy') if data_fim is not None else '...'}"
@@ -3914,7 +4889,7 @@ class MainWindow(QMainWindow):
         self.aplicar_filtros_nfe_entrada()
 
     def exportar_nfe_entrada_excel(self) -> None:
-        df = self._dataframe_colunas_visiveis(self.nfe_entrada_table, self.nfe_entrada_model)
+        df = self._dataframe_colunas_perfil("nfe_entrada", "nfe_entrada", self.nfe_entrada_model, self.nfe_entrada_model.dataframe, perfil="Exportar")
         if df.is_empty():
             self.show_info("Exportacao", "Nao ha dados de NFe Entrada para exportar.")
             return
@@ -4018,7 +4993,7 @@ class MainWindow(QMainWindow):
         self.aplicar_filtros_id_agrupados()
 
     def exportar_id_agrupados_excel(self) -> None:
-        df = self._dataframe_colunas_visiveis(self.id_agrupados_table, self.id_agrupados_model)
+        df = self._dataframe_colunas_perfil("id_agrupados", "id_agrupados", self.id_agrupados_model, self.id_agrupados_model.dataframe, perfil="Exportar")
         if df.is_empty():
             self.show_info("Exportacao", "Nao ha dados de id_agrupados para exportar.")
             return
@@ -4026,7 +5001,24 @@ class MainWindow(QMainWindow):
         if not target:
             return
         try:
-            self.export_service.export_excel(target, df, sheet_name="id_agrupados")
+            wb = Workbook()
+            ws_id_agrupados = wb.active
+            ws_id_agrupados.title = "id_agrupados"
+            self._escrever_planilha_openpyxl(ws_id_agrupados, df)
+
+            df_produtos_sel = self._dataframe_colunas_visiveis(
+                self.produtos_sel_table,
+                self.produtos_selecionados_model,
+            )
+            if not df_produtos_sel.is_empty():
+                self._escrever_planilha_openpyxl(
+                    wb.create_sheet("produtos_selecionados"),
+                    df_produtos_sel,
+                )
+
+            target.parent.mkdir(parents=True, exist_ok=True)
+            wb.save(target)
+            self.show_info("Exportacao concluida", f"Arquivo gerado em:\n{target}")
         except Exception as e:
             self.show_error("Erro de exportacao", str(e))
 
@@ -4361,6 +5353,10 @@ class MainWindow(QMainWindow):
         fonte_padrao = OpenPyxlFont(name="Arial", size=8)
         fonte_header = OpenPyxlFont(name="Arial", size=8, bold=True)
         formato_num = "#,##0.00"
+        formato_inteiro = "#,##0"
+        formato_ano = "0"
+        formato_data = "dd/mm/yyyy"
+        formato_data_hora = "dd/mm/yyyy hh:mm:ss"
 
         ws.append(list(df.columns))
         for cell in ws[1]:
@@ -4368,11 +5364,11 @@ class MainWindow(QMainWindow):
 
         for row in df.iter_rows():
             linha_excel = []
-            for valor in row:
+            for coluna, valor in zip(df.columns, row):
                 if isinstance(valor, (int, float)) and not isinstance(valor, bool):
                     linha_excel.append(valor)
                 else:
-                    linha_excel.append(display_cell(valor))
+                    linha_excel.append(display_cell(valor, coluna))
             ws.append(linha_excel)
 
         for row in ws.iter_rows():
@@ -4381,34 +5377,28 @@ class MainWindow(QMainWindow):
                     cell.font = fonte_header
                 else:
                     cell.font = fonte_padrao
-                if isinstance(cell.value, (int, float)) and not isinstance(cell.value, bool):
-                    cell.number_format = formato_num
+                if cell.row == 1:
+                    continue
+                nome_coluna = str(ws.cell(row=1, column=cell.column).value or "")
+                if is_year_column_name(nome_coluna) and isinstance(cell.value, (int, float)) and not isinstance(cell.value, bool):
+                    cell.number_format = formato_ano
+                elif isinstance(cell.value, (int, float)) and not isinstance(cell.value, bool):
+                    if float(cell.value).is_integer():
+                        cell.number_format = formato_inteiro
+                    else:
+                        cell.number_format = formato_num
+                elif hasattr(cell.value, "hour"):
+                    cell.number_format = formato_data_hora
+                elif hasattr(cell.value, "day") and hasattr(cell.value, "month"):
+                    cell.number_format = formato_data
 
         ws.freeze_panes = "A2"
         if ws.max_row >= 1 and ws.max_column >= 1:
             ws.auto_filter.ref = ws.dimensions
 
-    def _montar_valores_consolidados_produtos_selecionados(self, ids: list[str]) -> pl.DataFrame:
-        resumo = self._filtrar_dataframe_por_ids(self._produtos_selecionados_df, ids)
-        mensal = self._filtrar_dataframe_por_ids(self._produtos_selecionados_mensal_df, ids)
-        anual = self._filtrar_dataframe_por_ids(self._produtos_selecionados_anual_df, ids)
-
-        if resumo.is_empty():
-            return pl.DataFrame(
-                schema={
-                    "Ano/Mes": pl.Utf8,
-                    "ICMS_entr_desacob": pl.Float64,
-                    "ICMS_saidas_desac": pl.Float64,
-                    "ICMS_estoque_desac": pl.Float64,
-                    "Total": pl.Float64,
-                }
-            )
-
-        anos_base: list[int] = []
-        ano_ini, ano_fim = self._intervalo_anos_produtos_selecionados()
-        if ano_ini is not None and ano_fim is not None:
-            anos_base = list(range(int(ano_ini), int(ano_fim) + 1))
-        else:
+    def _gerar_resumo_global(self, mensal: pl.DataFrame, anual: pl.DataFrame, anos_base: list[int] | None = None) -> pl.DataFrame:
+        if anos_base is None:
+            anos_base = []
             for df in (mensal, anual):
                 if not df.is_empty() and "ano" in df.columns:
                     anos_base.extend(
@@ -4515,10 +5505,82 @@ class MainWindow(QMainWindow):
             nulls_last=True,
         )
 
+    def atualizar_aba_resumo_global(self) -> None:
+        if self._aba_mensal_df.is_empty() and self._aba_anual_df.is_empty():
+            self.resumo_global_model.set_dataframe(pl.DataFrame())
+            self._resumo_global_df = pl.DataFrame()
+            self.lbl_resumo_global_status.setText("Aguarde a aba mensal e a aba anual estarem processadas.")
+            return
+
+        try:
+            resumo = self._gerar_resumo_global(self._aba_mensal_df, self._aba_anual_df)
+            self._resumo_global_df = resumo
+            self.resumo_global_model.set_dataframe(resumo)
+            self.lbl_resumo_global_status.setText(f"Resumo global calculado com base em {resumo.height} competencias.")
+        except Exception as e:
+            self.show_error("Erro de consoliacao", f"Erro ao calcular Resumo Global: {e}")
+
+    def exportar_resumo_global_excel(self) -> None:
+        if self._resumo_global_df is None or self._resumo_global_df.is_empty():
+            QMessageBox.information(self, "Exportacao", "Nao ha dados globais para exportar.")
+            return
+        target = self._save_dialog("Exportar Resumo Global", "Excel (*.xlsx)")
+        if not target:
+            return
+        try:
+            df_to_export = self._dataframe_colunas_perfil(
+                "resumo_global",
+                "resumo_global",
+                self.resumo_global_model,
+                self._resumo_global_df,
+                perfil="Exportar"
+            )
+            wb = Workbook()
+            ws = wb.active
+            ws.title = "Resumo Global"
+            self._escrever_planilha_openpyxl(ws, df_to_export)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            wb.save(target)
+            self.show_info("Exportacao concluida", f"Arquivo gerado em:\n{target}")
+        except Exception as e:
+            self.show_error("Erro de exportacao", str(e))
+
+    def _montar_valores_consolidados_produtos_selecionados(self, ids: list[str]) -> pl.DataFrame:
+        resumo = self._filtrar_dataframe_por_ids(self._produtos_selecionados_df, ids)
+        mensal = self._filtrar_dataframe_por_ids(self._produtos_selecionados_mensal_df, ids)
+        anual = self._filtrar_dataframe_por_ids(self._produtos_selecionados_anual_df, ids)
+
+        if resumo.is_empty():
+            return pl.DataFrame(
+                schema={
+                    "Ano/Mes": pl.Utf8,
+                    "ICMS_entr_desacob": pl.Float64,
+                    "ICMS_saidas_desac": pl.Float64,
+                    "ICMS_estoque_desac": pl.Float64,
+                    "Total": pl.Float64,
+                }
+            )
+
+        anos_base: list[int] = []
+        ano_ini, ano_fim = self._intervalo_anos_produtos_selecionados()
+        if ano_ini is not None and ano_fim is not None:
+            anos_base = list(range(int(ano_ini), int(ano_fim) + 1))
+        else:
+            anos_base = None
+
+        return self._gerar_resumo_global(mensal, anual, anos_base)
+
     def exportar_produtos_selecionados_excel(self) -> None:
         if self._produtos_selecionados_df.is_empty():
             QMessageBox.information(self, "Exportacao", "Nao ha dados consolidados para exportar.")
             return
+            
+        from interface_grafica.ui.dialogs import DialogoExportacaoEstoque
+        dlg = DialogoExportacaoEstoque(self)
+        if not dlg.exec():
+            return
+        dt_ini, dt_fim = dlg.obter_datas()
+        
         target = self._save_dialog("Exportar mov_estoque, mensal e anual", "Excel (*.xlsx)")
         if not target:
             return
@@ -4527,36 +5589,51 @@ class MainWindow(QMainWindow):
             if not ids:
                 QMessageBox.information(self, "Exportacao", "Marque pelo menos um id_agregado em Produtos selecionados.")
                 return
+                
+            df_mensal_export = self._filtrar_dataframe_produtos_selecionados_por_data(self._produtos_selecionados_mensal_df, dt_ini, dt_fim, "mensal")
+            df_anual_export = self._filtrar_dataframe_produtos_selecionados_por_data(self._produtos_selecionados_anual_df, dt_ini, dt_fim, "anual")
+            df_mov_export = self._filtrar_dataframe_produtos_selecionados_por_data(self._produtos_selecionados_mov_df, dt_ini, dt_fim, "mov_estoque")
+
             mensal = self._dataframe_colunas_perfil(
                 "aba_mensal",
                 "aba_mensal",
                 self.aba_mensal_model,
-                self._filtrar_dataframe_por_ids(self._produtos_selecionados_mensal_df, ids),
+                self._filtrar_dataframe_por_ids(df_mensal_export, ids),
                 perfil="Exportar",
             )
             anual = self._dataframe_colunas_perfil(
                 "aba_anual",
                 "aba_anual",
                 self.aba_anual_model,
-                self._filtrar_dataframe_por_ids(self._produtos_selecionados_anual_df, ids),
+                self._filtrar_dataframe_por_ids(df_anual_export, ids),
                 perfil="Exportar",
             )
             mov = self._dataframe_colunas_perfil(
                 "mov_estoque",
                 "mov_estoque",
                 self.mov_estoque_model,
-                self._filtrar_dataframe_por_ids(self._produtos_selecionados_mov_df, ids),
+                self._filtrar_dataframe_por_ids(df_mov_export, ids),
                 perfil="Exportar",
             )
             valores_consolidados = self._montar_valores_consolidados_produtos_selecionados(ids)
 
+            produtos_selecionados_tabela = self._dataframe_colunas_perfil(
+                "produtos_selecionados",
+                "produtos_selecionados",
+                self.produtos_selecionados_model,
+                self._filtrar_dataframe_por_ids(self._produtos_selecionados_df, ids),
+                perfil="Exportar"
+            )
+
             wb = Workbook()
-            ws_mov = wb.active
-            ws_mov.title = "Mov_Estoque"
-            self._escrever_planilha_openpyxl(ws_mov, mov)
+            ws_produtos = wb.active
+            ws_produtos.title = "Produtos_Selecionados"
+            self._escrever_planilha_openpyxl(ws_produtos, produtos_selecionados_tabela)
+
+            self._escrever_planilha_openpyxl(wb.create_sheet("Mov_Estoque"), mov)
             self._escrever_planilha_openpyxl(wb.create_sheet("Mensal"), mensal)
             self._escrever_planilha_openpyxl(wb.create_sheet("Anual"), anual)
-            self._escrever_planilha_openpyxl(wb.create_sheet("valores_consolidados"), valores_consolidados)
+            self._escrever_planilha_openpyxl(wb.create_sheet("ICMS_devido"), valores_consolidados)
             target.parent.mkdir(parents=True, exist_ok=True)
             wb.save(target)
             self.show_info("Exportacao concluida", f"Arquivo gerado em:\n{target}")
@@ -4983,6 +6060,8 @@ class MainWindow(QMainWindow):
             self._aggregation_file_path = target
             self._aggregation_filters = []
             self._aggregation_results_filters = []
+            self._aggregation_relational_mode = None
+            self._aggregation_results_relational_mode = None
             self._load_aggregation_table()
             self.recarregar_historico_agregacao(self.state.current_cnpj)
         except Exception as exc:
@@ -4996,15 +6075,88 @@ class MainWindow(QMainWindow):
 
     def _desfazer_agregacao(self) -> None:
         self.aggregation_table_model.clear_checked()
+        self.results_table_model.clear_checked()
         self.status.showMessage("Selecao de agregacao limpa.")
 
+    def _obter_ids_agrupados_para_reversao(self) -> list[str]:
+        rows = self.results_table_model.get_checked_rows()
+        if not rows:
+            selecao = self.results_table.selectionModel()
+            if selecao is not None:
+                df = self.results_table_model.get_dataframe()
+                rows = [
+                    df.row(index.row(), named=True)
+                    for index in selecao.selectedRows()
+                    if 0 <= index.row() < df.height
+                ]
+
+        ids: list[str] = []
+        vistos: set[str] = set()
+        for row in rows:
+            valor = str(row.get("id_agrupado") or "").strip()
+            if not valor or valor in vistos:
+                continue
+            vistos.add(valor)
+            ids.append(valor)
+        return ids
+
+    def reverter_agregacao(self) -> None:
+        if not self.state.current_cnpj:
+            self.show_error("CNPJ nao selecionado", "Selecione um CNPJ antes de reverter agrupamentos.")
+            return
+
+        ids_reversao = self._obter_ids_agrupados_para_reversao()
+        if not ids_reversao:
+            self.show_error(
+                "Selecao insuficiente",
+                "Marque ou selecione na tabela inferior o agrupamento que deve ser revertido.",
+            )
+            return
+
+        mensagem = (
+            "Isso vai restaurar os grupos de origem do(s) agrupamento(s) selecionado(s):\n"
+            + "\n".join(ids_reversao)
+            + "\n\nProsseguir?"
+        )
+        if QMessageBox.question(self, "Reverter agrupamento", mensagem) != QMessageBox.StandardButton.Yes:
+            return
+
+        try:
+            resultados = [
+                self.servico_agregacao.reverter_agrupamento(self.state.current_cnpj, id_agrupado)
+                for id_agrupado in ids_reversao
+            ]
+            self.atualizar_tabelas_agregacao()
+            self.recarregar_historico_agregacao(self.state.current_cnpj)
+            self.atualizar_aba_id_agrupados()
+            self.refresh_logs()
+
+            total_restaurado = sum(int(item.get("qtd_grupos_restaurados", 0)) for item in resultados)
+            self.show_info(
+                "Agrupamento revertido",
+                f"Foram restaurados {total_restaurado} grupos a partir de {len(ids_reversao)} agrupamento(s).",
+            )
+        except Exception as exc:
+            self.show_error("Erro ao reverter agrupamento", str(exc))
+
     def _load_aggregation_table(self) -> None:
+        cnpj = self.state.current_cnpj
+        if not cnpj:
+            return
         if self._aggregation_file_path is None:
             return
+        self._aggregation_file_path = self.servico_agregacao.carregar_tabela_editavel(cnpj)
         df = self.parquet_service.load_dataset(self._aggregation_file_path, self._aggregation_filters or [])
+        df = self._aplicar_modo_relacional_agregacao_df(df, self._aggregation_relational_mode)
         self.aggregation_table_model.set_dataframe(df)
         self._resize_table_once(self.aggregation_table_view, "agregacao_top")
-        self._aplicar_preferencias_tabela("agregacao_top", self.aggregation_table, self.aggregation_table_model)
+        if not self._aplicar_preferencias_tabela("agregacao_top", self.aggregation_table, self.aggregation_table_model):
+            self._aplicar_perfil_agregacao(
+                "agregacao_top",
+                self.aggregation_table,
+                self.aggregation_table_model,
+                self.top_profile.currentText(),
+            )
 
     def execute_aggregation(self) -> None:
         if not self.state.current_cnpj:
@@ -5056,26 +6208,25 @@ class MainWindow(QMainWindow):
             )
         except Exception as e:
             import traceback
-            traceback.print_exc()
-            self.show_error("Erro na agregacao", f"Ocorreu um erro ao agregar: {e}")
+            from utilitarios.perf_monitor import registrar_evento_performance
+            registrar_evento_performance("main_window.agregacao_erro", contexto={"erro": str(e), "traceback": traceback.format_exc()}, status="error")
+            self.show_error("Erro na agregacao", "Ocorreu um erro interno ao agregar. Consulte os logs internos para mais detalhes.")
             
             # Clear checks and reload top table
             self.aggregation_table_model.clear_checked()
             self.results_table_model.clear_checked()
             self.open_editable_aggregation_table()
-        except Exception as exc:
-            self.show_error("Falha na agregacao", str(exc))
 
     def apply_quick_filters(self) -> None:
         idx = self.tabs.currentIndex()
-        if idx == 0: # Consulta
+        if idx == 1: # Consulta
             fields = {
                 "descricao_normalizada": self.qf_norm.text().strip(),
                 "descricao": self.qf_desc.text().strip(),
                 "ncm_padrao": self.qf_ncm.text().strip(),
                 "cest_padrao": self.qf_cest.text().strip(),
             }
-        elif idx == 2: # Agregacao (Index 2 is "Agregacao", Index 1 is "SQL")
+        elif idx == 3: # Agregacao (Index 3 is "Agregacao", Index 2 is "SQL")
             fields = {
                 "descricao_normalizada": self.aqf_norm.text().strip(),
                 "descricao": self.aqf_desc.text().strip(),
@@ -5111,6 +6262,8 @@ class MainWindow(QMainWindow):
             "descricao": [
                 "descricao",
                 "lista_descricoes",
+                "lista_desc_compl",
+                "lista_itens_agrupados",
                 "descr",
                 "descr_padrao",
                 "descricao_final",
@@ -5124,13 +6277,13 @@ class MainWindow(QMainWindow):
 
         # Na aba de Agregacao, o filtro rapido deve ser deterministico:
         # substitui totalmente os filtros anteriores para evitar "filtros ocultos".
-        if idx == 2:
+        if idx == 3:
             new_filters = []
         else:
             new_filters = [f for f in (self.state.filters or []) if f.column not in quick_target_cols]
         
         available_columns = self.state.all_columns or []
-        if idx == 2 and self._aggregation_file_path is not None:
+        if idx == 3 and self._aggregation_file_path is not None:
             try:
                 available_columns = self.parquet_service.get_schema(self._aggregation_file_path)
             except Exception:
@@ -5164,7 +6317,7 @@ class MainWindow(QMainWindow):
                 for termo in termos:
                     new_filters.append(FilterCondition(column=actual_col, operator="contem", value=termo))
         
-        if idx == 2:
+        if idx == 3:
             self._aggregation_filters = new_filters
             self._load_aggregation_table()
         else:
@@ -5178,7 +6331,7 @@ class MainWindow(QMainWindow):
         self.log_view.setPlainText("\n".join(logs))
 
     def apply_aggregation_results_filters(self) -> None:
-        if self.tabs.currentIndex() != 2:
+        if self.tabs.currentIndex() != 3:
             return
 
         fields = {
@@ -5210,6 +6363,8 @@ class MainWindow(QMainWindow):
             "descricao": [
                 "descricao",
                 "lista_descricoes",
+                "lista_desc_compl",
+                "lista_itens_agrupados",
                 "descr",
                 "descr_padrao",
                 "descricao_final",
@@ -5285,48 +6440,9 @@ class MainWindow(QMainWindow):
                 return normalizadas[chave]
         return None
 
-    def _aplicar_filtro_relacional_agregacao(self, destino: str, include_gtin: bool) -> None:
-        if self.tabs.currentIndex() != 2:
-            return
-
-        if destino == "top":
-            table = self.aggregation_table
-            model = self.aggregation_table_model
-            row = self._obter_linha_selecionada_tabela(table, model)
-            if not row:
-                self.show_error("Selecao necessaria", "Selecione uma linha da tabela superior para aplicar o filtro.")
-                return
-
-            df_atual = model.get_dataframe()
-            available_columns = list(df_atual.columns)
-            self.aqf_ncm.setText(str(row.get("ncm_padrao") or ""))
-            self.aqf_cest.setText(str(row.get("cest_padrao") or ""))
-            self.aqf_norm.clear()
-            self.aqf_desc.clear()
-            self._aggregation_filters = []
-        else:
-            table = self.results_table
-            model = self.results_table_model
-            row = self._obter_linha_selecionada_tabela(table, model)
-            if not row:
-                self.show_error("Selecao necessaria", "Selecione uma linha da tabela inferior para aplicar o filtro.")
-                return
-
-            cnpj = self.state.current_cnpj
-            if not cnpj:
-                self.show_error("CNPJ nao selecionado", "Selecione um CNPJ antes de aplicar o filtro.")
-                return
-
-            path = self.servico_agregacao.caminho_tabela_agregadas(cnpj)
-            try:
-                available_columns = self.parquet_service.get_schema(path) if path.exists() else list(model.get_dataframe().columns)
-            except Exception:
-                available_columns = list(model.get_dataframe().columns)
-            self.bqf_ncm.setText(str(row.get("ncm_padrao") or ""))
-            self.bqf_cest.setText(str(row.get("cest_padrao") or ""))
-            self.bqf_norm.clear()
-            self.bqf_desc.clear()
-            self._aggregation_results_filters = []
+    def _aplicar_modo_relacional_agregacao_df(self, df: pl.DataFrame, modo: str | None) -> pl.DataFrame:
+        if df.is_empty() or not modo:
+            return df
 
         aliases_map = {
             "ncm": ["ncm_padrao", "NCM_padrao", "lista_ncm", "ncm_final", "ncm"],
@@ -5334,51 +6450,89 @@ class MainWindow(QMainWindow):
             "gtin": ["gtin_padrao", "GTIN_padrao", "gtin", "cod_barra", "cod_barras"],
         }
 
-        filtros: list[FilterCondition] = []
-        ncm = str(row.get("ncm_padrao") or "").strip()
-        cest = str(row.get("cest_padrao") or "").strip()
-        gtin = str(row.get("gtin_padrao") or "").strip()
-
-        if not ncm or not cest:
-            self.show_error("Dados insuficientes", "A linha selecionada nao possui NCM e CEST preenchidos.")
-            return
-
+        available_columns = list(df.columns)
         col_ncm = self._resolver_coluna_agregacao(aliases_map["ncm"], available_columns)
         col_cest = self._resolver_coluna_agregacao(aliases_map["cest"], available_columns)
         if not col_ncm or not col_cest:
-            self.show_error("Colunas nao encontradas", "Nao foi possivel localizar as colunas de NCM/CEST na tabela.")
-            return
+            return df
 
-        filtros.append(FilterCondition(column=col_ncm, operator="igual", value=ncm))
-        filtros.append(FilterCondition(column=col_cest, operator="igual", value=cest))
-
-        if include_gtin:
-            if not gtin:
-                self.show_error("GTIN ausente", "A linha selecionada nao possui GTIN preenchido.")
-                return
+        chaves: list[tuple[str, str]] = [("ncm", col_ncm), ("cest", col_cest)]
+        if modo == "ncm_cest_gtin":
             col_gtin = self._resolver_coluna_agregacao(aliases_map["gtin"], available_columns)
             if not col_gtin:
-                self.show_error("Coluna nao encontrada", "Nao foi possivel localizar a coluna de GTIN na tabela.")
-                return
-            filtros.append(FilterCondition(column=col_gtin, operator="igual", value=gtin))
+                return df.head(0)
+            chaves.append(("gtin", col_gtin))
+
+        temporarias = [f"__rel_{nome}" for nome, _col in chaves]
+        df_rel = df.with_row_index("__row_pos").with_columns(
+            [
+                pl.col(col)
+                .cast(pl.Utf8, strict=False)
+                .fill_null("")
+                .str.strip_chars()
+                .alias(f"__rel_{nome}")
+                for nome, col in chaves
+            ]
+        )
+
+        for coluna_tmp in temporarias:
+            df_rel = df_rel.filter(pl.col(coluna_tmp) != "")
+
+        if df_rel.is_empty():
+            return df.head(0)
+
+        df_repetidos = (
+            df_rel
+            .group_by(temporarias)
+            .agg(pl.len().alias("__match_count"))
+            .filter(pl.col("__match_count") >= 2)
+        )
+
+        if df_repetidos.is_empty():
+            return df.head(0)
+
+        return (
+            df_rel
+            .join(df_repetidos, on=temporarias, how="inner")
+            .sort("__row_pos")
+            .drop(["__row_pos", "__match_count", *temporarias], strict=False)
+        )
+
+    def _aplicar_filtro_relacional_agregacao(self, destino: str, include_gtin: bool) -> None:
+        if self.tabs.currentIndex() != 3:
+            return
+
+        modo = "ncm_cest_gtin" if include_gtin else "ncm_cest"
 
         if destino == "top":
-            self._aggregation_filters = filtros
+            if self._aggregation_file_path is None:
+                self.show_error("Tabela indisponivel", "Abra a tabela de agregacao antes de aplicar o filtro.")
+                return
+            self._aggregation_relational_mode = modo
             self._load_aggregation_table()
         else:
-            self._aggregation_results_filters = filtros
-            self.recarregar_historico_agregacao(self.state.current_cnpj or "")
+            cnpj = self.state.current_cnpj
+            if not cnpj:
+                self.show_error("CNPJ nao selecionado", "Selecione um CNPJ antes de aplicar o filtro.")
+                return
+            self._aggregation_results_relational_mode = modo
+            self.recarregar_historico_agregacao(cnpj)
+
+        rotulo = "NCM+CEST+GTIN iguais" if include_gtin else "NCM+CEST iguais"
+        self.status.showMessage(f"Filtro relacional ativo: {rotulo}.")
 
     def clear_top_aggregation_filters(self) -> None:
         for widget in [self.aqf_norm, self.aqf_desc, self.aqf_ncm, self.aqf_cest]:
             widget.clear()
         self._aggregation_filters = []
+        self._aggregation_relational_mode = None
         self._load_aggregation_table()
 
     def clear_bottom_aggregation_filters(self) -> None:
         for widget in [self.bqf_norm, self.bqf_desc, self.bqf_ncm, self.bqf_cest]:
             widget.clear()
         self._aggregation_results_filters = []
+        self._aggregation_results_relational_mode = None
         cnpj = self.state.current_cnpj or ""
         self.recarregar_historico_agregacao(cnpj)
 
@@ -5492,8 +6646,7 @@ class MainWindow(QMainWindow):
         # Salvar as alteracoes matematicas
         if self._conversion_file_path:
             (
-                self._conversion_df_full
-                .drop(["__row_id__", "preco_medio_ref", "fator_calculado"], strict=False)
+                self._preparar_dataframe_para_salvar_conversao(self._conversion_df_full)
                 .write_parquet(self._conversion_file_path)
             )
             
@@ -5598,61 +6751,208 @@ class MainWindow(QMainWindow):
 
         return df_enriquecido
 
-    def _enriquecer_descricoes_conversao(self, cnpj: str, df: pl.DataFrame) -> pl.DataFrame:
-        if df.is_empty() or "id_agrupado" not in df.columns:
-            return df
+    def _montar_descricoes_exibicao_por_grupo(self, df_descricoes: pl.DataFrame) -> pl.DataFrame:
+        """
+        Normaliza a lista exibida na aba de conversao sem alterar a
+        fonte canonica persistida em parquet.
+        """
+        if df_descricoes.is_empty() or not {"id_agrupado", "descricao_item"}.issubset(set(df_descricoes.columns)):
+            return pl.DataFrame()
 
-        arq_prod_final = CNPJ_ROOT / cnpj / "analises" / "produtos" / f"produtos_final_{cnpj}.parquet"
-        if not arq_prod_final.exists():
-            return df
-
-        try:
-            df_prod = pl.read_parquet(arq_prod_final).select(
+        return (
+            df_descricoes
+            .select(
                 [
                     pl.col("id_agrupado").cast(pl.Utf8, strict=False),
-                    pl.col("descricao").cast(pl.Utf8, strict=False),
-                    pl.col("descricao_final").cast(pl.Utf8, strict=False),
-                    pl.col("lista_desc_compl").cast(pl.List(pl.Utf8), strict=False),
+                    pl.col("descricao_item").cast(pl.Utf8, strict=False),
                 ]
             )
-        except Exception:
-            return df
-
-        if df_prod.is_empty():
-            return df
-
-        df_descricoes_base = (
-            pl.concat(
-                [
-                    df_prod.select(["id_agrupado", pl.col("descricao").alias("descricao_item")]),
-                    df_prod.select(["id_agrupado", pl.col("descricao_final").alias("descricao_item")]),
-                    df_prod.select(["id_agrupado", pl.col("lista_desc_compl").alias("descricao_item")]).explode("descricao_item"),
-                ],
-                how="vertical_relaxed",
-            )
             .with_columns(
-                pl.col("descricao_item").cast(pl.Utf8, strict=False).fill_null("").str.strip_chars().alias("descricao_item")
+                pl.col("descricao_item").fill_null("").str.strip_chars().alias("descricao_item")
             )
             .filter(pl.col("descricao_item") != "")
             .unique(subset=["id_agrupado", "descricao_item"])
             .sort(["id_agrupado", "descricao_item"], nulls_last=True)
             .group_by("id_agrupado")
-            .agg(pl.col("descricao_item").alias("lista_descricoes_produto"))
+            .agg(pl.col("descricao_item").alias("__lista_descricoes"))
             .with_columns(
-                pl.col("lista_descricoes_produto").list.join(" | ").alias("lista_descricoes_produto")
+                pl.col("__lista_descricoes").list.join(" | ").alias("lista_descricoes_produto")
             )
+            .select(["id_agrupado", "lista_descricoes_produto"])
         )
 
-        df_out = (
-            df.drop(["lista_descricoes_produto"], strict=False)
-            .join(df_descricoes_base, on="id_agrupado", how="left")
-            .with_columns(
-                pl.col("lista_descricoes_produto")
-                .cast(pl.Utf8, strict=False)
-                .fill_null("")
-                .alias("lista_descricoes_produto")
+    def _carregar_descr_padrao_canonico_conversao(self, cnpj: str) -> pl.DataFrame:
+        """
+        Garante que a aba use o descr_padrao atual do agrupamento.
+        """
+        arquivos_canonicos = [
+            CNPJ_ROOT / cnpj / "analises" / "produtos" / f"produtos_agrupados_{cnpj}.parquet",
+            CNPJ_ROOT / cnpj / "analises" / "produtos" / f"id_agrupados_{cnpj}.parquet",
+            CNPJ_ROOT / cnpj / "analises" / "produtos" / f"produtos_final_{cnpj}.parquet",
+        ]
+
+        for caminho in arquivos_canonicos:
+            if not caminho.exists():
+                continue
+            try:
+                df_origem = self._carregar_dataset_ui(caminho, columns=["id_agrupado", "descr_padrao"])
+            except Exception:
+                continue
+
+            if df_origem.is_empty() or not {"id_agrupado", "descr_padrao"}.issubset(set(df_origem.columns)):
+                continue
+
+            return (
+                df_origem
+                .select(
+                    [
+                        pl.col("id_agrupado").cast(pl.Utf8, strict=False),
+                        pl.col("descr_padrao").cast(pl.Utf8, strict=False).fill_null("").str.strip_chars().alias("descr_padrao_canonico"),
+                    ]
+                )
+                .filter(pl.col("descr_padrao_canonico") != "")
+                .unique(subset=["id_agrupado"], keep="first")
             )
+
+        return pl.DataFrame()
+
+    def _carregar_descricoes_canonicas_conversao(self, cnpj: str) -> pl.DataFrame:
+        """
+        Prefere a lista consolidada do ETL; so recorre ao fallback via
+        produtos_final quando o schema antigo ainda nao foi regenerado.
+        """
+        arquivos_canonicos = [
+            CNPJ_ROOT / cnpj / "analises" / "produtos" / f"produtos_agrupados_{cnpj}.parquet",
+            CNPJ_ROOT / cnpj / "analises" / "produtos" / f"id_agrupados_{cnpj}.parquet",
+        ]
+
+        for caminho in arquivos_canonicos:
+            if not caminho.exists():
+                continue
+            try:
+                df_origem = self._carregar_dataset_ui(caminho, columns=["id_agrupado", "lista_descricoes"])
+            except Exception:
+                continue
+
+            if df_origem.is_empty() or not {"id_agrupado", "lista_descricoes"}.issubset(set(df_origem.columns)):
+                continue
+
+            df_descricoes = self._montar_descricoes_exibicao_por_grupo(
+                df_origem
+                .select(
+                    [
+                        pl.col("id_agrupado").cast(pl.Utf8, strict=False),
+                        pl.col("lista_descricoes").cast(pl.List(pl.Utf8), strict=False).alias("descricao_item"),
+                    ]
+                )
+                .explode("descricao_item")
+            )
+            if not df_descricoes.is_empty():
+                return df_descricoes
+
+        return pl.DataFrame()
+
+    def _reconstruir_descricoes_conversao_via_produtos_final(self, cnpj: str) -> pl.DataFrame:
+        """Fallback legado para CNPJs ainda nao regenerados."""
+        arq_prod_final = CNPJ_ROOT / cnpj / "analises" / "produtos" / f"produtos_final_{cnpj}.parquet"
+        if not arq_prod_final.exists():
+            return pl.DataFrame()
+
+        try:
+            df_prod = self._carregar_dataset_ui(
+                arq_prod_final,
+                columns=["id_agrupado", "descricao", "descricao_final", "lista_desc_compl"],
+            )
+        except Exception:
+            return pl.DataFrame()
+
+        if df_prod.is_empty() or "id_agrupado" not in df_prod.columns:
+            return pl.DataFrame()
+
+        partes_descricoes: list[pl.DataFrame] = []
+        if "descricao" in df_prod.columns:
+            partes_descricoes.append(
+                df_prod.select(
+                    [
+                        pl.col("id_agrupado").cast(pl.Utf8, strict=False),
+                        pl.col("descricao").cast(pl.Utf8, strict=False).alias("descricao_item"),
+                    ]
+                )
+            )
+        if "descricao_final" in df_prod.columns:
+            partes_descricoes.append(
+                df_prod.select(
+                    [
+                        pl.col("id_agrupado").cast(pl.Utf8, strict=False),
+                        pl.col("descricao_final").cast(pl.Utf8, strict=False).alias("descricao_item"),
+                    ]
+                )
+            )
+        if "lista_desc_compl" in df_prod.columns:
+            partes_descricoes.append(
+                df_prod.select(
+                    [
+                        pl.col("id_agrupado").cast(pl.Utf8, strict=False),
+                        pl.col("lista_desc_compl").cast(pl.List(pl.Utf8), strict=False).alias("descricao_item"),
+                    ]
+                ).explode("descricao_item")
+            )
+
+        if not partes_descricoes:
+            return pl.DataFrame()
+
+        return self._montar_descricoes_exibicao_por_grupo(
+            pl.concat(partes_descricoes, how="vertical_relaxed")
         )
+
+    def _preparar_dataframe_para_salvar_conversao(self, df: pl.DataFrame) -> pl.DataFrame:
+        """
+        Remove colunas derivadas da UI antes de persistir fatores_conversao.
+        """
+        return df.drop(
+            [
+                "__row_id__",
+                "preco_medio_ref",
+                "fator_calculado",
+                "lista_descricoes_produto",
+                "descr_padrao_canonico",
+            ],
+            strict=False,
+        )
+
+    def _enriquecer_descricoes_conversao(self, cnpj: str, df: pl.DataFrame) -> pl.DataFrame:
+        if df.is_empty() or "id_agrupado" not in df.columns:
+            return df
+
+        df_descr_padrao = self._carregar_descr_padrao_canonico_conversao(cnpj)
+        df_descricoes_base = self._carregar_descricoes_canonicas_conversao(cnpj)
+        if df_descricoes_base.is_empty():
+            df_descricoes_base = self._reconstruir_descricoes_conversao_via_produtos_final(cnpj)
+        if df_descricoes_base.is_empty() and df_descr_padrao.is_empty():
+            return df
+
+        df_out = df.drop(["lista_descricoes_produto", "descr_padrao_canonico"], strict=False)
+        if not df_descr_padrao.is_empty():
+            df_out = (
+                df_out
+                .join(df_descr_padrao, on="id_agrupado", how="left")
+                .with_columns(
+                    pl.coalesce([pl.col("descr_padrao_canonico"), pl.col("descr_padrao")]).alias("descr_padrao")
+                )
+            )
+        if not df_descricoes_base.is_empty():
+            df_out = (
+                df_out
+                .join(df_descricoes_base, on="id_agrupado", how="left")
+                .with_columns(
+                    pl.col("lista_descricoes_produto")
+                    .cast(pl.Utf8, strict=False)
+                    .fill_null("")
+                    .alias("lista_descricoes_produto")
+                )
+            )
+        else:
+            df_out = df_out.with_columns(pl.lit("").alias("lista_descricoes_produto"))
 
         colunas = list(df_out.columns)
         if "descr_padrao" in colunas and "lista_descricoes_produto" in colunas:
@@ -5680,7 +6980,7 @@ class MainWindow(QMainWindow):
             return
 
         try:
-            df = pl.read_parquet(arq_conversao)
+            df = self._carregar_dataset_ui(arq_conversao)
             if "fator_manual" not in df.columns:
                 df = df.with_columns(pl.lit(False).alias("fator_manual"))
             if "unid_ref_manual" not in df.columns:
@@ -5829,8 +7129,7 @@ class MainWindow(QMainWindow):
         self._conversion_df_full = self._enriquecer_dataframe_conversao(self._conversion_df_full)
 
         (
-            self._conversion_df_full
-            .drop(["__row_id__", "preco_medio_ref", "fator_calculado"], strict=False)
+            self._preparar_dataframe_para_salvar_conversao(self._conversion_df_full)
             .write_parquet(self._conversion_file_path)
         )
         self.status.showMessage("Fator e/ou unidade de referencia atualizados e salvos.")
@@ -5979,14 +7278,21 @@ class MainWindow(QMainWindow):
     def recarregar_historico_agregacao(self, cnpj: str) -> None:
         """Carrega a tabela de descricoes agregadas no painel inferior."""
         try:
-            path = self.servico_agregacao.caminho_tabela_agregadas(cnpj)
+            path = self.servico_agregacao.carregar_tabela_editavel(cnpj)
             if path.exists():
                 df_agregadas = self.parquet_service.load_dataset(path, self._aggregation_results_filters or [])
+                df_agregadas = self._aplicar_modo_relacional_agregacao_df(df_agregadas, self._aggregation_results_relational_mode)
             else:
                 df_agregadas = pl.DataFrame()
             self.results_table_model.set_dataframe(df_agregadas)
             self._resize_table_once(self.results_table_view, "agregacao_bottom")
-            self._aplicar_preferencias_tabela("agregacao_bottom", self.results_table, self.results_table_model)
+            if not self._aplicar_preferencias_tabela("agregacao_bottom", self.results_table, self.results_table_model):
+                self._aplicar_perfil_agregacao(
+                    "agregacao_bottom",
+                    self.results_table,
+                    self.results_table_model,
+                    self.bottom_profile.currentText(),
+                )
         except Exception:
             self.results_table_model.set_dataframe(pl.DataFrame())
 
@@ -5994,7 +7300,7 @@ class MainWindow(QMainWindow):
         """Atualiza os modelos das tabelas de agregacao."""
         cnpj = self.state.current_cnpj
         if not cnpj: return
-        self._aggregation_file_path = self.servico_agregacao.caminho_tabela_editavel(cnpj)
+        self._aggregation_file_path = self.servico_agregacao.carregar_tabela_editavel(cnpj)
         if self._aggregation_file_path.exists():
             self._load_aggregation_table()
             
@@ -6011,7 +7317,7 @@ class MainWindow(QMainWindow):
         self.sql_combo.clear()
         self.sql_combo.addItem("- Selecione uma consulta -")
         for info in self._sql_files:
-            self.sql_combo.addItem(f"{info.display_name}  [{info.source_dir}]", str(info.path))
+            self.sql_combo.addItem(f"{info.display_name}  [{info.source_dir}]", info.sql_id)
         self.sql_combo.blockSignals(False)
 
     def _on_sql_selected(self, index: int) -> None:
@@ -6025,7 +7331,7 @@ class MainWindow(QMainWindow):
         if not path_str:
             return
         try:
-            sql_text = self.sql_service.read_sql(Path(path_str))
+            sql_text = self.sql_service.read_sql(path_str)
         except Exception as exc:
             self.show_error("Erro ao ler SQL", str(exc))
             return

@@ -11,7 +11,6 @@ Salva:
 from __future__ import annotations
 
 import re
-import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from time import perf_counter
@@ -19,16 +18,12 @@ from typing import Any, Callable
 
 import polars as pl
 
-ROOT_DIR = Path(r"c:\funcoes - Copia")
-SRC_DIR = ROOT_DIR / "src"
-SQL_DIR = ROOT_DIR / "sql"
-DADOS_DIR = ROOT_DIR / "dados"
-CNPJ_ROOT = DADOS_DIR / "CNPJ"
+from extracao.extracao_oracle_eficiente import descobrir_consultas_sql, executar_extracao_oracle
+from interface_grafica.config import CNPJ_ROOT, SQL_DIR
 
+from utilitarios.sql_catalog import list_sql_entries
 
-from utilitarios.conectar_oracle import obter_conexao_oracle
 from utilitarios.extrair_parametros import extrair_parametros_sql
-from utilitarios.ler_sql import ler_sql
 
 
 @dataclass
@@ -144,17 +139,20 @@ TABELAS_DISPONIVEIS: list[dict[str, str]] = [
 class ServicoExtracao:
     """Executa consultas SQL Oracle e salva os resultados como Parquet."""
 
-    def __init__(self, consultas_dir: Path = SQL_DIR, cnpj_root: Path = CNPJ_ROOT):
-        self.consultas_dir = consultas_dir
+    def __init__(self, consultas_dir: Path | list[Path] | None = None, cnpj_root: Path = CNPJ_ROOT):
+        if consultas_dir is None:
+            candidatos = [SQL_DIR]
+        elif isinstance(consultas_dir, list):
+            candidatos = [Path(item) for item in consultas_dir]
+        else:
+            candidatos = [Path(consultas_dir)]
+
+        self.consultas_dirs = [diretorio for idx, diretorio in enumerate(candidatos) if diretorio not in candidatos[:idx]]
+        self.consultas_dir = self.consultas_dirs[0] if self.consultas_dirs else SQL_DIR
         self.cnpj_root = cnpj_root
 
-    def listar_consultas(self) -> list[Path]:
-        if not self.consultas_dir.exists():
-            return []
-        return sorted(
-            [p for p in self.consultas_dir.iterdir() if p.is_file() and p.suffix.lower() == ".sql"],
-            key=lambda p: p.name.lower(),
-        )
+    def listar_consultas(self) -> list[str]:
+        return [entry.sql_id for entry in list_sql_entries()]
 
     def pasta_cnpj(self, cnpj: str) -> Path:
         return self.cnpj_root / cnpj
@@ -232,7 +230,7 @@ class ServicoExtracao:
     def executar_consultas(
         self,
         cnpj: str,
-        consultas: list[Path],
+        consultas: list[str | Path],
         data_limite: str | None = None,
         progresso: Callable[[str], None] | None = None,
     ) -> list[str]:
@@ -451,7 +449,7 @@ class ServicoPipelineCompleto:
     def executar_completo(
         self,
         cnpj: str,
-        consultas: list[Path],
+        consultas: list[str | Path],
         tabelas: list[str],
         data_limite: str | None = None,
         progresso: Callable[[str], None] | None = None,
