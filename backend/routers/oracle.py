@@ -123,6 +123,11 @@ def testar_conexao(req: TestarConexaoRequest):
             return {"ok": False, "message": "Preencha host, serviço, usuário e senha.", "tempo_ms": 0}
 
         porta = int(req.port) if req.port.isdigit() else 1521
+
+        ALLOWED_PORTS = {1521, 1522, 1523, 1524, 1525, 1526, 1527, 1528, 1529, 1530}
+        if porta not in ALLOWED_PORTS:
+            return {"ok": False, "message": f"Porta {porta} não permitida por segurança. Apenas portas Oracle padrão são aceitas.", "tempo_ms": 0}
+
         dsn = oracledb.makedsn(req.host, porta, service_name=req.service)
         conn = oracledb.connect(
             user=req.user,
