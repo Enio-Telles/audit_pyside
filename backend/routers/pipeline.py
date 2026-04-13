@@ -211,7 +211,7 @@ def _run_pipeline(
                 item_atual=_pipeline_status[cnpj].get("item_atual"),
             )
     except Exception as exc:
-        logger.error("Erro interno durante execução do pipeline para CNPJ %s", cnpj, exc_info=exc)
+        logger.exception("Erro interno durante execução do pipeline para CNPJ %s", cnpj)
         atual = _pipeline_status.get(cnpj, _criar_status("error", total_etapas=total_etapas))
         _pipeline_status[cnpj] = _criar_status(
             "error",
