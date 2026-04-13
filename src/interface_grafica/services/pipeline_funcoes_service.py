@@ -242,20 +242,76 @@ class ServicoExtracao:
         pasta = self.pasta_parquets(cnpj)
         arquivos: list[str] = []
 
-        resultados = executar_extracao_oracle(
-            cnpj_input=cnpj,
-            data_limite_input=data_limite,
-            consultas_selecionadas=consultas,
-            pasta_saida_base=pasta,
-            diretorios_sql=self.consultas_dirs,
-            max_workers=1,
-            progresso=_msg,
-        )
-        arquivos.extend(
-            str(resultado.arquivo_saida)
-            for resultado in resultados
-            if resultado.ok and resultado.arquivo_saida is not None
-        )
+        _msg("Conectando ao Oracle...")
+        with obter_conexao_oracle() as conn:
+            for sql_path in consultas:
+                nome_consulta = sql_path.stem.lower()
+                _msg(f"Executando {sql_path.name}...")
+
+                sql_text = ler_sql(sql_path)
+                if sql_text is None:
+                    _msg(f"Aviso: nao foi possivel ler {sql_path.name}")
+                    continue
+
+                valores = {
+                    "CNPJ": cnpj,
+                    "cnpj": cnpj,
+                    "data_limite_processamento": data_limite,
+                    "DATA_LIMITE_PROCESSAMENTO": data_limite,
+                }
+                binds = self.montar_binds(sql_text, valores)
+
+                try:
+                    with conn.cursor() as cursor:
+                        cursor.arraysize = 50_000
+                        cursor.prefetchrows = 50_000
+                        cursor.execute(sql_text, binds)
+                        colunas = [desc[0].lower() for desc in cursor.description]
+                        todas_linhas: list[tuple] = []
+                        while True:
+                            lote = cursor.fetchmany(50_000)
+                            if not lote:
+                                break
+                            todas_linhas.extend(lote)
+                            _msg(f"  {sql_path.name}: {len(todas_linhas):,} linhas lidas...")
+
+                    if todas_linhas:
+                        try:
+                            # Otimizacao Bolt: criar DataFrame diretamente de tuplas
+                            df = pl.DataFrame(
+                                todas_linhas,
+                                schema=colunas,
+                                orient="row",
+                                infer_schema_length=min(len(todas_linhas), 50_000),
+                            )
+                        except Exception as exc:
+                            _msg(
+                                f"  Aviso: falha na inferencia automatica ({exc}). Tentando modo robusto..."
+                            )
+                            dados_colunas = {
+                                col_name: [row[i] for row in todas_linhas]
+                                for i, col_name in enumerate(colunas)
+                            }
+                            try:
+                                df = pl.DataFrame(dados_colunas)
+                            except Exception:
+                                dados_string = {
+                                    col_name: [
+                                        str(row[i]) if row[i] is not None else None
+                                        for row in todas_linhas
+                                    ]
+                                    for i, col_name in enumerate(colunas)
+                                }
+                                df = pl.DataFrame(dados_string)
+                    else:
+                        df = pl.DataFrame({col: [] for col in colunas})
+
+                    arquivo_saida = pasta / f"{nome_consulta}_{cnpj}.parquet"
+                    df.write_parquet(arquivo_saida, compression="snappy")
+                    arquivos.append(str(arquivo_saida))
+                    _msg(f"OK {sql_path.name}: {df.height:,} linhas -> {arquivo_saida.name}")
+                except Exception as exc:
+                    _msg(f"Erro em {sql_path.name}: {exc}")
 
         return arquivos
 

@@ -1095,92 +1095,75 @@ class ServicoAgregacao:
             .alias("descricao_normalizada")
         )
 
-        registros = []
-        for row in df_agrup.iter_rows(named=True):
-            chaves = row.get("lista_chave_produto", []) or []
+        # Optimized: Pre-calculate normalized descriptions for df_base
+        df_base = df_base.with_columns(
+            pl.col("descricao")
+            .map_elements(self._normalizar_descricao_para_match, return_dtype=pl.String)
+            .alias("descricao_normalizada")
+        )
 
-            # Optimization: compute df_prod_sel once to avoid redundant O(N) full-table
-            # scans inside the loop. Previously df_prod was filtered three times per group.
-            # pl.lit(False) yields an empty DataFrame with the same schema as df_prod.
-            df_prod_sel = df_prod.filter(pl.col("chave_item").is_in(chaves)) if chaves else df_prod.filter(pl.lit(False))
+        # Optimized: Vectorized calculation of lists and fallback descriptions
+        df_prod_exp = df_prod.select(["chave_item", "descricao", "descricao_normalizada", "lista_co_sefin", "lista_unid"])
 
-            desc_norm = df_prod_sel["descricao_normalizada"].to_list() if chaves else []
+        df_agrup_exp = df_agrup.select(["id_agrupado", "lista_chave_produto"]).explode("lista_chave_produto").rename({"lista_chave_produto": "chave_item"})
+        df_joined = df_agrup_exp.join(df_prod_exp, on="chave_item", how="left")
 
-            # Optimization: Compute df_prod_sel once to avoid redundant O(N) filters inside the loop
-            df_prod_sel = df_prod.filter(pl.col("chave_item").is_in(chaves)) if chaves else df_prod.filter(pl.lit(False))
+        # lista_co_sefin and co_sefin_agr
+        df_co_sefin = (
+            df_joined.explode("lista_co_sefin")
+            .drop_nulls("lista_co_sefin")
+            .with_columns(pl.col("lista_co_sefin").cast(pl.String).alias("co"))
+            .group_by("id_agrupado")
+            .agg([
+                pl.col("co").unique().sort().alias("lista_co_sefin"),
+                pl.col("co").unique().sort().list.join(", ").alias("co_sefin_agr")
+            ])
+            .with_columns(pl.col("lista_co_sefin").list.len().gt(1).alias("co_sefin_divergentes"))
+        )
 
-            desc_norm = df_prod_sel["descricao_normalizada"].to_list() if chaves else []
+        # lista_unidades
+        df_unid = (
+            df_joined.explode("lista_unid")
+            .drop_nulls("lista_unid")
+            .with_columns(pl.col("lista_unid").cast(pl.String).alias("u"))
+            .group_by("id_agrupado")
+            .agg(pl.col("u").unique().sort().alias("lista_unidades"))
+        )
 
-            df_base_filtered = (
-                df_base_norm.filter(pl.col("descricao_normalizada").is_in(desc_norm))
-                .drop("descricao_normalizada")
+        # descr_fallback (first non-empty description)
+        df_fallback = (
+            df_joined.filter(
+                pl.col("descricao").cast(pl.Utf8, strict=False).fill_null("").str.strip_chars() != ""
             )
+            .group_by("id_agrupado")
+            .agg(pl.col("descricao").first().alias("descr_fallback"))
+        )
+
+        # Mapping for df_base filtering
+        df_mapping = df_joined.select(["id_agrupado", "descricao_normalizada"]).unique().drop_nulls()
+        df_base_mapped = df_base.join(df_mapping, on="descricao_normalizada")
+
+        # Partition df_base by group for efficient access
+        dict_base_parts = df_base_mapped.partition_by("id_agrupado", as_dict=True)
+
+        # Optimized: Indexed dictionaries for O(1) lookups
+        dict_co_sefin = {row["id_agrupado"]: row for row in df_co_sefin.to_dicts()}
+        dict_unid = {row["id_agrupado"]: row for row in df_unid.to_dicts()}
+        dict_fallback = {row["id_agrupado"]: row["descr_fallback"] for row in df_fallback.to_dicts()}
+
+        registros = []
+        for row in df_agrup.to_dicts():
+            id_grp = row["id_agrupado"]
+
+            # Use pre-filtered DataFrame from dictionary
+            df_base_filtered = dict_base_parts.get((id_grp,)) or df_base.filter(pl.lit(False))
+
             padrao = calcular_atributos_padrao(df_base_filtered)
 
-            # Pass the already-filtered df_prod_sel to avoid another full-table scan.
-            descr_fallback = self._primeira_descricao_por_chaves(df_prod_sel, chaves)
-
-            lista_co_sefin = (
-                df_prod_sel
-                .explode("lista_co_sefin")
-                .drop_nulls("lista_co_sefin")
-                .select(pl.col("lista_co_sefin").cast(pl.String).alias("co"))
-                .unique()
-                .sort("co")
-                .get_column("co")
-                .to_list()
-            )
-
-            lista_unidades = (
-                df_prod_sel
-                .explode("lista_unid")
-                .drop_nulls("lista_unid")
-                .select(pl.col("lista_unid").cast(pl.String).alias("u"))
-                .unique()
-                .sort("u")
-                .get_column("u")
-                .to_list()
-            )
-            lista_fontes: list[str] = []
-            if "fontes" in df_base_filtered.columns:
-                lista_fontes = (
-                    df_base_filtered
-                    .explode("fontes")
-                    .drop_nulls("fontes")
-                    .select(pl.col("fontes").cast(pl.Utf8, strict=False).str.strip_chars().alias("fonte"))
-                    .filter(pl.col("fonte") != "")
-                    .unique()
-                    .sort("fonte")
-                    .get_column("fonte")
-                    .to_list()
-                )
-            if not lista_fontes and "fonte" in df_base_filtered.columns:
-                lista_fontes = (
-                    df_base_filtered
-                    .select(
-                        pl.when(pl.col("fonte").is_not_null())
-                        .then(pl.col("fonte").cast(pl.Utf8, strict=False).str.strip_chars())
-                        .otherwise(pl.lit(""))
-                        .alias("fonte")
-                    )
-                    .filter(pl.col("fonte") != "")
-                    .unique()
-                    .sort("fonte")
-                    .get_column("fonte")
-                    .to_list()
-                )
-            if not lista_fontes and "fontes" in df_prod_sel.columns:
-                lista_fontes = (
-                    df_prod_sel
-                    .explode("fontes")
-                    .drop_nulls("fontes")
-                    .select(pl.col("fontes").cast(pl.Utf8, strict=False).str.strip_chars().alias("fonte"))
-                    .filter(pl.col("fonte") != "")
-                    .unique()
-                    .sort("fonte")
-                    .get_column("fonte")
-                    .to_list()
-                )
+            # Retrieve pre-calculated vectorized values using O(1) dictionary lookups
+            co_info = dict_co_sefin.get(id_grp, {})
+            unid_info = dict_unid.get(id_grp, {})
+            descr_fallback = dict_fallback.get(id_grp)
 
             row["descr_padrao"] = padrao.get("descr_padrao") or row.get("descr_padrao") or descr_fallback
             row["ncm_padrao"] = padrao.get("ncm_padrao")
@@ -1192,11 +1175,12 @@ class ServicoAgregacao:
             row["lista_descricoes"] = self._coletar_lista_coluna(df_prod_sel, "descricao") or self._coletar_lista_coluna(df_base_filtered, "descricao")
             row["lista_desc_compl"] = self._coletar_lista_coluna(df_prod_sel, "lista_desc_compl")
             row["co_sefin_padrao"] = padrao.get("co_sefin_padrao")
-            row["co_sefin_agr"] = ", ".join(sorted([str(s) for s in lista_co_sefin]))
-            row["lista_co_sefin"] = lista_co_sefin
-            row["lista_unidades"] = lista_unidades
-            row["co_sefin_divergentes"] = len(lista_co_sefin) > 1
-            row["fontes"] = lista_fontes
+
+            row["lista_co_sefin"] = co_info.get("lista_co_sefin", [])
+            row["co_sefin_agr"] = co_info.get("co_sefin_agr", "")
+            row["co_sefin_divergentes"] = co_info.get("co_sefin_divergentes", False)
+            row["lista_unidades"] = unid_info.get("lista_unidades", [])
+
             registros.append(row)
 
         df_novo = pl.DataFrame(registros, schema=df_agrup.schema)
@@ -1293,84 +1277,40 @@ class ServicoAgregacao:
                 .unique(subset=["id_agrupado", "descricao_normalizada"])
             )
 
-            df_base_agregado = (
-                df_base
-                .with_columns(
-                    [
-                        self._expr_normalizar_descricao("descricao")
-                        .alias("descricao_normalizada"),
-                        pl.col("compras").cast(pl.Float64, strict=False).fill_null(0.0).alias("compras"),
-                        pl.col("qtd_compras").cast(pl.Float64, strict=False).fill_null(0.0).alias("qtd_compras"),
-                        pl.col("vendas").cast(pl.Float64, strict=False).fill_null(0.0).alias("vendas"),
-                        pl.col("qtd_vendas").cast(pl.Float64, strict=False).fill_null(0.0).alias("qtd_vendas"),
-                    ]
-                )
-                .group_by("descricao_normalizada")
-                .agg(
-                    [
-                        pl.col("compras").sum().alias("total_compras"),
-                        pl.col("qtd_compras").sum().alias("qtd_compras_total"),
-                        pl.col("vendas").sum().alias("total_vendas"),
-                        pl.col("qtd_vendas").sum().alias("qtd_vendas_total"),
-                    ]
-                )
+        # Optimized: Vectorized calculation of totals
+        if "lista_chave_produto" in df_agrup.columns:
+            df_mapping = (
+                df_agrup.select(["id_agrupado", "lista_chave_produto"])
+                .explode("lista_chave_produto")
+                .rename({"lista_chave_produto": "chave_item"})
+                .join(df_prod.select(["chave_item", "descricao_normalizada"]), on="chave_item")
+                .select(["id_agrupado", "descricao_normalizada"])
+                .unique()
             )
 
-            df_metricas = (
-                df_desc_por_grupo
-                .join(df_base_agregado, on="descricao_normalizada", how="left")
-                .with_columns(
-                    [
-                        pl.col("total_compras").fill_null(0.0),
-                        pl.col("qtd_compras_total").fill_null(0.0),
-                        pl.col("total_vendas").fill_null(0.0),
-                        pl.col("qtd_vendas_total").fill_null(0.0),
-                    ]
-                )
+            df_totais = (
+                df_base.select(["descricao_normalizada", "compras", "vendas"])
+                .join(df_mapping, on="descricao_normalizada")
                 .group_by("id_agrupado")
-                .agg(
-                    [
-                        pl.col("total_compras").sum().alias("total_compras"),
-                        pl.col("qtd_compras_total").sum().alias("qtd_compras_total"),
-                        pl.col("total_vendas").sum().alias("total_vendas"),
-                        pl.col("qtd_vendas_total").sum().alias("qtd_vendas_total"),
-                    ]
-                )
-                .with_columns(
-                    [
-                        pl.when(pl.col("qtd_compras_total") > 0)
-                        .then(pl.col("total_compras") / pl.col("qtd_compras_total"))
-                        .otherwise(None)
-                        .alias("preco_medio_compra"),
-                        pl.when(pl.col("qtd_vendas_total") > 0)
-                        .then(pl.col("total_vendas") / pl.col("qtd_vendas_total"))
-                        .otherwise(None)
-                        .alias("preco_medio_venda"),
-                        pl.col("total_compras").alias("total_entradas"),
-                        pl.col("total_vendas").alias("total_saidas"),
-                        (pl.col("total_compras") + pl.col("total_vendas")).alias("total_movimentacao"),
-                    ]
-                )
+                .agg([
+                    pl.col("compras").fill_null(0).sum().alias("total_compras"),
+                    pl.col("vendas").fill_null(0).sum().alias("total_vendas")
+                ])
             )
 
-        df_agrup = (
-            df_agrup
-            .drop(colunas_metricas, strict=False)
-            .join(df_metricas, on="id_agrupado", how="left")
-            .with_columns(
-                [
-                    pl.col("total_compras").cast(pl.Float64, strict=False).fill_null(0.0),
-                    pl.col("qtd_compras_total").cast(pl.Float64, strict=False).fill_null(0.0),
-                    pl.col("total_vendas").cast(pl.Float64, strict=False).fill_null(0.0),
-                    pl.col("qtd_vendas_total").cast(pl.Float64, strict=False).fill_null(0.0),
-                    pl.col("preco_medio_compra").cast(pl.Float64, strict=False),
-                    pl.col("preco_medio_venda").cast(pl.Float64, strict=False),
-                    pl.col("total_entradas").cast(pl.Float64, strict=False).fill_null(0.0),
-                    pl.col("total_saidas").cast(pl.Float64, strict=False).fill_null(0.0),
-                    pl.col("total_movimentacao").cast(pl.Float64, strict=False).fill_null(0.0),
-                ]
-            )
-        )
+            cols_to_drop = [c for c in ["total_compras", "total_vendas"] if c in df_agrup.columns]
+            if cols_to_drop:
+                df_agrup = df_agrup.drop(cols_to_drop)
+
+            df_agrup = df_agrup.join(df_totais, on="id_agrupado", how="left").with_columns([
+                pl.col("total_compras").fill_null(0.0),
+                pl.col("total_vendas").fill_null(0.0)
+            ])
+        else:
+            if "total_compras" not in df_agrup.columns:
+                df_agrup = df_agrup.with_columns(pl.lit(0.0).alias("total_compras"))
+            if "total_vendas" not in df_agrup.columns:
+                df_agrup = df_agrup.with_columns(pl.lit(0.0).alias("total_vendas"))
 
         df_agrup.drop("lista_chave_produto", strict=False).write_parquet(path_agrup)
         contexto_base = {"cnpj": cnpj, "fluxo": "recalcular_valores_totais"}

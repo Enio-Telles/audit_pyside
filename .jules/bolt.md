@@ -1,3 +1,3 @@
-## 2024-03-31 - [Optimization using partition_by]
-**Learning:** Polars `filter` with `map_elements` or `is_in` inside a Python loop scaling over thousands of product groups leads to O(N*M) complexity and severely degraded performance due to redundant evaluation.
-**Action:** Always pre-calculate expensive transformations (e.g. string manipulation with `map_elements` or `str.to_uppercase()`) outside the loop, and use `df.partition_by('column', as_dict=True)` to convert the DataFrame into an O(1) dictionary indexed by the grouping key. Then, fetch partitioned chunks inside the loop via `dict.get()`, drastically reducing time complexity.
+## 2024-05-18 - Avoid List Comprehension with Polars Initialization
+**Learning:** Initializing a Polars DataFrame by mapping a list of DB tuples into a list of dictionaries via a python list comprehension (e.g. `[dict(zip(cols, row)) for row in rows]`) is extremely slow and acts as a massive bottleneck for data ingestion.
+**Action:** Always create a `pl.DataFrame` directly from the raw list of tuples using the `orient="row"` argument. It bypasses python dictionary creation entirely and runs an order of magnitude faster.
