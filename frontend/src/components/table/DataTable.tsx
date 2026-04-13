@@ -180,14 +180,21 @@ export function DataTable({
 
   const effectiveRows = useMemo(() => {
     if (onColumnFilterChange) return rows;
-    const hasFilters = Object.values(effectiveColFilters).some((v) => v !== "");
-    if (!hasFilters) return rows;
+
+    // ⚡ Bolt Optimization: Hoist active filters and .toLowerCase() outside the row iteration loop.
+    // This avoids repeatedly allocating strings and running filter checks per row per column,
+    // improving filtering performance on large datasets.
+    const activeFilters = Object.entries(effectiveColFilters)
+      .filter(([, val]) => val !== "")
+      .map(([col, val]) => ({ col, valLower: val.toLowerCase() }));
+
+    if (activeFilters.length === 0) return rows;
+
     return rows.filter((row) =>
-      Object.entries(effectiveColFilters).every(([col, val]) => {
-        if (!val) return true;
+      activeFilters.every(({ col, valLower }) => {
         return String(row[col] ?? "")
           .toLowerCase()
-          .includes(val.toLowerCase());
+          .includes(valLower);
       }),
     );
   }, [rows, effectiveColFilters, onColumnFilterChange]);

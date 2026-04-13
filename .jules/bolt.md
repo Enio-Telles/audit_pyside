@@ -1,3 +1,3 @@
-## 2025-02-24 - [Avoid Redundant Polars DataFrame Conversions]
-**Learning:** `executar_sql` fetched rows, converted them to a Polars DataFrame with inferred schema, and immediately dumped them back to Python dicts via `.to_dicts()`. This bypasses Polars' vectorization capabilities entirely, creating pure O(N) overhead for no benefit.
-**Action:** When SQL results are only needed as Python dictionaries (e.g., for JSON APIs or UI models), construct and return the `[dict(zip(columns, row)) for row in rows]` directly. Only create a Polars DataFrame if vectorized operations will be performed on it.
+## 2024-05-18 - Avoid List Comprehension with Polars Initialization
+**Learning:** Initializing a Polars DataFrame by mapping a list of DB tuples into a list of dictionaries via a python list comprehension (e.g. `[dict(zip(cols, row)) for row in rows]`) is extremely slow and acts as a massive bottleneck for data ingestion.
+**Action:** Always create a `pl.DataFrame` directly from the raw list of tuples using the `orient="row"` argument. It bypasses python dictionary creation entirely and runs an order of magnitude faster.
