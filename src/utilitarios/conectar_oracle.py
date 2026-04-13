@@ -4,6 +4,7 @@ Usa credenciais do arquivo .env
 Implementa Context Manager para evitar vazamentos de recursos.
 """
 import os
+import logging
 import socket
 import oracledb
 from pathlib import Path
