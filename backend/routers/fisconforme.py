@@ -462,8 +462,8 @@ def testar_conexao():
         conn.close()
         return {"ok": True, "message": "Conexão estabelecida com sucesso"}
     except Exception as exc:
-        logger.error("Erro ao testar conexao Oracle", exc_info=exc)
-        return {"ok": False, "message": "Falha na conexão. Consulte os logs do servidor."}
+        logger.exception("Erro ao testar conexao Oracle")
+        return {"ok": False, "message": "Falha na conexão com o banco de dados."}
 
 
 @router.get("/config")
