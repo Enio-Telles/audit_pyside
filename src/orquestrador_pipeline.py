@@ -10,9 +10,9 @@ from __future__ import annotations
 
 import re
 import sys
-import traceback
 from pathlib import Path
 from typing import Callable
+from transformacao.auxiliares.logs import log_exception
 
 from rich import print as rprint
 
@@ -114,7 +114,9 @@ def executar_pipeline_completo(
             )
             rprint("[green]Extracao concluida.[/green]")
         except Exception as e:
-            rprint(f"[red]Falha critica na extracao para {cnpj}:[/red] {e}")
+            from transformacao.auxiliares.logs import log_exception
+            log_exception(e)
+            rprint(f"[red]Falha critica na extracao para {cnpj}. Verifique os logs de erro.[/red]")
             return False
 
     if tabelas_selecionadas:
@@ -148,8 +150,8 @@ def executar_pipeline_completo(
                     etapas_executadas.add(tab_id)
                     rprint(f"[green]{tab_id} finalizada.[/green]")
             except Exception as e:
-                rprint(f"[red]Erro inesperado na etapa {tab_id}:[/red] {e}")
-                rprint(f"[dim]{traceback.format_exc()}[/dim]")
+                log_exception(e)
+                rprint(f"[red]Erro inesperado na etapa {tab_id}. Verifique os logs de erro.[/red]")
                 sucesso_global = False
 
     if sucesso_global:
