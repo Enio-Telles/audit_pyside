@@ -1,13 +1,14 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import re
 import sys
 from pathlib import Path
+from utilitarios.project_paths import PROJECT_ROOT
 
 import polars as pl
 from rich import print as rprint
 
-ROOT_DIR = Path(r"c:\funcoes - Copia")
+ROOT_DIR = PROJECT_ROOT
 SRC_DIR = ROOT_DIR / "src"
 DADOS_DIR = ROOT_DIR / "dados"
 CNPJ_ROOT = DADOS_DIR / "CNPJ"
@@ -38,6 +39,12 @@ def gerar_id_agrupados(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
     if df_final.is_empty() or "id_agrupado" not in df_final.columns:
         rprint("[yellow]produtos_final vazio ou sem id_agrupado.[/yellow]")
         return False
+
+    # Intermediate columns used only during aggregation; dropped from the final result.
+    _TMP_AGG_COLS = [
+        "_tmp_desc_padrao", "_tmp_desc_final", "_tmp_desc", "_tmp_desc_compl",
+        "_tmp_codigos", "_tmp_unid", "_tmp_unid_agr", "_tmp_unid_ref",
+    ]
 
     df_id_agrupados = (
         df_final
@@ -86,3 +93,5 @@ if __name__ == "__main__":
         gerar_id_agrupados(sys.argv[1])
     else:
         gerar_id_agrupados(input("CNPJ: "))
+
+

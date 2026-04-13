@@ -1,4 +1,4 @@
-"""
+﻿"""
 mapeamento_fontes.py
 
 Funcoes de mapeamento de dados brutos para o schema padrao de mov_estoque:
@@ -14,25 +14,31 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from utilitarios.project_paths import PROJECT_ROOT
 
 import polars as pl
 from utilitarios.text import remove_accents
 
-ROOT_DIR = Path(r"c:\funcoes - Copia")
+ROOT_DIR = PROJECT_ROOT
 DADOS_DIR = ROOT_DIR / "dados"
 
 
-def _norm(text: str | None) -> str:
-    if text is None:
-        return ""
-    return re.sub(r"\s+", " ", (remove_accents(text) or "").upper().strip())
-
-
 def normalizar_descricao_expr(col: str) -> pl.Expr:
+    # Optimization: Replace .map_elements with native Polars string operations to preserve vectorization
     return (
         pl.col(col)
         .cast(pl.Utf8, strict=False)
-        .map_elements(_norm, return_dtype=pl.String)
+        .fill_null("")
+        .str.to_uppercase()
+        .str.replace_all(r"[ÁÀÂÃÄ]", "A")
+        .str.replace_all(r"[ÉÈÊË]", "E")
+        .str.replace_all(r"[ÍÌÎÏ]", "I")
+        .str.replace_all(r"[ÓÒÔÕÖ]", "O")
+        .str.replace_all(r"[ÚÙÛÜ]", "U")
+        .str.replace_all(r"Ç", "C")
+        .str.replace_all(r"Ñ", "N")
+        .str.strip_chars()
+        .str.replace_all(r"\s+", " ")
         .alias("__descricao_normalizada__")
     )
 
@@ -89,7 +95,7 @@ def parse_expression(expr_str: str, col_alias: str) -> pl.Expr:
     if expr_str == "prod_ceantrib ou caso for nulo -> prod_cean":
         return pl.coalesce(["prod_ceantrib", "prod_cean"]).alias(col_alias)
 
-    # Complex: Valores matemáticos (Vl_item em C170 ou Nfe)
+    # Complex: Valores matemÃ¡ticos (Vl_item em C170 ou Nfe)
     if expr_str == "vl_item-vl_desc":
         return (pl.col("vl_item").cast(pl.Float64) - pl.col("vl_desc").cast(pl.Float64).fill_null(0)).alias(col_alias)
 
@@ -102,8 +108,8 @@ def parse_expression(expr_str: str, col_alias: str) -> pl.Expr:
             pl.col("prod_vdesc").cast(pl.Float64).fill_null(0)
         ).alias(col_alias)
 
-    # Extração via Chave
-    if expr_str == "correspondência com chave NF":
+    # ExtraÃ§Ã£o via Chave
+    if expr_str == "correspondÃªncia com chave NF":
         if col_alias == "mod":
             return pl.col("chv_nfe").str.slice(20, 2).alias(col_alias)
         elif col_alias == "co_uf_emit":
@@ -177,3 +183,5 @@ def carregar_flags_cfop() -> pl.DataFrame:
     if df_cfop_bi.is_empty():
         return df_cfop
     return df_cfop.join(df_cfop_bi, on="Cfop", how="full", coalesce=True)
+
+

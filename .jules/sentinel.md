@@ -1,4 +1,4 @@
-## YYYY-MM-DD - [Prevent Information Exposure Through Error Messages]
-**Vulnerability:** The exception `e` or `exc` was directly cast to string and emitted to the UI or standard output (`rprint`) in `src/interface_grafica/services/query_worker.py` and `src/utilitarios/conectar_oracle.py`.
-**Learning:** Emitting the raw `str(exc)` from `oracledb` could expose internal database schema or connection details (Information Exposure Through an Error Message - CWE-209).
-**Prevention:** Avoid exposing `str(e)` directly to the user or standard output. Always use generic error messages for the UI/stdout and log the actual error internally for debugging.
+## 2024-05-24 - Masking Passwords in Config APIs
+**Vulnerability:** Cleartext passwords from .env file were exposed through /api/oracle/config GET endpoint to pre-fill frontend UI.
+**Learning:** Sending cleartext passwords to frontend configuration UIs creates a major credential exposure risk, even for local tools.
+**Prevention:** Mask passwords with a dummy string (e.g. "********") when serving them to the client, and explicitly ignore this mask string when the frontend submits updates to save, preserving the original password securely on the server.

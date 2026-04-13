@@ -30,7 +30,7 @@ def test_calcular_precos_medios_produtos_final_com_log(tmp_path: Path):
             "qtd_compras": [5.0, 0.0],
             "qtd_vendas": [0.0, 3.0],
         }
-    ).write_parquet(pasta_prod / f"produtos_unidades_{cnpj}.parquet")
+    ).write_parquet(pasta_prod / f"item_unidades_{cnpj}.parquet")
 
     pl.DataFrame(
         {
@@ -46,6 +46,14 @@ def test_calcular_precos_medios_produtos_final_com_log(tmp_path: Path):
             "lista_chave_produto": [["id_produto_1"]],
         }
     ).write_parquet(pasta_prod / f"produtos_agrupados_{cnpj}.parquet")
+
+    pl.DataFrame(
+        {
+            "id_agrupado": ["id_agrupado_1"],
+            "descricao_normalizada": ["PRODUTO A"],
+            "descr_padrao": ["Produto A"],
+        }
+    ).write_parquet(pasta_prod / f"produtos_final_{cnpj}.parquet")
 
     df_precos, df_sem_compra = calcular_precos_medios_produtos_final(cnpj, pasta_cnpj=pasta_cnpj, salvar_logs=True)
 
