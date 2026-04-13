@@ -7,8 +7,3 @@
 **Vulnerability:** Internal Oracle database hostnames, ports, and service names were hardcoded as defaults in the codebase, potentially exposing internal network architecture and making the application less flexible and secure.
 **Learning:** Hardcoding infrastructure details, even as defaults for environment variables, can lead to information disclosure if the source code is accessed.
 **Prevention:** Always enforce the use of environment variables or external configuration files for infrastructure details, and implement strict validation to ensure the application fails fast if they are missing.
-
-## 2025-02-28 - Secure Exception Handling in Oracle Connection Module
-**Vulnerability:** Information Disclosure. Broad exception handlers in `src/utilitarios/conectar_oracle.py` were directly printing raw exception objects (`{e}`) using `rich.print`. This could expose sensitive network topologies, credentials, or backend internal errors to the user or system logs.
-**Learning:** During refactoring, ensure that all instances of a vulnerability type within the file are addressed, including module-level configurations, connection strings, and context-manager cleanup steps (e.g., `finally` blocks). Adding an `except Exception as e` to explicitly handle an error must not involve printing `e` when the goal is to sanitize logs.
-**Prevention:** Use strictly formatted, generic, user-friendly messages for standard output when catching broad exceptions related to database resources.
