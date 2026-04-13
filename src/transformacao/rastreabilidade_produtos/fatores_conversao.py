@@ -1,4 +1,4 @@
-"""
+﻿"""
 fatores_conversao.py
 
 Objetivo: Calcular a relacao entre diferentes unidades de medida do mesmo
@@ -11,11 +11,14 @@ import json
 import re
 import sys
 from pathlib import Path
+from utilitarios.project_paths import PROJECT_ROOT
 
 import polars as pl
 from rich import print as rprint
 
-ROOT_DIR = Path(r"c:\funcoes - Copia")
+from transformacao.movimentacao_estoque_pkg.mapeamento_fontes import normalizar_descricao_expr
+
+ROOT_DIR = PROJECT_ROOT
 SRC_DIR = ROOT_DIR / "src"
 DADOS_DIR = ROOT_DIR / "dados"
 CNPJ_ROOT = DADOS_DIR / "CNPJ"
@@ -26,26 +29,16 @@ try:
     from utilitarios.text import remove_accents
     from utilitarios.validacao_schema import (
         SchemaValidacaoError,
-        validar_parquet_essencial,
+        garantir_colunas_obrigatorias,
     )
 except ImportError as e:
     rprint(f"[red]Erro ao importar modulos utilitarios:[/red] {e}")
     sys.exit(1)
 
 
-def _norm(text: str | None) -> str:
-    if text is None:
-        return ""
-    return re.sub(r"\s+", " ", (remove_accents(text) or "").upper().strip())
-
 
 def _normalizar_descricao_expr(col: str) -> pl.Expr:
-    return (
-        pl.col(col)
-        .cast(pl.Utf8, strict=False)
-        .map_elements(_norm, return_dtype=pl.String)
-        .alias("descricao_normalizada")
-    )
+    return normalizar_descricao_expr(col).alias("descricao_normalizada")
 
 
 def _salvar_log_sem_compra(df_sem_compra: pl.DataFrame, pasta_analises: Path, cnpj: str) -> None:
@@ -74,6 +67,7 @@ def _df_vazio_agrupamento_canonico() -> pl.DataFrame:
             "id_agrupado": pl.Utf8,
             "descr_padrao_canonico": pl.Utf8,
             "lista_descricoes": pl.List(pl.Utf8),
+            "lista_desc_compl": pl.List(pl.Utf8),
         }
     )
 
@@ -98,7 +92,7 @@ def _carregar_base_agrupamento_canonico(path: Path) -> pl.DataFrame:
     if not path.exists():
         return _df_vazio_agrupamento_canonico()
 
-    schema_cols = set(pl.scan_parquet(path).collect_schema().names())
+    schema_cols = set(pl.read_parquet_schema(path).names())
     if "id_agrupado" not in schema_cols:
         return _df_vazio_agrupamento_canonico()
 
@@ -107,12 +101,16 @@ def _carregar_base_agrupamento_canonico(path: Path) -> pl.DataFrame:
         selecionadas.append("descr_padrao")
     if "lista_descricoes" in schema_cols:
         selecionadas.append("lista_descricoes")
+    if "lista_desc_compl" in schema_cols:
+        selecionadas.append("lista_desc_compl")
 
     df = pl.scan_parquet(path).select(selecionadas).collect()
     if "descr_padrao" not in df.columns:
         df = df.with_columns(pl.lit(None, dtype=pl.Utf8).alias("descr_padrao"))
     if "lista_descricoes" not in df.columns:
         df = df.with_columns(pl.lit([]).cast(pl.List(pl.Utf8), strict=False).alias("lista_descricoes"))
+    if "lista_desc_compl" not in df.columns:
+        df = df.with_columns(pl.lit([]).cast(pl.List(pl.Utf8), strict=False).alias("lista_desc_compl"))
 
     return (
         df
@@ -121,6 +119,7 @@ def _carregar_base_agrupamento_canonico(path: Path) -> pl.DataFrame:
                 pl.col("id_agrupado").cast(pl.Utf8, strict=False),
                 pl.col("descr_padrao").cast(pl.Utf8, strict=False).alias("descr_padrao_canonico"),
                 pl.col("lista_descricoes").cast(pl.List(pl.Utf8), strict=False),
+                pl.col("lista_desc_compl").cast(pl.List(pl.Utf8), strict=False),
             ]
         )
         .unique(subset=["id_agrupado"], keep="first")
@@ -151,14 +150,20 @@ def _carregar_agrupamento_canonico(pasta_analises: Path, cnpj: str) -> pl.DataFr
             [
                 pl.col("descr_padrao_canonico").drop_nulls().first().alias("descr_padrao_canonico"),
                 pl.col("lista_descricoes").drop_nulls().alias("__listas_descricoes"),
+                pl.col("lista_desc_compl").drop_nulls().alias("__listas_desc_compl"),
             ]
         )
         .with_columns(
-            pl.col("__listas_descricoes")
-            .map_elements(_primeira_lista_textos_nao_vazia, return_dtype=pl.List(pl.Utf8))
-            .alias("lista_descricoes")
+            [
+                pl.col("__listas_descricoes")
+                .map_elements(_primeira_lista_textos_nao_vazia, return_dtype=pl.List(pl.Utf8))
+                .alias("lista_descricoes"),
+                pl.col("__listas_desc_compl")
+                .map_elements(_primeira_lista_textos_nao_vazia, return_dtype=pl.List(pl.Utf8))
+                .alias("lista_desc_compl"),
+            ]
         )
-        .drop("__listas_descricoes")
+        .drop(["__listas_descricoes", "__listas_desc_compl"])
     )
 
 
@@ -194,16 +199,25 @@ def _construir_mapa_descricoes_canonicas(df_agrupamento_canonico: pl.DataFrame) 
             )
             .explode("descricao_texto")
         )
+    if "lista_desc_compl" in df_agrupamento_canonico.columns:
+        partes.append(
+            df_agrupamento_canonico
+            .select(
+                [
+                    pl.col("id_agrupado").cast(pl.Utf8, strict=False),
+                    pl.col("descr_padrao_canonico").cast(pl.Utf8, strict=False).alias("descr_padrao_destino"),
+                    pl.col("lista_desc_compl").cast(pl.List(pl.Utf8), strict=False).alias("descricao_texto"),
+                ]
+            )
+            .explode("descricao_texto")
+        )
 
     return (
         pl.concat(partes, how="vertical_relaxed")
         .with_columns(
             [
                 pl.col("descricao_texto").cast(pl.Utf8, strict=False).fill_null("").str.strip_chars().alias("descricao_texto"),
-                pl.col("descricao_texto")
-                .cast(pl.Utf8, strict=False)
-                .map_elements(_norm, return_dtype=pl.String)
-                .alias("descricao_normalizada_match"),
+                normalizar_descricao_expr("descricao_texto").alias("descricao_normalizada_match"),
             ]
         )
         .filter(pl.col("descricao_normalizada_match") != "")
@@ -278,6 +292,7 @@ def _reconciliar_fatores_existentes_com_agrupamento_atual(
             pl.col("id_agrupado").cast(pl.Utf8, strict=False),
             pl.col("descr_padrao_canonico").cast(pl.Utf8, strict=False),
             pl.col("lista_descricoes").cast(pl.List(pl.Utf8), strict=False),
+            pl.col("lista_desc_compl").cast(pl.List(pl.Utf8), strict=False),
         ]
     )
     df_mapa_descricoes = _construir_mapa_descricoes_canonicas(df_canonico)
@@ -288,12 +303,8 @@ def _reconciliar_fatores_existentes_com_agrupamento_atual(
         .with_columns(
             [
                 (pl.col("fator_manual") | pl.col("unid_ref_manual")).alias("__eh_manual__"),
-                pl.col("descr_padrao").map_elements(_norm, return_dtype=pl.String).alias("__descr_padrao_norm__"),
-                pl.col("descr_padrao_canonico")
-                .cast(pl.Utf8, strict=False)
-                .fill_null("")
-                .map_elements(_norm, return_dtype=pl.String)
-                .alias("__descr_padrao_canonico_norm__"),
+                normalizar_descricao_expr("descr_padrao").alias("__descr_padrao_norm__"),
+                normalizar_descricao_expr("descr_padrao_canonico").alias("__descr_padrao_canonico_norm__"),
             ]
         )
         .with_columns(
@@ -489,24 +500,24 @@ def calcular_fatores_conversao(cnpj: str, pasta_cnpj: Path | None = None) -> boo
 
     rprint(f"[bold cyan]Calculando fatores de conversao para CNPJ: {cnpj}[/bold cyan]")
 
+    df_unid = pl.read_parquet(arq_unid)
+    df_final = pl.read_parquet(arq_final)
+    df_fatores_existente = pl.read_parquet(arq_fatores_existente) if arq_fatores_existente.exists() else pl.DataFrame()
+
     try:
-        validar_parquet_essencial(
-            arq_unid,
+        garantir_colunas_obrigatorias(
+            df_unid,
             ["descricao", "unid", "compras", "vendas", "qtd_compras", "qtd_vendas"],
             contexto="fatores_conversao/item_unidades",
         )
-        validar_parquet_essencial(
-            arq_final,
+        garantir_colunas_obrigatorias(
+            df_final,
             ["id_agrupado", "descricao_normalizada", "descricao_final", "descr_padrao", "unid_ref_sugerida"],
             contexto="fatores_conversao/produtos_final",
         )
     except SchemaValidacaoError as exc:
         rprint(f"[red]{exc}[/red]")
         return False
-
-    df_unid = pl.read_parquet(arq_unid)
-    df_final = pl.read_parquet(arq_final)
-    df_fatores_existente = pl.read_parquet(arq_fatores_existente) if arq_fatores_existente.exists() else pl.DataFrame()
 
     if df_unid.is_empty() or df_final.is_empty():
         rprint("[yellow]Aviso: sem dados para calcular fatores de conversao.[/yellow]")
@@ -746,3 +757,5 @@ if __name__ == "__main__":
         calcular_fatores_conversao(sys.argv[1])
     else:
         calcular_fatores_conversao(input("CNPJ: "))
+
+

@@ -1,13 +1,14 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import re
 import sys
 from pathlib import Path
+from utilitarios.project_paths import PROJECT_ROOT
 
 import polars as pl
 from rich import print as rprint
 
-ROOT_DIR = Path(r"c:\funcoes - Copia")
+ROOT_DIR = PROJECT_ROOT
 SRC_DIR = ROOT_DIR / "src"
 DADOS_DIR = ROOT_DIR / "dados"
 CNPJ_ROOT = DADOS_DIR / "CNPJ"
@@ -18,65 +19,6 @@ try:
 except ImportError as e:
     rprint(f"[red]Erro ao importar modulos:[/red] {e}")
     sys.exit(1)
-
-
-def _limpar_lista(valores) -> list[str]:
-    saida: list[str] = []
-    for valor in valores or []:
-        if valor is None:
-            continue
-        if isinstance(valor, list):
-            saida.extend(_limpar_lista(valor))
-            continue
-        texto = str(valor).strip()
-        if texto:
-            saida.append(texto)
-    return sorted(set(saida))
-
-
-def _consolidar_grupo_id_agrupado(df_grupo: pl.DataFrame) -> pl.DataFrame:
-    registros = df_grupo.to_dicts()
-    descr_padrao = None
-    descricoes: list[str] = []
-    codigos: list[str] = []
-    unidades: list[str] = []
-
-    for row in registros:
-        if descr_padrao is None:
-            valor = (row.get("descr_padrao") or "").strip() if row.get("descr_padrao") is not None else ""
-            if valor:
-                descr_padrao = valor
-
-        descricoes.extend(
-            _limpar_lista(
-                [
-                    row.get("descr_padrao"),
-                    row.get("descricao_final"),
-                    row.get("descricao"),
-                    row.get("lista_desc_compl"),
-                ]
-            )
-        )
-        codigos.extend(_limpar_lista(row.get("lista_codigos")))
-        unidades.extend(
-            _limpar_lista(
-                [
-                    row.get("lista_unid"),
-                    row.get("lista_unidades_agr"),
-                    row.get("unid_ref_sugerida"),
-                ]
-            )
-        )
-
-    return pl.DataFrame(
-        {
-            "id_agrupado": [str(registros[0]["id_agrupado"])],
-            "descr_padrao": [descr_padrao],
-            "lista_descricoes": [_limpar_lista(descricoes)],
-            "lista_codigos": [_limpar_lista(codigos)],
-            "lista_unidades": [_limpar_lista(unidades)],
-        }
-    )
 
 
 def gerar_id_agrupados(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
@@ -98,6 +40,12 @@ def gerar_id_agrupados(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         rprint("[yellow]produtos_final vazio ou sem id_agrupado.[/yellow]")
         return False
 
+    # Intermediate columns used only during aggregation; dropped from the final result.
+    _TMP_AGG_COLS = [
+        "_tmp_desc_padrao", "_tmp_desc_final", "_tmp_desc", "_tmp_desc_compl",
+        "_tmp_codigos", "_tmp_unid", "_tmp_unid_agr", "_tmp_unid_ref",
+    ]
+
     df_id_agrupados = (
         df_final
         .with_columns(
@@ -114,7 +62,50 @@ def gerar_id_agrupados(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
             ]
         )
         .group_by("id_agrupado")
-        .map_groups(_consolidar_grupo_id_agrupado)
+        .agg([
+            # descr_padrao: first non-null, non-empty value in the group
+            pl.col("descr_padrao")
+                .filter(pl.col("descr_padrao").is_not_null() & (pl.col("descr_padrao").str.strip_chars() != ""))
+                .first()
+                .alias("descr_padrao"),
+            # Collect non-null values from scalar description columns for later union
+            pl.col("descr_padrao").drop_nulls().alias("_tmp_desc_padrao"),
+            pl.col("descricao_final").drop_nulls().alias("_tmp_desc_final"),
+            pl.col("descricao").drop_nulls().alias("_tmp_desc"),
+            # Flatten list columns — lista_desc_compl kept as a separate output column
+            pl.col("lista_desc_compl").explode().drop_nulls().alias("_tmp_desc_compl"),
+            pl.col("lista_codigos").explode().drop_nulls().alias("_tmp_codigos"),
+            pl.col("lista_unid").explode().drop_nulls().alias("_tmp_unid"),
+            pl.col("lista_unidades_agr").explode().drop_nulls().alias("_tmp_unid_agr"),
+            pl.col("unid_ref_sugerida").drop_nulls().alias("_tmp_unid_ref"),
+        ])
+        .with_columns([
+            # lista_descricoes: union of descr_padrao, descricao_final, descricao (stripped, deduped, sorted)
+            pl.concat_list(["_tmp_desc_padrao", "_tmp_desc_final", "_tmp_desc"])
+                .list.eval(pl.element().str.strip_chars())
+                .list.eval(pl.element().filter(pl.element() != ""))
+                .list.unique().list.sort()
+                .alias("lista_descricoes"),
+            # lista_desc_compl: flattened from all group rows (stripped, deduped, sorted)
+            pl.col("_tmp_desc_compl")
+                .list.eval(pl.element().str.strip_chars())
+                .list.eval(pl.element().filter(pl.element() != ""))
+                .list.unique().list.sort()
+                .alias("lista_desc_compl"),
+            # lista_codigos: flattened from all group rows (stripped, deduped, sorted)
+            pl.col("_tmp_codigos")
+                .list.eval(pl.element().str.strip_chars())
+                .list.eval(pl.element().filter(pl.element() != ""))
+                .list.unique().list.sort()
+                .alias("lista_codigos"),
+            # lista_unidades: union of lista_unid, lista_unidades_agr, unid_ref_sugerida
+            pl.concat_list(["_tmp_unid", "_tmp_unid_agr", "_tmp_unid_ref"])
+                .list.eval(pl.element().str.strip_chars())
+                .list.eval(pl.element().filter(pl.element() != ""))
+                .list.unique().list.sort()
+                .alias("lista_unidades"),
+        ])
+        .drop(_TMP_AGG_COLS)
         .sort("id_agrupado")
     )
 
@@ -126,3 +117,5 @@ if __name__ == "__main__":
         gerar_id_agrupados(sys.argv[1])
     else:
         gerar_id_agrupados(input("CNPJ: "))
+
+

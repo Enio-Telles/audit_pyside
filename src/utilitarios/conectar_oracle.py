@@ -28,7 +28,8 @@ try:
     PORTA = int(os.getenv("ORACLE_PORT", '1521').strip())
     SERVICO = os.getenv("ORACLE_SERVICE", 'sefindw').strip()
 except Exception as e:
-    rprint(f"[red]Erro na configuração das variáveis de rede Oracle:[/red] {e}")
+    logging.error("Detalhes internos do erro de rede Oracle", exc_info=e)
+    rprint("[red]Erro na configuração das variáveis de rede Oracle. Verifique as configurações do .env.[/red]")
     HOST, PORTA, SERVICO = None, None, None
 
 def conectar(cpf_usuario=None, senha=None):
@@ -53,7 +54,7 @@ def conectar(cpf_usuario=None, senha=None):
             
         return conexao
     except Exception as e:
-        logging.error(f"Detalhes internos do erro de conexão Oracle: {e}")
+        logging.error("Detalhes internos do erro de conexão Oracle", exc_info=e)
         rprint("[red]Erro de conexão Oracle. Verifique suas configurações e o status do banco de dados.[/red]")
         return None
 
@@ -72,12 +73,13 @@ def obter_conexao_oracle(user=None, password=None):
         try:
             conn.close()
             # rprint("[blue]DEBUG: Conexão Oracle encerrada com segurança.[/blue]")
-        except:
-            pass
+        except Exception as e:
+            logging.debug("Falha ao encerrar conexão Oracle", exc_info=e)
 
 if __name__ == "__main__":    
     try:
         with obter_conexao_oracle() as conn:
             rprint("[green]Conexão via Context Manager estabelecida com sucesso![/green]")
     except Exception as e:
-        rprint(f"[red]Falha no teste de conexão:[/red] {e}")
+        logging.error("Detalhes internos da falha no teste de conexão", exc_info=e)
+        rprint("[red]Falha no teste de conexão. Verifique os logs para mais detalhes.[/red]")

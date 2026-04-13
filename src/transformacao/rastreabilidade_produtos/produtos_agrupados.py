@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 """
 produtos_agrupados.py
@@ -12,11 +12,12 @@ import re
 import sys
 from collections import Counter
 from pathlib import Path
+from utilitarios.project_paths import PROJECT_ROOT
 
 import polars as pl
 from rich import print as rprint
 
-ROOT_DIR = Path(r"c:\funcoes - Copia")
+ROOT_DIR = PROJECT_ROOT
 SRC_DIR = ROOT_DIR / "src"
 DADOS_DIR = ROOT_DIR / "dados"
 CNPJ_ROOT = DADOS_DIR / "CNPJ"
@@ -30,11 +31,24 @@ except ImportError as e:
     sys.exit(1)
 
 
-def _normalizar_descricao_para_match(texto: str | None) -> str:
-    """Normaliza texto igual ao pipeline de produtos: remove acento, upper, trim, espaco unico."""
-    if texto is None:
-        return ""
-    return " ".join((remove_accents(texto) or "").upper().strip().split())
+def _expr_normalizar_descricao(coluna: str) -> pl.Expr:
+    return (
+        pl.when(pl.col(coluna).is_null())
+        .then(pl.lit(""))
+        .otherwise(
+            pl.col(coluna)
+            .cast(pl.Utf8, strict=False)
+            .str.replace_all(r"[áàãâäÁÀÃÂÄ]", "A")
+            .str.replace_all(r"[éèêëÉÈÊË]", "E")
+            .str.replace_all(r"[íìîïÍÌÎÏ]", "I")
+            .str.replace_all(r"[óòõôöÓÒÕÔÖ]", "O")
+            .str.replace_all(r"[úùûüÚÙÛÜ]", "U")
+            .str.replace_all(r"[çÇ]", "C")
+            .str.to_uppercase()
+            .str.strip_chars()
+            .str.replace_all(r"\s+", " ")
+        )
+    )
 
 
 def _primeira_descricao_valida(df: pl.DataFrame) -> str | None:
@@ -180,11 +194,11 @@ def inicializar_produtos_agrupados(cnpj: str, pasta_cnpj: Path | None = None) ->
         lista_ncm = sorted(set([item for r in g for item in (r.get("lista_ncm") or []) if item]))
         lista_cest = sorted(set([item for r in g for item in (r.get("lista_cest") or []) if item]))
         lista_gtin = sorted(set([item for r in g for item in (r.get("lista_gtin") or []) if item]))
-        lista_descricoes = sorted(
-            set(
-                [r.get("descricao") for r in g if r.get("descricao")]
-                + [item for r in g for item in (r.get("lista_desc_compl") or []) if item]
-            )
+        # A lista principal deve conter apenas descricoes-base do grupo.
+        lista_descricoes = sorted(set([r.get("descricao") for r in g if r.get("descricao")]))
+        # Complementos permanecem auditaveis em coluna propria.
+        lista_desc_compl = sorted(
+            set([item for r in g for item in (r.get("lista_desc_compl") or []) if item])
         )
         divergentes = len(lista_sefin) > 1
 
@@ -199,6 +213,7 @@ def inicializar_produtos_agrupados(cnpj: str, pasta_cnpj: Path | None = None) ->
                 "lista_cest": lista_cest,
                 "lista_gtin": lista_gtin,
                 "lista_descricoes": lista_descricoes,
+                "lista_desc_compl": lista_desc_compl,
                 "lista_co_sefin": lista_sefin,
                 "co_sefin_padrao": padrao.get("co_sefin_padrao"),
                 "co_sefin_agr": ", ".join(sorted([str(s) for s in lista_sefin])),
@@ -229,3 +244,5 @@ if __name__ == "__main__":
     else:
         c = input("CNPJ: ")
         inicializar_produtos_agrupados(c)
+
+
