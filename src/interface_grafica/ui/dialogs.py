@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import polars as pl
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QDate
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QTableView,
     QVBoxLayout,
+    QDateEdit,
 )
 
 from interface_grafica.models.table_model import PolarsTableModel
@@ -246,3 +247,40 @@ class DialogoFioDeOuro(QDialog):
         btn_close = QPushButton("Fechar")
         btn_close.clicked.connect(self.accept)
         layout.addWidget(btn_close)
+
+
+class DialogoExportacaoEstoque(QDialog):
+    """Dialogo para selecionar parametros de exportacao (datas limite)."""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Exportar Produtos Selecionados")
+        self.resize(320, 140)
+        
+        layout = QVBoxLayout(self)
+        layout.addWidget(QLabel("Defina o periodo de extracao das informacoes para Excel:"))
+        
+        form_layout = QHBoxLayout()
+        self.data_ini = QDateEdit()
+        self.data_ini.setCalendarPopup(True)
+        self.data_ini.setDisplayFormat("dd/MM/yyyy")
+        self.data_ini.setDate(QDate(2020, 1, 1))
+        
+        self.data_fim = QDateEdit()
+        self.data_fim.setCalendarPopup(True)
+        self.data_fim.setDisplayFormat("dd/MM/yyyy")
+        self.data_fim.setDate(QDate(2025, 12, 31))
+        
+        form_layout.addWidget(QLabel("De:"))
+        form_layout.addWidget(self.data_ini)
+        form_layout.addWidget(QLabel("Ate:"))
+        form_layout.addWidget(self.data_fim)
+        
+        layout.addLayout(form_layout)
+        
+        botoes = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        botoes.accepted.connect(self.accept)
+        botoes.rejected.connect(self.reject)
+        layout.addWidget(botoes)
+        
+    def obter_datas(self) -> tuple[QDate, QDate]:
+        return self.data_ini.date(), self.data_fim.date()

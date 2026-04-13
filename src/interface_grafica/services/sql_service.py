@@ -124,7 +124,9 @@ class SqlService:
         try:
             from interface_grafica.services.query_worker import _conectar_oracle_fallback
         except Exception as exc:
-            raise RuntimeError("Nao foi possivel inicializar a conexao Oracle.") from exc
+            from transformacao.auxiliares.logs import log_exception
+            log_exception(exc)
+            raise RuntimeError("Nao foi possivel inicializar a conexao com o banco de dados.") from exc
 
         values = dict(params or {})
         if cnpj and not any(str(k).lower() == "cnpj" for k in values):

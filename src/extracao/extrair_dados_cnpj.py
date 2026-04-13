@@ -1,19 +1,33 @@
 from __future__ import annotations
 
 import re
-import sys
-from pathlib import Path
-from typing import Sequence
+import threading
+import logging
+
+logger = logging.getLogger(__name__)
+import polars as pl
+import concurrent.futures
 
 from rich import print as rprint
 
-from extracao.extracao_oracle_eficiente import (
-    CNPJ_ROOT,
-    descobrir_consultas_sql,
-    executar_extracao_oracle,
-    imprimir_resumo_extracao,
-)
-from utilitarios.validar_cnpj import validar_cnpj
+def get_thread_connection():
+    if not hasattr(thread_local, "conexao"):
+        # Cria uma nova conexão para esta thread
+        conn = conectar_oracle()
+        if conn is None:
+            logger.error(f"[{threading.current_thread().name}] Falha ao criar conexão com banco de dados.")
+            return None
+
+        try:
+            # Testar a conexão
+            cursor = conn.cursor()
+            cursor.execute("SELECT 1 FROM DUAL")
+        except Exception as e:
+            logger.error(f"[{threading.current_thread().name}] Erro ao testar conexão: {e}")
+            return None
+
+        thread_local.conexao = conn
+    return thread_local.conexao
 
 
 def extrair_dados(
@@ -23,6 +37,88 @@ def extrair_dados(
 ) -> bool:
     """Extrai as consultas SQL em parquet usando escrita incremental por lotes."""
 
+ROOT_DIR        = Path(r"c:\funcoes - Copia")
+SRC_DIR         = ROOT_DIR / "src"
+SQL_DIR         = ROOT_DIR / "sql"
+DADOS_DIR       = ROOT_DIR / "dados"
+CNPJ_ROOT       = DADOS_DIR / "CNPJ"
+
+
+try:
+    from utilitarios.conectar_oracle import conectar, conectar as conectar_oracle
+    from utilitarios.ler_sql import ler_sql
+    from utilitarios.salvar_para_parquet import salvar_para_parquet
+    from utilitarios.validar_cnpj import validar_cnpj
+except ImportError as e:
+    rprint(f"[red]Erro ao importar módulos utilitários:[/red] {e}")
+    sys.exit(1)
+
+
+
+def processar_arquivo(arq_sql, cnpj_limpo, data_limite_input, consultas_dir, pasta_saida):
+    try:
+        conexao = get_thread_connection()
+        if not conexao:
+            rprint(f"[red]Falha na conexão para o arquivo {arq_sql.name}[/red]")
+            return False
+
+        with conexao.cursor() as cursor:
+            cursor.arraysize = 1000
+
+            rprint(f"\n[bold cyan]Processando: {arq_sql.relative_to(consultas_dir)}[/bold cyan]")
+
+            sql_txt = ler_sql(arq_sql)
+            if not sql_txt:
+                rprint(f"[yellow]Arquivo {arq_sql.name} vazio ou com erro de leitura.[/yellow]")
+                return True
+
+            cursor.prepare(sql_txt)
+            nomes_binds = cursor.bindnames()
+
+            binds = {}
+            tem_bind_cnpj = False
+            for b in nomes_binds:
+                b_upper = b.upper()
+                if b_upper == "CNPJ":
+                    binds[b] = cnpj_limpo
+                    tem_bind_cnpj = True
+                elif b_upper == "DATA_LIMITE_PROCESSAMENTO":
+                    binds[b] = data_limite_input if data_limite_input else None
+
+            # Executa consulta
+            if not tem_bind_cnpj:
+                if nomes_binds:
+                    rprint(f"[yellow]⚠️ Consulta possui os binds ({', '.join(nomes_binds)}) mas não o :CNPJ. Pulando para evitar extração imensa.[/yellow]")
+                else:
+                    rprint("[yellow]⚠️ Consulta não possui nenhuma variável de bind. Pulando para evitar extração imensa da base.[/yellow]")
+                return True
+
+            cursor.execute(None, binds)
+
+            colunas = [col[0].lower() for col in cursor.description]
+            dados = cursor.fetchall()
+            
+            if not dados:
+                rprint(f"[yellow]  Zero linhas retornadas para {arq_sql.name}. Pulando gravação.[/yellow]")
+                return True
+
+            df = pl.DataFrame(dados, schema=colunas, orient="row")
+            rprint(f"[green]  {len(df)} linhas lidas com sucesso para {arq_sql.name}.[/green]")
+
+            # Nome do arquivo no formato nomedaconsulta_<cnpj>.parquet (mantendo subpastas se houver)
+            caminho_relativo = arq_sql.relative_to(consultas_dir)
+            nome_arquivo = f"{arq_sql.stem}_{cnpj_limpo}.parquet"
+            arquivo_saida = pasta_saida / caminho_relativo.parent / nome_arquivo
+
+            salvar_para_parquet(df, arquivo_saida)
+            return True
+
+    except Exception as e_proc:
+        rprint(f"[red]  [PROC] Erro processando {arq_sql.name}: {e_proc}[/red]")
+        return False
+    # finally block removed because connection is thread-local and will be closed later
+
+def extrair_dados(cnpj_input, data_limite_input=None):
     if not validar_cnpj(cnpj_input):
         rprint(f"[red]Erro:[/red] CNPJ '{cnpj_input}' invalido!")
         return False

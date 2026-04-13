@@ -12,6 +12,7 @@ import re
 import sys
 from pathlib import Path
 from typing import Callable
+from transformacao.auxiliares.logs import log_exception
 
 from rich import print as rprint
 
@@ -62,6 +63,7 @@ _registar("c176_xml",            "transformacao.c176_xml:gerar_c176_xml",       
 _registar("movimentacao_estoque","transformacao.movimentacao_estoque:gerar_movimentacao_estoque", deps=["c170_xml", "c176_xml"])
 _registar("calculos_mensais",    "transformacao.calculos_mensais:gerar_calculos_mensais", deps=["movimentacao_estoque"])
 _registar("calculos_anuais",     "transformacao.calculos_anuais:gerar_calculos_anuais",   deps=["movimentacao_estoque"])
+_registar("calculos_periodos",   "transformacao.calculos_periodo_pkg:gerar_calculos_periodos", deps=["movimentacao_estoque"])
 
 
 def _ordem_topologica(selecionadas: list[str]) -> list[str]:

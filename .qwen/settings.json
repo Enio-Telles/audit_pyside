@@ -6,7 +6,9 @@
       "Bash(git fetch *)",
       "Bash(git merge *)",
       "Bash(taskkill *)",
-      "Bash(set *)"
+      "Bash(set *)",
+      "Bash(mkdir *)",
+      "Bash(git push *)"
     ]
   },
   "$version": 3
