@@ -1,4 +1,4 @@
-"""
+﻿"""
 produtos_itens.py
 
 Gera tabela de itens vinculados ao cadastro de produtos.
@@ -23,10 +23,11 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from utilitarios.project_paths import PROJECT_ROOT
 
 import polars as pl
 
-ROOT_DIR = Path(r"c:\funcoes - Copia")
+ROOT_DIR = PROJECT_ROOT
 DADOS_DIR = ROOT_DIR / "dados"
 CNPJ_ROOT = DADOS_DIR / "CNPJ"
 
@@ -126,4 +127,6 @@ def gerar_produtos_itens(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
     arq_saida.parent.mkdir(parents=True, exist_ok=True)
     df_items.write_parquet(arq_saida, compression="snappy")
     return True
+
+
 

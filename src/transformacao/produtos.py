@@ -48,11 +48,18 @@ def gerar_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
     try:
         df = pl.read_parquet(arq_input)
 
-        # Mantem map_elements apenas para remocao de acentos; o resto usa API nativa do Polars.
+        # Optimization: Use native Polars string operations to preserve vectorization
         df = df.with_columns(
             pl.col("descricao")
-            .map_elements(_remover_acentos, return_dtype=pl.String)
+            .fill_null("")
             .str.to_uppercase()
+            .str.replace_all(r"[ÁÀÂÃÄ]", "A")
+            .str.replace_all(r"[ÉÈÊË]", "E")
+            .str.replace_all(r"[ÍÌÎÏ]", "I")
+            .str.replace_all(r"[ÓÒÔÕÖ]", "O")
+            .str.replace_all(r"[ÚÙÛÜ]", "U")
+            .str.replace_all(r"Ç", "C")
+            .str.replace_all(r"Ñ", "N")
             .str.strip_chars()
             .str.replace_all(r"\s+", " ")
             .alias("descricao_normalizada")

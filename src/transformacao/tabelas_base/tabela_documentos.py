@@ -1,10 +1,11 @@
-import polars as pl
+﻿import polars as pl
 from pathlib import Path
+from utilitarios.project_paths import PROJECT_ROOT
 import sys
 import re
 from rich import print as rprint
 
-ROOT_DIR = Path(r"c:\funcoes - Copia")
+ROOT_DIR = PROJECT_ROOT
 SRC_DIR = ROOT_DIR / "src"
 DADOS_DIR = ROOT_DIR / "dados"
 CNPJ_ROOT = DADOS_DIR / "CNPJ"
@@ -13,15 +14,15 @@ CNPJ_ROOT = DADOS_DIR / "CNPJ"
 try:
     from utilitarios.salvar_para_parquet import salvar_para_parquet
 except ImportError as e:
-    rprint(f"[red]Erro ao importar módulos utilitários em tabela_documentos:[/red] {e}")
+    rprint(f"[red]Erro ao importar mÃ³dulos utilitÃ¡rios em tabela_documentos:[/red] {e}")
     sys.exit(1)
 
 def gerar_tabela_documentos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
     """
-    Consolida cabeçalhos de notas (C100, NFe, NFCe).
-    Saída: tb_documentos_{cnpj}.parquet
+    Consolida cabeÃ§alhos de notas (C100, NFe, NFCe).
+    SaÃ­da: tb_documentos_{cnpj}.parquet
     
-    Recomendação Auditoria: Otimização de tipos (Categorical) e estabilidade.
+    RecomendaÃ§Ã£o Auditoria: OtimizaÃ§Ã£o de tipos (Categorical) e estabilidade.
     """
     cnpj = re.sub(r"\D", "", cnpj)
     if pasta_cnpj is None:
@@ -29,7 +30,7 @@ def gerar_tabela_documentos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
     
     arq_dir = pasta_cnpj / "arquivos_parquet"
     if not arq_dir.exists():
-        rprint(f"[red]Pasta de parquets brutos não encontrada: {arq_dir}[/red]")
+        rprint(f"[red]Pasta de parquets brutos nÃ£o encontrada: {arq_dir}[/red]")
         return False
 
     rprint(f"[bold cyan]Consolidando documentos para CNPJ: {cnpj}[/bold cyan]")
@@ -56,7 +57,7 @@ def gerar_tabela_documentos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
             
         df_final = pl.concat(fragmentos, how="diagonal_relaxed")
         
-        # 2. Otimização de Performance (Audit)
+        # 2. OtimizaÃ§Ã£o de Performance (Audit)
         # Colunas de baixa cardinalidade -> Categorical
         cols_categoricas = ["origem", "situacao", "modelo", "serie", "ind_oper", "ind_emit", "cod_sit"]
         for col in cols_categoricas:
@@ -79,3 +80,5 @@ if __name__ == "__main__":
     else:
         c = input("CNPJ: ")
         gerar_tabela_documentos(c)
+
+

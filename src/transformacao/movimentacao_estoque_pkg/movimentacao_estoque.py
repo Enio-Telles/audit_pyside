@@ -1,10 +1,11 @@
-import sys
+﻿import sys
 import re
 from pathlib import Path
+from utilitarios.project_paths import PROJECT_ROOT, TRACEBACK_PATH
 import polars as pl
 from rich import print as rprint
 
-ROOT_DIR = Path(r"c:\funcoes - Copia")
+ROOT_DIR = PROJECT_ROOT
 SRC_DIR = ROOT_DIR / "src"
 DADOS_DIR = ROOT_DIR / "dados"
 CNPJ_ROOT = DADOS_DIR / "CNPJ"
@@ -12,6 +13,10 @@ CNPJ_ROOT = DADOS_DIR / "CNPJ"
 
 try:
     from utilitarios.salvar_para_parquet import salvar_para_parquet
+    from utilitarios.validacao_schema import (
+        SchemaValidacaoError,
+        validar_parquet_essencial,
+    )
     from transformacao.co_sefin_class import enriquecer_co_sefin_class
     from utilitarios.text import remove_accents
     from transformacao.movimentacao_estoque_pkg.calculo_saldos import (
@@ -32,12 +37,50 @@ except ImportError as e:
     sys.exit(1)
 
 
-# --- Funções utilitárias extraídas para sub-módulos ---
+# --- FunÃ§Ãµes utilitÃ¡rias extraÃ­das para sub-mÃ³dulos ---
 # calculo_saldos.py: _padronizar_tipo_operacao_expr, _boolish_expr,
 #                    gerar_eventos_estoque, calcular_saldo_estoque_anual
 # mapeamento_fontes.py: normalizar_descricao_expr, detectar_coluna_descricao,
 #                       detectar_coluna_unidade, parse_expression, carregar_flags_cfop
 # ---
+
+
+def marcar_mov_rep_por_chave_item(df: pl.DataFrame) -> pl.DataFrame:
+    """Marca mov_rep quando houver mais de uma linha com a mesma Chv_nfe + Num_item."""
+    if df.is_empty() or "Chv_nfe" not in df.columns or "Num_item" not in df.columns:
+        return df
+
+    chave_expr = pl.col("Chv_nfe").cast(pl.Utf8, strict=False).fill_null("").str.strip_chars()
+    item_expr = pl.col("Num_item").cast(pl.Utf8, strict=False).fill_null("").str.strip_chars()
+    repetido_expr = (
+        (chave_expr != "")
+        & (item_expr != "")
+        & (pl.len().over(["Chv_nfe", "Num_item"]) > 1)
+    )
+
+    if "mov_rep" in df.columns:
+        return df.with_columns(
+            (repetido_expr | _boolish_expr("mov_rep").fill_null(False)).alias("mov_rep")
+        )
+
+    return df.with_columns(repetido_expr.alias("mov_rep"))
+
+
+def filtrar_movimentacoes_por_fonte(df: pl.DataFrame) -> pl.DataFrame:
+    """Aplica a regra fiscal de direcao por origem na mov_estoque."""
+    if df.is_empty() or "fonte" not in df.columns or "Tipo_operacao" not in df.columns:
+        return df
+
+    fonte_expr = pl.col("fonte").cast(pl.Utf8, strict=False).str.to_lowercase()
+    tipo_expr = pl.col("Tipo_operacao").cast(pl.Utf8, strict=False)
+    filtro_expr = (
+        pl.when(fonte_expr == "c170")
+        .then(tipo_expr == "1 - ENTRADA")
+        .when(fonte_expr.is_in(["nfe", "nfce"]))
+        .then(tipo_expr == "2 - SAIDAS")
+        .otherwise(pl.lit(True))
+    )
+    return df.filter(filtro_expr)
 
 
 def gerar_movimentacao_estoque(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
@@ -70,6 +113,30 @@ def gerar_movimentacao_estoque(cnpj: str, pasta_cnpj: Path | None = None) -> boo
         mapeamento = json.load(f)
 
     rprint(f"\n[bold cyan]Gerando movimentacao_estoque para CNPJ: {cnpj}[/bold cyan]")
+
+    try:
+        validar_parquet_essencial(
+            arq_prod_final,
+            [
+                "id_agrupado",
+                "descricao_normalizada",
+                "descr_padrao",
+                "ncm_padrao",
+                "cest_padrao",
+                "descricao_final",
+                "co_sefin_final",
+                "unid_ref_sugerida",
+            ],
+            contexto="movimentacao_estoque/produtos_final",
+        )
+        validar_parquet_essencial(
+            arq_fatores,
+            ["id_agrupado", "unid", "unid_ref", "fator"],
+            contexto="movimentacao_estoque/fatores_conversao",
+        )
+    except SchemaValidacaoError as exc:
+        rprint(f"[red]{exc}[/red]")
+        return False
 
     df_prod_final = (
         pl.read_parquet(arq_prod_final)
@@ -225,19 +292,19 @@ def gerar_movimentacao_estoque(cnpj: str, pasta_cnpj: Path | None = None) -> boo
                 # valida se as dependencias de coluna da expressao existem no df
                 # se "col("x") is missing, we put null"
                 # um try no select isolado descobre
-                # Para producao, uma funcao check columns é melhor, faremos um fallback basico
+                # Para producao, uma funcao check columns Ã© melhor, faremos um fallback basico
                 
                 exprs.append(e)
             except Exception as ex:
                 exprs.append(pl.lit(None).alias(target))
                 
         # Polars: try selecting. Se alguma coluna referenciada falhar, ele crasheia.
-        # Entao adicionamos as colunas q não existem como nulas antes.
+        # Entao adicionamos as colunas q nÃ£o existem como nulas antes.
         cols_required = set()
         # Uma heuristic rapida para descobrir dependencias: vars() de orig
         for m in mapeamento:
             v = str(m[key_map])
-            if v and v not in ["(vazio)", "correspondência com chave NF", "icms_orig & icms_cst ou icms_csosn", "prod_ceantrib ou caso for nulo -> prod_cean", "vl_item-vl_desc", "prod_vprod+prod_vfrete+prod_vseg+prod_voutro-prod_vdesc", "\"gerado\" ou \"registro\" (se está no bloco_h)"]:
+            if v and v not in ["(vazio)", "correspondÃªncia com chave NF", "icms_orig & icms_cst ou icms_csosn", "prod_ceantrib ou caso for nulo -> prod_cean", "vl_item-vl_desc", "prod_vprod+prod_vfrete+prod_vseg+prod_voutro-prod_vdesc", "\"gerado\" ou \"registro\" (se está no bloco_h)"]:
                 if not v.startswith('"'):
                     cols_required.add(v)
         
@@ -260,6 +327,8 @@ def gerar_movimentacao_estoque(cnpj: str, pasta_cnpj: Path | None = None) -> boo
                 df_selecionado = df_selecionado.with_columns(df_raw[c])
             else:
                 df_selecionado = df_selecionado.with_columns(pl.lit(None).alias(c))
+
+        df_selecionado = df_selecionado.with_columns(pl.lit(prefix_sys).alias("fonte"))
 
         if prefix_sys == "c170":
             for c in ["finnfe", "infprot_cstat", "co_uf_emit", "co_uf_dest"]:
@@ -312,7 +381,11 @@ def gerar_movimentacao_estoque(cnpj: str, pasta_cnpj: Path | None = None) -> boo
             )
             .drop(["nsu_ref", "finnfe_ref", "infprot_cstat_ref", "co_uf_emit_ref", "co_uf_dest_ref"], strict=False)
         )
-    df_mov = df_mov.with_columns(_padronizar_tipo_operacao_expr("Tipo_operacao"))
+    df_mov = (
+        df_mov
+        .with_columns(_padronizar_tipo_operacao_expr("Tipo_operacao"))
+        .pipe(filtrar_movimentacoes_por_fonte)
+    )
     
     # 2. Ajustar eventos de estoque final/inicial
     df_mov = _gerar_eventos_estoque(df_mov)
@@ -329,7 +402,8 @@ def gerar_movimentacao_estoque(cnpj: str, pasta_cnpj: Path | None = None) -> boo
     for col in ["mov_rep", "excluir_estoque", "dev_simples", "dev_venda", "dev_compra", "dev_ent_simples"]:
         if col not in df_final.columns:
             df_final = df_final.with_columns(pl.lit(None).alias(col))
-    
+    df_final = marcar_mov_rep_por_chave_item(df_final)
+
     # Ordenacao semantica:
     # - por id_agrupado
     # - por data do evento (preferindo Dt_e_s e depois Dt_doc)
@@ -369,14 +443,18 @@ def gerar_movimentacao_estoque(cnpj: str, pasta_cnpj: Path | None = None) -> boo
         .drop(["__data_ord__", "__nsu_ord__", "__ord_tipo__"], strict=False)
     )
 
-    # Reordenar colunas para exibição: Descr_item e Descr_compl logo após Tipo_operacao
+    # Reordenar colunas para exibiÃ§Ã£o: Descr_item e Descr_compl logo apÃ³s Tipo_operacao
     cols = list(df_final.columns)
-    if "Tipo_operacao" in cols and "Descr_item" in cols and "Descr_compl" in cols:
-        cols.remove("Descr_item")
-        cols.remove("Descr_compl")
+    if "Tipo_operacao" in cols:
+        for coluna in ["fonte", "Descr_item", "Descr_compl"]:
+            if coluna in cols:
+                cols.remove(coluna)
         idx = cols.index("Tipo_operacao")
-        cols.insert(idx + 1, "Descr_item")
-        cols.insert(idx + 2, "Descr_compl")
+        posicao = idx + 1
+        for coluna in ["fonte", "Descr_item", "Descr_compl"]:
+            if coluna in df_final.columns:
+                cols.insert(posicao, coluna)
+                posicao += 1
         df_final = df_final.select(cols)
 
     data_ref_expr = pl.coalesce(
@@ -415,31 +493,44 @@ def gerar_movimentacao_estoque(cnpj: str, pasta_cnpj: Path | None = None) -> boo
             ]
         )
         .with_columns(
+            pl.when(pl.col("Tipo_operacao").cast(pl.Utf8, strict=False).str.starts_with("0"))
+            .then(1)
+            .otherwise(0)
+            .cum_sum()
+            .over("id_agrupado")
+            .alias("periodo_inventario")
+        )
+        .with_columns(
             [
+                # __qtd_decl_final_audit__: captura a quantidade declarada em TODO estoque final do ano
+                # A restricao de 31/12 foi removida para permitir auditoria anual correta
                 pl.when(
                     pl.col("Tipo_operacao").cast(pl.Utf8, strict=False).str.starts_with("3 - ESTOQUE FINAL")
-                    & (pl.col("__data_ref_calc__").dt.month() == 12)
-                    & (pl.col("__data_ref_calc__").dt.day() == 31)
                 )
                 .then(q_conv_valido_expr)
                 .otherwise(pl.lit(0.0))
                 .alias("__qtd_decl_final_audit__"),
+                # q_conv: estoque inicial, entradas, saidas e final capturados independente da data
+                # para permitir auditoria anual completa
+                # Nota: estoque final tem q_conv populado, mas nao afeta o saldo sequencial
                 pl.when(
                     pl.col("Tipo_operacao").cast(pl.Utf8, strict=False).str.starts_with("0 - ESTOQUE INICIAL")
-                    & (pl.col("__data_ref_calc__").dt.month() == 1)
-                    & (pl.col("__data_ref_calc__").dt.day() == 1)
                 )
                 .then(q_conv_valido_expr)
                 .when(pl.col("Tipo_operacao") == "1 - ENTRADA")
                 .then(q_conv_valido_expr)
                 .when(pl.col("Tipo_operacao") == "2 - SAIDAS")
                 .then(q_conv_valido_expr)
+                .when(
+                    pl.col("Tipo_operacao").cast(pl.Utf8, strict=False).str.starts_with("3 - ESTOQUE FINAL")
+                )
+                .then(q_conv_valido_expr)
                 .otherwise(pl.lit(0.0))
                 .alias("q_conv"),
+                # __q_conv_sinal__: usado no calculo sequencial de saldo
+                # estoque final nao entra aqui para nao afetar o saldo acumulado
                 pl.when(
                     pl.col("Tipo_operacao").cast(pl.Utf8, strict=False).str.starts_with("0 - ESTOQUE INICIAL")
-                    & (pl.col("__data_ref_calc__").dt.month() == 1)
-                    & (pl.col("__data_ref_calc__").dt.day() == 1)
                 )
                 .then(q_conv_valido_expr)
                 .when(pl.col("Tipo_operacao") == "1 - ENTRADA")
@@ -458,6 +549,8 @@ def gerar_movimentacao_estoque(cnpj: str, pasta_cnpj: Path | None = None) -> boo
         )
         .group_by("id_agrupado", "__ano_saldo__", maintain_order=True)
         .map_groups(_calcular_saldo_estoque_anual)
+        .group_by("id_agrupado", "periodo_inventario", maintain_order=True)
+        .map_groups(_calcular_saldo_estoque_periodo)
         .drop(["__data_ref_calc__", "__q_conv_base__"], strict=False)
     )
 
@@ -486,6 +579,8 @@ if __name__ == "__main__":
             gerar_movimentacao_estoque(c)
     except Exception as e:
         import traceback
-        with open(r"c:\funcoes - Copia\traceback.txt", "w") as f:
+        with open(TRACEBACK_PATH, "w", encoding="utf-8") as f:
             traceback.print_exc(file=f)
         raise
+
+

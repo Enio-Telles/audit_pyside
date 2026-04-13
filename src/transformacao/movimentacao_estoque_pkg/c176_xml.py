@@ -1,4 +1,4 @@
-"""
+﻿"""
 c176_xml.py
 
 Objetivo:
@@ -16,11 +16,12 @@ from __future__ import annotations
 import re
 import sys
 from pathlib import Path
+from utilitarios.project_paths import PROJECT_ROOT
 
 import polars as pl
 from rich import print as rprint
 
-ROOT_DIR = Path(r"c:\funcoes - Copia")
+ROOT_DIR = PROJECT_ROOT
 SRC_DIR = ROOT_DIR / "src"
 DADOS_DIR = ROOT_DIR / "dados"
 CNPJ_ROOT = DADOS_DIR / "CNPJ"
@@ -28,6 +29,10 @@ CNPJ_ROOT = DADOS_DIR / "CNPJ"
 
 try:
     from utilitarios.salvar_para_parquet import salvar_para_parquet
+    from utilitarios.validacao_schema import (
+        SchemaValidacaoError,
+        validar_parquet_essencial,
+    )
 except ImportError as e:
     rprint(f"[red]Erro ao importar modulos utilitarios:[/red] {e}")
     sys.exit(1)
@@ -79,6 +84,31 @@ def gerar_c176_xml(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
             return False
 
     rprint(f"[bold cyan]Gerando c176_xml para CNPJ: {cnpj}[/bold cyan]")
+
+    try:
+        validar_parquet_essencial(
+            arq_c176,
+            ["chave_saida", "num_item_saida", "cod_item", "chave_nfe_ultima_entrada"],
+            contexto="c176_xml/c176",
+        )
+        validar_parquet_essencial(
+            arq_c170_agr,
+            ["chv_nfe", "num_item", "cod_item", "id_agrupado", "descr_padrao", "cod_ncm", "cest", "unid", "qtd"],
+            contexto="c176_xml/c170_agr",
+        )
+        validar_parquet_essencial(
+            arq_nfe_agr,
+            ["chave_acesso", "prod_nitem", "id_agrupado"],
+            contexto="c176_xml/nfe_agr",
+        )
+        validar_parquet_essencial(
+            arq_fatores,
+            ["id_agrupado", "unid", "unid_ref", "fator"],
+            contexto="c176_xml/fatores_conversao",
+        )
+    except SchemaValidacaoError as exc:
+        rprint(f"[red]{exc}[/red]")
+        return False
 
     df_c176 = pl.read_parquet(arq_c176)
     df_saida = pl.read_parquet(arq_c170_agr)
@@ -419,3 +449,5 @@ if __name__ == "__main__":
         gerar_c176_xml(sys.argv[1])
     else:
         gerar_c176_xml(input("CNPJ: "))
+
+
