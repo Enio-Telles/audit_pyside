@@ -1099,6 +1099,13 @@ class ServicoAgregacao:
         for row in df_agrup.iter_rows(named=True):
             chaves = row.get("lista_chave_produto", []) or []
 
+            # Optimization: compute df_prod_sel once to avoid redundant O(N) full-table
+            # scans inside the loop. Previously df_prod was filtered three times per group.
+            # pl.lit(False) yields an empty DataFrame with the same schema as df_prod.
+            df_prod_sel = df_prod.filter(pl.col("chave_item").is_in(chaves)) if chaves else df_prod.filter(pl.lit(False))
+
+            desc_norm = df_prod_sel["descricao_normalizada"].to_list() if chaves else []
+
             # Optimization: Compute df_prod_sel once to avoid redundant O(N) filters inside the loop
             df_prod_sel = df_prod.filter(pl.col("chave_item").is_in(chaves)) if chaves else df_prod.filter(pl.lit(False))
 
@@ -1110,7 +1117,7 @@ class ServicoAgregacao:
             )
             padrao = calcular_atributos_padrao(df_base_filtered)
 
-            # Pass the already-filtered df_prod_sel to avoid another full table scan
+            # Pass the already-filtered df_prod_sel to avoid another full-table scan.
             descr_fallback = self._primeira_descricao_por_chaves(df_prod_sel, chaves)
 
             lista_co_sefin = (
