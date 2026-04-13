@@ -3,12 +3,7 @@
 **Learning:** PySide asynchronous workers often propagate exceptions back to the main thread UI via signals (`self.failed.emit`). If these strings are not sanitized, they create Information Disclosure vulnerabilities.
 **Prevention:** Always catch exceptions in worker threads, log the full traceback securely on the backend (using `rprint` or a logging framework), and emit only generic, safe error messages to the UI.
 
-## 2024-04-01 - Prevent Information Leakage in UI Error Handlers
-**Vulnerability:** A `try...except` block in the PySide6 UI layer was directly printing a raw stack trace via `traceback.print_exc()` to standard output and passing the raw exception object (`str(e)`) to the user-facing `QMessageBox` via `self.show_error()`. This risked disclosing sensitive internal application state, file paths, and potential data formats to unprivileged users.
-**Learning:** PySide6 components must not leak raw exceptions to the UI. Conversely, observability must not be destroyed by completely removing error logging. The correct approach is to log the detailed error and traceback securely on the backend (using `utilitarios.perf_monitor.registrar_evento_performance`) and present only generic, sanitized error messages to the UI.
-**Prevention:** Always audit `except Exception as e:` blocks in user-facing code to ensure `str(e)` or `traceback.format_exc()` are strictly routed to internal telemetry systems and never rendered directly in the graphical interface.
-
-## 2024-04-03 - Prevent Information Exposure Through Hardcoded Local File Path Logging
-**Vulnerability:** Several transformation files (`calculos_anuais.py`, `calculos_mensais.py`, `movimentacao_estoque.py`) were writing unhandled exception tracebacks directly to a hardcoded local text file on the C: drive (`c:\funcoes - Copia\traceback.txt`) via `traceback.print_exc(file=f)`. The orchestrator (`orquestrador_pipeline.py`) was also printing raw tracebacks to standard output via `rprint(f"[dim]{traceback.format_exc()}[/dim]")`.
-**Learning:** Writing raw tracebacks to arbitrary, hardcoded local file paths or printing them to stdout exposes the internal application logic, file system structure, and potential execution context to unprivileged contexts (CWE-209). It also creates brittleness if the target directory doesn't exist.
-**Prevention:** Never use `open("c:\...", "w")` or `traceback.print_exc()` to log errors manually in user-facing scripts or pipeline workers. Always use the centralized `logging` module (e.g., `src.transformacao.auxiliares.logs.setup_logging()`) passing `exc_info=e` to ensure the stack trace is written to the correct, secured logging directory (`/logs/error.log`).
+## 2025-02-13 - Removal of Hardcoded Internal Infrastructure Details
+**Vulnerability:** Internal Oracle database hostnames, ports, and service names were hardcoded as defaults in the codebase, potentially exposing internal network architecture and making the application less flexible and secure.
+**Learning:** Hardcoding infrastructure details, even as defaults for environment variables, can lead to information disclosure if the source code is accessed.
+**Prevention:** Always enforce the use of environment variables or external configuration files for infrastructure details, and implement strict validation to ensure the application fails fast if they are missing.
