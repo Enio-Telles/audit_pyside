@@ -19,7 +19,7 @@ class ExportService:
     @staticmethod
     def _iter_rows(df: pl.DataFrame):
         for row in df.iter_rows(named=True):
-            yield [display_cell(row.get(col)) for col in df.columns]
+            yield [display_cell(row.get(col), col) for col in df.columns]
 
     def export_excel(self, target: Path, df: pl.DataFrame, sheet_name: str = "Dados") -> Path:
         target.parent.mkdir(parents=True, exist_ok=True)

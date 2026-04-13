@@ -225,7 +225,7 @@ class PolarsTableModel(QAbstractTableModel):
             return None
 
         value = self._df[row, col]
-        return display_cell(value)
+        return display_cell(value, self._df.columns[col])
 
     def setData(self, index: QModelIndex, value: Any, role: int = Qt.EditRole) -> bool:
         if self._checkable and index.column() == 0 and role == Qt.CheckStateRole:

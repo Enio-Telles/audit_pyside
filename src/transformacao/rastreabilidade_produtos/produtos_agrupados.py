@@ -12,11 +12,12 @@ import re
 import sys
 from collections import Counter
 from pathlib import Path
+from utilitarios.project_paths import PROJECT_ROOT
 
 import polars as pl
 from rich import print as rprint
 
-ROOT_DIR = Path(r"c:\funcoes - Copia")
+ROOT_DIR = PROJECT_ROOT
 SRC_DIR = ROOT_DIR / "src"
 DADOS_DIR = ROOT_DIR / "dados"
 CNPJ_ROOT = DADOS_DIR / "CNPJ"
@@ -27,14 +28,38 @@ try:
     from utilitarios.text import remove_accents
 except ImportError as e:
     rprint(f"[red]Erro ao importar modulos utilitarios:[/red] {e}")
-    sys.exit(1)
+    salvar_para_parquet = None  # type: ignore
+    remove_accents = None  # type: ignore
 
 
-def _normalizar_descricao_para_match(texto: str | None) -> str:
-    """Normaliza texto igual ao pipeline de produtos: remove acento, upper, trim, espaco unico."""
-    if texto is None:
+def _expr_normalizar_descricao(coluna: str) -> pl.Expr:
+    return (
+        pl.when(pl.col(coluna).is_null())
+        .then(pl.lit(""))
+        .otherwise(
+            pl.col(coluna)
+            .cast(pl.Utf8, strict=False)
+            .str.replace_all(r"[áàãâäÁÀÃÂÄ]", "A")
+            .str.replace_all(r"[éèêëÉÈÊË]", "E")
+            .str.replace_all(r"[íìîïÍÌÎÏ]", "I")
+            .str.replace_all(r"[óòõôöÓÒÕÔÖ]", "O")
+            .str.replace_all(r"[úùûüÚÙÛÜ]", "U")
+            .str.replace_all(r"[çÇ]", "C")
+            .str.to_uppercase()
+            .str.strip_chars()
+            .str.replace_all(r"\s+", " ")
+        )
+    )
+
+
+def _normalizar_descricao_para_match(text: str | None) -> str:
+    if not text:
         return ""
-    return " ".join((remove_accents(texto) or "").upper().strip().split())
+    # Standard normalization for grouping
+    res = remove_accents(str(text))
+    res = res.upper().strip()
+    res = re.sub(r"\s+", " ", res)
+    return res
 
 
 def _primeira_descricao_valida(df: pl.DataFrame) -> str | None:
@@ -148,13 +173,14 @@ def inicializar_produtos_agrupados(cnpj: str, pasta_cnpj: Path | None = None) ->
         if not found:
             grupos.append([row])
 
-    # Bolt: Pre-calculate map_elements outside the loop for O(1) lookups
-    df_base_opt = df_base.with_columns(
+    # Pre-calculate partitions outside the loop for O(1) lookups
+    df_base = df_base.with_columns(
         pl.col("descricao")
         .map_elements(_normalizar_descricao_para_match, return_dtype=pl.String)
         .alias("__descricao_norm")
     )
-    part_dict = df_base_opt.partition_by("__descricao_norm", as_dict=True)
+    df_base_parts = df_base.partition_by("__descricao_norm", as_dict=True)
+    df_base_empty = df_base.filter(pl.lit(False))
 
     registros_mestra = []
     registros_ponte = []
@@ -164,24 +190,13 @@ def inicializar_produtos_agrupados(cnpj: str, pasta_cnpj: Path | None = None) ->
         id_grp = _gerar_id_agrupado(seq)
         seq += 1
         
-        desc_norms = [r.get("descricao_normalizada") for r in g if r.get("descricao_normalizada")]
+        desc_norms = sorted(set([r.get("descricao_normalizada") for r in g if r.get("descricao_normalizada")]))
         
         if desc_norms:
-            group_dfs = []
-            for d in set(desc_norms):
-                if (d,) in part_dict:
-                    group_dfs.append(part_dict[(d,)])
-
-            if group_dfs:
-                if len(group_dfs) > 1:
-                    df_base_filtered = pl.concat(group_dfs)
-                else:
-                    df_base_filtered = group_dfs[0]
-                df_base_filtered = df_base_filtered.drop("__descricao_norm")
-            else:
-                df_base_filtered = df_base.filter(pl.lit(False))
+            partes = [df_base_parts.get((n,), df_base_empty) for n in desc_norms]
+            df_base_filtered = pl.concat(partes, how="vertical_relaxed") if partes else df_base_empty
         else:
-            df_base_filtered = df_base.filter(pl.lit(False))
+            df_base_filtered = df_base_empty
 
         padrao = calcular_atributos_padrao(df_base_filtered)
 
@@ -190,11 +205,11 @@ def inicializar_produtos_agrupados(cnpj: str, pasta_cnpj: Path | None = None) ->
         lista_ncm = sorted(set([item for r in g for item in (r.get("lista_ncm") or []) if item]))
         lista_cest = sorted(set([item for r in g for item in (r.get("lista_cest") or []) if item]))
         lista_gtin = sorted(set([item for r in g for item in (r.get("lista_gtin") or []) if item]))
-        lista_descricoes = sorted(
-            set(
-                [r.get("descricao") for r in g if r.get("descricao")]
-                + [item for r in g for item in (r.get("lista_desc_compl") or []) if item]
-            )
+        # A lista principal deve conter apenas descricoes-base do grupo.
+        lista_descricoes = sorted(set([r.get("descricao") for r in g if r.get("descricao")]))
+        # Complementos permanecem auditaveis em coluna propria.
+        lista_desc_compl = sorted(
+            set([item for r in g for item in (r.get("lista_desc_compl") or []) if item])
         )
         divergentes = len(lista_sefin) > 1
 
@@ -209,6 +224,7 @@ def inicializar_produtos_agrupados(cnpj: str, pasta_cnpj: Path | None = None) ->
                 "lista_cest": lista_cest,
                 "lista_gtin": lista_gtin,
                 "lista_descricoes": lista_descricoes,
+                "lista_desc_compl": lista_desc_compl,
                 "lista_co_sefin": lista_sefin,
                 "co_sefin_padrao": padrao.get("co_sefin_padrao"),
                 "co_sefin_agr": ", ".join(sorted([str(s) for s in lista_sefin])),
@@ -239,3 +255,5 @@ if __name__ == "__main__":
     else:
         c = input("CNPJ: ")
         inicializar_produtos_agrupados(c)
+
+

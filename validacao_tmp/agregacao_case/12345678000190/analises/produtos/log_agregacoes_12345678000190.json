@@ -1,0 +1,11 @@
+[
+  {
+    "tipo": "agregacao",
+    "ids_unidos": [
+      "AGR_1",
+      "AGR_2"
+    ],
+    "nova_descr": "Produto A",
+    "timestamp": "2026-04-06T11:44:40.006538"
+  }
+]
