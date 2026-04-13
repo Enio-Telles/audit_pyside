@@ -1,4 +1,4 @@
-## 2024-11-20 - [Fix Information Disclosure via HTTPException and raw exception catching]
-**Vulnerability:** Raw exception objects and traceback were being directly formatted into HTTPException and terminal print outputs via f-strings and print logic (e.g. `except Exception as e:` with `rprint(f"Error: {e}")` and `traceback.format_exc()` or `HTTPException(503, f"Erro: {exc}")`).
-**Learning:** Developers must be careful not to log/print or leak to the end user the raw exception strings or tracebacks which can expose database connection information, file paths, or structural internals that can assist an attacker in footprinting the application. Web frameworks like FastAPI can leak this back to clients via 5xx HTTP responses if not strictly controlled.
-**Prevention:** Always log exceptions appropriately in the backend with secure tools (e.g., `logger.error(..., exc_info=exc)`) and use generic sanitized responses for the frontend/client (e.g. "Erro interno ao consultar o banco de dados.").
+## 2024-05-24 - Fix Information Disclosure in Oracle Connection
+**Vulnerability:** Information Exposure (CWE-209) through `rprint` outputting detailed exception string (`{e}`) in `conectar_oracle.py`.
+**Learning:** Detailed runtime exceptions regarding the environment setup were logged directly to the end-user CLI when they failed, potentially exposing host environment data.
+**Prevention:** Catch exception context using the standard logging module for developers and display generic, sanitized errors via user-facing functions like `rprint` to avoid Information Disclosure.
