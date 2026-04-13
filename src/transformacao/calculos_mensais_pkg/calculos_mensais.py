@@ -1,13 +1,14 @@
-import sys
+﻿import sys
 import re
 from datetime import date
 from pathlib import Path
+from utilitarios.project_paths import PROJECT_ROOT, TRACEBACK_PATH
 from time import perf_counter
 
 import polars as pl
 from rich import print as rprint
 
-ROOT_DIR = Path(r"c:\funcoes - Copia")
+ROOT_DIR = PROJECT_ROOT
 SRC_DIR = ROOT_DIR / "src"
 DADOS_DIR = ROOT_DIR / "dados"
 CNPJ_ROOT = DADOS_DIR / "CNPJ"
@@ -97,23 +98,10 @@ def _carregar_referencia_st_mensal(df_base: pl.DataFrame, df_aux_st: pl.DataFram
             ]
         )
         .with_columns(
-            [
-                pl.struct(["ano", "mes"]).map_elements(
-                    lambda registro: date(int(registro["ano"]), int(registro["mes"]), 1),
-                    return_dtype=pl.Date,
-                ).alias("__mes_ini__"),
-                pl.struct(["ano", "mes"]).map_elements(
-                    lambda registro: (
-                        date(int(registro["ano"]) + 1, 1, 1)
-                        if int(registro["mes"]) == 12
-                        else date(int(registro["ano"]), int(registro["mes"]) + 1, 1)
-                    ),
-                    return_dtype=pl.Date,
-                ).alias("__prox_mes_ini__"),
-            ]
+            pl.date(pl.col("ano"), pl.col("mes"), 1).alias("__mes_ini__")
         )
         .with_columns(
-            (pl.col("__prox_mes_ini__") - pl.duration(days=1)).alias("__mes_fim__")
+            pl.col("__mes_ini__").dt.month_end().alias("__mes_fim__")
         )
     )
     if df_chaves.is_empty():
@@ -535,6 +523,8 @@ if __name__ == "__main__":
     except Exception:
         import traceback
 
-        with open(r"c:\funcoes - Copia\traceback.txt", "w") as f:
+        with open(TRACEBACK_PATH, "w", encoding="utf-8") as f:
             traceback.print_exc(file=f)
         raise
+
+

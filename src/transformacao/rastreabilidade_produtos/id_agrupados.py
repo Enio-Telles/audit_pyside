@@ -1,13 +1,14 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import re
 import sys
 from pathlib import Path
+from utilitarios.project_paths import PROJECT_ROOT
 
 import polars as pl
 from rich import print as rprint
 
-ROOT_DIR = Path(r"c:\funcoes - Copia")
+ROOT_DIR = PROJECT_ROOT
 SRC_DIR = ROOT_DIR / "src"
 DADOS_DIR = ROOT_DIR / "dados"
 CNPJ_ROOT = DADOS_DIR / "CNPJ"
@@ -40,6 +41,7 @@ def _consolidar_grupo_id_agrupado(df_grupo: pl.DataFrame) -> pl.DataFrame:
     registros = df_grupo.to_dicts()
     descr_padrao = None
     descricoes: set[str] = set()
+    descricoes_complementares: set[str] = set()
     codigos: set[str] = set()
     unidades: set[str] = set()
 
@@ -54,10 +56,10 @@ def _consolidar_grupo_id_agrupado(df_grupo: pl.DataFrame) -> pl.DataFrame:
                 row.get("descr_padrao"),
                 row.get("descricao_final"),
                 row.get("descricao"),
-                row.get("lista_desc_compl"),
             ],
             descricoes
         )
+        _extrair_valores(row.get("lista_desc_compl"), descricoes_complementares)
         _extrair_valores(row.get("lista_codigos"), codigos)
         _extrair_valores(
             [
@@ -73,9 +75,18 @@ def _consolidar_grupo_id_agrupado(df_grupo: pl.DataFrame) -> pl.DataFrame:
             "id_agrupado": [str(registros[0]["id_agrupado"])],
             "descr_padrao": [descr_padrao],
             "lista_descricoes": [sorted(descricoes)],
+            "lista_desc_compl": [sorted(descricoes_complementares)],
             "lista_codigos": [sorted(codigos)],
             "lista_unidades": [sorted(unidades)],
-        }
+        },
+        schema_overrides={
+            "id_agrupado": pl.String,
+            "descr_padrao": pl.String,
+            "lista_descricoes": pl.List(pl.String),
+            "lista_desc_compl": pl.List(pl.String),
+            "lista_codigos": pl.List(pl.String),
+            "lista_unidades": pl.List(pl.String),
+        },
     )
 
 
@@ -126,3 +137,5 @@ if __name__ == "__main__":
         gerar_id_agrupados(sys.argv[1])
     else:
         gerar_id_agrupados(input("CNPJ: "))
+
+

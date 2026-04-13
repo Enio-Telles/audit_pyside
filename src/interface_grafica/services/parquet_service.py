@@ -276,6 +276,8 @@ class ParquetService:
         visible_columns: list[str] | None,
         page: int,
         page_size: int = DEFAULT_PAGE_SIZE,
+        sort_by: str | None = None,
+        sort_desc: bool = False,
     ) -> PageResult:
         inicio_total = perf_counter()
         page = max(page, 1)
@@ -284,6 +286,8 @@ class ParquetService:
             *path_signature,
             self._conditions_key(conditions),
             tuple(visible_columns or ()),
+            sort_by or "",
+            sort_desc,
             page,
             page_size,
         )
@@ -348,6 +352,8 @@ class ParquetService:
         if not visible_columns:
             visible_columns = all_columns[:]
         offset = (page - 1) * page_size
+        if sort_by and sort_by in all_columns:
+            lf_all = lf_all.sort(sort_by, descending=sort_desc)
         inicio_collect = perf_counter()
         df_all = lf_all.slice(offset, page_size).collect()
         registrar_evento_performance(
@@ -441,4 +447,6 @@ class ParquetService:
         self._count_cache = {k: v for k, v in self._count_cache.items() if k[0] != target}
         self._page_cache = OrderedDict((k, v) for k, v in self._page_cache.items() if k[0] != target)
         self._dataset_cache = OrderedDict((k, v) for k, v in self._dataset_cache.items() if k[0] != target)
+
+    paginate = get_page
 

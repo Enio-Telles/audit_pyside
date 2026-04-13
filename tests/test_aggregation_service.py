@@ -136,13 +136,23 @@ def test_agregar_linhas_recalcula_padroes_com_colunas_item_unidades(monkeypatch,
     assert df.height == 1
     row = df.row(0, named=True)
     assert row["descr_padrao"] == "Produto A"
+    assert row["id_agrupado"] == "AGR_1"
     assert row["ncm_padrao"] == "1000"
     assert row["cest_padrao"] == "2000"
     assert row["gtin_padrao"] == "789"
     assert row["lista_ncm"] == ["1000"]
     assert row["lista_cest"] == ["2000"]
     assert row["lista_gtin"] == ["789"]
-    assert row["lista_descricoes"] == ["Caixa 12x1L", "Garrafa 1L", "Produto A"]
+    assert row["lista_descricoes"] == ["Produto A"]
+    assert row["lista_desc_compl"] == ["Caixa 12x1L", "Garrafa 1L"]
+    assert row["ids_origem_agrupamento"] == ["AGR_1", "AGR_2"]
+    assert row["lista_itens_agrupados"] == ["Produto A"]
+
+    historico = servico.ler_linhas_log(cnpj)
+    assert historico[-1]["tipo"] == "agregacao"
+    assert historico[-1]["id_destino"] == "AGR_1"
+    assert historico[-1]["ids_unidos"] == ["AGR_1", "AGR_2"]
+    assert len(historico[-1]["grupos_origem"]) == 2
 
 
 def test_garantir_metricas_regenera_schema_legado_com_descricoes(monkeypatch, tmp_path: Path):
@@ -178,7 +188,8 @@ def test_garantir_metricas_regenera_schema_legado_com_descricoes(monkeypatch, tm
                 "lista_ncm": [["1000"]],
                 "lista_cest": [["2000"]],
                 "lista_gtin": [["789"]],
-                "lista_descricoes": [["Caixa 12x1L", "Produto A"]],
+                "lista_descricoes": [["Produto A"]],
+                "lista_desc_compl": [["Caixa 12x1L"]],
             }
         ).write_parquet(pasta_prod / f"produtos_agrupados_{cnpj}.parquet")
         return True
@@ -189,7 +200,8 @@ def test_garantir_metricas_regenera_schema_legado_com_descricoes(monkeypatch, tm
             {
                 "id_agrupado": ["AGR_1"],
                 "descr_padrao": ["Produto A"],
-                "lista_descricoes": [["Caixa 12x1L", "Produto A"]],
+                "lista_descricoes": [["Produto A"]],
+                "lista_desc_compl": [["Caixa 12x1L"]],
             }
         ).write_parquet(pasta_prod / f"id_agrupados_{cnpj}.parquet")
         return True
@@ -215,13 +227,83 @@ def test_garantir_metricas_regenera_schema_legado_com_descricoes(monkeypatch, tm
     schema_id = pl.read_parquet(pasta_prod / f"id_agrupados_{cnpj}.parquet", n_rows=1).columns
 
     assert "lista_descricoes" in schema_agr
+    assert "lista_desc_compl" in schema_agr
     assert "lista_descricoes" in schema_id
+    assert "lista_desc_compl" in schema_id
     assert chamadas == [
         f"inicializar:{cnpj}",
         f"id_agrupados:{cnpj}",
         "recalcular_padroes",
         "recalcular_totais",
     ]
+
+
+def test_reverter_agrupamento_restabelece_grupos_origem(monkeypatch, tmp_path: Path):
+    cnpj = "12345678000190"
+    pasta_prod = tmp_path / cnpj / "analises" / "produtos"
+    pasta_prod.mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setattr(aggregation_service_module, "CNPJ_ROOT", tmp_path)
+    monkeypatch.setattr(aggregation_service_module, "registrar_evento_performance", lambda *args, **kwargs: None)
+
+    pl.DataFrame(
+        {
+            "id_agrupado": ["AGR_1", "AGR_2"],
+            "descr_padrao": ["Produto A", "Produto B"],
+            "lista_chave_produto": [["desc_1"], ["desc_2"]],
+            "lista_descricoes": [["Produto A"], ["Produto B"]],
+            "lista_desc_compl": [["Comp A"], ["Comp B"]],
+            "ids_origem_agrupamento": [["AGR_1"], ["AGR_2"]],
+            "lista_itens_agrupados": [["Produto A"], ["Produto B"]],
+            "lista_co_sefin": [["2290"], ["2291"]],
+            "lista_unidades": [["UN"], ["UN"]],
+            "co_sefin_divergentes": [False, False],
+        }
+    ).write_parquet(pasta_prod / f"produtos_agrupados_{cnpj}.parquet")
+
+    pl.DataFrame(
+        {
+            "id_descricao": ["desc_1", "desc_2"],
+            "descricao_normalizada": ["PRODUTO A", "PRODUTO B"],
+            "descricao": ["Produto A", "Produto B"],
+            "lista_desc_compl": [["Comp A"], ["Comp B"]],
+            "lista_ncm": [["1000"], ["2000"]],
+            "lista_cest": [["3000"], ["4000"]],
+            "lista_gtin": [["789"], ["456"]],
+            "fontes": [["c170"], ["nfe"]],
+        }
+    ).write_parquet(pasta_prod / f"descricao_produtos_{cnpj}.parquet")
+
+    pl.DataFrame(
+        {
+            "descricao": ["Produto A", "Produto B"],
+            "ncm": ["1000", "2000"],
+            "cest": ["3000", "4000"],
+            "gtin": ["789", "456"],
+            "co_sefin_item": ["2290", "2291"],
+            "fontes": [["c170"], ["nfe"]],
+        }
+    ).write_parquet(pasta_prod / f"item_unidades_{cnpj}.parquet")
+
+    servico = ServicoAgregacao()
+    monkeypatch.setattr(servico, "recalcular_valores_totais", lambda *args, **kwargs: True)
+    monkeypatch.setattr(servico, "recalcular_produtos_final", lambda *args, **kwargs: True)
+    monkeypatch.setattr(servico, "recalcular_referencias_produtos", lambda *args, **kwargs: True)
+
+    servico.agregar_linhas(cnpj, ["AGR_1", "AGR_2"])
+    resultado = servico.reverter_agrupamento(cnpj, "AGR_1")
+
+    assert resultado["success"] is True
+    assert resultado["ids_restaurados"] == ["AGR_1", "AGR_2"]
+
+    df = pl.read_parquet(pasta_prod / f"produtos_agrupados_{cnpj}.parquet").sort("id_agrupado")
+    assert df.get_column("id_agrupado").to_list() == ["AGR_1", "AGR_2"]
+
+    historico = servico.ler_linhas_log(cnpj)
+    entradas_agregacao = [item for item in historico if item.get("tipo") == "agregacao"]
+    entradas_desagrupacao = [item for item in historico if item.get("tipo") == "desagrupacao"]
+    assert entradas_agregacao[-1]["revertida"] is True
+    assert entradas_desagrupacao[-1]["ids_restaurados"] == ["AGR_1", "AGR_2"]
 
 
 def test_artefatos_estoque_defasados_identifica_derivados_antigos_ou_ausentes(monkeypatch, tmp_path: Path):

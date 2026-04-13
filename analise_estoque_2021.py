@@ -5,8 +5,9 @@ Foco: id_agrupado_23, ano 2021
 
 import polars as pl
 from pathlib import Path
+from src.utilitarios.project_paths import PROJECT_ROOT
 
-ROOT_DIR = Path(r"c:\funcoes - Copia")
+ROOT_DIR = PROJECT_ROOT
 CNPJ_ROOT = ROOT_DIR / "dados" / "CNPJ"
 
 # Localizar CNPJ dos dados de exemplo

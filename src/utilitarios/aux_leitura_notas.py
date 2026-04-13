@@ -26,7 +26,8 @@ def ler_nfe_nfce(path: Path | None, cnpj: str, fonte: str, cfop_df: pl.DataFrame
         "codigo_fonte",
     ]
 
-    schema = pl.read_parquet(path, n_rows=0).schema
+    # Otimização Bolt: pl.read_parquet_schema le a metadata sem alocar o DataFrame na memoria
+    schema = pl.read_parquet_schema(path)
 
     # Identifica coluna de tipo de operacao (0=Entrada, 1=Saida)
     col_tp = next((c for c in ["tipo_operacao", "co_tp_nf", "tp_nf"] if c in schema), None)
@@ -115,7 +116,8 @@ def ler_c170(path: Path | None, cfop_df: pl.DataFrame | None = None, ano_padrao:
         print("  [!] C170 nao encontrado.")
         return None
 
-    schema = pl.read_parquet(path, n_rows=0).schema
+    # Otimização Bolt: pl.read_parquet_schema le a metadata sem alocar o DataFrame na memoria
+    schema = pl.read_parquet_schema(path)
 
     col_map = {
         "cod_item": "codigo",
@@ -177,7 +179,8 @@ def ler_bloco_h(path: Path | None, print_status: bool = False) -> pl.DataFrame |
         print("  [!] bloco_h nao encontrado.")
         return None
 
-    schema = pl.read_parquet(path, n_rows=0).schema
+    # Otimização Bolt: pl.read_parquet_schema le a metadata sem alocar o DataFrame na memoria
+    schema = pl.read_parquet_schema(path)
 
     def _pick(*candidates: str) -> str | None:
         for c in candidates:

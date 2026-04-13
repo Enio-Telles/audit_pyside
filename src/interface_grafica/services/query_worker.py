@@ -7,13 +7,13 @@ Emite sinais de progresso, sucesso e falha.
 from __future__ import annotations
 
 import os
-from pathlib import Path
 from time import perf_counter
 from typing import Any
 
 import polars as pl
 from PySide6.QtCore import QThread, Signal
 from utilitarios.perf_monitor import registrar_evento_performance
+from utilitarios.project_paths import ENV_PATH
 
 # ---------------------------------------------------------------------------
 # Reutiliza funcoes do pipeline existente quando possivel
@@ -33,8 +33,7 @@ def _conectar_oracle_fallback():
 
     from dotenv import load_dotenv
 
-    root = Path(__file__).resolve().parents[2]
-    for candidate in [Path.cwd() / ".env", root / ".env"]:
+    for candidate in [Path.cwd() / ".env", ENV_PATH]:
         if candidate.exists():
             load_dotenv(candidate, override=False, encoding="latin-1")
             break
