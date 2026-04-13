@@ -63,49 +63,25 @@ def gerar_id_agrupados(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         )
         .group_by("id_agrupado")
         .agg([
-            # descr_padrao: first non-null, non-empty value in the group
-            pl.col("descr_padrao")
-                .filter(pl.col("descr_padrao").is_not_null() & (pl.col("descr_padrao").str.strip_chars() != ""))
-                .first()
-                .alias("descr_padrao"),
-            # Collect non-null values from scalar description columns for later union
-            pl.col("descr_padrao").drop_nulls().alias("_tmp_desc_padrao"),
-            pl.col("descricao_final").drop_nulls().alias("_tmp_desc_final"),
-            pl.col("descricao").drop_nulls().alias("_tmp_desc"),
-            # Flatten list columns — lista_desc_compl kept as a separate output column
-            pl.col("lista_desc_compl").explode().drop_nulls().alias("_tmp_desc_compl"),
-            pl.col("lista_codigos").explode().drop_nulls().alias("_tmp_codigos"),
-            pl.col("lista_unid").explode().drop_nulls().alias("_tmp_unid"),
-            pl.col("lista_unidades_agr").explode().drop_nulls().alias("_tmp_unid_agr"),
-            pl.col("unid_ref_sugerida").drop_nulls().alias("_tmp_unid_ref"),
+            pl.col("descr_padrao").filter(pl.col("descr_padrao").str.strip_chars() != "").drop_nulls().first().alias("descr_padrao"),
+            pl.concat_list([
+                pl.col("descr_padrao").drop_nulls().implode(),
+                pl.col("descricao_final").drop_nulls().implode(),
+                pl.col("descricao").drop_nulls().implode(),
+                pl.col("lista_desc_compl").explode().drop_nulls().implode()
+            ]).explode().drop_nulls().str.strip_chars().unique().sort().alias("lista_descricoes"),
+            pl.col("lista_codigos").explode().drop_nulls().str.strip_chars().unique().sort().alias("lista_codigos"),
+            pl.concat_list([
+                pl.col("lista_unid").explode().drop_nulls().implode(),
+                pl.col("lista_unidades_agr").explode().drop_nulls().implode(),
+                pl.col("unid_ref_sugerida").drop_nulls().implode()
+            ]).explode().drop_nulls().str.strip_chars().unique().sort().alias("lista_unidades")
         ])
         .with_columns([
-            # lista_descricoes: union of descr_padrao, descricao_final, descricao (stripped, deduped, sorted)
-            pl.concat_list(["_tmp_desc_padrao", "_tmp_desc_final", "_tmp_desc"])
-                .list.eval(pl.element().str.strip_chars())
-                .list.eval(pl.element().filter(pl.element() != ""))
-                .list.unique().list.sort()
-                .alias("lista_descricoes"),
-            # lista_desc_compl: flattened from all group rows (stripped, deduped, sorted)
-            pl.col("_tmp_desc_compl")
-                .list.eval(pl.element().str.strip_chars())
-                .list.eval(pl.element().filter(pl.element() != ""))
-                .list.unique().list.sort()
-                .alias("lista_desc_compl"),
-            # lista_codigos: flattened from all group rows (stripped, deduped, sorted)
-            pl.col("_tmp_codigos")
-                .list.eval(pl.element().str.strip_chars())
-                .list.eval(pl.element().filter(pl.element() != ""))
-                .list.unique().list.sort()
-                .alias("lista_codigos"),
-            # lista_unidades: union of lista_unid, lista_unidades_agr, unid_ref_sugerida
-            pl.concat_list(["_tmp_unid", "_tmp_unid_agr", "_tmp_unid_ref"])
-                .list.eval(pl.element().str.strip_chars())
-                .list.eval(pl.element().filter(pl.element() != ""))
-                .list.unique().list.sort()
-                .alias("lista_unidades"),
+            pl.col("lista_descricoes").list.eval(pl.element().filter(pl.element() != "")),
+            pl.col("lista_codigos").list.eval(pl.element().filter(pl.element() != "")),
+            pl.col("lista_unidades").list.eval(pl.element().filter(pl.element() != ""))
         ])
-        .drop(_TMP_AGG_COLS)
         .sort("id_agrupado")
     )
 
