@@ -246,6 +246,9 @@ def calcular_aba_mensal_dataframe(df: pl.DataFrame, df_aux_st: pl.DataFrame | No
         "entr_desac_anual",
         "saldo_estoque_anual",
         "custo_medio_anual",
+        "entr_desac_periodo",
+        "saldo_estoque_periodo",
+        "custo_medio_periodo",
         "Aliq_icms",
         "it_pc_interna",
         "it_pc_mva",
@@ -301,6 +304,9 @@ def calcular_aba_mensal_dataframe(df: pl.DataFrame, df_aux_st: pl.DataFrame | No
                 pl.col("entr_desac_anual").cast(pl.Float64, strict=False).fill_null(0.0).alias("__entr_desac_calc__"),
                 pl.col("saldo_estoque_anual").cast(pl.Float64, strict=False).fill_null(0.0).alias("__saldo_calc__"),
                 pl.col("custo_medio_anual").cast(pl.Float64, strict=False).fill_null(0.0).alias("__custo_calc__"),
+                pl.col("entr_desac_periodo").cast(pl.Float64, strict=False).fill_null(0.0).alias("__entr_desac_periodo_calc__"),
+                pl.col("saldo_estoque_periodo").cast(pl.Float64, strict=False).fill_null(0.0).alias("__saldo_periodo_calc__"),
+                pl.col("custo_medio_periodo").cast(pl.Float64, strict=False).fill_null(0.0).alias("__custo_periodo_calc__"),
                 pl.col("Aliq_icms").cast(pl.Float64, strict=False).fill_null(0.0).alias("__aliq_inter_calc__"),
                 pl.col("it_pc_interna").cast(pl.Float64, strict=False).fill_null(0.0).alias("__aliq_mes_calc__"),
                 pl.col("it_pc_mva").cast(pl.Float64, strict=False).fill_null(0.0).alias("__mva_pct_calc__"),
@@ -336,6 +342,9 @@ def calcular_aba_mensal_dataframe(df: pl.DataFrame, df_aux_st: pl.DataFrame | No
                 pl.col("__entr_desac_calc__").sum().alias("entradas_desacob"),
                 pl.col("__saldo_calc__").last().alias("saldo_mes"),
                 pl.col("__custo_calc__").last().alias("custo_medio_mes"),
+                pl.col("__entr_desac_periodo_calc__").sum().alias("entradas_desacob_periodo"),
+                pl.col("__saldo_periodo_calc__").last().alias("saldo_mes_periodo"),
+                pl.col("__custo_periodo_calc__").last().alias("custo_medio_mes_periodo"),
                 pl.col("__aliq_mes_calc__").drop_nulls().last().alias("__aliq_mes__"),
                 pl.col("__aliq_inter_calc__").drop_nulls().last().alias("__aliq_inter_mes__"),
                 pl.col("__mva_pct_calc__").drop_nulls().last().alias("__mva_pct_mes__"),
@@ -390,6 +399,10 @@ def calcular_aba_mensal_dataframe(df: pl.DataFrame, df_aux_st: pl.DataFrame | No
                     pl.col("saldo_mes").cast(pl.Float64, strict=False).fill_null(0.0)
                     * pl.col("custo_medio_mes").cast(pl.Float64, strict=False).fill_null(0.0)
                 ).alias("valor_estoque"),
+                (
+                    pl.col("saldo_mes_periodo").cast(pl.Float64, strict=False).fill_null(0.0)
+                    * pl.col("custo_medio_mes_periodo").cast(pl.Float64, strict=False).fill_null(0.0)
+                ).alias("valor_estoque_periodo"),
                 pl.when(
                     pl.col("__tem_st_mes__")
                     & (pl.col("entradas_desacob") > 0)
@@ -409,7 +422,27 @@ def calcular_aba_mensal_dataframe(df: pl.DataFrame, df_aux_st: pl.DataFrame | No
                     )
                 )
                 .otherwise(0.0)
-                .alias("ICMS_entr_desacob")
+                .alias("ICMS_entr_desacob"),
+                pl.when(
+                    pl.col("__tem_st_mes__")
+                    & (pl.col("entradas_desacob_periodo") > 0)
+                )
+                .then(
+                    pl.when(pl.col("__pms_mes_icms__") > 0)
+                    .then(
+                        pl.col("__pms_mes_icms__")
+                        * pl.col("entradas_desacob_periodo")
+                        * (pl.col("__aliq_mes__") / 100.0)
+                    )
+                    .otherwise(
+                        pl.col("__pme_mes_icms__")
+                        * pl.col("entradas_desacob_periodo")
+                        * (pl.col("__aliq_mes__") / 100.0)
+                        * pl.col("__mva_mes__")
+                    )
+                )
+                .otherwise(0.0)
+                .alias("ICMS_entr_desacob_periodo")
             ]
         )
         .with_columns(
@@ -425,6 +458,11 @@ def calcular_aba_mensal_dataframe(df: pl.DataFrame, df_aux_st: pl.DataFrame | No
                 pl.col("custo_medio_mes").round(4),
                 pl.col("valor_estoque").round(2),
                 pl.col("ICMS_entr_desacob").round(2),
+                pl.col("entradas_desacob_periodo").round(4),
+                pl.col("saldo_mes_periodo").round(4),
+                pl.col("custo_medio_mes_periodo").round(4),
+                pl.col("valor_estoque_periodo").round(2),
+                pl.col("ICMS_entr_desacob_periodo").round(2),
                 pl.col("qtd_entradas").round(4),
                 pl.col("qtd_saidas").round(4),
             ]
@@ -452,6 +490,11 @@ def calcular_aba_mensal_dataframe(df: pl.DataFrame, df_aux_st: pl.DataFrame | No
                 "saldo_mes",
                 "custo_medio_mes",
                 "valor_estoque",
+                "entradas_desacob_periodo",
+                "ICMS_entr_desacob_periodo",
+                "saldo_mes_periodo",
+                "custo_medio_mes_periodo",
+                "valor_estoque_periodo",
             ]
         )
         .sort(["ano", "mes", "id_agregado"])

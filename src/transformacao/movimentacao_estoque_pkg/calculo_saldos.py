@@ -314,8 +314,8 @@ def gerar_eventos_estoque(df_mov: pl.DataFrame) -> pl.DataFrame:
     return df_result.drop(["__data_ref__", "__tipo_op__"], strict=False)
 
 
-def calcular_saldo_estoque_anual(df: pl.DataFrame) -> pl.DataFrame:
-    """Calcula saldo de estoque sequencial por grupo (id_agrupado, ano).
+def _calc_saldos_loop(df: pl.DataFrame, sufixo: str) -> pl.DataFrame:
+    """Calcula saldo de estoque sequencial por grupo.
 
     Usa arrays NumPy em vez de to_dicts() para ~3-5x de speedup.
     A logica sequencial (saldo depende da linha anterior) impede window functions
@@ -426,8 +426,15 @@ def calcular_saldo_estoque_anual(df: pl.DataFrame) -> pl.DataFrame:
 
     return df.with_columns(
         [
-            pl.Series("saldo_estoque_anual", saldos),
-            pl.Series("entr_desac_anual", entradas_desacob),
-            pl.Series("custo_medio_anual", custos),
+            pl.Series(f"saldo_estoque_{sufixo}", saldos),
+            pl.Series(f"entr_desac_{sufixo}", entradas_desacob),
+            pl.Series(f"custo_medio_{sufixo}", custos),
         ]
     )
+
+
+def calcular_saldo_estoque_anual(df: pl.DataFrame) -> pl.DataFrame:
+    return _calc_saldos_loop(df, "anual")
+
+def calcular_saldo_estoque_periodo(df: pl.DataFrame) -> pl.DataFrame:
+    return _calc_saldos_loop(df, "periodo")
