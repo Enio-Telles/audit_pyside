@@ -1,13 +1,14 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import re
 import sys
 from pathlib import Path
+from utilitarios.project_paths import PROJECT_ROOT
 
 import polars as pl
 from rich import print as rprint
 
-ROOT_DIR = Path(r"c:\funcoes - Copia")
+ROOT_DIR = PROJECT_ROOT
 SRC_DIR = ROOT_DIR / "src"
 DADOS_DIR = ROOT_DIR / "dados"
 CNPJ_ROOT = DADOS_DIR / "CNPJ"
@@ -20,26 +21,29 @@ except ImportError as e:
     sys.exit(1)
 
 
-def _limpar_lista(valores) -> list[str]:
-    saida: list[str] = []
-    for valor in valores or []:
-        if valor is None:
+def _extrair_valores(valores, saida: set[str]) -> None:
+    if not valores:
+        return
+    stack = [valores]
+    while stack:
+        curr = stack.pop()
+        if curr is None:
             continue
-        if isinstance(valor, list):
-            saida.extend(_limpar_lista(valor))
-            continue
-        texto = str(valor).strip()
-        if texto:
-            saida.append(texto)
-    return sorted(set(saida))
+        if isinstance(curr, list):
+            stack.extend(curr)
+        else:
+            texto = str(curr).strip()
+            if texto:
+                saida.add(texto)
 
 
 def _consolidar_grupo_id_agrupado(df_grupo: pl.DataFrame) -> pl.DataFrame:
     registros = df_grupo.to_dicts()
     descr_padrao = None
-    descricoes: list[str] = []
-    codigos: list[str] = []
-    unidades: list[str] = []
+    descricoes: set[str] = set()
+    descricoes_complementares: set[str] = set()
+    codigos: set[str] = set()
+    unidades: set[str] = set()
 
     for row in registros:
         if descr_padrao is None:
@@ -47,35 +51,42 @@ def _consolidar_grupo_id_agrupado(df_grupo: pl.DataFrame) -> pl.DataFrame:
             if valor:
                 descr_padrao = valor
 
-        descricoes.extend(
-            _limpar_lista(
-                [
-                    row.get("descr_padrao"),
-                    row.get("descricao_final"),
-                    row.get("descricao"),
-                    row.get("lista_desc_compl"),
-                ]
-            )
+        _extrair_valores(
+            [
+                row.get("descr_padrao"),
+                row.get("descricao_final"),
+                row.get("descricao"),
+            ],
+            descricoes
         )
-        codigos.extend(_limpar_lista(row.get("lista_codigos")))
-        unidades.extend(
-            _limpar_lista(
-                [
-                    row.get("lista_unid"),
-                    row.get("lista_unidades_agr"),
-                    row.get("unid_ref_sugerida"),
-                ]
-            )
+        _extrair_valores(row.get("lista_desc_compl"), descricoes_complementares)
+        _extrair_valores(row.get("lista_codigos"), codigos)
+        _extrair_valores(
+            [
+                row.get("lista_unid"),
+                row.get("lista_unidades_agr"),
+                row.get("unid_ref_sugerida"),
+            ],
+            unidades
         )
 
     return pl.DataFrame(
         {
             "id_agrupado": [str(registros[0]["id_agrupado"])],
             "descr_padrao": [descr_padrao],
-            "lista_descricoes": [_limpar_lista(descricoes)],
-            "lista_codigos": [_limpar_lista(codigos)],
-            "lista_unidades": [_limpar_lista(unidades)],
-        }
+            "lista_descricoes": [sorted(descricoes)],
+            "lista_desc_compl": [sorted(descricoes_complementares)],
+            "lista_codigos": [sorted(codigos)],
+            "lista_unidades": [sorted(unidades)],
+        },
+        schema_overrides={
+            "id_agrupado": pl.String,
+            "descr_padrao": pl.String,
+            "lista_descricoes": pl.List(pl.String),
+            "lista_desc_compl": pl.List(pl.String),
+            "lista_codigos": pl.List(pl.String),
+            "lista_unidades": pl.List(pl.String),
+        },
     )
 
 
@@ -126,3 +137,5 @@ if __name__ == "__main__":
         gerar_id_agrupados(sys.argv[1])
     else:
         gerar_id_agrupados(input("CNPJ: "))
+
+

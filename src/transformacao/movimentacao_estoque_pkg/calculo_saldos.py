@@ -184,6 +184,7 @@ def gerar_eventos_estoque(df_mov: pl.DataFrame) -> pl.DataFrame:
                     pl.lit(0).cast(pl.Float64).alias("Vl_item"),
                     pl.lit(None).alias("Unid"),
                     pl.lit("gerado").alias("Ser"),
+                    pl.lit("gerado").alias("fonte"),
                 ]
             )
             .with_columns(
@@ -228,6 +229,7 @@ def gerar_eventos_estoque(df_mov: pl.DataFrame) -> pl.DataFrame:
                     .alias("Tipo_operacao"),
                     pl.col("__data_inicial__").cast(dt_doc_dtype, strict=False).alias("Dt_doc"),
                     pl.col("__data_inicial__").cast(dt_es_dtype, strict=False).alias("Dt_e_s"),
+                    pl.lit("gerado").alias("fonte"),
                 ]
             )
         )
@@ -282,6 +284,7 @@ def gerar_eventos_estoque(df_mov: pl.DataFrame) -> pl.DataFrame:
                     pl.lit(0).cast(pl.Float64).alias("Vl_item"),
                     pl.lit(None).alias("Unid"),
                     pl.lit("gerado").alias("Ser"),
+                    pl.lit("gerado").alias("fonte"),
                 ]
             )
             .with_columns(
@@ -411,9 +414,11 @@ def calcular_saldo_estoque_anual(df: pl.DataFrame) -> pl.DataFrame:
                         custo_medio = saldo_valor / saldo_qtd
 
         elif tipo[:1] == "3":
-            # ESTOQUE FINAL
-            if qtd_decl_final > saldo_qtd:
-                entr_desac = qtd_decl_final - saldo_qtd
+            # ESTOQUE FINAL apenas audita a quantidade declarada em
+            # __qtd_decl_final_audit__. A regra de negocio vigente exige
+            # que essa linha permaneça neutra para entradas desacobertadas,
+            # saldo fisico e custo medio.
+            pass
 
         saldos[i] = round(saldo_qtd, 6)
         entradas_desacob[i] = round(entr_desac, 6)
