@@ -1088,6 +1088,13 @@ class ServicoAgregacao:
             .alias("descricao_normalizada_temp")
         )
 
+        # ⚡ Bolt: Pre-calculate string normalization outside the loop to avoid redundant operations for each group
+        df_base_norm = df_base.with_columns(
+            pl.col("descricao")
+            .map_elements(self._normalizar_descricao_para_match, return_dtype=pl.String)
+            .alias("descricao_normalizada")
+        )
+
         registros = []
         for row in df_agrup.iter_rows(named=True):
             chaves = row.get("lista_chave_produto", []) or []
@@ -1097,9 +1104,10 @@ class ServicoAgregacao:
 
             desc_norm = df_prod_sel["descricao_normalizada"].to_list() if chaves else []
 
-            df_base_filtered = df_base.filter(
-                pl.col("descricao_normalizada_temp").is_in(desc_norm)
-            ).drop("descricao_normalizada_temp")
+            df_base_filtered = (
+                df_base_norm.filter(pl.col("descricao_normalizada").is_in(desc_norm))
+                .drop("descricao_normalizada")
+            )
             padrao = calcular_atributos_padrao(df_base_filtered)
 
             # Pass the already-filtered df_prod_sel to avoid another full table scan
