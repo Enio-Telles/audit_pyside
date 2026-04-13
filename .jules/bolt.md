@@ -1,7 +1,10 @@
+## 2025-02-24 - [Avoid Redundant Polars DataFrame Conversions]
+**Learning:** `executar_sql` fetched rows, converted them to a Polars DataFrame with inferred schema, and immediately dumped them back to Python dicts via `.to_dicts()`. This bypasses Polars' vectorization capabilities entirely, creating pure O(N) overhead for no benefit.
+**Action:** When SQL results are only needed as Python dictionaries (e.g., for JSON APIs or UI models), construct and return the `[dict(zip(columns, row)) for row in rows]` directly. Only create a Polars DataFrame if vectorized operations will be performed on it.
 
-## 2024-05-24 - Number.prototype.toLocaleString vs Intl.NumberFormat performance
-**Learning:** Calling `Number.prototype.toLocaleString()` inside a render loop (like a table cell formatter) repeatedly allocates locale data and parses the options object, causing significant performance degradation in JS execution times. In a test with 80k iterations, `toLocaleString()` took ~7.5 seconds, while a cached `Intl.NumberFormat` instance took ~65 milliseconds, making it over 100x faster.
-**Action:** Always instantiate and cache `Intl.NumberFormat` objects outside of render loops or frequent operations when formatting large amounts of data in the frontend.
-## 2026-04-08 - Vectorized String Normalization and Unicode Mojibake Fix
-**Learning:** When refactoring legacy string manipulation or normalization functions, explicitly verify regular expressions for corrupted unicode characters (mojibake like `ÃƒÂÃƒÂ€`), which can cause functional regressions if migrated blindly to native Polars `str.replace_all`. Replacing `.map_elements()` with native Polars expressions drastically improves performance, but the expressions must be character-accurate.
-**Action:** Always verify regex matches with live data or unit tests, ensuring characters like accents are properly encoded before relying on `replace_all` in a vectorized environment.
+## 2025-02-24 - [Avoid `partition_by(..., as_dict=True)` for Iteration]
+**Learning:** In `04_produtos_final.py`, using `df.partition_by('__descricao_upper', as_dict=True)` to create dictionaries of DataFrames for row-by-row iteration in Polars creates huge numbers of tiny DataFrames. This leads to high overhead and OOM errors, especially on larger datasets.
+**Action:** Replace `partition_by(as_dict=True)` with vectorized operations like `.join()` or `.group_by()`. If you must perform custom aggregations, group the data once or construct standard Python dictionaries of dictionaries instead of DataFrames.
+## 2025-02-24 - [Avoid Repeated Operations in Frontend useMemo Loops]
+**Learning:** In frontend components like `DataTable.tsx`, running string transformations (`.toLowerCase()`) and object iteration (`Object.entries`) *inside* the `rows.filter` callback creates an O(N*M) bottleneck, drastically reducing performance on large datasets.
+**Action:** Always hoist static filter extraction and value normalization outside the row iteration loop in `useMemo` to prevent redundant allocations and loop overhead.
