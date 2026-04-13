@@ -2,7 +2,7 @@ import pytest
 import pandas as pd
 import polars as pl
 from pathlib import Path
-from funcoes_auxiliares.exportar_excel import exportar_excel
+from utilitarios.exportar_excel import exportar_excel
 
 def test_exportar_excel_pandas_empty(tmp_path):
     df = pd.DataFrame()

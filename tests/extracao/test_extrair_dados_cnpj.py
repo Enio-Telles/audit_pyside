@@ -2,14 +2,14 @@ import pytest
 import threading
 from unittest.mock import patch, MagicMock
 
-from src.extracao.extrair_dados_cnpj import get_thread_connection, close_thread_connection, thread_local
+from extracao.extrair_dados_cnpj import get_thread_connection, close_thread_connection, thread_local
 
 def test_get_thread_connection_creates_new():
     # Ensure thread_local is clean
     if hasattr(thread_local, "conexao"):
         del thread_local.conexao
 
-    with patch("src.extracao.extrair_dados_cnpj.conectar") as mock_conectar:
+    with patch("extracao.extrair_dados_cnpj.conectar") as mock_conectar:
         mock_conn = MagicMock()
         mock_conectar.return_value = mock_conn
 
@@ -23,7 +23,7 @@ def test_get_thread_connection_reuses_existing():
     if hasattr(thread_local, "conexao"):
         del thread_local.conexao
 
-    with patch("src.extracao.extrair_dados_cnpj.conectar") as mock_conectar:
+    with patch("extracao.extrair_dados_cnpj.conectar") as mock_conectar:
         mock_conn = MagicMock()
         mock_conectar.return_value = mock_conn
 
@@ -38,7 +38,7 @@ def test_get_thread_connection_thread_isolation():
     if hasattr(thread_local, "conexao"):
         del thread_local.conexao
 
-    with patch("src.extracao.extrair_dados_cnpj.conectar") as mock_conectar:
+    with patch("extracao.extrair_dados_cnpj.conectar") as mock_conectar:
         # Each call returns a new mock object
         mock_conectar.side_effect = lambda: MagicMock()
 
@@ -60,7 +60,7 @@ def test_close_thread_connection():
     if hasattr(thread_local, "conexao"):
         del thread_local.conexao
 
-    with patch("src.extracao.extrair_dados_cnpj.conectar") as mock_conectar:
+    with patch("extracao.extrair_dados_cnpj.conectar") as mock_conectar:
         mock_conn = MagicMock()
         mock_conectar.return_value = mock_conn
 
@@ -76,7 +76,7 @@ def test_close_thread_connection_exception_handling():
     if hasattr(thread_local, "conexao"):
         del thread_local.conexao
 
-    with patch("src.extracao.extrair_dados_cnpj.conectar") as mock_conectar:
+    with patch("extracao.extrair_dados_cnpj.conectar") as mock_conectar:
         mock_conn = MagicMock()
         mock_conn.close.side_effect = Exception("Fake DB Close Error")
         mock_conectar.return_value = mock_conn

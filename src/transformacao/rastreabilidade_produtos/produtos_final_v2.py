@@ -20,3 +20,6 @@ produtos_agrupados = _module.produtos_agrupados
 gerar_produtos_final = _module.gerar_produtos_final
 
 __all__ = ["produtos_agrupados", "gerar_produtos_final"]
+
+# Re-export para compatibilidade com importação "from X import *"
+__getattr__ = lambda name: getattr(_module, name)

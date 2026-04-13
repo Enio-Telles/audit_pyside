@@ -1088,17 +1088,9 @@ class ServicoAgregacao:
             .alias("descricao_normalizada_temp")
         )
 
-        # ⚡ Bolt: Pre-calculate string normalization outside the loop to avoid redundant operations for each group
-        df_base_norm = df_base.with_columns(
-            pl.col("descricao")
-            .map_elements(self._normalizar_descricao_para_match, return_dtype=pl.String)
-            .alias("descricao_normalizada")
-        )
-
-        # Optimized: Pre-calculate normalized descriptions for df_base
+        # Optimized: Pre-calculate string normalization outside redundant loops to preserve vectorization
         df_base = df_base.with_columns(
-            pl.col("descricao")
-            .map_elements(self._normalizar_descricao_para_match, return_dtype=pl.String)
+            self._expr_normalizar_descricao("descricao")
             .alias("descricao_normalizada")
         )
 
@@ -1108,26 +1100,22 @@ class ServicoAgregacao:
         df_agrup_exp = df_agrup.select(["id_agrupado", "lista_chave_produto"]).explode("lista_chave_produto").rename({"lista_chave_produto": "chave_item"})
         df_joined = df_agrup_exp.join(df_prod_exp, on="chave_item", how="left")
 
-        # lista_co_sefin and co_sefin_agr
-        df_co_sefin = (
-            df_joined.explode("lista_co_sefin")
-            .drop_nulls("lista_co_sefin")
-            .with_columns(pl.col("lista_co_sefin").cast(pl.String).alias("co"))
-            .group_by("id_agrupado")
-            .agg([
-                pl.col("co").unique().sort().alias("lista_co_sefin"),
-                pl.col("co").unique().sort().list.join(", ").alias("co_sefin_agr")
-            ])
-            .with_columns(pl.col("lista_co_sefin").list.len().gt(1).alias("co_sefin_divergentes"))
-        )
-
-        # lista_unidades
-        df_unid = (
-            df_joined.explode("lista_unid")
-            .drop_nulls("lista_unid")
-            .with_columns(pl.col("lista_unid").cast(pl.String).alias("u"))
-            .group_by("id_agrupado")
-            .agg(pl.col("u").unique().sort().alias("lista_unidades"))
+        # Vectorized aggregation of lists (NCM, CEST, GTIN, Descricoes, etc.)
+        df_aggr_lists = (
+            df_joined.group_by("id_agrupado")
+            .agg(
+                pl.col("lista_co_sefin").explode().unique().sort().drop_nulls().alias("lista_co_sefin"),
+                pl.col("lista_unid").explode().unique().sort().drop_nulls().alias("lista_unidades"),
+                pl.col("lista_ncm").explode().unique().sort().drop_nulls().alias("lista_ncm"),
+                pl.col("lista_cest").explode().unique().sort().drop_nulls().alias("lista_cest"),
+                pl.col("lista_gtin").explode().unique().sort().drop_nulls().alias("lista_gtin"),
+                pl.col("descricao").unique().sort().drop_nulls().alias("lista_descricoes"),
+                pl.col("lista_desc_compl").explode().unique().sort().drop_nulls().alias("lista_desc_compl"),
+            )
+            .with_columns(
+                pl.col("lista_co_sefin").list.len().gt(1).alias("co_sefin_divergentes"),
+                pl.col("lista_co_sefin").cast(pl.List(pl.Utf8)).list.join(", ").alias("co_sefin_agr"),
+            )
         )
 
         # descr_fallback (first non-empty description)
@@ -1147,64 +1135,7 @@ class ServicoAgregacao:
         dict_base_parts = df_base_mapped.partition_by("id_agrupado", as_dict=True)
 
         # Optimized: Indexed dictionaries for O(1) lookups
-        dict_co_sefin = {row["id_agrupado"]: row for row in df_co_sefin.to_dicts()}
-        dict_unid = {row["id_agrupado"]: row for row in df_unid.to_dicts()}
-        dict_fallback = {row["id_agrupado"]: row["descr_fallback"] for row in df_fallback.to_dicts()}
-
-        # Optimized: Pre-calculate normalized descriptions for df_base
-        df_base = df_base.with_columns(
-            pl.col("descricao")
-            .map_elements(self._normalizar_descricao_para_match, return_dtype=pl.String)
-            .alias("descricao_normalizada")
-        )
-
-        # Optimized: Vectorized calculation of lists and fallback descriptions
-        df_prod_exp = df_prod.select(["chave_item", "descricao", "descricao_normalizada", "lista_co_sefin", "lista_unid"])
-
-        df_agrup_exp = df_agrup.select(["id_agrupado", "lista_chave_produto"]).explode("lista_chave_produto").rename({"lista_chave_produto": "chave_item"})
-        df_joined = df_agrup_exp.join(df_prod_exp, on="chave_item", how="left")
-
-        # lista_co_sefin and co_sefin_agr
-        df_co_sefin = (
-            df_joined.explode("lista_co_sefin")
-            .drop_nulls("lista_co_sefin")
-            .with_columns(pl.col("lista_co_sefin").cast(pl.String).alias("co"))
-            .group_by("id_agrupado")
-            .agg([
-                pl.col("co").unique().sort().alias("lista_co_sefin"),
-                pl.col("co").unique().sort().list.join(", ").alias("co_sefin_agr")
-            ])
-            .with_columns(pl.col("lista_co_sefin").list.len().gt(1).alias("co_sefin_divergentes"))
-        )
-
-        # lista_unidades
-        df_unid = (
-            df_joined.explode("lista_unid")
-            .drop_nulls("lista_unid")
-            .with_columns(pl.col("lista_unid").cast(pl.String).alias("u"))
-            .group_by("id_agrupado")
-            .agg(pl.col("u").unique().sort().alias("lista_unidades"))
-        )
-
-        # descr_fallback (first non-empty description)
-        df_fallback = (
-            df_joined.filter(
-                pl.col("descricao").cast(pl.Utf8, strict=False).fill_null("").str.strip_chars() != ""
-            )
-            .group_by("id_agrupado")
-            .agg(pl.col("descricao").first().alias("descr_fallback"))
-        )
-
-        # Mapping for df_base filtering
-        df_mapping = df_joined.select(["id_agrupado", "descricao_normalizada"]).unique().drop_nulls()
-        df_base_mapped = df_base.join(df_mapping, on="descricao_normalizada")
-
-        # Partition df_base by group for efficient access
-        dict_base_parts = df_base_mapped.partition_by("id_agrupado", as_dict=True)
-
-        # Optimized: Indexed dictionaries for O(1) lookups
-        dict_co_sefin = {row["id_agrupado"]: row for row in df_co_sefin.to_dicts()}
-        dict_unid = {row["id_agrupado"]: row for row in df_unid.to_dicts()}
+        dict_aggr = {row["id_agrupado"]: row for row in df_aggr_lists.to_dicts()}
         dict_fallback = {row["id_agrupado"]: row["descr_fallback"] for row in df_fallback.to_dicts()}
 
         registros = []
@@ -1217,25 +1148,25 @@ class ServicoAgregacao:
             padrao = calcular_atributos_padrao(df_base_filtered)
 
             # Retrieve pre-calculated vectorized values using O(1) dictionary lookups
-            co_info = dict_co_sefin.get(id_grp, {})
-            unid_info = dict_unid.get(id_grp, {})
+            aggr_info = dict_aggr.get(id_grp, {})
             descr_fallback = dict_fallback.get(id_grp)
 
             row["descr_padrao"] = padrao.get("descr_padrao") or row.get("descr_padrao") or descr_fallback
             row["ncm_padrao"] = padrao.get("ncm_padrao")
             row["cest_padrao"] = padrao.get("cest_padrao")
             row["gtin_padrao"] = padrao.get("gtin_padrao")
-            row["lista_ncm"] = self._coletar_lista_coluna(df_prod_sel, "lista_ncm") or self._coletar_lista_coluna(df_base_filtered, "ncm")
-            row["lista_cest"] = self._coletar_lista_coluna(df_prod_sel, "lista_cest") or self._coletar_lista_coluna(df_base_filtered, "cest")
-            row["lista_gtin"] = self._coletar_lista_coluna(df_prod_sel, "lista_gtin") or self._coletar_lista_coluna(df_base_filtered, "gtin")
-            row["lista_descricoes"] = self._coletar_lista_coluna(df_prod_sel, "descricao") or self._coletar_lista_coluna(df_base_filtered, "descricao")
-            row["lista_desc_compl"] = self._coletar_lista_coluna(df_prod_sel, "lista_desc_compl")
+
+            row["lista_ncm"] = aggr_info.get("lista_ncm") or self._coletar_lista_coluna(df_base_filtered, "ncm")
+            row["lista_cest"] = aggr_info.get("lista_cest") or self._coletar_lista_coluna(df_base_filtered, "cest")
+            row["lista_gtin"] = aggr_info.get("lista_gtin") or self._coletar_lista_coluna(df_base_filtered, "gtin")
+            row["lista_descricoes"] = aggr_info.get("lista_descricoes") or self._coletar_lista_coluna(df_base_filtered, "descricao")
+            row["lista_desc_compl"] = aggr_info.get("lista_desc_compl", [])
             row["co_sefin_padrao"] = padrao.get("co_sefin_padrao")
 
-            row["lista_co_sefin"] = co_info.get("lista_co_sefin", [])
-            row["co_sefin_agr"] = co_info.get("co_sefin_agr", "")
-            row["co_sefin_divergentes"] = co_info.get("co_sefin_divergentes", False)
-            row["lista_unidades"] = unid_info.get("lista_unidades", [])
+            row["lista_co_sefin"] = aggr_info.get("lista_co_sefin", [])
+            row["co_sefin_agr"] = aggr_info.get("co_sefin_agr", "")
+            row["co_sefin_divergentes"] = aggr_info.get("co_sefin_divergentes", False)
+            row["lista_unidades"] = aggr_info.get("lista_unidades", [])
 
             registros.append(row)
 

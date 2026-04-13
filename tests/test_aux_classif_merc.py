@@ -3,7 +3,7 @@ from unittest.mock import MagicMock
 import polars as pl
 from pathlib import Path
 
-from funcoes_auxiliares.aux_classif_merc import aux_classif_merc
+from utilitarios.aux_classif_merc import aux_classif_merc
 
 # Fixture to provide standard mock dataframes for read_parquet
 @pytest.fixture

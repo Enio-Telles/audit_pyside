@@ -1,7 +1,7 @@
 import pytest
 from pathlib import Path
 from unittest.mock import Mock, call
-from funcoes_auxiliares.ler_sql import ler_sql
+from utilitarios.ler_sql import ler_sql
 
 def test_ler_sql_utf8(monkeypatch):
     """Test successful reading with the default utf-8 encoding."""

@@ -1,6 +1,6 @@
 import polars as pl
 import pytest
-from src.transformacao.movimentacao_estoque_pkg.mapeamento_fontes import parse_expression
+from transformacao.movimentacao_estoque_pkg.mapeamento_fontes import parse_expression
 
 def evaluate_expr(df: pl.DataFrame, expr: pl.Expr) -> pl.Series:
     """Helper function to evaluate a polars expression on a dummy dataframe."""

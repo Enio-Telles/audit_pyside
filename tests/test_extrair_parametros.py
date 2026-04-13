@@ -1,5 +1,5 @@
 import pytest
-from funcoes_auxiliares.extrair_parametros import extrair_parametros_sql, extract_sql_parameters
+from utilitarios.extrair_parametros import extrair_parametros_sql, extract_sql_parameters
 
 def test_extrair_parametros_sql():
     sql = "SELECT * FROM tabela WHERE cnpj = :CNPJ AND data >= :data_inicial AND data <= :data_final"

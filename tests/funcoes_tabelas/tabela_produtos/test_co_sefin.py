@@ -1,7 +1,7 @@
 import pytest
 import polars as pl
 from pathlib import Path
-from funcoes_tabelas.tabela_produtos.co_sefin import co_sefin
+from transformacao.movimentacao_estoque_pkg.co_sefin import co_sefin
 
 def test_co_sefin_missing_reference_files(mocker):
     # Mock Path.exists to return False for reference files

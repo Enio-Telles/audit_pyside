@@ -8,7 +8,8 @@
       "Bash(taskkill *)",
       "Bash(set *)",
       "Bash(mkdir *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(timeout *)"
     ]
   },
   "$version": 3

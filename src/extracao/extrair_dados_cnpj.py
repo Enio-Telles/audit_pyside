@@ -3,12 +3,25 @@ from __future__ import annotations
 import re
 import threading
 import logging
+import sys
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 import polars as pl
 import concurrent.futures
 
 from rich import print as rprint
+
+thread_local = threading.local()
+
+def close_thread_connection():
+    if hasattr(thread_local, "conexao"):
+        if thread_local.conexao:
+            try:
+                thread_local.conexao.close()
+            except Exception as e:
+                logger.warning(f"Erro ao fechar conexao de thread: {e}")
+        thread_local.conexao = None
 
 def get_thread_connection():
     if not hasattr(thread_local, "conexao"):

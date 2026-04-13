@@ -1,5 +1,5 @@
 from pathlib import Path
-from funcoes_auxiliares.encontrar_arquivo_cnpj import encontrar_arquivo
+from utilitarios.encontrar_arquivo_cnpj import encontrar_arquivo
 
 def test_encontrar_arquivo_agrupado(tmp_path: Path):
     prefixo = "NFE"

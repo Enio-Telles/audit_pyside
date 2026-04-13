@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from pytest_mock import MockerFixture
 
-from src.utilitarios.perf_monitor import (
+from utilitarios.perf_monitor import (
     _root_dir,
     _serializar_valor,
     caminho_log_performance,

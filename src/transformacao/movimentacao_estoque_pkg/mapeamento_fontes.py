@@ -1,4 +1,4 @@
-﻿"""
+"""
 mapeamento_fontes.py
 
 Funcoes de mapeamento de dados brutos para o schema padrao de mov_estoque:
@@ -108,8 +108,8 @@ def parse_expression(expr_str: str, col_alias: str) -> pl.Expr:
             pl.col("prod_vdesc").cast(pl.Float64).fill_null(0)
         ).alias(col_alias)
 
-    # ExtraÃ§Ã£o via Chave
-    if expr_str == "correspondÃªncia com chave NF":
+    # Extração via Chave
+    if expr_str == "correspondência com chave NF":
         if col_alias == "mod":
             return pl.col("chv_nfe").str.slice(20, 2).alias(col_alias)
         elif col_alias == "co_uf_emit":
