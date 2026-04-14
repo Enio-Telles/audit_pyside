@@ -265,14 +265,14 @@ def run_dev(backend_port: int, open_browser: bool) -> None:
             try:
                 p.terminate()
             except Exception:
-                pass
+                _print("Aviso: Erro não crítico ao terminar processo.", color="yellow")
         time.sleep(1)
         for p in procs:
             try:
                 if p.poll() is None:
                     p.kill()
             except Exception:
-                pass
+                _print("Aviso: Erro não crítico ao forçar encerramento do processo.", color="yellow")
         sys.exit(0)
 
     signal.signal(signal.SIGINT, _shutdown)
@@ -341,7 +341,7 @@ def run_prod(port: int, open_browser: bool) -> None:
         try:
             proc.terminate()
         except Exception:
-            pass
+            _print("Aviso: Erro não crítico ao terminar processo.", color="yellow")
         sys.exit(0)
 
     signal.signal(signal.SIGINT, _shutdown)
@@ -430,14 +430,14 @@ def run_dev(backend_port: int, open_browser: bool) -> None:
             try:
                 processo.terminate()
             except Exception:
-                pass
+                _print("Aviso: Erro não crítico ao terminar processo.", color="yellow")
         time.sleep(1)
         for processo in procs:
             try:
                 if processo.poll() is None:
                     processo.kill()
             except Exception:
-                pass
+                _print("Aviso: Erro não crítico ao forçar encerramento do processo.", color="yellow")
         sys.exit(0)
 
     signal.signal(signal.SIGINT, _shutdown)
