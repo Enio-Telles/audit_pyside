@@ -83,6 +83,32 @@ def filtrar_movimentacoes_por_fonte(df: pl.DataFrame) -> pl.DataFrame:
     return df.filter(filtro_expr)
 
 
+# ===========================================================================
+# Funcoes de calculo de saldo para map_groups
+# ===========================================================================
+
+def _calcular_saldo_estoque_anual(df_grupo: pl.DataFrame) -> pl.DataFrame:
+    """Calcula o saldo acumulado (estoque) dentro de um grupo anual.
+
+    Recebe um DataFrame com as colunas ja preparadas (__q_conv_sinal__, etc.)
+    e adiciona a coluna `saldo` com o acumulado sequencial de __q_conv_sinal__.
+    """
+    return df_grupo.with_columns(
+        pl.col("__q_conv_sinal__").cum_sum().alias("saldo")
+    )
+
+
+def _calcular_saldo_estoque_periodo(df_grupo: pl.DataFrame) -> pl.DataFrame:
+    """Calcula o saldo acumulado dentro de um periodo de inventario.
+
+    Usado apos o agrupamento por periodo_inventario para garantir que o saldo
+    reinicie corretamente em cada evento de ESTOQUE INICIAL.
+    """
+    return df_grupo.with_columns(
+        pl.col("__q_conv_sinal__").cum_sum().alias("saldo")
+    )
+
+
 def gerar_movimentacao_estoque(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
     cnpj = re.sub(r"\D", "", cnpj)
     if pasta_cnpj is None:

@@ -25,30 +25,14 @@ CNPJ_ROOT = DADOS_DIR / "CNPJ"
 
 try:
     from utilitarios.salvar_para_parquet import salvar_para_parquet
-    from utilitarios.text import remove_accents
+    from utilitarios.text import remove_accents, expr_normalizar_descricao
 except ImportError as e:
     rprint(f"[red]Erro ao importar modulos utilitarios:[/red] {e}")
     sys.exit(1)
 
 
 def _expr_normalizar_descricao(coluna: str) -> pl.Expr:
-    return (
-        pl.when(pl.col(coluna).is_null())
-        .then(pl.lit(""))
-        .otherwise(
-            pl.col(coluna)
-            .cast(pl.Utf8, strict=False)
-            .str.replace_all(r"[áàãâäÁÀÃÂÄ]", "A")
-            .str.replace_all(r"[éèêëÉÈÊË]", "E")
-            .str.replace_all(r"[íìîïÍÌÎÏ]", "I")
-            .str.replace_all(r"[óòõôöÓÒÕÔÖ]", "O")
-            .str.replace_all(r"[úùûüÚÙÛÜ]", "U")
-            .str.replace_all(r"[çÇ]", "C")
-            .str.to_uppercase()
-            .str.strip_chars()
-            .str.replace_all(r"\s+", " ")
-        )
-    )
+    return expr_normalizar_descricao(coluna)
 
 
 def _primeira_descricao_valida(df: pl.DataFrame) -> str | None:

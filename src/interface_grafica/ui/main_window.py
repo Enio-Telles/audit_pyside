@@ -404,6 +404,8 @@ class MainWindow(QMainWindow):
             foreground_resolver=self._aba_anual_foreground,
             background_resolver=self._aba_anual_background,
         )
+        self._aba_periodos_file_path: Path | None = None
+        self._aba_periodos_df: pl.DataFrame = pl.DataFrame()
         self._aba_anual_file_path: Path | None = None
         self._aba_anual_df: pl.DataFrame = pl.DataFrame()
         self.aba_mensal_model = PolarsTableModel(
@@ -424,6 +426,7 @@ class MainWindow(QMainWindow):
         self._produtos_selecionados_mov_df: pl.DataFrame = pl.DataFrame()
         self._produtos_selecionados_mensal_df: pl.DataFrame = pl.DataFrame()
         self._produtos_selecionados_anual_df: pl.DataFrame = pl.DataFrame()
+        self._produtos_selecionados_periodos_df: pl.DataFrame = pl.DataFrame()
         self.resumo_global_model = PolarsTableModel()
         self._resumo_global_df: pl.DataFrame = pl.DataFrame()
         self._produtos_sel_preselecionado_cnpj: str | None = None
@@ -2197,78 +2200,93 @@ class MainWindow(QMainWindow):
         return tab
 
     def atualizar_aba_periodos(self) -> None:
-        if not self.cnpj_selecionado:
+        cnpj = self.state.current_cnpj
+        if not cnpj:
             return
-        
+
+        # Bug fix: usar state.current_cnpj em vez de cnpj_selecionado (inexistente)
         self.lbl_aba_periodos_status.setText("Carregando aba períodos...")
         from interface_grafica.services.parquet_service import ParquetService
         parquet_service = ParquetService()
-        
+
         def task():
-            caminho = Path(f"dados/CNPJ/{self.cnpj_selecionado}/analises/produtos/aba_periodos_{self.cnpj_selecionado}.parquet")
+            caminho = Path(f"dados/CNPJ/{cnpj}/analises/produtos/aba_periodos_{cnpj}.parquet")
             if not caminho.exists():
                 return None
-            return pl.read_parquet(caminho)
+            return (pl.read_parquet(caminho), caminho)
 
-        def on_finished(df):
-            if df is not None:
+        def on_finished(result):
+            if result is not None:
+                df, caminho = result
+                self._aba_periodos_df = df
+                self._aba_periodos_file_path = caminho
+
                 self.aba_periodos_table.setUpdatesEnabled(False)
                 self.aba_periodos_model.set_dataframe(df)
                 self.aba_periodos_table.setUpdatesEnabled(True)
-                
+
                 ids = sorted(df["id_agregado"].unique().to_list())
                 self.periodo_filter_id.clear()
                 self.periodo_filter_id.addItem("")
                 self.periodo_filter_id.addItems([str(x) for x in ids])
-                
+
                 self.lbl_aba_periodos_status.setText(f"Sucesso! {df.height} registros carregados.")
                 self._aplicar_preferencias_tabela("aba_periodos", self.aba_periodos_table, self.aba_periodos_model)
             else:
+                self._aba_periodos_df = pl.DataFrame()
+                self._aba_periodos_file_path = None
                 self.aba_periodos_model.set_dataframe(pl.DataFrame())
                 self.lbl_aba_periodos_status.setText("Erro: Arquivo aba_periodos não encontrado.")
 
-        worker = ServiceTaskWorker(task)
-        worker.signals.finished.connect(on_finished)
-        self.threadpool.start(worker)
+        # Bug fix: ServiceTaskWorker pode não ter 'signals' — usar try/except
+        try:
+            worker = ServiceTaskWorker(task)
+            worker.signals.finished.connect(on_finished)
+            self.threadpool.start(worker)
+        except AttributeError:
+            # Fallback: executar síncrono se worker não suportar sinais
+            try:
+                result = task()
+                on_finished(result)
+            except Exception as e:
+                self.lbl_aba_periodos_status.setText(f"Erro ao carregar aba períodos: {e}")
 
     def aplicar_filtros_aba_periodos(self) -> None:
+        if self._aba_periodos_df.is_empty():
+            return
+
         filtros = []
+        df_filtrado = self._aba_periodos_df
+
         id_val = self.periodo_filter_id.currentText().strip()
         if id_val:
             filtros.append(f"ID={id_val}")
-            self.aba_periodos_model.add_filter("id_agregado", id_val, "equal")
-        else:
-            self.aba_periodos_model.remove_filter("id_agregado")
+            df_filtrado = df_filtrado.filter(pl.col("id_agregado").cast(pl.Utf8).str.contains(id_val))
 
-        desc_val = self.periodo_filter_desc.text().strip()
+        desc_val = self.periodo_filter_desc.text().strip().lower()
         if desc_val:
             filtros.append(f"Desc~={desc_val}")
-            self.aba_periodos_model.add_filter("descr_padrao", desc_val, "contains")
-        else:
-            self.aba_periodos_model.remove_filter("descr_padrao")
+            col_desc = "descr_padrao" if "descr_padrao" in df_filtrado.columns else ("descricao" if "descricao" in df_filtrado.columns else None)
+            if col_desc:
+                df_filtrado = df_filtrado.filter(
+                    pl.col(col_desc).cast(pl.Utf8, strict=False).fill_null("").str.to_lowercase().str.contains(desc_val, literal=True)
+                )
 
-        texto_val = self.periodo_filter_texto.text().strip()
+        texto_val = self.periodo_filter_texto.text().strip().lower()
         if texto_val:
             filtros.append(f"Busca='{texto_val}'")
-            self.aba_periodos_model.add_filter("ANY", texto_val, "contains")
-        else:
-            self.aba_periodos_model.remove_filter("ANY")
+            df_filtrado = self._filtrar_texto_em_colunas(df_filtrado, texto_val)
 
-        num_col = self.periodo_filter_num_col.currentText()
+        num_col = self.periodo_filter_num_col.currentText().strip()
         v_min = self.periodo_filter_num_min.text().strip()
         v_max = self.periodo_filter_num_max.text().strip()
         if v_min or v_max:
-            try:
-                f_min = float(v_min) if v_min else None
-                f_max = float(v_max) if v_max else None
-                self.aba_periodos_model.add_numeric_filter(num_col, f_min, f_max)
-                filtros.append(f"{num_col} entre [{v_min or '-inf'}, {v_max or '+inf'}]")
-            except ValueError:
-                pass
-        else:
-            self.aba_periodos_model.remove_numeric_filter()
+            df_filtrado = self._filtrar_intervalo_numerico(df_filtrado, num_col, v_min, v_max)
+            filtros.append(f"{num_col} entre [{v_min or '-inf'}, {v_max or '+inf'}]")
 
+        self.aba_periodos_model.set_dataframe(df_filtrado)
         self.lbl_aba_periodos_filtros.setText(f"Filtros ativos: {', '.join(filtros) if filtros else 'nenhum'}")
+        self.lbl_aba_periodos_status.setText(f"Exibindo {df_filtrado.height:,} de {self._aba_periodos_df.height:,} registros.")
 
     def limpar_filtros_aba_periodos(self) -> None:
         self.periodo_filter_id.setCurrentText("")
@@ -2276,8 +2294,10 @@ class MainWindow(QMainWindow):
         self.periodo_filter_texto.clear()
         self.periodo_filter_num_min.clear()
         self.periodo_filter_num_max.clear()
-        self.aba_periodos_model.clear_filters()
+        
+        self.aba_periodos_model.set_dataframe(self._aba_periodos_df)
         self.lbl_aba_periodos_filtros.setText("Filtros ativos: nenhum")
+        self.lbl_aba_periodos_status.setText(f"Sucesso! {self._aba_periodos_df.height} registros carregados.")
 
     def exportar_aba_periodos_excel(self) -> None:
         if self.aba_periodos_model.df_filtered.is_empty():
@@ -5196,8 +5216,9 @@ class MainWindow(QMainWindow):
                 self._produtos_selecionados_mov_df = pl.DataFrame()
                 self._produtos_selecionados_mensal_df = pl.DataFrame()
                 self._produtos_selecionados_anual_df = pl.DataFrame()
+                self._produtos_selecionados_periodos_df = pl.DataFrame()
                 self.lbl_produtos_sel_status.setText("Nenhum dado de estoque/mensal/anual foi encontrado para consolidacao.")
-                self.lbl_produtos_sel_resumo.setText("Recorte atual: mov_estoque 0 | mensal 0 | anual 0")
+                self.lbl_produtos_sel_resumo.setText("Recorte atual: mov_estoque 0 | mensal 0 | anual 0 | periodos 0")
                 self._atualizar_titulo_aba_produtos_selecionados(0, 0)
                 return
 
@@ -5294,6 +5315,7 @@ class MainWindow(QMainWindow):
                 data_fim,
                 "mov",
             )
+            self._produtos_selecionados_periodos_df = self._filtrar_dataframe_por_ids(self._aba_periodos_df, ids_filtrados)
 
             self.produtos_selecionados_model.set_dataframe(resumo)
             if self.state.current_cnpj and self._produtos_sel_preselecionado_cnpj != self.state.current_cnpj:
@@ -5615,6 +5637,13 @@ class MainWindow(QMainWindow):
                 self._filtrar_dataframe_por_ids(df_mov_export, ids),
                 perfil="Exportar",
             )
+            periodos = self._dataframe_colunas_perfil(
+                "aba_periodos",
+                "aba_periodos",
+                self.aba_periodos_model,
+                self._filtrar_dataframe_por_ids(self._produtos_selecionados_periodos_df, ids),
+                perfil="Exportar",
+            )
             valores_consolidados = self._montar_valores_consolidados_produtos_selecionados(ids)
 
             produtos_selecionados_tabela = self._dataframe_colunas_perfil(
@@ -5633,6 +5662,7 @@ class MainWindow(QMainWindow):
             self._escrever_planilha_openpyxl(wb.create_sheet("Mov_Estoque"), mov)
             self._escrever_planilha_openpyxl(wb.create_sheet("Mensal"), mensal)
             self._escrever_planilha_openpyxl(wb.create_sheet("Anual"), anual)
+            self._escrever_planilha_openpyxl(wb.create_sheet("Periodos"), periodos)
             self._escrever_planilha_openpyxl(wb.create_sheet("ICMS_devido"), valores_consolidados)
             target.parent.mkdir(parents=True, exist_ok=True)
             wb.save(target)

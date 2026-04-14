@@ -238,6 +238,36 @@ export const aggregationApi = {
         ok: boolean;
       }>("/aggregation/merge", { cnpj, id_agrupado_destino, ids_origem })
       .then((r) => r.data),
+  // M4: Endpoint de desagregacao (reverter merge manual)
+  unmerge: (cnpj: string, id_agrupado: string) =>
+    api
+      .post<{
+        ok: boolean;
+        resultado?: {
+          success: boolean;
+          id_destino: string;
+          ids_restaurados: string[];
+          qtd_grupos_restaurados: number;
+        };
+      }>("/aggregation/unmerge", { cnpj, id_agrupado })
+      .then((r) => r.data),
+  // M4: Historico de agregacoes
+  historicoAgregacoes: (cnpj: string) =>
+    api
+      .get<{
+        eventos: Array<{
+          tipo: string;
+          timestamp: string;
+          id_destino: string;
+          ids_unidos?: string[];
+          ids_origem_agrupamento?: string[];
+          revertida?: boolean;
+          revertida_em?: string;
+          ids_restaurados?: string[];
+          qtd_grupos_restaurados?: number;
+        }>;
+      }>(`/aggregation/${cnpj}/historico_agregacoes`)
+      .then((r) => r.data),
 };
 
 // ---- SQL ----

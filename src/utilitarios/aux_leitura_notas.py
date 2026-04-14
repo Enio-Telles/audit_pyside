@@ -25,6 +25,9 @@ def ler_nfe_nfce(path: Path | None, cnpj: str, fonte: str, cfop_df: pl.DataFrame
         "codigo_fonte",
     ]
 
+    # R1: Coluna para id_linha_origem (chave_acesso + prod_nitem)
+    colunas_necesssarias += ["chave_acesso", "prod_nitem"]
+
     # Otimização Bolt: pl.read_parquet_schema le a metadata sem alocar o DataFrame na memoria
     schema = pl.read_parquet_schema(path)
 
@@ -103,6 +106,16 @@ def ler_nfe_nfce(path: Path | None, cnpj: str, fonte: str, cfop_df: pl.DataFrame
         ]
     )
 
+    # R1: Gerar id_linha_origem = chave_acesso|prod_nitem
+    col_chave = "chave_acesso" if "chave_acesso" in df.columns else None
+    col_nitem = "prod_nitem" if "prod_nitem" in df.columns else None
+    if col_chave and col_nitem:
+        df = df.with_columns(
+            pl.concat_str([pl.col(col_chave), pl.lit("|"), pl.col(col_nitem).cast(pl.String)]).alias("id_linha_origem")
+        )
+    elif col_chave:
+        df = df.with_columns(pl.col(col_chave).alias("id_linha_origem"))
+
     if print_status:
         print(f"  {fonte}: {len(df):,} linhas (emitente, saidas X)")
 
@@ -168,6 +181,22 @@ def ler_c170(path: Path | None, cfop_df: pl.DataFrame | None = None, ano_padrao:
 
     if print_status:
         print(f"  C170: {len(df):,} linhas (entradas e saidas internas X)")
+
+    # R1: Gerar id_linha_origem para C170 (reg_0000_id|num_doc|num_item)
+    # Colunas possiveis: reg_0000_id, num_doc (ou num_doc_ref), num_item
+    col_reg = "reg_0000_id" if "reg_0000_id" in df.columns else None
+    col_doc = "num_doc" if "num_doc" in df.columns else None
+    col_item = "num_item" if "num_item" in df.columns else None
+    partes_id = [c for c in [col_reg, col_doc, col_item] if c]
+    if len(partes_id) >= 2:
+        # Pelo menos doc + item estao presentes
+        exprs = [pl.col(p).cast(pl.String) for p in partes_id]
+        concat = pl.concat_str(exprs, separator="|")
+        df = df.with_columns(concat.alias("id_linha_origem"))
+    elif col_doc:
+        df = df.with_columns(
+            pl.concat_str([pl.col(col_doc).cast(pl.String), pl.lit("|"), pl.col("codigo").cast(pl.String)]).alias("id_linha_origem")
+        )
 
     return df
 
@@ -257,6 +286,21 @@ def ler_bloco_h(path: Path | None, print_status: bool = False) -> pl.DataFrame |
         ]
     )
 
+    # R1: Gerar id_linha_origem para Bloco H (chave do inventario)
+    # Colunas possiveis: dt_inv, num_inventario, ou usar codigo + dt_inv
+    col_dt = "dt_inv" if "dt_inv" in df.columns else None
+    col_num_inv = "num_inventario" if "num_inventario" in df.columns else None
+    if col_num_inv and col_dt:
+        out = out.with_columns(
+            pl.concat_str([pl.col(col_num_inv).cast(pl.String), pl.lit("|"), pl.col(col_dt).cast(pl.String)]).alias("id_linha_origem")
+        )
+    elif col_dt:
+        out = out.with_columns(
+            pl.concat_str([pl.col("codigo").cast(pl.String), pl.lit("|"), pl.col(col_dt).cast(pl.String)]).alias("id_linha_origem")
+        )
+    else:
+        out = out.with_columns(pl.col("codigo").alias("id_linha_origem"))
+
     out = out.select(
         [
             "codigo",
@@ -274,6 +318,7 @@ def ler_bloco_h(path: Path | None, print_status: bool = False) -> pl.DataFrame |
             "quantidade_saida",
             "ano",
         ]
+        + (["id_linha_origem"] if "id_linha_origem" in out.columns else [])
     )
 
     if print_status:

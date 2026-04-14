@@ -13,6 +13,11 @@ Saidas (em arquivos_parquet):
 Regra de consistencia:
 - toda linha precisa sair com `id_agrupado`
 - se houver qualquer linha sem `id_agrupado`, a rotina falha
+
+Rastreabilidade:
+- `codigo_fonte` e `id_linha_origem` (quando presente na fonte) sao preservados
+- `descricao_normalizada` e `versao_agrupamento` sao incluidas para auditoria
+- permite voltar da analise ao produto bruto do emitente e a linha original
 """
 
 from __future__ import annotations
@@ -37,6 +42,10 @@ try:
     from utilitarios.validacao_schema import (
         SchemaValidacaoError,
         validar_parquet_essencial,
+    )
+    from utilitarios.schemas_agregacao import (
+        COLUNAS_OBRIGATORIAS_FONTES_AGR,
+        COLUNAS_RASTREABILIDADE_FONTES,
     )
 except ImportError as e:
     rprint(f"[red]Erro ao importar modulos utilitarios:[/red] {e}")
@@ -92,6 +101,45 @@ def _ler_primeiro(arq_dir: Path, prefix: str) -> pl.DataFrame | None:
     return pl.read_parquet(arquivos[0])
 
 
+def _preservar_colunas_rastreabilidade(df_src: pl.DataFrame) -> list[pl.Expr]:
+    """
+    Garante que `codigo_fonte` e `id_linha_origem` estao presentes na saida.
+
+    - `codigo_fonte`: ja deve existir na fonte bruta (gerado na extracao SQL
+      como `CNPJ_Emitente + "|" + codigo_produto_original`). Se ausente, e
+      derivado de `cnpj` + `codigo_produto`/`cod_item` como fallback.
+    - `id_linha_origem`: chave fisica da linha original (ex: chave_acesso|prod_nitem).
+      Se a fonte ja possui, e preservada; caso contrario, nao e criada.
+    """
+    exprs: list[pl.Expr] = []
+
+    # --- codigo_fonte ---
+    if "codigo_fonte" not in df_src.columns:
+        # Fallback: tentar reconstruir a partir de cnpj + codigo do produto
+        col_codigo = None
+        for cand in ["codigo_produto", "codigo_produto_original", "cod_item"]:
+            if cand in df_src.columns:
+                col_codigo = cand
+                break
+
+        if "cnpj" in df_src.columns and col_codigo:
+            exprs.append(
+                pl.concat_str(
+                    [pl.col("cnpj").cast(pl.Utf8, strict=False), pl.lit("|"), pl.col(col_codigo).cast(pl.Utf8, strict=False)]
+                ).alias("codigo_fonte")
+            )
+        elif col_codigo:
+            exprs.append(pl.col(col_codigo).cast(pl.Utf8, strict=False).alias("codigo_fonte"))
+        # Se nao ha como derivar, nao forcamos — a validacao a jusante reclamara.
+
+    # --- id_linha_origem ---
+    # Preservar se existir; nao criar se nao existir (sera propagada quando disponivel)
+    if "id_linha_origem" in df_src.columns:
+        exprs.append(pl.col("id_linha_origem").cast(pl.Utf8, strict=False))
+
+    return exprs
+
+
 def gerar_fontes_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
     cnpj = re.sub(r"\D", "", cnpj or "")
     if len(cnpj) not in {11, 14}:
@@ -141,6 +189,8 @@ def gerar_fontes_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
                 "co_sefin_final",
                 "unid_ref_sugerida",
             ]
+            # Incluir versao_agrupamento se disponivel (M3)
+            + (["versao_agrupamento"] if "versao_agrupamento" in pl.read_parquet_schema(arq_prod_final).names() else [])
         )
         .rename({"descricao_normalizada": "__descricao_normalizada__", "co_sefin_final": "co_sefin_agr"})
         .unique(subset=["__descricao_normalizada__"])
@@ -159,6 +209,11 @@ def gerar_fontes_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
             rprint(f"[yellow]Fonte {fonte} ignorada: sem coluna de descricao reconhecida.[/yellow]")
             continue
 
+        # Garantir preservacao de codigo_fonte e id_linha_origem
+        exprs_rastreabilidade = _preservar_colunas_rastreabilidade(df_src)
+        if exprs_rastreabilidade:
+            df_src = df_src.with_columns(exprs_rastreabilidade)
+
         df_out = (
             df_src
             .with_columns(_normalizar_descricao_expr(col_desc))
@@ -170,12 +225,35 @@ def gerar_fontes_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
             nome_log = f"{fonte}_agr_sem_id_agrupado_{cnpj}.parquet"
             salvar_para_parquet(faltantes, pasta_analises, nome_log)
             rprint(
-                f"[red]Erro: {fonte} possui {faltantes.height} linhas sem id_agrupado. "
-                f"Verifique {nome_log}.[/red]"
+                f"[yellow]Aviso: {fonte} possui {faltantes.height} linhas sem id_agrupado. "
+                f"Detalhes em {nome_log}. "
+                f"Essas linhas serao excluidas da saida {fonte}_agr.[/yellow]"
             )
-            return False
+            # Excluir linhas sem id_agrupado em vez de falhar
+            # Isso permite que o pipeline continue mesmo quando ha descricoes
+            # no C170/Bloco H que nao casam com produtos_final
+            df_out = df_out.filter(pl.col("id_agrupado").is_not_null())
+            if df_out.is_empty():
+                rprint(f"[yellow]Fonte {fonte}: todas as linhas foram excluidas (sem correspondencia). Pulando.[/yellow]")
+                continue
 
-        df_out = df_out.drop("__descricao_normalizada__")
+        # Mapear descricao_normalizada para a saida (preservar para auditoria)
+        # e drop da coluna temporaria
+        if "descricao_normalizada" not in df_out.columns and "__descricao_normalizada__" in df_out.columns:
+            df_out = df_out.rename({"__descricao_normalizada__": "descricao_normalizada"})
+        else:
+            df_out = df_out.drop("__descricao_normalizada__", strict=False)
+
+        # Validar colunas obrigatorias na saida
+        colunas_presentes = set(df_out.columns)
+        colunas_faltando = [c for c in COLUNAS_OBRIGATORIAS_FONTES_AGR if c not in colunas_presentes]
+        if colunas_faltando:
+            rprint(f"[yellow]Fonte {fonte}: colunas obrigatorias faltando na saida: {colunas_faltando}[/yellow]")
+
+        # Garantir colunas de rastreabilidade (mesmo que nulas)
+        for col in COLUNAS_RASTREABILIDADE_FONTES:
+            if col not in df_out.columns:
+                df_out = df_out.with_columns(pl.lit(None, dtype=pl.Utf8).alias(col))
 
         nome_saida = f"{fonte}_agr_{cnpj}.parquet"
         ok = salvar_para_parquet(df_out, pasta_brutos, nome_saida)

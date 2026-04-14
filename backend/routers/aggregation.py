@@ -111,3 +111,49 @@ def merge_agrupados(req: AggregateRequest):
         raise HTTPException(400, "Parâmetros inválidos para agregação.") from exc
     except Exception as exc:
         raise HTTPException(500, "Erro interno ao processar agregação.") from exc
+
+
+class UnmergeRequest(BaseModel):
+    cnpj: str
+    id_agrupado: str
+
+
+@router.post("/unmerge")
+def unmerge_agrupados(req: UnmergeRequest):
+    """
+    Reverte o ultimo merge manual de um grupo de produtos.
+
+    Restaura os grupos originais a partir do historico de agregacoes
+    (log_agregacoes_{cnpj}.json) e recalcula a cascata de tabelas derivadas.
+    """
+    cnpj = _sanitize(req.cnpj)
+    try:
+        from interface_grafica.services.aggregation_service import ServicoAgregacao
+        svc = ServicoAgregacao()
+        resultado = svc.reverter_agrupamento(cnpj=cnpj, id_agrupado=req.id_agrupado)
+        return {"ok": True, "resultado": resultado}
+    except ValueError as exc:
+        raise HTTPException(400, "Não foi possível reverter: " + str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(500, "Erro interno ao processar desagregação.") from exc
+
+
+@router.get("/{cnpj}/historico_agregacoes")
+def get_historico_agregacoes(cnpj: str):
+    """
+    Retorna o historico completo de merges e reversoes de agregacoes.
+
+    Le log_agregacoes_{cnpj}.json e retorna como lista de eventos.
+    """
+    cnpj = _sanitize(cnpj)
+    log_path = _pasta_produtos(cnpj) / f"log_agregacoes_{cnpj}.json"
+    if not log_path.exists():
+        return {"eventos": []}
+
+    try:
+        import json
+        with open(log_path, "r", encoding="utf-8") as f:
+            eventos = json.load(f)
+        return {"eventos": eventos}
+    except Exception as exc:
+        raise HTTPException(500, "Erro ao ler historico de agregações.") from exc

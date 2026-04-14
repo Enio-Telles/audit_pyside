@@ -2,12 +2,15 @@
 enriquecimento_fontes.py
 
 Objetivo: Materializar as regras de rastreabilidade na pratica sem destruir origens.
+
+Este modulo unifica as rotas de enriquecimento:
+- Usa `fontes_produtos.gerar_fontes_produtos()` como camada base (id_agrupado via descricao_normalizada)
+- Aplica fatores de conversao para gerar `*_enriquecido` (camada Gold com qtd_padronizada)
+
 Etapas:
-1. Carrega base (NFe, NFCe, C170, Bloco H)
-2. JOIN map_produto_agrupado (traz id_agrupado)
-3. JOIN produtos_agrupados (traz descr_padrao, ncm_padrao)
-4. JOIN fatores_conversao (calcula equivalencias de unidade_ref)
-5. Salva Parquets Enriched (Camada Gold)
+1. Delega a `fontes_produtos` para gerar `*_agr` com id_agrupado + codigo_fonte + id_linha_origem
+2. JOIN fatores_conversao (calcula equivalencias de unidade_ref)
+3. Salva Parquets Enriched (Camada Gold)
 """
 
 import re
@@ -36,33 +39,44 @@ def gerar_enriquecimento(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         pasta_cnpj = CNPJ_ROOT / cnpj
 
     pasta_analises = pasta_cnpj / "analises" / "produtos"
-    arq_agrup = pasta_analises / f"produtos_agrupados_{cnpj}.parquet"
-    arq_map = pasta_analises / f"map_produto_agrupado_{cnpj}.parquet"
+    pasta_brutos = pasta_cnpj / "arquivos_parquet"
     arq_fator = pasta_analises / f"fatores_conversao_{cnpj}.parquet"
-    
-    if not (arq_agrup.exists() and arq_map.exists() and arq_fator.exists()):
-        rprint("[red]Bases de MDM/Conversao nao encontradas.[/red]")
-        return False
-        
-    df_agrup = pl.read_parquet(arq_agrup).select(["id_agrupado", "descr_padrao", "ncm_padrao", "cest_padrao"])
-    df_map = pl.read_parquet(arq_map).rename({"chave_produto": "codigo_fonte"})
-    df_fator = pl.read_parquet(arq_fator).select(["id_produtos", "unid", "unid_ref", "fator"]).rename({"id_produtos": "id_agrupado"})
-    
+
+    # Delegar a camada base para fontes_produtos (garante id_agrupado, codigo_fonte, id_linha_origem)
+    try:
+        from transformacao.rastreabilidade_produtos.fontes_produtos import gerar_fontes_produtos
+        ok_agr = gerar_fontes_produtos(cnpj, pasta_cnpj)
+        if not ok_agr:
+            rprint("[yellow]fontes_produtos falhou; tentando prosseguir com *_agr existentes...[/yellow]")
+    except ImportError:
+        rprint("[yellow]fontes_produtos indisponivel; usando *_agr existentes.[/yellow]")
+
+    if not arq_fator.exists():
+        rprint("[yellow]fatores_conversao nao encontrado. Enriquecimento sem padronizacao de unidades.[/yellow]")
+        # Sem fatores: apenas retornar sucesso se os *_agr foram gerados
+        return ok_agr if 'ok_agr' in dir() else False
+
+    df_fator = pl.read_parquet(arq_fator).select(
+        ["id_agrupado" if "id_agrupado" in pl.read_parquet_schema(arq_fator).names() else "id_produtos", "unid", "unid_ref", "fator"]
+    ).rename({
+        c: "id_agrupado" for c in ["id_agrupado", "id_produtos"]
+        if c in pl.read_parquet_schema(arq_fator).names()
+    })
+
     sucesso = True
-    
-    def enriquecer(df_bruto: pl.DataFrame, col_unid_original: str, col_qtd_original: str, col_valor_unitario: str = None) -> pl.DataFrame:
+
+    def enriquecer_a_partir_agr(df_agr: pl.DataFrame, col_unid_original: str, col_qtd_original: str, col_valor_unitario: str = None) -> pl.DataFrame:
+        """Enriquece a partir de um *_agr (ja com id_agrupado)."""
         df_join = (
-            df_bruto
-            .join(df_map, on="codigo_fonte", how="left")
-            .join(df_agrup, on="id_agrupado", how="left")
+            df_agr
             .join(df_fator, left_on=["id_agrupado", col_unid_original], right_on=["id_agrupado", "unid"], how="left")
         )
-        
+
         # Default de fator eh 1.0 se nao encontrado
         df_join = df_join.with_columns(
             pl.col("fator").fill_null(1.0)
         )
-        
+
         # Calcular qtd_padronizada e vuncom_padronizado
         df_join = df_join.with_columns([
             (pl.col(col_qtd_original).cast(pl.Float64) * pl.col("fator")).alias("qtd_padronizada"),
@@ -70,41 +84,42 @@ def gerar_enriquecimento(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         ])
         return df_join
 
-    def processar_fonte(prefix: str, arq_origem: Path, col_ucom: str, col_qcom: str, col_vuncom: str):
-        if not arq_origem.exists():
+    def processar_fonte_agr(prefix: str, col_ucom: str, col_qcom: str, col_vuncom: str = None):
+        """Processa uma fonte a partir do *_agr correspondente."""
+        arq_agr = pasta_brutos / f"{prefix}_agr_{cnpj}.parquet"
+        if not arq_agr.exists():
+            # Fallback: procurar por padroes alternativos
+            alternativas = list(pasta_brutos.glob(f"{prefix}_*.parquet")) or list(pasta_cnpj.glob(f"{prefix}*.parquet"))
+            if not alternativas:
+                return True
+            arq_agr = alternativas[0]
+
+        rprint(f"[cyan]Enriquecendo {prefix} a partir de {arq_agr.name}...[/cyan]")
+        df_agr = pl.read_parquet(arq_agr)
+
+        if "id_agrupado" not in df_agr.columns:
+            rprint(f"[yellow]Ignorando {prefix}_agr - Sem coluna id_agrupado (execute fontes_produtos primeiro)[/yellow]")
             return True
-        rprint(f"[cyan]Enriquecendo {prefix}...[/cyan]")
-        df_orig = pl.read_parquet(arq_origem)
-        
-        if "codigo_fonte" not in df_orig.columns:
-            rprint(f"[yellow]Ignorando {prefix} - Sem coluna codigo_fonte (falta re-extracao SQL)[/yellow]")
-            return True
-            
-        df_enr = enriquecer(df_orig, col_ucom, col_qcom, col_vuncom)
+
+        df_enr = enriquecer_a_partir_agr(df_agr, col_ucom, col_qcom, col_vuncom)
         return salvar_para_parquet(df_enr, pasta_analises, f"{prefix}_enriquecido_{cnpj}.parquet")
-        
-    arq_dir = pasta_cnpj / "arquivos_parquet"
-    
+
     # NFe
-    f_nfe = list(arq_dir.glob("NFe_*.parquet")) or list(pasta_cnpj.glob("NFe_*.parquet"))
-    if f_nfe:
-        sucesso &= processar_fonte("nfe", f_nfe[0], "prod_ucom", "prod_qcom", "prod_vuncom")
-        
+    if list(pasta_brutos.glob("nfe_agr_*.parquet")) or list(pasta_brutos.glob("NFe_*.parquet")):
+        sucesso &= processar_fonte_agr("nfe", "prod_ucom", "prod_qcom", "prod_vuncom")
+
     # NFCe
-    f_nfce = list(arq_dir.glob("NFCe_*.parquet")) or list(pasta_cnpj.glob("NFCe_*.parquet"))
-    if f_nfce:
-        sucesso &= processar_fonte("nfce", f_nfce[0], "prod_ucom", "prod_qcom", "prod_vuncom")
-        
+    if list(pasta_brutos.glob("nfce_agr_*.parquet")) or list(pasta_brutos.glob("NFCe_*.parquet")):
+        sucesso &= processar_fonte_agr("nfce", "prod_ucom", "prod_qcom", "prod_vuncom")
+
     # C170
-    f_c170 = list(arq_dir.glob("c170*.parquet")) or list(pasta_cnpj.glob("c170*.parquet"))
-    if f_c170:
-        sucesso &= processar_fonte("c170", f_c170[0], "unid", "qtd", None) 
-        
+    if list(pasta_brutos.glob("c170_agr_*.parquet")) or list(pasta_brutos.glob("c170*.parquet")):
+        sucesso &= processar_fonte_agr("c170", "unid", "qtd", None)
+
     # Bloco H
-    f_blocoh = list(arq_dir.glob("bloco_h*.parquet")) or list(pasta_cnpj.glob("bloco_h*.parquet"))
-    if f_blocoh:
-        sucesso &= processar_fonte("bloco_h", f_blocoh[0], "unidade_medida", "quantidade", "valor_unitario")
-        
+    if list(pasta_brutos.glob("bloco_h_agr_*.parquet")) or list(pasta_brutos.glob("bloco_h*.parquet")):
+        sucesso &= processar_fonte_agr("bloco_h", "unidade_medida", "quantidade", "valor_unitario")
+
     return sucesso
 
 if __name__ == "__main__":

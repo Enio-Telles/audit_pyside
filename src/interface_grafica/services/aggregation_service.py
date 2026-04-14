@@ -6,6 +6,7 @@ from time import perf_counter
 
 import polars as pl
 from utilitarios.perf_monitor import registrar_evento_performance
+from utilitarios.text import expr_normalizar_descricao
 
 from interface_grafica.config import CNPJ_ROOT
 
@@ -66,6 +67,11 @@ try:
 except ImportError:
     gerar_calculos_anuais = None
 
+try:
+    from transformacao.calculos_periodo_pkg import gerar_calculos_periodos
+except ImportError:
+    gerar_calculos_periodos = None
+
 
 class ServicoAgregacao:
     """Gerencia a tabela produtos_agrupados e as derivacoes da camada _agr."""
@@ -119,23 +125,7 @@ class ServicoAgregacao:
 
     @staticmethod
     def _expr_normalizar_descricao(coluna: str) -> pl.Expr:
-        return (
-            pl.when(pl.col(coluna).is_null())
-            .then(pl.lit(""))
-            .otherwise(
-                pl.col(coluna)
-                .cast(pl.Utf8, strict=False)
-                .str.replace_all(r"[áàãâäÁÀÃÂÄ]", "A")
-                .str.replace_all(r"[éèêëÉÈÊË]", "E")
-                .str.replace_all(r"[íìîïÍÌÎÏ]", "I")
-                .str.replace_all(r"[óòõôöÓÒÕÔÖ]", "O")
-                .str.replace_all(r"[úùûüÚÙÛÜ]", "U")
-                .str.replace_all(r"[çÇ]", "C")
-                .str.to_uppercase()
-                .str.strip_chars()
-                .str.replace_all(r"\s+", " ")
-            )
-        )
+        return expr_normalizar_descricao(coluna)
 
     @staticmethod
     def _primeira_descricao_por_chaves(df_prod: pl.DataFrame, chaves: list[str]) -> str | None:
@@ -299,6 +289,9 @@ class ServicoAgregacao:
         ]:
             if coluna not in df.columns:
                 exprs.append(pl.lit([]).cast(pl.List(pl.Utf8), strict=False).alias(coluna))
+        # M3: Garantir versao_agrupamento
+        if "versao_agrupamento" not in df.columns:
+            exprs.append(pl.lit(1).cast(pl.Int64).alias("versao_agrupamento"))
         df_saida = df.with_columns(exprs) if exprs else df
         return ServicoAgregacao._garantir_rastreabilidade_agregacao(df_saida)
 
@@ -400,11 +393,35 @@ class ServicoAgregacao:
         return pl.DataFrame(registros_alinhados, schema=schema)
 
     def _salvar_tabela_agregada_e_mapa(self, cnpj: str, df_resultado: pl.DataFrame) -> None:
+        """
+        Salva a tabela mestre e a ponte.
+
+        M3: Incrementa `versao_agrupamento` a cada salvamento.
+        R3: Expande a ponte com `codigo_fonte` e `descricao_normalizada`.
+        """
         df_resultado = self._garantir_colunas_lista_agregacao(self._promover_tipos_sefin(df_resultado))
+
+        # M3: Incrementar versao_agrupamento
+        if "versao_agrupamento" not in df_resultado.columns:
+            df_resultado = df_resultado.with_columns(pl.lit(1).cast(pl.Int64).alias("versao_agrupamento"))
+        else:
+            # Incrementar apenas se nao foi definido explicitamente pelo caller
+            max_versao = df_resultado["versao_agrupamento"].max()
+            if max_versao is not None and max_versao > 0:
+                nova_versao = max_versao + 1
+                df_resultado = df_resultado.with_columns(pl.lit(nova_versao).cast(pl.Int64).alias("versao_agrupamento"))
+            else:
+                df_resultado = df_resultado.with_columns(pl.lit(1).cast(pl.Int64).alias("versao_agrupamento"))
+
         df_resultado_sem_chaves = df_resultado.drop("lista_chave_produto", strict=False)
         df_resultado_sem_chaves.write_parquet(self.caminho_tabela_agregadas(cnpj))
 
         if "lista_chave_produto" in df_resultado.columns:
+            # R3: Ponte expandida com codigo_fonte e descricao_normalizada
+            # Tentar enriquecer ponte com informacoes de produtos_final
+            path_final = self.caminho_tabela_final(cnpj)
+            path_base = self.caminho_tabela_base(cnpj)
+
             df_map = (
                 df_resultado
                 .select(["id_agrupado", "lista_chave_produto"])
@@ -412,7 +429,42 @@ class ServicoAgregacao:
                 .rename({"lista_chave_produto": "chave_produto"})
                 .drop_nulls("chave_produto")
             )
+
+            # Enriquecer com descricao_normalizada via base
+            if path_base.exists():
+                schema_base = pl.read_parquet_schema(path_base).names()
+                cols_base = ["chave_item" if "chave_item" in schema_base else "id_descricao"]
+                if "descricao_normalizada" in schema_base:
+                    cols_base.append("descricao_normalizada")
+
+                df_base_info = pl.scan_parquet(path_base).select(cols_base).collect()
+                if "chave_item" not in df_base_info.columns and "id_descricao" in df_base_info.columns:
+                    df_base_info = df_base_info.rename({"id_descricao": "chave_item"})
+
+                if "descricao_normalizada" in df_base_info.columns:
+                    df_map = df_map.join(df_base_info, left_on="chave_produto", right_on="chave_item", how="left")
+                    df_map = df_map.drop("chave_item", strict=False)
+
+            # Enriquecer com codigo_fonte via produtos_final
+            if path_final.exists():
+                schema_final = pl.read_parquet_schema(path_final).names()
+                if "id_descricao" in schema_final and "codigo_fonte" in schema_final:
+                    df_cf = pl.scan_parquet(path_final).select(["id_descricao", "codigo_fonte"]).collect()
+                    df_map = df_map.join(df_cf, left_on="chave_produto", right_on="id_descricao", how="left")
+                    df_map = df_map.drop("id_descricao", strict=False)
+
+            # Garantir colunas obrigatorias da ponte
+            for col in ["codigo_fonte", "descricao_normalizada"]:
+                if col not in df_map.columns:
+                    df_map = df_map.with_columns(pl.lit(None, dtype=pl.Utf8).alias(col))
+
             arq_pont = CNPJ_ROOT / cnpj / "analises" / "produtos" / f"map_produto_agrupado_{cnpj}.parquet"
+            df_map = df_map.select([
+                pl.col("chave_produto").cast(pl.Utf8),
+                pl.col("id_agrupado").cast(pl.Utf8),
+                pl.col("codigo_fonte").cast(pl.Utf8),
+                pl.col("descricao_normalizada").cast(pl.Utf8),
+            ])
             df_map.write_parquet(arq_pont)
 
     def _regenerar_tabela_agregadas_legada(self, cnpj: str) -> bool:
@@ -670,6 +722,10 @@ class ServicoAgregacao:
             "fontes": lista_fontes,
         }
 
+        # M3: Preservar versao_agrupamento (sera incrementado em _salvar_tabela_agregada_e_mapa)
+        if "versao_agrupamento" in df.columns:
+            nova_linha["versao_agrupamento"] = df["versao_agrupamento"].max()
+
         df_nova = pl.DataFrame([nova_linha], schema=df.schema)
         df_resultado = pl.concat([df_nova, df_restante])
         grupos_origem = df_para_unir.to_dicts()
@@ -753,6 +809,7 @@ class ServicoAgregacao:
                     pl.col("lista_unidades").alias("lista_unidades_agr"),
                     "co_sefin_divergentes",
                 ]
+                + (["versao_agrupamento"] if "versao_agrupamento" in df_agrup.columns else [])
             )
             .explode("lista_chave_produto")
             .rename({"lista_chave_produto": "chave_item"})
@@ -1095,7 +1152,11 @@ class ServicoAgregacao:
         )
 
         # Optimized: Vectorized calculation of lists and fallback descriptions
-        df_prod_exp = df_prod.select(["chave_item", "descricao", "descricao_normalizada", "lista_co_sefin", "lista_unid"])
+        df_prod_exp = df_prod.select([
+            "chave_item", "descricao", "descricao_normalizada", 
+            "lista_co_sefin", "lista_unid", "lista_ncm", 
+            "lista_cest", "lista_gtin", "lista_desc_compl"
+        ])
 
         df_agrup_exp = df_agrup.select(["id_agrupado", "lista_chave_produto"]).explode("lista_chave_produto").rename({"lista_chave_produto": "chave_item"})
         df_joined = df_agrup_exp.join(df_prod_exp, on="chave_item", how="left")
@@ -1142,8 +1203,12 @@ class ServicoAgregacao:
         for row in df_agrup.to_dicts():
             id_grp = row["id_agrupado"]
 
-            # Use pre-filtered DataFrame from dictionary
-            df_base_filtered = dict_base_parts.get((id_grp,)) or df_base.filter(pl.lit(False))
+            # Use pre-filtered DataFrame from dictionary — check with is_empty() to avoid DataFrame ambiguity in boolean context
+            df_base_filtered_raw = dict_base_parts.get((id_grp,))
+            if df_base_filtered_raw is None or df_base_filtered_raw.is_empty():
+                df_base_filtered = df_base.filter(pl.lit(False))
+            else:
+                df_base_filtered = df_base_filtered_raw
 
             padrao = calcular_atributos_padrao(df_base_filtered)
 
@@ -1205,7 +1270,10 @@ class ServicoAgregacao:
 
         df_agrup = self.carregar_tabela_agregadas(cnpj)
         df_prod = self._padronizar_chaves_prod(
-            self._ler_parquet_colunas(path_prod, ["id_descricao", "chave_item", "chave_produto", "descricao_normalizada"])
+            self._ler_parquet_colunas(
+                path_prod,
+                ["id_descricao", "chave_item", "chave_produto", "descricao_normalizada", "descricao"],
+            )
         )
         df_base = self._ler_parquet_colunas(
             path_base,
@@ -1270,14 +1338,14 @@ class ServicoAgregacao:
                 df_agrup.select(["id_agrupado", "lista_chave_produto"])
                 .explode("lista_chave_produto")
                 .rename({"lista_chave_produto": "chave_item"})
-                .join(df_prod.select(["chave_item", "descricao_normalizada"]), on="chave_item")
-                .select(["id_agrupado", "descricao_normalizada"])
+                .join(df_prod.select(["chave_item", "descricao"]), on="chave_item")
+                .select(["id_agrupado", "descricao"])
                 .unique()
             )
 
             df_totais = (
-                df_base.select(["descricao_normalizada", "compras", "vendas"])
-                .join(df_mapping, on="descricao_normalizada")
+                df_base.select(["descricao", "compras", "vendas"])
+                .join(df_mapping, on="descricao")
                 .group_by("id_agrupado")
                 .agg([
                     pl.col("compras").fill_null(0).sum().alias("total_compras"),
@@ -1342,6 +1410,8 @@ class ServicoAgregacao:
             raise ImportError("Nao foi possivel importar calculos_mensais.py.")
         if gerar_calculos_anuais is None:
             raise ImportError("Nao foi possivel importar calculos_anuais.py.")
+        if gerar_calculos_periodos is None:
+            raise ImportError("Nao foi possivel importar calculos_periodos.py.")
 
         ok_padroes = bool(
             self.recalcular_todos_padroes(
@@ -1373,8 +1443,9 @@ class ServicoAgregacao:
         ok_mov = self._executar_etapa_tempo("mov_estoque", lambda: bool(gerar_movimentacao_estoque(cnpj)), progresso, contexto=contexto_base) if ok_c176 else False
         ok_mensal = self._executar_etapa_tempo("calculos_mensais", lambda: bool(gerar_calculos_mensais(cnpj)), progresso, contexto=contexto_base) if ok_mov else False
         ok_anual = self._executar_etapa_tempo("calculos_anuais", lambda: bool(gerar_calculos_anuais(cnpj)), progresso, contexto=contexto_base) if ok_mensal else False
+        ok_periodos = self._executar_etapa_tempo("calculos_periodos", lambda: bool(gerar_calculos_periodos(cnpj)), progresso, contexto=contexto_base) if ok_anual else False
 
-        ok_total = bool(ok_padroes and ok_totais and ok_final and ok_fontes and ok_precos and ok_fatores and ok_c170 and ok_c176 and ok_mov and ok_mensal and ok_anual)
+        ok_total = bool(ok_padroes and ok_totais and ok_final and ok_fontes and ok_precos and ok_fatores and ok_c170 and ok_c176 and ok_mov and ok_mensal and ok_anual and ok_periodos)
         self._registrar_tempo(
             "reprocessar_agregacao_total",
             perf_counter() - inicio_total,

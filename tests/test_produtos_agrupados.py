@@ -6,7 +6,8 @@ from pathlib import Path
 # Add src to python path to import the module
 sys.path.insert(0, str(Path("src").resolve()))
 
-from transformacao.rastreabilidade_produtos.produtos_agrupados import _primeira_descricao_valida, _normalizar_descricao_para_match
+from transformacao.rastreabilidade_produtos.produtos_agrupados import _primeira_descricao_valida
+from utilitarios.text import normalize_desc as _normalizar_descricao_para_match
 
 def test_primeira_descricao_valida_missing_column():
     """Test when the DataFrame does not have a 'descricao' column."""
@@ -66,5 +67,5 @@ def test_normalizar_descricao_whitespace():
 def test_normalizar_descricao_realistic():
     """Testa um caso realista de descrição de produto."""
     input_str = " Refrigerante   Coca-cola  2L  PET   com Açúcar "
-    expected_str = "REFRIGERANTE COCA-COLA 2L PET COM ACUCAR"
+    expected_str = "REFRIGERANTE COCA COLA 2L PET COM ACUCAR"
     assert _normalizar_descricao_para_match(input_str) == expected_str

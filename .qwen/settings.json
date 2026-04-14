@@ -9,7 +9,9 @@
       "Bash(set *)",
       "Bash(mkdir *)",
       "Bash(git push *)",
-      "Bash(timeout *)"
+      "Bash(timeout *)",
+      "Bash(%pythonpath%)",
+      "Bash(conda *)"
     ]
   },
   "$version": 3

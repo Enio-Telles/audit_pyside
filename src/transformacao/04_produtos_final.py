@@ -1,4 +1,4 @@
-﻿"""
+"""
 04_produtos_final.py
 
 Objetivo: inicializar a camada de agrupamento manual e gerar a tabela final
@@ -36,6 +36,7 @@ try:
     from salvar_para_parquet import salvar_para_parquet
     from descricao_produtos import descricao_produtos
     from id_agrupados import gerar_id_agrupados
+    from text import expr_normalizar_descricao
 except ImportError as e:
     rprint(f"[red]Erro ao importar modulos:[/red] {e}")
     sys.exit(1)
@@ -154,13 +155,9 @@ def produtos_agrupados(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
 
         if desc_norm:
             df_base = df_item_unid.filter(pl.col("descricao").is_not_null()).with_columns(
-                pl.col("descricao")
-                .cast(pl.Utf8, strict=False)
-                .str.to_uppercase()
-                .str.replace_all(r"\s+", " ")
-                .alias("__descricao_upper")
+                expr_normalizar_descricao("descricao").alias("__descricao_norm")
             )
-            df_base = df_base.filter(pl.col("__descricao_upper") == desc_norm).drop("__descricao_upper")
+            df_base = df_base.filter(pl.col("__descricao_norm") == desc_norm).drop("__descricao_norm")
         else:
             df_base = df_item_unid.filter(pl.lit(False))
 

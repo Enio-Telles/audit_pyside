@@ -36,7 +36,7 @@ Chave mestra que representa o produto consolidado no pipeline analítico.
 
 ## Golden Thread
 
-O “fio de ouro” do projeto é:
+O "fio de ouro" do projeto é:
 
 ```text
 linha original -> id_linha_origem -> codigo_fonte -> id_agrupado -> tabelas analíticas
@@ -44,21 +44,49 @@ linha original -> id_linha_origem -> codigo_fonte -> id_agrupado -> tabelas anal
 
 Esse encadeamento é o que permite auditar totais de estoque, preço médio, ST e ICMS até o registro original.
 
+### Colunas de rastreabilidade
+
+| Coluna               | Origem                                                                                                    | Preservada em                   |
+|----------------------|-----------------------------------------------------------------------------------------------------------|---------------------------------|
+| `id_linha_origem`    | Extração SQL (NFe: `chave_acesso|prod_nitem`, C170: `num_doc|num_item`, Bloco H: `num_inventario|dt_inv`) | `*_agr`, ponte                  |
+| `codigo_fonte`       | Extração SQL (`CNPJ|codigo_produto`)                                                                      | `*_agr`, ponte, `item_unidades` |
+| `id_agrupado`        | Heurística de agrupamento                                                                                 | Todas as camadas analíticas     |
+| `versao_agrupamento` | Incrementada a cada merge                                                                                 | Tabela mestre                   |
+
+### Tabela ponte expandida
+
+A tabela ponte (`map_produto_agrupado_{cnpj}.parquet`) agora inclui:
+- `chave_produto` — ID interno da descrição
+- `id_agrupado` — grupo consolidado
+- `codigo_fonte` — vínculo com a fonte bruta
+- `descricao_normalizada` — chave de matching
+
+### API de agregação
+
+| Método | Rota                                       | Ação                                   |
+|--------|--------------------------------------------|----------------------------------------|
+| GET    | `/aggregation/{cnpj}/tabela_agrupada`      | Lista grupos paginados                 |
+| POST   | `/aggregation/merge`                       | Merge manual de grupos                 |
+| POST   | `/aggregation/unmerge`                     | Reverte último merge de um grupo       |
+| GET    | `/aggregation/{cnpj}/historico_agregacoes` | Histórico completo de merges/reversões |
+
 ## Agregação automática
 
-O agrupamento automático considera principalmente duas trilhas:
+O agrupamento automático considera três trilhas (implementação vetorizada em `04_produtos_final.py`):
 
-1. GTIN comum entre produtos.
-2. `descricao_normalizada` igual com interseção de NCM.
-
-Fallback tolerado:
-
-- se ambos não tiverem NCM, descrições idênticas ainda podem formar grupo.
+1. **GTIN comum** entre produtos — mesmo `id_agrupado`.
+2. **`descricao_normalizada` igual com interseção de NCM** — mesmo `id_agrupado`.
+3. **Fallback**: `descricao_normalizada` igual sem NCM — mesmo `id_agrupado`.
 
 Regras de cuidado:
 
 - `cest` não é equivalente a `gtin`;
 - código de barras não deve ser tratado como classificação fiscal.
+
+## Versão do agrupamento
+
+A tabela mestre possui coluna `versao_agrupamento` (inteiro sequencial) incrementada
+a cada merge manual. Tabelas derivadas podem validar contra esta versão.
 
 ## Tabela mestre e tabela ponte
 
