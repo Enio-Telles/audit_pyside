@@ -69,6 +69,9 @@ except ImportError as e:
 
 
 def processar_arquivo(arq_sql, cnpj_limpo, data_limite_input, consultas_dir, pasta_saida):
+    # Garantir que arq_sql e consultas_dir sejam Path (podem vir como str do catalogo)
+    arq_sql = Path(arq_sql) if not isinstance(arq_sql, Path) else arq_sql
+    consultas_dir = Path(consultas_dir) if not isinstance(consultas_dir, Path) else consultas_dir
     try:
         conexao = get_thread_connection()
         if not conexao:
@@ -110,7 +113,7 @@ def processar_arquivo(arq_sql, cnpj_limpo, data_limite_input, consultas_dir, pas
 
             colunas = [col[0].lower() for col in cursor.description]
             dados = cursor.fetchall()
-            
+
             if not dados:
                 rprint(f"[yellow]  Zero linhas retornadas para {arq_sql.name}. Pulando gravação.[/yellow]")
                 return True

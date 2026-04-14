@@ -1,5 +1,9 @@
 # Tabela Mensal
 
+## Identificação Fiscal (SITAFE)
+
+Toda a lógica de tributação e agregação mensal baseia-se no `co_sefin` identificado na etapa inicial do pipeline. O sistema consulta as tabelas oficiais do SITAFE (`dados/referencias/CO_SEFIN/`) priorizando o match em `CEST + NCM` e utilizando `CEST` ou `NCM` isolados apenas como fallback. Isso garante integridade na aplicação das alíquotas mensais.
+
 Este documento consolida as regras da `aba_mensal_<cnpj>.parquet`, gerada por `src/transformacao/calculos_mensais_pkg/calculos_mensais.py`.
 
 ## Papel da tabela

@@ -1,4 +1,4 @@
-﻿"""
+"""
 02_itens.py
 
 Objetivo: Gerar a tabela consolidada de itens a partir de item_unidades.
@@ -30,7 +30,7 @@ for _dir in (SRC_DIR, UTILITARIOS_DIR):
 
 try:
     from salvar_para_parquet import salvar_para_parquet
-    from text import remove_accents
+    from text import remove_accents, expr_normalizar_descricao
     from item_unidades import item_unidades
 except ImportError as e:
     rprint(f"[red]Erro ao importar modulos:[/red] {e}")
@@ -38,22 +38,7 @@ except ImportError as e:
 
 
 def _normalizar_descricao_expr(col: str) -> pl.Expr:
-    return (
-        pl.col(col)
-        .cast(pl.Utf8, strict=False)
-        .fill_null("")
-        .str.to_uppercase()
-        .str.replace_all(r"[ÃÃ€Ã‚ÃƒÃ„]", "A")
-        .str.replace_all(r"[Ã‰ÃˆÃŠÃ‹]", "E")
-        .str.replace_all(r"[ÃÃŒÃŽÃ]", "I")
-        .str.replace_all(r"[Ã“Ã’Ã”Ã•Ã–]", "O")
-        .str.replace_all(r"[ÃšÃ™Ã›Ãœ]", "U")
-        .str.replace_all(r"Ã‡", "C")
-        .str.replace_all(r"Ã‘", "N")
-        .str.strip_chars()
-        .str.replace_all(r"\s+", " ")
-        .alias("descricao_normalizada")
-    )
+    return expr_normalizar_descricao(col).alias("descricao_normalizada")
 
 
 def _agg_list(col: str, alias: str) -> pl.Expr:
@@ -187,5 +172,3 @@ if __name__ == "__main__":
         itens(sys.argv[1])
     else:
         itens(input("CNPJ: "))
-
-

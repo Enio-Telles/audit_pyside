@@ -1,4 +1,4 @@
-﻿"""
+"""
 fontes_produtos.py
 
 Gera arquivos derivados das fontes brutas com a coluna `id_agrupado`
@@ -38,7 +38,7 @@ CNPJ_ROOT = DADOS_DIR / "CNPJ"
 
 try:
     from utilitarios.salvar_para_parquet import salvar_para_parquet
-    from utilitarios.text import remove_accents
+    from utilitarios.text import remove_accents, expr_normalizar_descricao
     from utilitarios.validacao_schema import (
         SchemaValidacaoError,
         validar_parquet_essencial,
@@ -59,24 +59,7 @@ def _norm(text: str | None) -> str:
 
 
 def _normalizar_descricao_expr(col: str) -> pl.Expr:
-    # Optimization: Replace .map_elements with native Polars string operations to preserve vectorization
-    # and improve performance for large datasets.
-    return (
-        pl.col(col)
-        .cast(pl.Utf8, strict=False)
-        .fill_null("")
-        .str.to_uppercase()
-        .str.replace_all(r"[ÁÀÂÃÄ]", "A")
-        .str.replace_all(r"[ÉÈÊË]", "E")
-        .str.replace_all(r"[ÍÌÎÏ]", "I")
-        .str.replace_all(r"[ÓÒÔÕÖ]", "O")
-        .str.replace_all(r"[ÚÙÛÜ]", "U")
-        .str.replace_all(r"Ç", "C")
-        .str.replace_all(r"Ñ", "N")
-        .str.strip_chars()
-        .str.replace_all(r"\s+", " ")
-        .alias("__descricao_normalizada__")
-    )
+    return expr_normalizar_descricao(col).alias("__descricao_normalizada__")
 
 
 def _detectar_coluna_descricao(df: pl.DataFrame, fonte: str) -> str | None:

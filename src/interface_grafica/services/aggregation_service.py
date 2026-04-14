@@ -1,3 +1,8 @@
+import os
+try:
+    import psutil
+except ImportError:
+    psutil = None
 import json
 import sys
 import re
@@ -72,9 +77,140 @@ try:
 except ImportError:
     gerar_calculos_periodos = None
 
+try:
+    from transformacao.ressarcimento_st_pkg import executar_pipeline_ressarcimento_st as gerar_ressarcimento_st
+except ImportError:
+    gerar_ressarcimento_st = None
+
+try:
+    from transformacao.resumo_global import gerar_aba_resumo_global
+except ImportError:
+    gerar_aba_resumo_global = None
+
+try:
+    from transformacao.produtos_selecionados import gerar_aba_produtos_selecionados
+except ImportError:
+    gerar_aba_produtos_selecionados = None
+
 
 class ServicoAgregacao:
-    """Gerencia a tabela produtos_agrupados e as derivacoes da camada _agr."""
+    # Cache global de DataFrames por CNPJ
+    _global_df_cache: dict[str, dict[Path, pl.DataFrame]] = {}
+
+    def _ler_parquet_com_cache(self, path: Path, cache: dict, nome: str, progresso=None, cnpj: str = None, tentar_reprocessar=True) -> pl.DataFrame:
+        """Lê Parquet com cache em memória e logs de tempo/tamanho."""
+        def meminfo():
+            if psutil is not None:
+                proc = psutil.Process(os.getpid())
+                mem = proc.memory_info().rss / (1024 * 1024)
+                return f"{mem:.1f} MB"
+            return "psutil N/A"
+
+        # Cache global por CNPJ
+        if cnpj is not None:
+            gcache = self._global_df_cache.setdefault(cnpj, {})
+            if path in gcache:
+                if progresso:
+                    progresso(f"[CACHE][GLOBAL] {nome}: {path.name} | Mem: {meminfo()}")
+                return gcache[path]
+
+        if path in cache:
+            if progresso:
+                progresso(f"[CACHE][LOCAL] {nome}: {path.name} | Mem: {meminfo()}")
+            return cache[path]
+
+        if not path.exists():
+            if progresso:
+                progresso(f"[ERRO] Arquivo não encontrado: {path}")
+            raise FileNotFoundError(f"Arquivo não encontrado: {path}")
+
+        try:
+            if progresso:
+                progresso(f"[MEM] Antes de ler {nome}: {meminfo()}")
+            t0 = perf_counter()
+            df = pl.read_parquet(path)
+            t1 = perf_counter()
+            cache[path] = df
+            if cnpj is not None:
+                self._global_df_cache[cnpj][path] = df
+            if progresso:
+                progresso(f"[LOAD] {nome}: {path.name} | {df.height} linhas, {df.width} cols | {t1-t0:.2f}s | Mem: {meminfo()}")
+            return df
+        except Exception as exc:
+            if progresso:
+                progresso(f"[ERRO] Falha ao ler {nome}: {exc}")
+            # Remove do cache se corrompido
+            if cnpj is not None and path in self._global_df_cache[cnpj]:
+                del self._global_df_cache[cnpj][path]
+            if path in cache:
+                del cache[path]
+            # Tenta reprocessar automaticamente se permitido
+            if tentar_reprocessar:
+                if progresso:
+                    progresso(f"[INFO] Tentando reprocessar {nome} automaticamente...")
+                ok = self._tentar_reprocessar_parquet(path, nome, cnpj, progresso)
+                if ok:
+                    # Tenta ler novamente, mas não recursivo
+                    return self._ler_parquet_com_cache(path, cache, nome, progresso, cnpj, tentar_reprocessar=False)
+                else:
+                    if progresso:
+                        progresso(f"[ERRO] Falha ao reprocessar {nome}. Aborte apenas esta etapa.")
+            raise
+
+    def _tentar_reprocessar_parquet(self, path: Path, nome: str, cnpj: str, progresso=None) -> bool:
+        """Tenta reprocessar o arquivo Parquet corrompido, se possível."""
+        # Mapear nome para função de geração
+        funcoes = {
+            "item_unidades": getattr(self, "_regerar_item_unidades", None),
+            "descricao_produtos": getattr(self, "_regerar_descricao_produtos", None),
+            "produtos_final": getattr(self, "_regerar_produtos_final", None),
+            "produtos_agrupados": getattr(self, "_regerar_produtos_agrupados", None),
+        }
+        func = funcoes.get(nome)
+        if func is not None:
+            try:
+                return func(cnpj, progresso)
+            except Exception as exc:
+                if progresso:
+                    progresso(f"[ERRO] Falha ao reprocessar {nome}: {exc}")
+                return False
+        if progresso:
+            progresso(f"[ERRO] Não há função de reprocessamento automático para {nome}.")
+        return False
+
+    def _regerar_item_unidades(self, cnpj, progresso=None):
+        if progresso:
+            progresso("[REPROCESSANDO] item_unidades...")
+        # Chame a função real do pipeline aqui
+        return False
+
+    def _regerar_descricao_produtos(self, cnpj, progresso=None):
+        if progresso:
+            progresso("[REPROCESSANDO] descricao_produtos...")
+        return False
+
+    def _regerar_produtos_final(self, cnpj, progresso=None):
+        if progresso:
+            progresso("[REPROCESSANDO] produtos_final...")
+        return False
+
+    def _regerar_produtos_agrupados(self, cnpj, progresso=None):
+        if progresso:
+            progresso("[REPROCESSANDO] produtos_agrupados...")
+        return False
+
+    """
+    Gerencia a tabela produtos_agrupados e as derivacoes da camada _agr.
+    """
+
+    def _tabelas_base_existem(self, cnpj: str) -> bool:
+        pasta = CNPJ_ROOT / cnpj / "analises" / "produtos"
+        reqs = [
+            pasta / f"item_unidades_{cnpj}.parquet",
+            pasta / f"descricao_produtos_{cnpj}.parquet",
+            pasta / f"produtos_final_{cnpj}.parquet",
+        ]
+        return all(p.exists() for p in reqs)
 
     def __init__(self) -> None:
         self.ultimo_tempo_etapas: dict[str, float] = {}
@@ -86,10 +222,21 @@ class ServicoAgregacao:
             progresso(f"OK {nome} em {duracao:.2f}s")
 
     def _executar_etapa_tempo(self, nome: str, funcao, progresso=None, contexto: dict | None = None):
+        def meminfo():
+            try:
+                import os
+                import psutil
+                proc = psutil.Process(os.getpid())
+                mem = proc.memory_info().rss / (1024 * 1024)
+                return f"{mem:.1f} MB"
+            except Exception:
+                return "psutil N/A"
         if progresso:
-            progresso(f"Iniciando {nome}...")
+            progresso(f"Iniciando {nome}... | Mem: {meminfo()}")
         inicio = perf_counter()
         resultado = funcao()
+        if progresso:
+            progresso(f"Finalizou {nome} | Mem: {meminfo()}")
         self._registrar_tempo(nome, perf_counter() - inicio, progresso, contexto=contexto)
         return resultado
 
@@ -113,9 +260,14 @@ class ServicoAgregacao:
             return []
 
         mov_mtime = mov_path.stat().st_mtime_ns
+        pasta_ressarc = pasta_prod.parent / "ressarcimento_st"
         derivados = {
             "calculos_mensais": pasta_prod / f"aba_mensal_{cnpj}.parquet",
             "calculos_anuais": pasta_prod / f"aba_anual_{cnpj}.parquet",
+            "calculos_periodos": pasta_prod / f"aba_periodos_{cnpj}.parquet",
+            "ressarcimento_st": pasta_ressarc / f"ressarcimento_st_item_{cnpj}.parquet",
+            "aba_resumo_global": pasta_prod / f"aba_resumo_global_{cnpj}.parquet",
+            "aba_produtos_selecionados": pasta_prod / f"aba_produtos_selecionados_{cnpj}.parquet",
         }
         return [
             etapa
@@ -149,23 +301,24 @@ class ServicoAgregacao:
     def _promover_tipos_sefin(df: pl.DataFrame) -> pl.DataFrame:
         """Garante tipos textuais para colunas de sefin/padroes, evitando schema List[null]/Null."""
         casts = []
-        if "lista_co_sefin" in df.columns:
+        cols = df.collect_schema().names() if isinstance(df, pl.LazyFrame) else df.columns
+        if "lista_co_sefin" in cols:
             casts.append(
                 pl.col("lista_co_sefin")
                 .cast(pl.List(pl.Utf8), strict=False)
                 .alias("lista_co_sefin")
             )
-        if "co_sefin_padrao" in df.columns:
+        if "co_sefin_padrao" in cols:
             casts.append(
                 pl.col("co_sefin_padrao")
                 .cast(pl.Utf8, strict=False)
                 .alias("co_sefin_padrao")
             )
         for col in ["ncm_padrao", "cest_padrao", "gtin_padrao"]:
-            if col in df.columns:
+            if col in cols:
                 casts.append(pl.col(col).cast(pl.Utf8, strict=False).alias(col))
         for col in ["lista_ncm", "lista_cest", "lista_gtin", "lista_descricoes", "lista_desc_compl"]:
-            if col in df.columns:
+            if col in cols:
                 casts.append(
                     pl.col(col)
                     .cast(pl.List(pl.Utf8), strict=False)
@@ -231,11 +384,12 @@ class ServicoAgregacao:
 
     @classmethod
     def _garantir_rastreabilidade_agregacao(cls, df: pl.DataFrame) -> pl.DataFrame:
-        if df.is_empty() or "id_agrupado" not in df.columns:
+        cols = df.collect_schema().names() if isinstance(df, pl.LazyFrame) else df.columns
+        if df.is_empty() or "id_agrupado" not in cols:
             return df
 
         expressoes: list[pl.Expr] = []
-        if "ids_origem_agrupamento" not in df.columns:
+        if "ids_origem_agrupamento" not in cols:
             expressoes.append(
                 pl.concat_list([pl.col("id_agrupado").cast(pl.Utf8, strict=False)]).alias("ids_origem_agrupamento")
             )
@@ -246,8 +400,8 @@ class ServicoAgregacao:
                 .alias("ids_origem_agrupamento")
             )
 
-        if "lista_itens_agrupados" not in df.columns:
-            if "lista_descricoes" in df.columns:
+        if "lista_itens_agrupados" not in cols:
+            if "lista_descricoes" in cols:
                 expressoes.append(
                     pl.col("lista_descricoes").cast(pl.List(pl.Utf8), strict=False).alias("lista_itens_agrupados")
                 )
@@ -278,6 +432,7 @@ class ServicoAgregacao:
     @staticmethod
     def _garantir_colunas_lista_agregacao(df: pl.DataFrame) -> pl.DataFrame:
         exprs = []
+        cols = df.collect_schema().names() if isinstance(df, pl.LazyFrame) else df.columns
         for coluna in [
             "lista_ncm",
             "lista_cest",
@@ -287,10 +442,10 @@ class ServicoAgregacao:
             "ids_origem_agrupamento",
             "lista_itens_agrupados",
         ]:
-            if coluna not in df.columns:
+            if coluna not in cols:
                 exprs.append(pl.lit([]).cast(pl.List(pl.Utf8), strict=False).alias(coluna))
         # M3: Garantir versao_agrupamento
-        if "versao_agrupamento" not in df.columns:
+        if "versao_agrupamento" not in cols:
             exprs.append(pl.lit(1).cast(pl.Int64).alias("versao_agrupamento"))
         df_saida = df.with_columns(exprs) if exprs else df
         return ServicoAgregacao._garantir_rastreabilidade_agregacao(df_saida)
@@ -301,14 +456,25 @@ class ServicoAgregacao:
         Define chave_item como chave canonica interna.
         Mantem chave_produto como coluna legado.
         """
-        if "chave_item" not in df.columns and "id_descricao" in df.columns:
-            df = df.with_columns(pl.col("id_descricao").alias("chave_item"))
-        if "chave_item" not in df.columns and "chave_produto" in df.columns:
-            df = df.with_columns(pl.col("chave_produto").alias("chave_item"))
-        if "chave_produto" not in df.columns and "id_descricao" in df.columns:
-            df = df.with_columns(pl.col("id_descricao").alias("chave_produto"))
-        if "chave_produto" not in df.columns and "chave_item" in df.columns:
-            df = df.with_columns(pl.col("chave_item").alias("chave_produto"))
+        try:
+            cols = df.collect_schema().names()
+        except (AttributeError, TypeError):
+            cols = df.columns
+
+        updates = []
+        
+        if "chave_item" not in cols and "id_descricao" in cols:
+            updates.append(pl.col("id_descricao").alias("chave_item"))
+        if "chave_item" not in cols and "chave_produto" in cols:
+            updates.append(pl.col("chave_produto").alias("chave_item"))
+            
+        if "chave_produto" not in cols and "id_descricao" in cols:
+            updates.append(pl.col("id_descricao").alias("chave_produto"))
+        if "chave_produto" not in cols and "chave_item" in cols:
+            updates.append(pl.col("chave_item").alias("chave_produto"))
+            
+        if updates:
+            df = df.with_columns(updates)
         return df
 
     def caminho_tabela_agregadas(self, cnpj: str) -> Path:
@@ -338,11 +504,13 @@ class ServicoAgregacao:
 
     @staticmethod
     def _ler_parquet_colunas(path: Path, colunas: list[str]) -> pl.DataFrame:
-        schema_cols = list(pl.read_parquet_schema(path).names())
+        if not path.exists():
+            return pl.DataFrame()
+        schema_cols = pl.read_parquet_schema(path).names()
         selecionadas = [col for col in colunas if col in schema_cols]
         if not selecionadas:
             return pl.DataFrame()
-        return pl.scan_parquet(path).select(selecionadas).collect()
+        return pl.read_parquet(path, columns=selecionadas)
 
     @staticmethod
     def _obter_schema_parquet(path: Path) -> set[str]:
@@ -401,9 +569,12 @@ class ServicoAgregacao:
         """
         df_resultado = self._garantir_colunas_lista_agregacao(self._promover_tipos_sefin(df_resultado))
 
+        cols_res = df_resultado.collect_schema().names() if isinstance(df_resultado, pl.LazyFrame) else df_resultado.columns
+
         # M3: Incrementar versao_agrupamento
-        if "versao_agrupamento" not in df_resultado.columns:
+        if "versao_agrupamento" not in cols_res:
             df_resultado = df_resultado.with_columns(pl.lit(1).cast(pl.Int64).alias("versao_agrupamento"))
+            cols_res = df_resultado.collect_schema().names() if isinstance(df_resultado, pl.LazyFrame) else df_resultado.columns
         else:
             # Incrementar apenas se nao foi definido explicitamente pelo caller
             max_versao = df_resultado["versao_agrupamento"].max()
@@ -416,7 +587,7 @@ class ServicoAgregacao:
         df_resultado_sem_chaves = df_resultado.drop("lista_chave_produto", strict=False)
         df_resultado_sem_chaves.write_parquet(self.caminho_tabela_agregadas(cnpj))
 
-        if "lista_chave_produto" in df_resultado.columns:
+        if "lista_chave_produto" in cols_res:
             # R3: Ponte expandida com codigo_fonte e descricao_normalizada
             # Tentar enriquecer ponte com informacoes de produtos_final
             path_final = self.caminho_tabela_final(cnpj)
@@ -437,7 +608,8 @@ class ServicoAgregacao:
                 if "descricao_normalizada" in schema_base:
                     cols_base.append("descricao_normalizada")
 
-                df_base_info = pl.scan_parquet(path_base).select(cols_base).collect()
+                lf_base_info = pl.scan_parquet(path_base).select(cols_base)
+                df_base_info = lf_base_info.collect()
                 if "chave_item" not in df_base_info.columns and "id_descricao" in df_base_info.columns:
                     df_base_info = df_base_info.rename({"id_descricao": "chave_item"})
 
@@ -449,7 +621,8 @@ class ServicoAgregacao:
             if path_final.exists():
                 schema_final = pl.read_parquet_schema(path_final).names()
                 if "id_descricao" in schema_final and "codigo_fonte" in schema_final:
-                    df_cf = pl.scan_parquet(path_final).select(["id_descricao", "codigo_fonte"]).collect()
+                    lf_cf = pl.scan_parquet(path_final).select(["id_descricao", "codigo_fonte"])
+                    df_cf = lf_cf.collect()
                     df_map = df_map.join(df_cf, left_on="chave_produto", right_on="id_descricao", how="left")
                     df_map = df_map.drop("id_descricao", strict=False)
 
@@ -762,12 +935,15 @@ class ServicoAgregacao:
         if not path_base.exists() or not path_agrup.exists():
             return False
 
-        df_base = self._padronizar_chaves_prod(pl.scan_parquet(path_base).collect())
-        df_agrup = self._promover_tipos_sefin(pl.scan_parquet(path_agrup).collect())
+        lf_base = pl.scan_parquet(path_base)
+        df_base = self._padronizar_chaves_prod(lf_base.collect())
+        lf_agrup = pl.scan_parquet(path_agrup)
+        df_agrup = self._promover_tipos_sefin(lf_agrup.collect())
 
         if path_pont.exists():
+            lf_pont = pl.scan_parquet(path_pont)
             df_pont = (
-                pl.scan_parquet(path_pont).collect()
+                lf_pont.collect()
                 .with_columns(pl.col("chave_produto").cast(pl.Utf8, strict=False))
             )
         elif "lista_chave_produto" in df_agrup.columns:
@@ -1094,12 +1270,44 @@ class ServicoAgregacao:
             "qtd_grupos_restaurados": len(ids_origem),
         }
 
-    def carregar_tabela_editavel(self, cnpj: str) -> Path:
+    def carregar_tabela_editavel(self, cnpj: str, progresso=None) -> Path:
+        """
+        Carrega a tabela de agregação editável, agora com leitura paralela das tabelas base.
+        """
+        import concurrent.futures
+        if not self._tabelas_base_existem(cnpj):
+            raise FileNotFoundError(
+                f"Tabelas base ausentes para o CNPJ {cnpj}.\n\n" 
+                f"Gere as tabelas: item_unidades, descricao_produtos e produtos_final antes de abrir a agregacao."
+            )
+        cache = {}
+        pasta = CNPJ_ROOT / cnpj / "analises" / "produtos"
+        paths = {
+            "item_unidades": pasta / f"item_unidades_{cnpj}.parquet",
+            "descricao_produtos": pasta / f"descricao_produtos_{cnpj}.parquet",
+            "produtos_final": pasta / f"produtos_final_{cnpj}.parquet",
+        }
+        # Leitura paralela das tabelas base
+        def ler(nome_path):
+            nome, path = nome_path
+            return (nome, self._ler_parquet_com_cache(path, cache, nome, progresso, cnpj=cnpj))
+        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+            futs = {executor.submit(ler, item): item[0] for item in paths.items()}
+            for fut in concurrent.futures.as_completed(futs):
+                try:
+                    nome, df = fut.result()
+                    cache[paths[nome]] = df
+                except Exception as exc:
+                    if progresso:
+                        progresso(f"[ERRO] Falha ao ler {futs[fut]}: {exc}")
+                    raise
+        # Só então tenta garantir agregação
         path_agr = self.garantir_tabela_agregadas(cnpj, criar_se_ausente=True)
         if not path_agr.exists():
             raise FileNotFoundError(
                 "Tabela produtos_agrupados nao encontrada. Gere ou recalcule a camada de agregacao antes de abrir a aba."
             )
+        self._ler_parquet_com_cache(path_agr, cache, "produtos_agrupados", progresso, cnpj=cnpj)
         self.garantir_metricas_tabela_agregadas(cnpj)
         return path_agr
 
@@ -1333,7 +1541,8 @@ class ServicoAgregacao:
             )
 
         # Optimized: Vectorized calculation of totals
-        if "lista_chave_produto" in df_agrup.columns:
+        cols_agrup = df_agrup.collect_schema().names() if isinstance(df_agrup, pl.LazyFrame) else df_agrup.columns
+        if "lista_chave_produto" in cols_agrup:
             df_mapping = (
                 df_agrup.select(["id_agrupado", "lista_chave_produto"])
                 .explode("lista_chave_produto")
@@ -1353,7 +1562,7 @@ class ServicoAgregacao:
                 ])
             )
 
-            cols_to_drop = [c for c in ["total_compras", "total_vendas"] if c in df_agrup.columns]
+            cols_to_drop = [c for c in ["total_compras", "total_vendas"] if c in cols_agrup]
             if cols_to_drop:
                 df_agrup = df_agrup.drop(cols_to_drop)
 
@@ -1362,9 +1571,9 @@ class ServicoAgregacao:
                 pl.col("total_vendas").fill_null(0.0)
             ])
         else:
-            if "total_compras" not in df_agrup.columns:
+            if "total_compras" not in cols_agrup:
                 df_agrup = df_agrup.with_columns(pl.lit(0.0).alias("total_compras"))
-            if "total_vendas" not in df_agrup.columns:
+            if "total_vendas" not in cols_agrup:
                 df_agrup = df_agrup.with_columns(pl.lit(0.0).alias("total_vendas"))
 
         df_agrup.drop("lista_chave_produto", strict=False).write_parquet(path_agrup)
@@ -1444,8 +1653,11 @@ class ServicoAgregacao:
         ok_mensal = self._executar_etapa_tempo("calculos_mensais", lambda: bool(gerar_calculos_mensais(cnpj)), progresso, contexto=contexto_base) if ok_mov else False
         ok_anual = self._executar_etapa_tempo("calculos_anuais", lambda: bool(gerar_calculos_anuais(cnpj)), progresso, contexto=contexto_base) if ok_mensal else False
         ok_periodos = self._executar_etapa_tempo("calculos_periodos", lambda: bool(gerar_calculos_periodos(cnpj)), progresso, contexto=contexto_base) if ok_anual else False
+        ok_ressarc = self._executar_etapa_tempo("ressarcimento_st", lambda: bool(gerar_ressarcimento_st(cnpj)), progresso, contexto=contexto_base) if ok_periodos else False
+        ok_resumo = self._executar_etapa_tempo("aba_resumo_global", lambda: bool(gerar_aba_resumo_global(cnpj)), progresso, contexto=contexto_base) if ok_ressarc else False
+        ok_sel = self._executar_etapa_tempo("aba_produtos_selecionados", lambda: bool(gerar_aba_produtos_selecionados(cnpj)), progresso, contexto=contexto_base) if ok_resumo else False
 
-        ok_total = bool(ok_padroes and ok_totais and ok_final and ok_fontes and ok_precos and ok_fatores and ok_c170 and ok_c176 and ok_mov and ok_mensal and ok_anual and ok_periodos)
+        ok_total = bool(ok_padroes and ok_totais and ok_final and ok_fontes and ok_precos and ok_fatores and ok_c170 and ok_c176 and ok_mov and ok_mensal and ok_anual and ok_periodos and ok_ressarc and ok_resumo and ok_sel)
         self._registrar_tempo(
             "reprocessar_agregacao_total",
             perf_counter() - inicio_total,

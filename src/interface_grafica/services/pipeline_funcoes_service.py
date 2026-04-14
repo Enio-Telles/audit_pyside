@@ -21,9 +21,10 @@ import polars as pl
 from extracao.extracao_oracle_eficiente import descobrir_consultas_sql, executar_extracao_oracle
 from interface_grafica.config import CNPJ_ROOT, SQL_DIR
 
-from utilitarios.sql_catalog import list_sql_entries
-
+from utilitarios.sql_catalog import list_sql_entries, resolve_sql_path
 from utilitarios.extrair_parametros import extrair_parametros_sql
+from utilitarios.conectar_oracle import obter_conexao_oracle
+from utilitarios.ler_sql import ler_sql
 
 
 @dataclass
@@ -186,7 +187,7 @@ class ServicoExtracao:
                 shutil.rmtree(caminho)
         return True
 
-    def apagar_cnpj(self, cnpj: str) -> bool:
+    def apagar_cnpj_total(self, cnpj: str) -> bool:
         import shutil
 
         pasta = self.pasta_cnpj(cnpj)
@@ -244,7 +245,21 @@ class ServicoExtracao:
 
         _msg("Conectando ao Oracle...")
         with obter_conexao_oracle() as conn:
-            for sql_path in consultas:
+            for sql_item in consultas:
+                # Se for apenas nome ou ID, resolve via catálogo
+                try:
+                    sql_path = resolve_sql_path(sql_item)
+                except Exception:
+                    # Fallback para o comportamento anterior se falhar a resolução pelo catálogo
+                    sql_path = Path(sql_item)
+                    if not sql_path.is_absolute():
+                        # Tenta resolver na pasta de consultas do serviço
+                        candidato = self.consultas_dir / sql_path
+                        if candidato.exists():
+                            sql_path = candidato
+                        elif (self.consultas_dir / f"{sql_item}.sql").exists():
+                             sql_path = self.consultas_dir / f"{sql_item}.sql"
+                
                 nome_consulta = sql_path.stem.lower()
                 _msg(f"Executando {sql_path.name}...")
 

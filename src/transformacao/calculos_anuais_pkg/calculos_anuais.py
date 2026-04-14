@@ -49,8 +49,14 @@ def _format_st_periodos_anuais(registros) -> str:
     if registros is None:
         return ""
     if isinstance(registros, pl.Series):
+        if registros.is_empty():
+            return ""
         registros = registros.to_list()
-    if not registros:
+    if isinstance(registros, list):
+        if not registros:
+            return ""
+    else:
+        # Caso venha um tipo inesperado, retorna string vazia
         return ""
 
     periodos = []

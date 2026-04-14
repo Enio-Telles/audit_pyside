@@ -1,4 +1,4 @@
-﻿import sys
+import sys
 import re
 from pathlib import Path
 from utilitarios.project_paths import PROJECT_ROOT, TRACEBACK_PATH
@@ -24,6 +24,7 @@ try:
         _boolish_expr,
         gerar_eventos_estoque as _gerar_eventos_estoque,
         calcular_saldo_estoque_anual as _calcular_saldo_estoque_anual,
+        calcular_saldo_estoque_periodo as _calcular_saldo_estoque_periodo,
     )
     from transformacao.movimentacao_estoque_pkg.mapeamento_fontes import (
         normalizar_descricao_expr as _normalizar_descricao_expr,
@@ -87,26 +88,6 @@ def filtrar_movimentacoes_por_fonte(df: pl.DataFrame) -> pl.DataFrame:
 # Funcoes de calculo de saldo para map_groups
 # ===========================================================================
 
-def _calcular_saldo_estoque_anual(df_grupo: pl.DataFrame) -> pl.DataFrame:
-    """Calcula o saldo acumulado (estoque) dentro de um grupo anual.
-
-    Recebe um DataFrame com as colunas ja preparadas (__q_conv_sinal__, etc.)
-    e adiciona a coluna `saldo` com o acumulado sequencial de __q_conv_sinal__.
-    """
-    return df_grupo.with_columns(
-        pl.col("__q_conv_sinal__").cum_sum().alias("saldo")
-    )
-
-
-def _calcular_saldo_estoque_periodo(df_grupo: pl.DataFrame) -> pl.DataFrame:
-    """Calcula o saldo acumulado dentro de um periodo de inventario.
-
-    Usado apos o agrupamento por periodo_inventario para garantir que o saldo
-    reinicie corretamente em cada evento de ESTOQUE INICIAL.
-    """
-    return df_grupo.with_columns(
-        pl.col("__q_conv_sinal__").cum_sum().alias("saldo")
-    )
 
 
 def gerar_movimentacao_estoque(cnpj: str, pasta_cnpj: Path | None = None) -> bool:

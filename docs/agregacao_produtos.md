@@ -72,16 +72,19 @@ A tabela ponte (`map_produto_agrupado_{cnpj}.parquet`) agora inclui:
 
 ## Agregação automática
 
-O agrupamento automático considera três trilhas (implementação vetorizada em `04_produtos_final.py`):
+O agrupamento automático agora segue uma sistemática simplificada (implementação em `04_produtos_final.py`):
 
-1. **GTIN comum** entre produtos — mesmo `id_agrupado`.
-2. **`descricao_normalizada` igual com interseção de NCM** — mesmo `id_agrupado`.
-3. **Fallback**: `descricao_normalizada` igual sem NCM — mesmo `id_agrupado`.
+1. **Descrição Normalizada**: Produtos com a mesma `descricao_normalizada` (após remoção de acentos, conversão para maiúsculas e limpeza de espaços) são agrupados automaticamente no mesmo `id_agrupado`.
+2. **Identificação Fiscal**: A identidade do produto é preservada com base no conjunto: `codigo, descricao, descricao_complementar, tipo_item, ncm, cest, gtin`.
 
-Regras de cuidado:
+Qualquer outra associação entre produtos com nomes diferentes (mesmo que compartilhem GTIN ou NCM) deve ser feita **explicitamente de forma manual**.
 
-- `cest` não é equivalente a `gtin`;
-- código de barras não deve ser tratado como classificação fiscal.
+## Persistência de Agrupamentos Manuais
+
+Para evitar a perda de trabalho após reprocessamentos do pipeline, o sistema utiliza o arquivo:
+- `mapa_agrupamento_manual_<cnpj>.parquet`
+
+Este arquivo armazena os DE-PARA manuais realizados na interface. O pipeline prioriza este mapeamento antes de aplicar a sistemática automática.
 
 ## Versão do agrupamento
 

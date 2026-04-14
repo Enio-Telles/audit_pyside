@@ -121,30 +121,55 @@ def inicializar_produtos_agrupados(cnpj: str, pasta_cnpj: Path | None = None) ->
     df_prod = pl.read_parquet(arq_produtos)
     df_base = pl.read_parquet(arq_base)
 
-    grupos = []
+    # Otimizacao: Agrupamento em tempo linear usando Union-Find/Mapeamento
+    # Em vez de O(N^2) no fits(), usamos tabelas de hash para GTIN e Descricao+NCM
     
-    def fits(row, g_rows):
-        for r in g_rows:
-            if row.get("lista_gtin") and r.get("lista_gtin"):
-                if set(row["lista_gtin"]) & set(r["lista_gtin"]):
-                    return True
-            if row.get("descricao_normalizada") == r.get("descricao_normalizada"):
-                if row.get("lista_ncm") and r.get("lista_ncm"):
-                    if set(row["lista_ncm"]) & set(r["lista_ncm"]):
-                        return True
-                elif not row.get("lista_ncm") and not r.get("lista_ncm"):
-                    return True
-        return False
+    rows = df_prod.to_dicts()
+    parent = list(range(len(rows)))
 
-    for row in df_prod.to_dicts():
-        found = False
-        for g in grupos:
-            if fits(row, g):
-                g.append(row)
-                found = True
-                break
-        if not found:
-            grupos.append([row])
+    def find(i):
+        if parent[i] == i: return i
+        parent[i] = find(parent[i])
+        return parent[i]
+
+    def union(i, j):
+        root_i = find(i)
+        root_j = find(j)
+        if root_i != root_j:
+            parent[root_i] = root_j
+
+    gtin_to_idx = {}
+    desc_ncm_to_idx = {}
+
+    for idx, row in enumerate(rows):
+        # 1. Agrupar por GTIN
+        list_gtin = row.get("lista_gtin") or []
+        for gtin in list_gtin:
+            if gtin in gtin_to_idx:
+                union(idx, gtin_to_idx[gtin])
+            else:
+                gtin_to_idx[gtin] = idx
+        
+        # 2. Agrupar por Descricao + NCM
+        desc_norm = row.get("descricao_normalizada")
+        if desc_norm:
+            list_ncm = row.get("lista_ncm") or [None]
+            for ncm in list_ncm:
+                key = (desc_norm, ncm)
+                if key in desc_ncm_to_idx:
+                    union(idx, desc_ncm_to_idx[key])
+                else:
+                    desc_ncm_to_idx[key] = idx
+
+    # Coletar grupos
+    grupos_indices = {}
+    for i in range(len(rows)):
+        root = find(i)
+        if root not in grupos_indices:
+            grupos_indices[root] = []
+        grupos_indices[root].append(rows[i])
+
+    grupos = list(grupos_indices.values())
 
     # Bolt: Pre-calculate normalization outside the loop to avoid redundant operations for each group
     # Optimized: Using native implementation of _expr_normalizar_descricao to ensure vectorization

@@ -39,8 +39,8 @@ try:
     )
     from transformacao.descricao_produtos import descricao_produtos
     from transformacao.id_agrupados import gerar_id_agrupados
-except ImportError as e:
-    rprint(f"[red]Erro ao importar modulos:[/red] {e}")
+except ImportError as erro:
+    rprint(f"[red]Erro ao importar modulos:[/red] {erro}")
     sys.exit(1)
 
 
@@ -48,20 +48,20 @@ def _gerar_id_agrupado(seq: int) -> str:
     return f"id_agrupado_{seq}"
 
 
-def get_mode_expr(col_name: str) -> pl.Expr:
+def get_moda_expr(col_nome: str) -> pl.Expr:
     return (
-        pl.col(col_name)
+        pl.col(col_nome)
         .cast(pl.Utf8, strict=False)
         .str.strip_chars()
-        .filter(pl.col(col_name).cast(pl.Utf8, strict=False).str.strip_chars() != "")
+        .filter(pl.col(col_nome).cast(pl.Utf8, strict=False).str.strip_chars() != "")
         .mode()
         .first()
     )
 
 
-def _clean_list_expr(col_name: str) -> pl.Expr:
+def _limpar_lista_expr(col_nome: str) -> pl.Expr:
     return (
-        pl.col(col_name)
+        pl.col(col_nome)
         .list.eval(
             pl.element()
             .cast(pl.Utf8, strict=False)
@@ -73,163 +73,40 @@ def _clean_list_expr(col_name: str) -> pl.Expr:
     )
 
 
-# ===========================================================================
-# Heuristica de agrupamento automatico (A1) — vetorizada
-# ===========================================================================
-
-def _agrupar_por_gtin(df_descricoes: pl.DataFrame) -> pl.DataFrame:
+def _aplicar_agrupamento_manual(df_descricoes: pl.DataFrame, pasta_analises: Path, cnpj: str) -> pl.DataFrame:
     """
-    Trilha 1: Produtos que compartilham GTIN sao agrupados no mesmo grupo.
-
-    Retorna df_descricoes com coluna `id_agrupado_gtin` onde GTINs comuns
-    recebem o mesmo ID. Descricoes sem GTIN ficam com null.
+    Prioriza o mapeamento manual se existir. 
+    O arquivo mapa_agrupamento_manual_<cnpj>.parquet deve conter [id_descricao, id_agrupado].
     """
-    # Explode lista_gtin para ter uma linha por (id_descricao, gtin)
-    df_com_gtin = (
-        df_descricoes
-        .filter(pl.col("lista_gtin").list.len() > 0)
-        .select(["id_descricao", "descricao_normalizada", "lista_gtin"])
-        .explode("lista_gtin")
-        .rename({"lista_gtin": "__gtin__"})
-    )
-
-    if df_com_gtin.is_empty():
-        return df_descricoes.with_columns(pl.lit(None, dtype=pl.Utf8).alias("id_agrupado_gtin"))
-
-    # Agrupar por GTIN: todos os id_descricao com mesmo GTIN recebem grupo
-    df_gtin_groups = (
-        df_com_gtin
-        .group_by("__gtin__")
-        .agg(pl.col("id_descricao").alias("__ids_com_gtin__"))
-    )
-
-    # Conectar grupos transitivos: se A e B compartilham GTIN1, B e C compartilham GTIN2,
-    # entao A, B, C estao no mesmo grupo. Fazemos via explode + group_by id_descricao.
-    df_ids_gtin = (
-        df_gtin_groups
-        .explode("__ids_com_gtin__")
-        .rename({"__ids_com_gtin__": "id_descricao"})
-        .group_by("id_descricao")
-        .agg(pl.col("__gtin__").sort().alias("__gtins_do_item__"))
-    )
-
-    # Para simplificar sem union-find, usamos o menor GTIN como chave do grupo
-    # (grupos transitivos perfeitos exigiriam union-find iterativo; na pratica,
-    # GTIN duplicado direto e o caso mais comum).
-    df_com_gtin = df_com_gtin.join(
-        df_ids_gtin, on="id_descricao", how="left"
-    ).with_columns(
-        pl.col("__gtins_do_item__").list.first().alias("__gtin_repr__")
-    )
-
-    # Atribuir id_agrupado por GTIN repr
-    df_gtin_seq = (
-        df_com_gtin
-        .select("__gtin_repr__")
-        .unique()
-        .sort("__gtin_repr__")
-        .with_row_index("seq_gtin", offset=1)
-        .with_columns(pl.format("id_agrupado_gt_{}", pl.col("seq_gtin")).alias("id_agrupado_gtin"))
-        .drop("seq_gtin")
-    )
-
-    df_com_gtin = df_com_gtin.join(df_gtin_seq, on="__gtin_repr__", how="left").select([
-        "id_descricao", pl.col("id_agrupado_gtin")
-    ])
-
-    return df_descricoes.join(df_com_gtin, on="id_descricao", how="left")
-
-
-def _agrupar_por_descricao_ncm(df: pl.DataFrame) -> pl.DataFrame:
-    """
-    Trilha 2+3: Descricao_normalizada igual com intersecao de NCM -> grupo.
-    Fallback: descricao_normalizada igual sem NCM -> grupo.
-
-    Retorna df com coluna `id_agrupado_desc_ncm`.
-    """
-    # Para cada descricao_normalizada, verificar se ha NCM comum
-    df_com_ncm = (
-        df
-        .filter(pl.col("lista_ncm").list.len() > 0)
-        .select(["id_descricao", "descricao_normalizada", "lista_ncm"])
-        .explode("lista_ncm")
-        .rename({"lista_ncm": "__ncm__"})
-    )
-
-    if df_com_ncm.is_empty():
-        # Sem NCM em nenhum: agrupar tudo por descricao_normalizacao
-        return df.with_columns(
-            pl.format("id_agrupado_dn_{}", pl.col("id_descricao")).alias("id_agrupado_desc_ncm")
+    caminho_manual = pasta_analises / f"mapa_agrupamento_manual_{cnpj}.parquet"
+    
+    if not caminho_manual.exists():
+        # Fallback: 1 id_agrupado para cada id_descricao (Agrupamento por Descrição apenas)
+        return df_descricoes.with_columns(
+            pl.col("id_descricao").alias("id_agrupado")
         )
 
-    # Descricoes com NCM: agrupar por (descricao_normalizada, ncm)
-    df_desc_ncm_groups = (
-        df_com_ncm
-        .group_by(["descricao_normalizada", "__ncm__"])
-        .agg(pl.col("id_descricao").alias("__ids__"))
-    )
-
-    # Atribuir ID sequencial por grupo
-    df_desc_ncm_groups = df_desc_ncm_groups.with_row_index("seq_ncm", offset=1).with_columns(
-        pl.format("id_agrupado_dn_{}", pl.col("seq_ncm")).alias("id_agrupado_desc_ncm")
-    )
-
-    # Explode ids e juntar de volta
-    df_ids_ncm = (
-        df_desc_ncm_groups
-        .select(["__ids__", "id_agrupado_desc_ncm"])
-        .explode("__ids__")
-        .rename({"__ids__": "id_descricao"})
-    )
-
-    # Descricoes SEM NCM: cada descricao_normalizada vira seu proprio grupo (agrupado por descricao)
-    offset_sem_ncm = df_desc_ncm_groups.height + 1
-    
-    df_sem_ncm_base = (
-        df
-        .filter(pl.col("lista_ncm").list.len() == 0)
-        .select(["id_descricao", "descricao_normalizada"])
-    )
-    
-    if df_sem_ncm_base.is_empty():
-        df_result = df_ids_ncm
-    else:
-        df_sem_ncm = (
-            df_sem_ncm_base
-            .group_by("descricao_normalizada")
-            .agg(pl.col("id_descricao").alias("__ids__"))
-            .with_row_index("seq_sem_ncm", offset=offset_sem_ncm)
-            .with_columns(pl.format("id_agrupado_dn_{}", pl.col("seq_sem_ncm")).alias("id_agrupado_desc_ncm"))
-            .explode("__ids__")
-            .rename({"__ids__": "id_descricao"})
-            .select(["id_descricao", "id_agrupado_desc_ncm"])
+    try:
+        df_manual = pl.read_parquet(caminho_manual).select(["id_descricao", "id_agrupado"])
+        rprint(f"[green]Mapeamento manual carregado: {caminho_manual.name}[/green]")
+        
+        return df_descricoes.join(df_manual, on="id_descricao", how="left").with_columns(
+            pl.coalesce([pl.col("id_agrupado"), pl.col("id_descricao")]).alias("id_agrupado")
         )
-        df_result = pl.concat([df_ids_ncm, df_sem_ncm])
+    except Exception as e:
+        rprint(f"[yellow]Aviso ao carregar mapeamento manual: {e}[/yellow]")
+        return df_descricoes.with_columns(
+            pl.col("id_descricao").alias("id_agrupado")
+        )
 
-    return df.join(df_result, on="id_descricao", how="left")
 
-
-def _fundir_grupos(df: pl.DataFrame) -> pl.DataFrame:
+def _aplicar_heuristica_agrupamento(df_descricoes: pl.DataFrame, pasta_analises: Path, cnpj: str) -> pl.DataFrame:
     """
-    Fundir as trilhas GTIN e descricao+NCM em um unico `id_agrupado`.
-
-    Estrategia: para cada id_descricao, se ha id_agrupado_gtin, usar como base.
-    Depois, conectar grupos de descricao+NCM que compartilham id_agrupado_gtin.
-    Para simplicidade vetorizada:
-    - Se tem GTIN: id_agrupado = id_agrupado_gtin
-    - Se nao tem GTIN: id_agrupado = id_agrupado_desc_ncm
+    Pipeline de agrupamento. Seguindo a nova regra:
+    1. Agrupamento por descricao_normalizada (ja eh a base do id_descricao).
+    2. Aplicacao de DE-PARA manual se existir.
     """
-    return df.with_columns(
-        pl.coalesce([pl.col("id_agrupado_gtin"), pl.col("id_agrupado_desc_ncm")]).alias("id_agrupado")
-    ).drop(["id_agrupado_gtin", "id_agrupado_desc_ncm"])
-
-
-def _aplicar_heuristica_agrupamento(df_descricoes: pl.DataFrame) -> pl.DataFrame:
-    """Pipeline completo de agrupamento automatico vetorizado."""
-    df = _agrupar_por_gtin(df_descricoes)
-    df = _agrupar_por_descricao_ncm(df)
-    df = _fundir_grupos(df)
-    return df
+    return _aplicar_agrupamento_manual(df_descricoes, pasta_analises, cnpj)
 
 
 # ===========================================================================
@@ -307,9 +184,9 @@ def produtos_agrupados(cnpj: str, pasta_cnpj: Path | None = None, versao: int = 
     ])
 
     # ===========================================================================
-    # A1: Aplicar heuristica de agrupamento automatico (GTIN + descricao+NCM)
+    # A1: Aplicar sistemática de agrupamento (Descrição + Mapeamento Manual)
     # ===========================================================================
-    df_descricoes = _aplicar_heuristica_agrupamento(df_descricoes)
+    df_descricoes = _aplicar_heuristica_agrupamento(df_descricoes, pasta_analises, cnpj)
 
     # Garantir que todos tem id_agrupado (fallback por id_descricao se heuristicas falharem)
     df_descricoes = df_descricoes.with_columns(
@@ -351,10 +228,10 @@ def produtos_agrupados(cnpj: str, pasta_cnpj: Path | None = None, versao: int = 
         .group_by("id_agrupado")
         .agg([
             pl.col("descricao").first().alias("descr_padrao"),
-            get_mode_expr("ncm").alias("ncm_padrao"),
-            get_mode_expr("cest").alias("cest_padrao"),
-            get_mode_expr("gtin").alias("gtin_padrao"),
-            get_mode_expr("co_sefin_item").alias("co_sefin_padrao")
+            get_moda_expr("ncm").alias("ncm_padrao"),
+            get_moda_expr("cest").alias("cest_padrao"),
+            get_moda_expr("gtin").alias("gtin_padrao"),
+            get_moda_expr("co_sefin_item").alias("co_sefin_padrao")
         ])
     )
 
@@ -367,18 +244,18 @@ def produtos_agrupados(cnpj: str, pasta_cnpj: Path | None = None, versao: int = 
 
     df_mestra = df_mestra_base.with_columns([
         pl.coalesce([pl.col("descr_padrao"), pl.col("descricao")]).alias("descr_padrao"),
-        _clean_list_expr("lista_ncm").alias("lista_ncm"),
-        _clean_list_expr("lista_cest").alias("lista_cest"),
-        _clean_list_expr("lista_gtin").alias("lista_gtin"),
-        _clean_list_expr("lista_co_sefin").alias("lista_co_sefin"),
-        _clean_list_expr("lista_unid").alias("lista_unidades"),
-        _clean_list_expr("fontes").alias("fontes"),
+        _limpar_lista_expr("lista_ncm").alias("lista_ncm"),
+        _limpar_lista_expr("lista_cest").alias("lista_cest"),
+        _limpar_lista_expr("lista_gtin").alias("lista_gtin"),
+        _limpar_lista_expr("lista_co_sefin").alias("lista_co_sefin"),
+        _limpar_lista_expr("lista_unid").alias("lista_unidades"),
+        _limpar_lista_expr("fontes").alias("fontes"),
 
         pl.col("descricao").cast(pl.Utf8, strict=False).str.strip_chars()
           .filter(pl.col("descricao").cast(pl.Utf8, strict=False).str.strip_chars() != "")
           .map_elements(lambda x: [x] if x else [], return_dtype=pl.List(pl.Utf8)).alias("lista_descricoes"),
 
-        _clean_list_expr("lista_desc_compl").alias("lista_desc_compl"),
+        _limpar_lista_expr("lista_desc_compl").alias("lista_desc_compl"),
 
         # Rastreabilidade: IDs de origem do agrupamento automatico
         pl.concat_str([pl.col("id_agrupado")]).cast(pl.List(pl.Utf8)).alias("ids_origem_agrupamento"),
@@ -443,7 +320,7 @@ def produtos_agrupados(cnpj: str, pasta_cnpj: Path | None = None, versao: int = 
     # ===========================================================================
     # R3: Tabela ponte expandida (codigo_fonte + descricao_normalizada)
     # ===========================================================================
-    df_ponte = (
+    df_ponte_agregacao = (
         df_descricoes
         .filter(pl.col("id_descricao").is_not_null())
         .select([
@@ -456,7 +333,7 @@ def produtos_agrupados(cnpj: str, pasta_cnpj: Path | None = None, versao: int = 
     # Tentar incluir codigo_fonte se disponivel em item_unidades
     if "codigo_fonte" in df_item_unid.columns:
         df_cf = df_item_unid.select(["descricao", "codigo_fonte"]).unique(subset=["descricao"])
-        df_ponte = df_ponte.join(
+        df_ponte_agregacao = df_ponte_agregacao.join(
             df_cf.rename({"descricao": "descr_ref"}),
             left_on="descricao_normalizada",
             right_on=df_cf.select(pl.col("descr_ref").cast(pl.Utf8, strict=False).str.to_uppercase().str.replace_all(r"\s+", " ").alias("descricao_normalizada_tmp")).get_column("descricao_normalizada_tmp"),
@@ -466,11 +343,11 @@ def produtos_agrupados(cnpj: str, pasta_cnpj: Path | None = None, versao: int = 
         df_cf_norm = df_item_unid.with_columns(
             pl.col("descricao").cast(pl.Utf8, strict=False).str.to_uppercase().str.replace_all(r"\s+", " ").alias("__dn__")
         ).select([pl.col("__dn__").alias("descricao_normalizada"), "codigo_fonte"]).unique(subset=["descricao_normalizada"])
-        df_ponte = df_ponte.join(df_cf_norm, on="descricao_normalizada", how="left")
+        df_ponte_agregacao = df_ponte_agregacao.join(df_cf_norm, on="descricao_normalizada", how="left")
     else:
-        df_ponte = df_ponte.with_columns(pl.lit(None, dtype=pl.Utf8).alias("codigo_fonte"))
+        df_ponte_agregacao = df_ponte_agregacao.with_columns(pl.lit(None, dtype=pl.Utf8).alias("codigo_fonte"))
 
-    df_ponte = df_ponte.select([
+    df_ponte_agregacao = df_ponte_agregacao.select([
         pl.col("chave_produto").cast(pl.String),
         pl.col("id_agrupado").cast(pl.String),
         pl.col("codigo_fonte").cast(pl.String),
@@ -481,14 +358,14 @@ def produtos_agrupados(cnpj: str, pasta_cnpj: Path | None = None, versao: int = 
     # Salvar tabela mestre e ponte
     # ===========================================================================
     ok_mestra = salvar_para_parquet(df_mestra, pasta_analises, f"produtos_agrupados_{cnpj}.parquet")
-    ok_ponte = salvar_para_parquet(df_ponte, pasta_analises, f"map_produto_agrupado_{cnpj}.parquet")
+    ok_ponte = salvar_para_parquet(df_ponte_agregacao, pasta_analises, f"map_produto_agrupado_{cnpj}.parquet")
     if not (ok_mestra and ok_ponte):
         return False
 
     # ===========================================================================
     # Gerar produtos_final
     # ===========================================================================
-    df_map = (
+    df_mapeamento = (
         df_mestra
         .select(
             [
@@ -512,7 +389,7 @@ def produtos_agrupados(cnpj: str, pasta_cnpj: Path | None = None, versao: int = 
 
     df_final = (
         df_descricoes
-        .join(df_map, on="id_descricao", how="left")
+        .join(df_mapeamento, on="id_descricao", how="left")
         .with_columns(
             [
                 pl.coalesce([pl.col("descr_padrao"), pl.col("descricao")]).alias("descricao_final"),

@@ -31,6 +31,10 @@ class ConsultaSql:
     caminho: Path
     raiz_sql: Path
 
+    def __post_init__(self):
+        # Garante que caminho seja sempre Path (pode vir como str do catalogo)
+        object.__setattr__(self, "caminho", Path(self.caminho))
+
     @property
     def caminho_relativo(self) -> Path:
         return self.caminho.relative_to(self.raiz_sql)
@@ -108,23 +112,23 @@ def descobrir_consultas_sql(
                 for raiz in diretorios:
                     candidato = (raiz / consulta_path).resolve() if (raiz / consulta_path).exists() else raiz / consulta_path
                     if candidato.exists():
-                        consultas.append(ConsultaSql(caminho=candidato, raiz_sql=raiz))
+                        consultas.append(ConsultaSql(caminho=Path(candidato), raiz_sql=raiz))
                         break
                 else:
-                    caminho = resolve_sql_path(consulta)
+                    caminho = Path(resolve_sql_path(consulta))
                     consultas.append(ConsultaSql(caminho=caminho, raiz_sql=SQL_ROOT))
             else:
-                caminho = resolve_sql_path(consulta)
+                caminho = Path(resolve_sql_path(consulta))
                 raiz_consulta = _resolver_raiz_sql(caminho, diretorios)
                 consultas.append(ConsultaSql(caminho=caminho, raiz_sql=raiz_consulta))
     else:
         if diretorios_explicitados:
             for raiz in diretorios:
                 for sql_path in raiz.rglob("*.sql"):
-                    consultas.append(ConsultaSql(caminho=sql_path, raiz_sql=raiz))
+                    consultas.append(ConsultaSql(caminho=Path(sql_path), raiz_sql=raiz))
         else:
             for entry in list_sql_entries():
-                caminho = entry.path
+                caminho = Path(entry.path)
                 consultas.append(ConsultaSql(caminho=caminho, raiz_sql=SQL_ROOT))
 
     consultas_unicas: list[ConsultaSql] = []
@@ -146,10 +150,13 @@ def obter_caminho_saida_parquet(
 ) -> Path:
     """Mantem a hierarquia relativa da SQL dentro de arquivos_parquet."""
 
-    caminho_relativo = consulta.caminho_relativo
+    # Garantir que caminho seja Path (pode vir como str)
+    caminho_path = Path(consulta.caminho) if not isinstance(consulta.caminho, Path) else consulta.caminho
+
+    caminho_relativo = caminho_path.relative_to(consulta.raiz_sql)
     if caminho_relativo.parts and caminho_relativo.parts[0].lower() == "arquivos_parquet":
         caminho_relativo = Path(*caminho_relativo.parts[1:]) if len(caminho_relativo.parts) > 1 else Path()
-    nome_arquivo = f"{consulta.caminho.stem}_{cnpj_limpo}.parquet"
+    nome_arquivo = f"{caminho_path.stem}_{cnpj_limpo}.parquet"
     return pasta_saida_base / caminho_relativo.parent / nome_arquivo
 
 
@@ -291,7 +298,9 @@ def _gravar_cursor_em_parquet(
 
 
 def _formatar_rotulo_consulta(consulta: ConsultaSql) -> str:
-    return str(consulta.caminho_relativo).replace("\\", "/")
+    # Garantir que caminho seja Path
+    caminho = Path(consulta.caminho) if not isinstance(consulta.caminho, Path) else consulta.caminho
+    return str(caminho.relative_to(consulta.raiz_sql)).replace("\\", "/")
 
 
 def _extrair_comandos_pre_sql(sql_texto: str) -> tuple[list[str], str]:
@@ -320,6 +329,8 @@ def processar_consulta_oracle(
 ) -> ResultadoConsultaExtracao:
     """Executa uma consulta SQL Oracle e grava o resultado em parquet por lotes."""
 
+    # Garantir que caminho seja Path (defesa em profundidade)
+    caminho_path = Path(consulta.caminho) if not isinstance(consulta.caminho, Path) else consulta.caminho
     rotulo_consulta = _formatar_rotulo_consulta(consulta)
 
     try:
@@ -331,7 +342,7 @@ def processar_consulta_oracle(
                 erro="Falha ao obter conexao Oracle para a thread.",
             )
 
-        sql_texto_bruto = ler_sql(consulta.caminho)
+        sql_texto_bruto = ler_sql(caminho_path)
         if not sql_texto_bruto:
             return ResultadoConsultaExtracao(consulta=consulta, ok=True, ignorada=True)
         comandos_pre, sql_texto = _extrair_comandos_pre_sql(sql_texto_bruto)

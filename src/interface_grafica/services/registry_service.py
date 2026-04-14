@@ -44,3 +44,12 @@ class RegistryService:
             existing["last_run_at"] = now
         self._save_raw(rows)
         return CNPJRecord(**existing)
+
+    def delete_by_cnpj(self, cnpj: str) -> bool:
+        """Remove um CNPJ do registry e retorna True se foi encontrado e removido."""
+        rows = self._load_raw()
+        new_rows = [r for r in rows if r["cnpj"] != cnpj]
+        if len(new_rows) == len(rows):
+            return False
+        self._save_raw(new_rows)
+        return True

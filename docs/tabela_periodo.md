@@ -1,5 +1,9 @@
 # Tabela de Períodos
 
+## Identificação Fiscal (SITAFE)
+
+Para garantir a acurácia fiscal na auditoria por períodos de inventário, o sistema utiliza o `co_sefin` resolvido via SITAFE. A identificação prioriza a combinação `CEST + NCM` (tabela `sitafe_cest_ncm.parquet`), recorrendo a `CEST` ou `NCM` individualmente apenas se necessário. Isso assegura que as alíquotas e regras de ressarcimento sejam aplicadas corretamente em cada intervalo.
+
 Este documento consolida as regras da `aba_periodos_<cnpj>.parquet`, gerada por `src/transformacao/calculos_periodo_pkg/calculos_periodo.py`.
 
 ## Papel da tabela

@@ -2204,28 +2204,17 @@ class MainWindow(QMainWindow):
         if not cnpj:
             return
 
-        # Bug fix: usar state.current_cnpj em vez de cnpj_selecionado (inexistente)
-        self.lbl_aba_periodos_status.setText("Carregando aba períodos...")
-        from interface_grafica.services.parquet_service import ParquetService
-        parquet_service = ParquetService()
+        caminho = Path(f"dados/CNPJ/{cnpj}/analises/produtos/aba_periodos_{cnpj}.parquet")
 
-        def task():
-            caminho = Path(f"dados/CNPJ/{cnpj}/analises/produtos/aba_periodos_{cnpj}.parquet")
-            if not caminho.exists():
-                return None
-            return (pl.read_parquet(caminho), caminho)
-
-        def on_finished(result):
-            if result is not None:
-                df, caminho = result
+        def _finalizar_carga_periodos(df):
+            if df is not None:
                 self._aba_periodos_df = df
                 self._aba_periodos_file_path = caminho
-
                 self.aba_periodos_table.setUpdatesEnabled(False)
                 self.aba_periodos_model.set_dataframe(df)
                 self.aba_periodos_table.setUpdatesEnabled(True)
 
-                ids = sorted(df["id_agregado"].unique().to_list())
+                ids = sorted(df["id_agrupado"].unique().to_list()) if "id_agrupado" in df.columns else []
                 self.periodo_filter_id.clear()
                 self.periodo_filter_id.addItem("")
                 self.periodo_filter_id.addItems([str(x) for x in ids])
@@ -2233,23 +2222,36 @@ class MainWindow(QMainWindow):
                 self.lbl_aba_periodos_status.setText(f"Sucesso! {df.height} registros carregados.")
                 self._aplicar_preferencias_tabela("aba_periodos", self.aba_periodos_table, self.aba_periodos_model)
             else:
-                self._aba_periodos_df = pl.DataFrame()
-                self._aba_periodos_file_path = None
-                self.aba_periodos_model.set_dataframe(pl.DataFrame())
-                self.lbl_aba_periodos_status.setText("Erro: Arquivo aba_periodos não encontrado.")
+                self.lbl_aba_periodos_status.setText("⏳ Arquivo ausente. Iniciando geração automática...")
+                self._reprocessar_periodos_auto(cnpj)
 
-        # Bug fix: ServiceTaskWorker pode não ter 'signals' — usar try/except
-        try:
-            worker = ServiceTaskWorker(task)
-            worker.signals.finished.connect(on_finished)
-            self.threadpool.start(worker)
-        except AttributeError:
-            # Fallback: executar síncrono se worker não suportar sinais
+        self._carregar_dados_parquet_async(caminho, _finalizar_carga_periodos, "Carregando Períodos")
+
+    def _reprocessar_periodos_auto(self, cnpj: str) -> None:
+        """Gera a aba_periodos automaticamente se estiver faltando."""
+        def task():
             try:
-                result = task()
-                on_finished(result)
+                from transformacao.calculos_periodo_pkg import gerar_calculos_periodos
+                return bool(gerar_calculos_periodos(cnpj))
             except Exception as e:
-                self.lbl_aba_periodos_status.setText(f"Erro ao carregar aba períodos: {e}")
+                print(f"Erro ao gerar períodos: {e}")
+                return False
+
+        def on_finished(success):
+            if success:
+                self.atualizar_aba_periodos()
+            else:
+                self.lbl_aba_periodos_status.setText("❌ Erro ao gerar períodos automaticamente.")
+
+        worker = ServiceTaskWorker(task)
+        worker.finished_ok.connect(on_finished)
+        
+        if not hasattr(self, "_active_load_workers") or not isinstance(self._active_load_workers, set):
+            self._active_load_workers = set()
+        self._active_load_workers.add(worker)
+        worker.finished.connect(lambda: self._active_load_workers.discard(worker))
+        worker.finished.connect(worker.deleteLater)
+        worker.start()
 
     def aplicar_filtros_aba_periodos(self) -> None:
         if self._aba_periodos_df.is_empty():
@@ -3096,6 +3098,10 @@ class MainWindow(QMainWindow):
     def _on_main_tab_changed(self, current_index: int) -> None:
         if not hasattr(self, "tab_conversao"):
             return
+            
+        # Lazy Loading: Ao trocar de aba, carrega os dados referentes ao CNPJ atual
+        self._carregar_aba_atual()
+
         idx_conversao = self.tabs.indexOf(self.tab_conversao)
         if idx_conversao < 0:
             return
@@ -3526,20 +3532,23 @@ class MainWindow(QMainWindow):
             self.atualizar_aba_produtos_selecionados()
             return
 
-        try:
-            self._mov_estoque_df = pl.read_parquet(path)
+        def _finalizar_carga_estoque(df: pl.DataFrame):
+            self._mov_estoque_df = df
             self._mov_estoque_file_path = path
             self._reset_table_resize_flag("mov_estoque")
 
             # Popular combo de id_agrupado
             id_atual = self.mov_filter_id.currentText()
-            ids = self._mov_estoque_df.get_column("id_agrupado").unique().sort().to_list()
-            self._popular_combo_texto(self.mov_filter_id, [str(i) for i in ids], id_atual, "")
-
+            if "id_agrupado" in df.columns:
+                ids = df.get_column("id_agrupado").unique().sort().to_list()
+                self._popular_combo_texto(self.mov_filter_id, [str(i) for i in ids], id_atual, "")
+            
             self.aplicar_filtros_mov_estoque()
             self.atualizar_aba_produtos_selecionados()
-        except Exception as e:
-            self.show_error("Erro de leitura", f"Falha ao ler mov_estoque: {e}")
+            self._atualizar_titulo_aba_mov_estoque()
+
+        self.lbl_mov_estoque_status.setText("⏳ Carregando dados de estoque em segundo plano...")
+        self._carregar_dados_parquet_async(path, _finalizar_carga_estoque, "Carregando Estoque")
 
     def aplicar_filtros_mov_estoque(self) -> None:
         if self._mov_estoque_df.is_empty():
@@ -3688,6 +3697,34 @@ class MainWindow(QMainWindow):
             self.estoque_tabs.setTabText(idx, f"id_agrupados ({visiveis})")
             return
         self.estoque_tabs.setTabText(idx, f"id_agrupados ({visiveis}/{total})")
+
+    def _atualizar_titulo_aba_nfe_entrada(self, visiveis: int | None = None, total: int | None = None) -> None:
+        if not hasattr(self, "tabs") or not hasattr(self, "tab_nfe_entrada"):
+            return
+        idx = self.tabs.indexOf(self.tab_nfe_entrada)
+        if idx < 0:
+            return
+        if visiveis is None:
+            self.tabs.setTabText(idx, "NFe Entrada")
+            return
+        if total is None:
+            self.tabs.setTabText(idx, f"NFe Entrada ({visiveis})")
+            return
+        self.tabs.setTabText(idx, f"NFe Entrada ({visiveis}/{total})")
+
+    def _atualizar_titulo_aba_periodos(self, visiveis: int | None = None, total: int | None = None) -> None:
+        if not hasattr(self, "estoque_tabs") or not hasattr(self, "tab_aba_periodos"):
+            return
+        idx = self.estoque_tabs.indexOf(self.tab_aba_periodos)
+        if idx < 0:
+            return
+        if visiveis is None:
+            self.estoque_tabs.setTabText(idx, "Tabela períodos")
+            return
+        if total is None:
+            self.estoque_tabs.setTabText(idx, f"Tabela períodos ({visiveis})")
+            return
+        self.estoque_tabs.setTabText(idx, f"Tabela períodos ({visiveis}/{total})")
 
     def _popular_combo_texto(self, combo: QComboBox, valores: list[str], valor_atual: str = "", primeiro_item: str = "") -> None:
         combo.blockSignals(True)
@@ -4363,6 +4400,39 @@ class MainWindow(QMainWindow):
                 return pl.DataFrame()
         return self.parquet_service.load_dataset(path, conditions or [], colunas_solicitadas)
 
+    def _carregar_dados_parquet_async(self, path: Path, callback: Callable[[pl.DataFrame], None], status_msg: str = "") -> None:
+        """Carrega um arquivo Parquet em background e chama o callback com o DataFrame resultante."""
+        if status_msg:
+            self.status.showMessage(f"⏳ {status_msg}...")
+
+        def _worker_load():
+            if not path.exists():
+                return None
+            return pl.read_parquet(path)
+
+        worker = ServiceTaskWorker(_worker_load)
+        
+        def _on_success(df: pl.DataFrame):
+            if status_msg:
+                self.status.showMessage(f"✔ {status_msg.replace('Carregando', 'Feito')}", 3000)
+            callback(df)
+
+        def _on_failed(err: str):
+            self.show_error("Erro de Carregamento", f"Falha ao carregar {path.name}: {err}")
+
+        worker.finished_ok.connect(_on_success)
+        worker.failed.connect(_on_failed)
+        
+        # Manter referência para evitar GC prematuro
+        if not hasattr(self, "_active_load_workers") or not isinstance(self._active_load_workers, set):
+            self._active_load_workers = set()
+        
+        self._active_load_workers.add(worker)
+        worker.finished.connect(lambda: self._active_load_workers.discard(worker))
+        worker.finished.connect(worker.deleteLater)
+        
+        worker.start()
+
     def _limpar_aba_resumo_estoque(self, contexto: str, mensagem: str) -> None:
         if contexto == "aba_mensal":
             self.aba_mensal_model.set_dataframe(pl.DataFrame())
@@ -4446,24 +4516,23 @@ class MainWindow(QMainWindow):
             self.atualizar_aba_produtos_selecionados()
             return
             
-        try:
-            self._aba_anual_df = self._carregar_dataset_ui(path)
+        def _finalizar_carga_anual(df: pl.DataFrame):
+            self._aba_anual_df = df
             self._aba_anual_file_path = path
             self._reset_table_resize_flag("aba_anual")
 
             id_atual = self.anual_filter_id.currentText()
-            ids = self._aba_anual_df.get_column("id_agregado").unique().sort().to_list()
-            self._popular_combo_texto(self.anual_filter_id, [str(i) for i in ids], id_atual, "")
-
-            ano_atual = self.anual_filter_ano.currentText()
-            anos = self._aba_anual_df.get_column("ano").unique().sort().to_list()
-            self._popular_combo_texto(self.anual_filter_ano, [str(a) for a in anos], ano_atual, "Todos")
+            if "id_agrupado" in df.columns:
+                ids = df.get_column("id_agrupado").unique().sort().to_list()
+                self._popular_combo_texto(self.anual_filter_id, [str(i) for i in ids], id_atual, "")
 
             self.aplicar_filtros_aba_anual()
             self.atualizar_aba_produtos_selecionados()
             self.atualizar_aba_resumo_global()
-        except Exception as e:
-            self.show_error("Erro de leitura", f"Falha ao ler aba_anual: {e}")
+            self._atualizar_titulo_aba_anual()
+
+        self.lbl_aba_anual_status.setText("⏳ Carregando tabela anual em segundo plano...")
+        self._carregar_dados_parquet_async(path, _finalizar_carga_anual, "Carregando Anual")
 
     def atualizar_aba_mensal(self) -> None:
         cnpj = self.state.current_cnpj
@@ -4484,24 +4553,26 @@ class MainWindow(QMainWindow):
             self.atualizar_aba_produtos_selecionados()
             return
 
-        try:
-            self._aba_mensal_df = self._carregar_dataset_ui(path)
+        def _finalizar_carga_mensal(df: pl.DataFrame):
+            self._aba_mensal_df = df
             self._aba_mensal_file_path = path
             self._reset_table_resize_flag("aba_mensal")
 
             id_atual = self.mensal_filter_id.currentText()
-            ids = self._aba_mensal_df.get_column("id_agregado").unique().sort().to_list()
-            self._popular_combo_texto(self.mensal_filter_id, [str(i) for i in ids], id_atual, "")
+            if "id_agrupado" in df.columns:
+                ids = df.get_column("id_agrupado").unique().sort().to_list()
+                self._popular_combo_texto(self.mensal_filter_id, [str(i) for i in ids], id_atual, "")
 
             ano_atual = self.mensal_filter_ano.currentText()
-            anos = self._aba_mensal_df.get_column("ano").unique().sort().to_list()
-            self._popular_combo_texto(self.mensal_filter_ano, [str(a) for a in anos], ano_atual, "Todos")
+            if "ano" in df.columns:
+                anos = df.get_column("ano").unique().sort().to_list()
+                self._popular_combo_texto(self.mensal_filter_ano, [str(a) for a in anos], ano_atual, "Todos")
 
-            self.aplicar_filtros_aba_mensal()
-            self.atualizar_aba_produtos_selecionados()
             self.atualizar_aba_resumo_global()
-        except Exception as e:
-            self.show_error("Erro de leitura", f"Falha ao ler aba_mensal: {e}")
+            self._atualizar_titulo_aba_mensal()
+
+        self.lbl_aba_mensal_status.setText("⏳ Carregando tabela mensal em segundo plano...")
+        self._carregar_dados_parquet_async(path, _finalizar_carga_mensal, "Carregando Mensal")
 
     def aplicar_filtros_aba_mensal(self) -> None:
         if self._aba_mensal_df.is_empty():
@@ -4701,7 +4772,6 @@ class MainWindow(QMainWindow):
                 self.mov_estoque_model.dataframe,
             )
             self.export_service.export_excel(target, df_to_export, sheet_name="Mov_Estoque")
-            # self.show_info("Exportacao concluida", f"Arquivo gerado em:\n{target}") # Export service shows its own message/bar maybe? I'll add one just in case 
         except Exception as e:
             self.show_error("Erro de exportacao", str(e))
 
@@ -4711,124 +4781,35 @@ class MainWindow(QMainWindow):
         if not cnpj:
             self.nfe_entrada_model.set_dataframe(pl.DataFrame())
             self._nfe_entrada_df = pl.DataFrame()
+            self._nfe_entrada_file_path = None
             self.lbl_nfe_entrada_status.setText("Selecione um CPF/CNPJ para carregar as NFes/NFCes de entrada.")
+            self._atualizar_titulo_aba_nfe_entrada()
             return
 
-        path_nfe = CNPJ_ROOT / cnpj / "arquivos_parquet" / f"nfe_agr_{cnpj}.parquet"
-        path_nfce = CNPJ_ROOT / cnpj / "arquivos_parquet" / f"nfce_agr_{cnpj}.parquet"
-        if not path_nfe.exists() and not path_nfce.exists():
+        path = CNPJ_ROOT / cnpj / "analises" / "produtos" / f"nfe_entrada_{cnpj}.parquet"
+        if not path.exists():
             self.nfe_entrada_model.set_dataframe(pl.DataFrame())
             self._nfe_entrada_df = pl.DataFrame()
-            base_nfe = CNPJ_ROOT / cnpj / "arquivos_parquet" / f"nfe_{cnpj}.parquet"
-            base_nfce = CNPJ_ROOT / cnpj / "arquivos_parquet" / f"nfce_{cnpj}.parquet"
-            if base_nfe.exists() or base_nfce.exists():
-                self.lbl_nfe_entrada_status.setText("Arquivos 'nfe_agr'/'nfce_agr' ainda nao foram gerados. Clique em Extrair para preparar a tabela.")
-            else:
-                self.lbl_nfe_entrada_status.setText("Arquivos 'nfe_agr'/'nfce_agr' nao encontrados para este CPF/CNPJ.")
+            self._nfe_entrada_file_path = None
+            self._atualizar_titulo_aba_nfe_entrada()
             return
 
-        try:
-            from transformacao.co_sefin import inferir_co_sefin_dataframe
-            from transformacao.co_sefin_class import enriquecer_co_sefin_class
-
-            df_partes: list[pl.DataFrame] = []
-            if path_nfe.exists():
-                df_partes.append(
-                    pl.read_parquet(path_nfe).with_columns(pl.lit("NFe").alias("fonte_documento"))
-                )
-            if path_nfce.exists():
-                df_partes.append(
-                    pl.read_parquet(path_nfce).with_columns(pl.lit("NFCe").alias("fonte_documento"))
-                )
-            df_nfe = pl.concat(df_partes, how="diagonal_relaxed") if df_partes else pl.DataFrame()
-            self._nfe_entrada_file_path = path_nfe if path_nfe.exists() else path_nfce
-
-            if "tipo_operacao" in df_nfe.columns:
-                df_nfe = df_nfe.filter(
-                    pl.col("tipo_operacao").cast(pl.Utf8, strict=False).fill_null("").str.to_lowercase().str.contains("entrada", literal=True)
-                )
-            elif "co_tp_nf" in df_nfe.columns:
-                df_nfe = df_nfe.filter(pl.col("co_tp_nf").cast(pl.Int64, strict=False) == 0)
-
-            if df_nfe.is_empty():
-                self._nfe_entrada_df = pl.DataFrame()
-                self.nfe_entrada_model.set_dataframe(pl.DataFrame())
-                self.lbl_nfe_entrada_status.setText("Nenhuma NFe/NFCe de entrada foi encontrada.")
-                return
-
-            for col in ["dhemi", "dhsaient", "prod_cest"]:
-                if col not in df_nfe.columns:
-                    df_nfe = df_nfe.with_columns(pl.lit(None).alias(col))
-
-            df_nfe = df_nfe.with_columns(
-                [
-                    pl.col("dhemi").cast(pl.Datetime, strict=False).dt.date().alias("__dhemi_date__"),
-                    pl.col("dhsaient").cast(pl.Datetime, strict=False).dt.date().alias("__dhsaient_date__"),
-                ]
-            ).with_columns(
-                pl.coalesce(
-                    [
-                        pl.max_horizontal(pl.col("__dhemi_date__"), pl.col("__dhsaient_date__")),
-                        pl.col("__dhsaient_date__"),
-                        pl.col("__dhemi_date__"),
-                    ]
-                ).alias("data_classificacao")
-            )
-
-            df_class = inferir_co_sefin_dataframe(df_nfe, col_ncm="prod_ncm", col_cest="prod_cest", output_col="co_sefin_inferido")
-            df_enriquecer = df_class.with_columns(
-                [
-                    pl.col("prod_ncm").cast(pl.Utf8, strict=False).alias("ncm_padrao"),
-                    pl.col("prod_cest").cast(pl.Utf8, strict=False).alias("cest_padrao"),
-                    pl.col("__dhemi_date__").alias("Dt_doc"),
-                    pl.col("__dhsaient_date__").alias("Dt_e_s"),
-                ]
-            )
-            df_enriquecido = enriquecer_co_sefin_class(df_enriquecer)
-            df_enriquecido = df_enriquecido.drop(
-                ["__dhemi_date__", "__dhsaient_date__", "Dt_doc", "Dt_e_s", "ncm_padrao", "cest_padrao"],
-                strict=False,
-            )
-
-            colunas = list(df_enriquecido.columns)
-            prioridade = [
-                "data_classificacao",
-                "fonte_documento",
-                "tipo_operacao",
-                "nnf",
-                "prod_nitem",
-                "id_agrupado",
-                "descr_padrao",
-                "prod_xprod",
-                "prod_ncm",
-                "prod_cest",
-                "co_sefin_inferido",
-                "co_sefin_agr",
-                "it_pc_interna",
-                "it_in_st",
-                "it_in_isento_icms",
-                "it_in_reducao",
-                "it_pc_reducao",
-                "it_pc_mva",
-                "it_in_mva_ajustado",
-                "xnome_emit",
-                "xnome_dest",
-                "chave_acesso",
-            ]
-            ordenadas = [c for c in prioridade if c in colunas] + [c for c in colunas if c not in prioridade]
-            self._nfe_entrada_df = df_enriquecido.select(ordenadas)
-
+        def _finalizar_carga_nfe(df: pl.DataFrame):
+            self._nfe_entrada_df = df
+            self._nfe_entrada_file_path = path
+            self._reset_table_resize_flag("nfe_entrada")
+            
             id_atual = self.nfe_entrada_filter_id.currentText()
-            ids = (
-                self._nfe_entrada_df.get_column("id_agrupado").cast(pl.Utf8, strict=False).drop_nulls().unique().sort().to_list()
-                if "id_agrupado" in self._nfe_entrada_df.columns
-                else []
-            )
-            self._popular_combo_texto(self.nfe_entrada_filter_id, [str(i) for i in ids], id_atual, "")
+            if "id_agrupado" in df.columns:
+                ids = df.get_column("id_agrupado").cast(pl.Utf8, strict=False).drop_nulls().unique().sort().to_list()
+                self._popular_combo_texto(self.nfe_entrada_filter_id, [str(i) for i in ids], id_atual, "")
 
             self.aplicar_filtros_nfe_entrada()
-        except Exception as e:
-            self.show_error("Erro de leitura", f"Falha ao montar a aba NFe Entrada: {e}")
+            self._atualizar_titulo_aba_nfe_entrada()
+
+        self.status.showMessage("⏳ Carregando NFe Entrada em segundo plano...")
+        self._carregar_dados_parquet_async(path, _finalizar_carga_nfe, "Carregando NFe Entrada")
+        self._atualizar_titulo_aba_nfe_entrada()
 
     def aplicar_filtros_nfe_entrada(self) -> None:
         if self._nfe_entrada_df.is_empty():
@@ -4938,21 +4919,21 @@ class MainWindow(QMainWindow):
             self._atualizar_titulo_aba_id_agrupados()
             return
 
-        try:
-            self._id_agrupados_df = pl.read_parquet(path)
+        def _finalizar_carga_id_agrupados(df: pl.DataFrame):
+            self._id_agrupados_df = df
             self._id_agrupados_file_path = path
             self._reset_table_resize_flag("id_agrupados")
 
             id_atual = self.id_agrupados_filter_id.currentText()
-            ids = (
-                self._id_agrupados_df.get_column("id_agrupado").cast(pl.Utf8, strict=False).drop_nulls().unique().sort().to_list()
-                if "id_agrupado" in self._id_agrupados_df.columns
-                else []
-            )
-            self._popular_combo_texto(self.id_agrupados_filter_id, [str(i) for i in ids], id_atual, "")
+            if "id_agrupado" in df.columns:
+                ids = df.get_column("id_agrupado").cast(pl.Utf8, strict=False).drop_nulls().unique().sort().to_list()
+                self._popular_combo_texto(self.id_agrupados_filter_id, [str(i) for i in ids], id_atual, "")
+            
             self.aplicar_filtros_id_agrupados()
-        except Exception as e:
-            self.show_error("Erro de leitura", f"Falha ao ler id_agrupados: {e}")
+            self._atualizar_titulo_aba_id_agrupados()
+
+        self.lbl_id_agrupados_status.setText("⏳ Carregando id_agrupados em segundo plano...")
+        self._carregar_dados_parquet_async(path, _finalizar_carga_id_agrupados, "Carregando ID Agrupados")
 
     def aplicar_filtros_id_agrupados(self) -> None:
         if self._id_agrupados_df.is_empty():
@@ -5043,7 +5024,8 @@ class MainWindow(QMainWindow):
             self.show_error("Erro de exportacao", str(e))
 
     def atualizar_aba_produtos_selecionados(self) -> None:
-        if not self.state.current_cnpj:
+        cnpj = self.state.current_cnpj
+        if not cnpj:
             self.produtos_selecionados_model.set_dataframe(pl.DataFrame())
             self._produtos_selecionados_df = pl.DataFrame()
             self._produtos_selecionados_mov_df = pl.DataFrame()
@@ -5054,6 +5036,30 @@ class MainWindow(QMainWindow):
             self._atualizar_titulo_aba_produtos_selecionados()
             return
 
+        # Priorizar carregamento permanente
+        path = CNPJ_ROOT / cnpj / "analises" / "produtos" / f"aba_produtos_selecionados_{cnpj}.parquet"
+        if path.exists():
+            try:
+                df_produtos = self._carregar_dataset_ui(path)
+                self._produtos_selecionados_df = df_produtos
+                self._reset_table_resize_flag("produtos_selecionados")
+
+                id_atual = self.produtos_sel_filter_id.currentText()
+                ids = df_produtos.get_column("id_agregado").cast(pl.Utf8, strict=False).drop_nulls().unique().sort().to_list() if "id_agregado" in df_produtos.columns else []
+                self._popular_combo_texto(self.produtos_sel_filter_id, [str(i) for i in ids], id_atual, "")
+
+                anos = self._anos_disponiveis_produtos_selecionados()
+                anos_texto = [str(a) for a in anos]
+                self._popular_combo_texto(self.produtos_sel_filter_id, [str(i) for i in ids], id_atual, "")
+                self._popular_combo_texto(self.produtos_sel_filter_ano_ini, anos_texto, self.produtos_sel_filter_ano_ini.currentText(), "Todos")
+                self._popular_combo_texto(self.produtos_sel_filter_ano_fim, anos_texto, self.produtos_sel_filter_ano_fim.currentText(), "Todos")
+
+                self.aplicar_filtros_produtos_selecionados()
+                return
+            except Exception as e:
+                self.status.showMessage(f"Erro ao carregar base de produtos do arquivo: {e}")
+
+        # Fallback para consolidar em tempo real
         try:
             df_produtos = self._coletar_base_produtos_selecionados()
             self._reset_table_resize_flag("produtos_selecionados")
@@ -5528,19 +5534,54 @@ class MainWindow(QMainWindow):
         )
 
     def atualizar_aba_resumo_global(self) -> None:
-        if self._aba_mensal_df.is_empty() and self._aba_anual_df.is_empty():
-            self.resumo_global_model.set_dataframe(pl.DataFrame())
-            self._resumo_global_df = pl.DataFrame()
-            self.lbl_resumo_global_status.setText("Aguarde a aba mensal e a aba anual estarem processadas.")
+        cnpj = self.state.current_cnpj
+        if not cnpj:
             return
 
+        path = CNPJ_ROOT / cnpj / "analises" / "produtos" / f"aba_resumo_global_{cnpj}.parquet"
+        
+        def _finalizar_carga_resumo(df: pl.DataFrame):
+            self._resumo_global_df = df
+            self.resumo_global_model.set_dataframe(df)
+            self.lbl_resumo_global_status.setText(f"Resumo global carregado (total {df.height} competencias).")
+
+        # Tentar carregar o arquivo do resumo global primeiro
+        if path.exists():
+            self.lbl_resumo_global_status.setText("⏳ Carregando resumo global...")
+            self._carregar_dados_parquet_async(path, _finalizar_carga_resumo, "Carregando Resumo Global")
+            return
+
+        # Se não existir resumo global, tentar calcular das abas mensal/anual
+        if self._aba_mensal_df.is_empty() or self._aba_anual_df.is_empty():
+            # Verificar se os arquivos de dependência existem antes de disparar
+            path_mensal = CNPJ_ROOT / cnpj / "analises" / "produtos" / f"aba_mensal_{cnpj}.parquet"
+            path_anual = CNPJ_ROOT / cnpj / "analises" / "produtos" / f"aba_anual_{cnpj}.parquet"
+            
+            needs_load = False
+            if self._aba_mensal_df.is_empty() and path_mensal.exists():
+                self.atualizar_aba_mensal()
+                needs_load = True
+            if self._aba_anual_df.is_empty() and path_anual.exists():
+                self.atualizar_aba_anual()
+                needs_load = True
+                
+            if needs_load:
+                self.lbl_resumo_global_status.setText("⏳ Carregando dependências (Mensal/Anual)... Ao terminar, o resumo será atualizado.")
+                return
+            else:
+                self.resumo_global_model.set_dataframe(pl.DataFrame())
+                self._resumo_global_df = pl.DataFrame()
+                self.lbl_resumo_global_status.setText("Aguarde o processamento das abas Mensal e Anual.")
+                return
+
+        # Se temos os dados em memória, consolidar em tempo real
         try:
             resumo = self._gerar_resumo_global(self._aba_mensal_df, self._aba_anual_df)
             self._resumo_global_df = resumo
             self.resumo_global_model.set_dataframe(resumo)
-            self.lbl_resumo_global_status.setText(f"Resumo global calculado com base em {resumo.height} competencias.")
+            self.lbl_resumo_global_status.setText(f"Resumo global consolidado ({resumo.height} competencias).")
         except Exception as e:
-            self.show_error("Erro de consoliacao", f"Erro ao calcular Resumo Global: {e}")
+            self.show_error("Erro de consolidação", f"Erro ao calcular Resumo Global: {e}")
 
     def exportar_resumo_global_excel(self) -> None:
         if self._resumo_global_df is None or self._resumo_global_df.is_empty():
@@ -5809,13 +5850,9 @@ class MainWindow(QMainWindow):
         self.status.showMessage(f"CNPJ selecionado: {cnpj}")
         self._refresh_profile_combos()
         self.refresh_file_tree(cnpj)
-        self.atualizar_aba_conversao()
-        self.atualizar_aba_mov_estoque()
-        self.atualizar_aba_mensal()
-        self.atualizar_aba_anual()
-        self.atualizar_aba_nfe_entrada()
-        self.atualizar_aba_id_agrupados()
-        self.atualizar_tabelas_agregacao()
+        
+        # Lazy Loading: Carregar apenas a aba que o usuário está vendo no momento
+        self._carregar_aba_atual()
         self.recarregar_historico_agregacao(cnpj)
 
         # Automacao de Data limite EFD baseada nao reg_0000
@@ -5824,6 +5861,33 @@ class MainWindow(QMainWindow):
             qdate = QDate.fromString(data_efd, "dd/MM/yyyy")
             if qdate.isValid():
                 self.date_input.setDate(qdate)
+
+
+    def _carregar_aba_atual(self) -> None:
+        """Carrega os dados da aba que está visível no momento para o CNPJ atual."""
+        if not self.state.current_cnpj:
+            return
+            
+        aba_idx = self.tabs.currentIndex()
+        texto_aba = self.tabs.tabText(aba_idx).strip().lower()
+        
+        # Mapeamento de abas para funções de atualização
+        if texto_aba == "agregacao":
+            self.atualizar_tabelas_agregacao()
+        elif texto_aba == "conversao":
+            self.atualizar_aba_conversao()
+        elif texto_aba == "estoque":
+            self.atualizar_aba_mov_estoque()
+        elif texto_aba == "nfe entrada":
+            self.atualizar_aba_nfe_entrada()
+        elif texto_aba == "logs":
+            self.refresh_logs()
+        elif "mensal" in texto_aba:
+            self.atualizar_aba_mensal()
+        elif "anual" in texto_aba:
+            self.atualizar_aba_anual()
+        elif "id" in texto_aba and "agrupado" in texto_aba:
+            self.atualizar_aba_id_agrupados()
 
 
     def refresh_file_tree(self, cnpj: str) -> None:
@@ -7009,7 +7073,7 @@ class MainWindow(QMainWindow):
             self._atualizar_titulo_aba_conversao()
             return
 
-        try:
+        def _processar_conversao():
             df = self._carregar_dataset_ui(arq_conversao)
             if "fator_manual" not in df.columns:
                 df = df.with_columns(pl.lit(False).alias("fator_manual"))
@@ -7018,18 +7082,29 @@ class MainWindow(QMainWindow):
             df = self._enriquecer_dataframe_conversao(df)
             df = self._enriquecer_descricoes_conversao(cnpj, df)
             df = df.with_row_index("__row_id__")
+            return df
+
+        def _finalizar_carga_conversao(df: pl.DataFrame):
             self._conversion_df_full = df
             self._conversion_file_path = arq_conversao
             self._limpar_recalculo_conversao_pendente()
             self._reset_table_resize_flag("conversao")
             id_atual = self.conv_filter_id.currentText()
-            ids = self._conversion_df_full.get_column("id_agrupado").cast(pl.Utf8, strict=False).drop_nulls().unique().sort().to_list() if "id_agrupado" in self._conversion_df_full.columns else []
+            ids = df.get_column("id_agrupado").cast(pl.Utf8, strict=False).drop_nulls().unique().sort().to_list() if "id_agrupado" in df.columns else []
             self._popular_combo_texto(self.conv_filter_id, [str(i) for i in ids], id_atual, "")
             self.aplicar_filtros_conversao()
-        except Exception as e:
-            self._updating_conversion_model = False
             self._atualizar_titulo_aba_conversao()
-            QMessageBox.warning(self, "Erro", f"Erro ao carregar fatores de conversao: {e}")
+
+        self.status.showMessage("⏳ Carregando fatores de conversão...")
+        worker = ServiceTaskWorker(_processar_conversao)
+        worker.finished_ok.connect(_finalizar_carga_conversao)
+        worker.failed.connect(lambda msg: self.show_error("Erro de Carregamento", f"Falha ao carregar conversão: {msg}"))
+        worker.start()
+        if not hasattr(self, "_active_load_workers") or not isinstance(self._active_load_workers, set):
+            self._active_load_workers = set()
+        self._active_load_workers.add(worker)
+        worker.finished.connect(lambda: self._active_load_workers.discard(worker))
+        worker.finished.connect(worker.deleteLater)
 
     def aplicar_filtros_conversao(self) -> None:
         if self._conversion_df_full.is_empty():
@@ -7330,9 +7405,15 @@ class MainWindow(QMainWindow):
         """Atualiza os modelos das tabelas de agregacao."""
         cnpj = self.state.current_cnpj
         if not cnpj: return
-        self._aggregation_file_path = self.servico_agregacao.carregar_tabela_editavel(cnpj)
-        if self._aggregation_file_path.exists():
-            self._load_aggregation_table()
+        try:
+            self._aggregation_file_path = self.servico_agregacao.carregar_tabela_editavel(cnpj)
+            if self._aggregation_file_path.exists():
+                self._load_aggregation_table()
+        except FileNotFoundError as e:
+            self.status.showMessage(f"Aviso: {str(e)}")
+            print(f"Aviso Agregacao: {e}")
+        except Exception as e:
+            self.show_error("Erro ao carregar agregacao", str(e))
             
     # ==================================================================
     # Consulta SQL - metodos de suporte

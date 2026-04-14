@@ -64,6 +64,9 @@ _registar("movimentacao_estoque","transformacao.movimentacao_estoque:gerar_movim
 _registar("calculos_mensais",    "transformacao.calculos_mensais:gerar_calculos_mensais", deps=["movimentacao_estoque"])
 _registar("calculos_anuais",     "transformacao.calculos_anuais:gerar_calculos_anuais",   deps=["movimentacao_estoque"])
 _registar("calculos_periodos",   "transformacao.calculos_periodo_pkg:gerar_calculos_periodos", deps=["movimentacao_estoque"])
+_registar("ressarcimento_st",    "transformacao.ressarcimento_st_pkg:executar_pipeline_ressarcimento_st", deps=["movimentacao_estoque"])
+_registar("aba_resumo_global",   "transformacao.resumo_global:gerar_aba_resumo_global",   deps=["calculos_mensais", "calculos_anuais"])
+_registar("aba_produtos_selecionados", "transformacao.produtos_selecionados:gerar_aba_produtos_selecionados", deps=["calculos_mensais", "calculos_anuais"])
 
 
 def _ordem_topologica(selecionadas: list[str]) -> list[str]:

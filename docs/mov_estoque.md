@@ -8,11 +8,18 @@ A `mov_estoque` é a camada cronológica e auditável do fluxo de mercadorias. E
 
 É nessa tabela que ficam materializados:
 
-- a origem da linha em `fonte`;
-- a quantidade convertida em `q_conv`;
-- o saldo físico anual em `saldo_estoque_anual`;
-- a omissão de entrada por saldo negativo em `entr_desac_anual`;
 - o custo médio móvel em `custo_medio_anual`.
+
+## Identificação Fiscal (SITAFE)
+
+Para que os saldos de estoque possam ser auditados sob a ótica da carga tributária, cada produto é vinculado a um `co_sefin` (código de classificação interna da SEFIN) utilizando as tabelas do SITAFE localizadas em `dados/referencias/CO_SEFIN/`.
+
+A identificação ocorre na etapa `item_unidades` via `pl.coalesce`, seguindo esta precedência de match:
+1. **CEST + NCM**: Prioridade máxima via `sitafe_cest_ncm.parquet`.
+2. **Somente CEST**: Fallback para match por CEST via `sitafe_cest.parquet`.
+3. **Somente NCM**: Fallback final para match por NCM via `sitafe_ncm.parquet`.
+
+Este vínculo é essencial para as colunas enriquecidas como `it_pc_interna`, `it_in_st` e `it_pc_mva`, permitindo que o cálculo de ressarcimento e auditoria de estoque reflita a classificação fiscal correta.
 
 ## Campos da Tabela
 
