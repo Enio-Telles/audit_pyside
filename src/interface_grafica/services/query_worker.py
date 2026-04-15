@@ -7,12 +7,15 @@ Emite sinais de progresso, sucesso e falha.
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from time import perf_counter
 from typing import Any
 
 import polars as pl
 from PySide6.QtCore import QThread, Signal
 from rich import print as rprint
+
+from transformacao.auxiliares.logs import log_exception
 from utilitarios.perf_monitor import registrar_evento_performance
 from utilitarios.project_paths import ENV_PATH
 
@@ -179,6 +182,7 @@ class QueryWorker(QThread):
             self.finished_ok.emit(df)
 
         except Exception as exc:
+            log_exception(exc)
             registrar_evento_performance(
                 "query_worker.total",
                 perf_counter() - inicio_total,
@@ -198,4 +202,5 @@ class QueryWorker(QThread):
                 try:
                     conn.close()
                 except Exception as close_exc:
+                    log_exception(close_exc)
                     rprint(f"[yellow]Aviso: Erro ao fechar conexao Oracle:[/yellow] {close_exc}")
