@@ -6,7 +6,7 @@ import polars as pl
 from fastapi import APIRouter
 
 from interface_grafica.config import CNPJ_ROOT
-from routers._common import sanitize_cnpj, safe_value, df_to_response, resposta_vazia
+from routers._common import sanitize_cnpj, df_to_response, resposta_vazia
 
 router = APIRouter()
 
@@ -55,7 +55,7 @@ def get_validacoes(cnpj: str, page: int = 1, page_size: int = 500):
 
 @router.get("/{cnpj}/resumo")
 def get_resumo(cnpj: str):
-    cnpj = _sanitize(cnpj)
+    cnpj = sanitize_cnpj(cnpj)
     pasta_produtos = _pasta_produtos(cnpj)
     pasta_ressarcimento = _pasta_ressarcimento(cnpj)
 

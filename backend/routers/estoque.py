@@ -1,20 +1,15 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 from pathlib import Path
 
 import polars as pl
 from fastapi import APIRouter, HTTPException
-from filelock import FileLock
+from filelock import FileLock, Timeout
 from pydantic import BaseModel
 
 from interface_grafica.config import CNPJ_ROOT
-from routers._common import (
-    sanitize_cnpj,
-    safe_value,
-    format_dt_inv_value,
-    df_to_response,
-    resposta_vazia,
-)
+from routers._common import sanitize_cnpj, df_to_response, resposta_vazia
 
 router = APIRouter()
 
@@ -65,7 +60,17 @@ def _ler_tabela_estoque_ou_vazia(path: Path, page: int = 1, page_size: int = 500
     if not path.exists():
         return _resposta_paginada_vazia(page, page_size)
     df = pl.read_parquet(path)
-    return _df_to_response(df, page, page_size)
+    return df_to_response(df, page, page_size)
+
+
+@contextmanager
+def _fatores_conversao_lock(path: Path):
+    lock_path = path.with_suffix(".lock")
+    try:
+        with FileLock(str(lock_path), timeout=10):
+            yield
+    except Timeout as exc:
+        raise HTTPException(423, "Arquivo de fatores de conversão está em uso") from exc
 
 
 def _aplicar_filtros_bloco_h(
@@ -143,7 +148,7 @@ def get_bloco_h(
 
     df = pl.read_parquet(path)
     df = _aplicar_filtros_bloco_h(df, dt_inv, cod_mot_inv, indicador_propriedade)
-    return _df_to_response(df, page, page_size)
+    return df_to_response(df, page, page_size)
 
 
 @router.get("/{cnpj}/bloco_h_h005")
@@ -195,7 +200,7 @@ def get_bloco_h_h005(
         .sort("dt_inv", descending=True)
     )
 
-    return _df_to_response(resumo, page, page_size)
+    return df_to_response(resumo, page, page_size)
 
 
 @router.get("/{cnpj}/bloco_h_resumo")
@@ -290,12 +295,11 @@ class UnidRefBatchUpdate(BaseModel):
 def patch_fatores_unid_ref_batch(cnpj: str, req: UnidRefBatchUpdate):
     cnpj = sanitize_cnpj(cnpj)
     path = _pasta_produtos(cnpj) / f"fatores_conversao_{cnpj}.parquet"
-    if not path.exists():
-        raise HTTPException(404, "fatores_conversao não encontrado")
-    
-    # File lock para evitar race condition em operações concorrentes
-    lock_path = path.with_suffix(".lock")
-    with FileLock(str(lock_path)):
+
+    with _fatores_conversao_lock(path):
+        if not path.exists():
+            raise HTTPException(404, "fatores_conversao não encontrado")
+
         df = pl.read_parquet(path)
         if "unid_ref_manual" not in df.columns:
             df = df.with_columns(pl.lit(False).alias("unid_ref_manual"))
@@ -312,12 +316,11 @@ def patch_fatores_unid_ref_batch(cnpj: str, req: UnidRefBatchUpdate):
 def patch_fatores_conversao(cnpj: str, req: FatorUpdate):
     cnpj = sanitize_cnpj(cnpj)
     path = _pasta_produtos(cnpj) / f"fatores_conversao_{cnpj}.parquet"
-    if not path.exists():
-        raise HTTPException(404, "fatores_conversao não encontrado")
-    
-    # File lock para evitar race condition em operações concorrentes
-    lock_path = path.with_suffix(".lock")
-    with FileLock(str(lock_path)):
+
+    with _fatores_conversao_lock(path):
+        if not path.exists():
+            raise HTTPException(404, "fatores_conversao não encontrado")
+
         df = pl.read_parquet(path)
         if "fator_manual" not in df.columns:
             df = df.with_columns(pl.lit(False).alias("fator_manual"))
