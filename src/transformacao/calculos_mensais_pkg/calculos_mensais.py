@@ -1,4 +1,4 @@
-﻿import sys
+import sys
 import re
 from datetime import date
 from pathlib import Path
@@ -65,7 +65,7 @@ def _carregar_referencia_st_mensal(df_base: pl.DataFrame, df_aux_st: pl.DataFram
         )
 
     if df_aux_st is None:
-        caminho_aux = _resolver_ref("sitafe_produto_sefin_aux.parquet")
+        caminho_aux = resolver_ref("sitafe_produto_sefin_aux.parquet")
         if caminho_aux is None:
             return pl.DataFrame(
                 schema={
@@ -232,13 +232,13 @@ def calcular_aba_mensal_dataframe(df: pl.DataFrame, df_aux_st: pl.DataFrame | No
     is_entrada = pl.col("Tipo_operacao").cast(pl.Utf8, strict=False).str.starts_with("1 - ENTRADA")
     is_saida = pl.col("Tipo_operacao").cast(pl.Utf8, strict=False).str.starts_with("2 - SAIDA")
     is_devolucao = (
-        _boolish_expr("dev_simples")
-        | _boolish_expr("dev_venda")
-        | _boolish_expr("dev_compra")
-        | _boolish_expr("dev_ent_simples")
+        boolish_expr("dev_simples")
+        | boolish_expr("dev_venda")
+        | boolish_expr("dev_compra")
+        | boolish_expr("dev_ent_simples")
         | _finnfe_4_expr()
     ).fill_null(False)
-    is_excluida = _boolish_expr("excluir_estoque").fill_null(False)
+    is_excluida = boolish_expr("excluir_estoque").fill_null(False)
     is_q_conv_positiva = pl.col("q_conv").cast(pl.Float64, strict=False).fill_null(0.0) > 0
     is_valida_media = ~is_devolucao & ~is_excluida & is_q_conv_positiva
 

@@ -1,4 +1,4 @@
-﻿import sys
+import sys
 import re
 from datetime import date
 from pathlib import Path
@@ -24,7 +24,7 @@ except ImportError as e:
 
 
 def _carregar_referencia_st_anual(df_anual: pl.DataFrame) -> pl.DataFrame:
-    caminho_aux = _resolver_ref("sitafe_produto_sefin_aux.parquet")
+    caminho_aux = resolver_ref("sitafe_produto_sefin_aux.parquet")
     if caminho_aux is None:
         return pl.DataFrame(
             schema={
@@ -166,14 +166,14 @@ def calcular_aba_anual_dataframe(df: pl.DataFrame, df_aux_st: pl.DataFrame | Non
     q_conv_positiva_expr = pl.col("q_conv").cast(pl.Float64, strict=False).fill_null(0.0) > 0
     entrada_valida_media_expr = (
         pl.col("Tipo_operacao").str.starts_with("1 - ENTRADA")
-        & ~_boolish_expr("dev_simples").fill_null(False)
-        & ~_boolish_expr("excluir_estoque").fill_null(False)
+        & ~boolish_expr("dev_simples").fill_null(False)
+        & ~boolish_expr("excluir_estoque").fill_null(False)
         & q_conv_positiva_expr
     )
     saida_valida_media_expr = (
         pl.col("Tipo_operacao").str.starts_with("2 - SAIDA")
-        & ~_boolish_expr("dev_simples").fill_null(False)
-        & ~_boolish_expr("excluir_estoque").fill_null(False)
+        & ~boolish_expr("dev_simples").fill_null(False)
+        & ~boolish_expr("excluir_estoque").fill_null(False)
         & q_conv_positiva_expr
     )
 
