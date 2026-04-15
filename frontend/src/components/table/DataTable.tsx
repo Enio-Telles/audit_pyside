@@ -1,3 +1,4 @@
+import React from "react";
 import {
   useMemo,
   useRef,
@@ -236,6 +237,7 @@ export function DataTable({
     [visibleCols],
   );
 
+  /* eslint-disable-next-line react-hooks/incompatible-library */
   const table = useReactTable({
     data: effectiveRows,
     columns: colDefs,
@@ -266,7 +268,8 @@ export function DataTable({
       el.removeEventListener("scroll", onScroll);
       resizeObserver.disconnect();
     };
-  }, [tableRef.current, containerRef.current]);
+  // use ref objects (not .current) in dependency array; refs are stable
+  }, [containerRef, tableRef]);
 
   const handleHeaderClick = (colId: string) => {
     if (isServerSort) {
@@ -531,111 +534,125 @@ export function DataTable({
                 const rowsToRender = allRows.slice(startIndex, endIndex);
                 const colSpanCount = (selectable ? 1 : 0) + 1 + visibleCols.length;
 
-                return (
-                  <>
-                    {topSpacer > 0 && (
-                      <tr style={{ height: topSpacer }}>
-                        <td colSpan={colSpanCount} />
-                      </tr>
-                    )}
+                const nodes: JSX.Element[] = [];
+                if (topSpacer > 0) {
+                  nodes.push(
+                    <tr style={{ height: topSpacer }}>
+                      <td colSpan={colSpanCount} />
+                    </tr>,
+                  );
+                }
 
-                    {rowsToRender.map((row, localIdx) => {
-                      const idx = startIndex + localIdx;
-                      const tipoOp = row.original["Tipo_operacao"] as
-                        | string
-                        | undefined;
-                const isEntrada = tipoOp?.includes("ENTRADA");
-                const isSaida =
-                  tipoOp?.includes("SAIDA") || tipoOp?.includes("SAIDAS");
-                      const rowKeyVal = rowKey
-                        ? String(row.original[rowKey] ?? "")
-                        : "";
-                const isSelected =
-                  selectable && selectedRowKeys!.has(rowKeyVal);
-                const ruleColor = getRowHighlightColor(row.original);
-                const bg = isSelected
-                  ? "rgba(37,99,235,0.25)"
-                  : ruleColor
-                    ? ruleColor
-                    : shouldAutoHighlight
-                      ? isEntrada
-                        ? "rgba(30,80,30,0.5)"
-                        : isSaida
-                          ? "rgba(120,30,30,0.5)"
+                nodes.push(
+                  ...rowsToRender.map((row, localIdx) => {
+                    const idx = startIndex + localIdx;
+                    const tipoOp = row.original["Tipo_operacao"] as
+                      | string
+                      | undefined;
+                    const isEntrada = tipoOp?.includes("ENTRADA");
+                    const isSaida =
+                      tipoOp?.includes("SAIDA") || tipoOp?.includes("SAIDAS");
+                    const rowKeyVal = rowKey
+                      ? String(row.original[rowKey] ?? "")
+                      : "";
+                    const isSelected =
+                      selectable && selectedRowKeys!.has(rowKeyVal);
+                    const ruleColor = getRowHighlightColor(row.original);
+                    const bg = isSelected
+                      ? "rgba(37,99,235,0.25)"
+                      : ruleColor
+                        ? ruleColor
+                        : shouldAutoHighlight
+                          ? isEntrada
+                            ? "rgba(30,80,30,0.5)"
+                            : isSaida
+                              ? "rgba(120,30,30,0.5)"
+                              : idx % 2 === 0
+                                ? "#0f1b33"
+                                : "#0a1628"
                           : idx % 2 === 0
                             ? "#0f1b33"
-                            : "#0a1628"
-                      : idx % 2 === 0
-                        ? "#0f1b33"
-                        : "#0a1628";
-                return (
-                  <tr
-                    key={row.id}
-                    style={{
-                      background: bg,
-                      outline: isSelected
-                        ? "1px solid rgba(59,130,246,0.5)"
-                        : undefined,
-                      cursor: selectable ? "pointer" : undefined,
-                    }}
-                    className="hover:brightness-125 transition-all"
-                    onClick={
-                      selectable
-                        ? () => onRowSelect?.(rowKeyVal, !isSelected)
-                        : undefined
-                    }
-                  >
-                    {selectable && (
-                      <td className="px-2 py-1.5 border-b border-slate-800 text-center">
-                        <input
-                          type="checkbox"
-                          aria-label={`Selecionar linha ${rowKeyVal}`}
-                          title={`Selecionar linha ${rowKeyVal}`}
-                          checked={isSelected}
-                          onChange={(e) => {
-                            e.stopPropagation();
-                            onRowSelect?.(rowKeyVal, e.target.checked);
-                          }}
-                          onClick={(e) => e.stopPropagation()}
-                          className="accent-blue-500 cursor-pointer"
-                        />
-                      </td>
-                    )}
-                    <td className="px-2 py-1.5 text-slate-500 text-right border-b border-slate-800">
-                      {(page - 1) * 200 + idx + 1}
-                    </td>
-                    {row.getVisibleCells().map((cell) => {
-                      const cellColor = getCellHighlightColor(
-                        cell.column.id,
-                        row.original,
-                      );
-                      return (
-                        <td
-                          key={cell.id}
-                          className="px-2 py-1.5 border-b border-slate-800 truncate"
-                          style={{
-                            width: obterLarguraColuna(
-                              columnWidths,
-                              cell.column.id,
-                            ),
-                            maxWidth: obterLarguraColuna(
-                              columnWidths,
-                              cell.column.id,
-                            ),
-                            background: cellColor ?? undefined,
-                          }}
-                          title={formatCell(cell.getValue())}
-                        >
-                          {flexRender(
-                            cell.column.columnDef.cell,
-                            cell.getContext(),
-                          )}
+                            : "#0a1628";
+                    return (
+                      <tr
+                        key={row.id}
+                        style={{
+                          background: bg,
+                          outline: isSelected
+                            ? "1px solid rgba(59,130,246,0.5)"
+                            : undefined,
+                          cursor: selectable ? "pointer" : undefined,
+                        }}
+                        className="hover:brightness-125 transition-all"
+                        onClick={
+                          selectable
+                            ? () => onRowSelect?.(rowKeyVal, !isSelected)
+                            : undefined
+                        }
+                      >
+                        {selectable && (
+                          <td className="px-2 py-1.5 border-b border-slate-800 text-center">
+                            <input
+                              type="checkbox"
+                              aria-label={`Selecionar linha ${rowKeyVal}`}
+                              title={`Selecionar linha ${rowKeyVal}`}
+                              checked={isSelected}
+                              onChange={(e) => {
+                                e.stopPropagation();
+                                onRowSelect?.(rowKeyVal, e.target.checked);
+                              }}
+                              onClick={(e) => e.stopPropagation()}
+                              className="accent-blue-500 cursor-pointer"
+                            />
+                          </td>
+                        )}
+                        <td className="px-2 py-1.5 text-slate-500 text-right border-b border-slate-800">
+                          {(page - 1) * 200 + idx + 1}
                         </td>
-                      );
-                    })}
-                  </tr>
+                        {row.getVisibleCells().map((cell) => {
+                          const cellColor = getCellHighlightColor(
+                            cell.column.id,
+                            row.original,
+                          );
+                          return (
+                            <td
+                              key={cell.id}
+                              className="px-2 py-1.5 border-b border-slate-800 truncate"
+                              style={{
+                                width: obterLarguraColuna(
+                                  columnWidths,
+                                  cell.column.id,
+                                ),
+                                maxWidth: obterLarguraColuna(
+                                  columnWidths,
+                                  cell.column.id,
+                                ),
+                                background: cellColor ?? undefined,
+                              }}
+                              title={formatCell(cell.getValue())}
+                            >
+                              {flexRender(
+                                cell.column.columnDef.cell,
+                                cell.getContext(),
+                              )}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  }),
                 );
-              })}
+
+                if (bottomSpacer > 0) {
+                  nodes.push(
+                    <tr style={{ height: bottomSpacer }}>
+                      <td colSpan={colSpanCount} />
+                    </tr>,
+                  );
+                }
+
+                return nodes;
+              })()}
             </tbody>
           </table>
         )}
