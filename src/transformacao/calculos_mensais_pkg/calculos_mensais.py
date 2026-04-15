@@ -17,20 +17,10 @@ CNPJ_ROOT = DADOS_DIR / "CNPJ"
 try:
     from utilitarios.salvar_para_parquet import salvar_para_parquet
     from utilitarios.perf_monitor import registrar_evento_performance
+    from utilitarios.calculos_compartilhados import boolish_expr, resolver_ref, format_st_periodos
 except ImportError as e:
     rprint(f"[red]Erro ao importar modulos:[/red] {e}")
-    sys.exit(1)
-
-
-def _boolish_expr(col_name: str) -> pl.Expr:
-    texto = (
-        pl.col(col_name)
-        .cast(pl.Utf8, strict=False)
-        .fill_null("")
-        .str.strip_chars()
-        .str.to_lowercase()
-    )
-    return texto.is_in(["true", "1", "s", "sim", "y", "yes"])
+    raise RuntimeError(f"Falha ao importar modulos ETL: {e}") from e
 
 
 def _finnfe_4_expr() -> pl.Expr:
@@ -40,47 +30,6 @@ def _finnfe_4_expr() -> pl.Expr:
         .fill_null("")
         .str.strip_chars()
         == "4"
-    )
-
-
-def _resolver_ref(nome_arquivo: str) -> Path | None:
-    candidatos = [
-        DADOS_DIR / "referencias" / "referencias" / "CO_SEFIN" / nome_arquivo,
-        DADOS_DIR / "referencias" / "CO_SEFIN" / nome_arquivo,
-        DADOS_DIR / "referencias" / nome_arquivo,
-    ]
-    for caminho in candidatos:
-        if caminho.exists():
-            return caminho
-    return None
-
-
-def _format_st_periodos_mensais(registros) -> str:
-    if registros is None:
-        return ""
-    if isinstance(registros, pl.Series):
-        registros = registros.to_list()
-    if not registros:
-        return ""
-
-    periodos = []
-    for registro in registros:
-        if not registro:
-            continue
-        status = str(registro.get("it_in_st") or "").strip()
-        dt_ini = registro.get("vig_ini")
-        dt_fim = registro.get("vig_fim")
-        if not status or dt_ini is None or dt_fim is None:
-            continue
-        periodos.append((status, dt_ini, dt_fim))
-
-    if not periodos:
-        return ""
-
-    periodos.sort(key=lambda item: (item[1], item[2], item[0]))
-    return ";".join(
-        f"['{status}' de {dt_ini.strftime('%d/%m/%Y')} ate {dt_fim.strftime('%d/%m/%Y')}]"
-        for status, dt_ini, dt_fim in periodos
     )
 
 
@@ -182,7 +131,7 @@ def _carregar_referencia_st_mensal(df_base: pl.DataFrame, df_aux_st: pl.DataFram
             ]
         )
         .with_columns(
-            pl.col("__st_registros__").map_elements(_format_st_periodos_mensais, return_dtype=pl.Utf8).alias("ST")
+            pl.col("__st_registros__").map_elements(format_st_periodos, return_dtype=pl.Utf8).alias("ST")
         )
         .select(["id_agrupado", "ano", "mes", "ST", "__tem_st_mes__"])
     )

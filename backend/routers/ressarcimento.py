@@ -1,20 +1,14 @@
 from __future__ import annotations
 
-import math
-import re
 from pathlib import Path
-from typing import Any
 
 import polars as pl
 from fastapi import APIRouter
 
 from interface_grafica.config import CNPJ_ROOT
+from routers._common import sanitize_cnpj, safe_value, df_to_response, resposta_vazia
 
 router = APIRouter()
-
-
-def _sanitize(cnpj: str) -> str:
-    return re.sub(r"\D", "", cnpj or "")
 
 
 def _pasta_ressarcimento(cnpj: str) -> Path:
@@ -25,75 +19,36 @@ def _pasta_produtos(cnpj: str) -> Path:
     return CNPJ_ROOT / cnpj / "analises" / "produtos"
 
 
-def _safe_value(v: Any) -> Any:
-    if v is None:
-        return None
-    if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
-        return None
-    if isinstance(v, list):
-        return [_safe_value(x) for x in v]
-    return v
-
-
-def _df_to_response(df: pl.DataFrame, page: int = 1, page_size: int = 500) -> dict:
-    total = df.height
-    start = (page - 1) * page_size
-    df_page = df.slice(start, page_size)
-    rows = [
-        {col: _safe_value(row[col]) for col in df_page.columns}
-        for row in df_page.to_dicts()
-    ]
-    return {
-        "total_rows": total,
-        "page": page,
-        "page_size": page_size,
-        "total_pages": max(1, math.ceil(total / page_size)),
-        "columns": df_page.columns,
-        "rows": rows,
-    }
-
-
-def _resposta_vazia(page: int = 1, page_size: int = 500) -> dict:
-    return {
-        "total_rows": 0,
-        "page": page,
-        "page_size": page_size,
-        "total_pages": 1,
-        "columns": [],
-        "rows": [],
-    }
-
-
 def _ler_tabela_ressarcimento_ou_vazia(path: Path, page: int = 1, page_size: int = 500) -> dict:
     if not path.exists():
-        return _resposta_vazia(page, page_size)
-    return _df_to_response(pl.read_parquet(path), page, page_size)
+        return resposta_vazia(page, page_size)
+    return df_to_response(pl.read_parquet(path), page, page_size)
 
 
 @router.get("/{cnpj}/itens")
 def get_itens(cnpj: str, page: int = 1, page_size: int = 500):
-    cnpj = _sanitize(cnpj)
+    cnpj = sanitize_cnpj(cnpj)
     path = _pasta_ressarcimento(cnpj) / f"ressarcimento_st_item_{cnpj}.parquet"
     return _ler_tabela_ressarcimento_ou_vazia(path, page, page_size)
 
 
 @router.get("/{cnpj}/mensal")
 def get_mensal(cnpj: str, page: int = 1, page_size: int = 500):
-    cnpj = _sanitize(cnpj)
+    cnpj = sanitize_cnpj(cnpj)
     path = _pasta_ressarcimento(cnpj) / f"ressarcimento_st_mensal_{cnpj}.parquet"
     return _ler_tabela_ressarcimento_ou_vazia(path, page, page_size)
 
 
 @router.get("/{cnpj}/conciliacao")
 def get_conciliacao(cnpj: str, page: int = 1, page_size: int = 500):
-    cnpj = _sanitize(cnpj)
+    cnpj = sanitize_cnpj(cnpj)
     path = _pasta_ressarcimento(cnpj) / f"ressarcimento_st_conciliacao_{cnpj}.parquet"
     return _ler_tabela_ressarcimento_ou_vazia(path, page, page_size)
 
 
 @router.get("/{cnpj}/validacoes")
 def get_validacoes(cnpj: str, page: int = 1, page_size: int = 500):
-    cnpj = _sanitize(cnpj)
+    cnpj = sanitize_cnpj(cnpj)
     path = _pasta_ressarcimento(cnpj) / f"ressarcimento_st_validacoes_{cnpj}.parquet"
     return _ler_tabela_ressarcimento_ou_vazia(path, page, page_size)
 

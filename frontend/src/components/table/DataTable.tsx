@@ -2,6 +2,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useEffect,
   type MouseEvent as EventoMouseReact,
 } from "react";
 import {
@@ -166,6 +167,13 @@ export function DataTable({
   >({});
   const colunaArrastadaRef = useRef<string | null>(null);
   const momentoUltimaInteracaoCabecalhoRef = useRef(0);
+  // Virtualization state
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const tableRef = useRef<HTMLTableElement | null>(null);
+  const [scrollTop, setScrollTop] = useState(0);
+  const [viewportHeight, setViewportHeight] = useState(400);
+  const ROW_HEIGHT = 36; // estimate row height in px
+  const OVERSCAN = 5;
 
   const effectiveColFilters =
     columnFilters !== undefined ? columnFilters : localColFilters;
@@ -238,6 +246,27 @@ export function DataTable({
     manualSorting: isServerSort,
     manualPagination: true,
   });
+
+  // Virtualization helpers
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const onScroll = () => setScrollTop(el.scrollTop);
+    el.addEventListener("scroll", onScroll, { passive: true });
+    const resizeObserver = new ResizeObserver(() => {
+      const headerH = tableRef.current?.querySelector("thead")?.clientHeight ?? 0;
+      const totalH = el.clientHeight - headerH;
+      setViewportHeight(Math.max(100, totalH));
+    });
+    resizeObserver.observe(el);
+    // initial
+    const headerH = tableRef.current?.querySelector("thead")?.clientHeight ?? 0;
+    setViewportHeight(Math.max(100, el.clientHeight - headerH));
+    return () => {
+      el.removeEventListener("scroll", onScroll);
+      resizeObserver.disconnect();
+    };
+  }, [tableRef.current, containerRef.current]);
 
   const handleHeaderClick = (colId: string) => {
     if (isServerSort) {
@@ -489,16 +518,38 @@ export function DataTable({
               )}
             </thead>
             <tbody>
-              {table.getRowModel().rows.map((row, idx) => {
-                const tipoOp = row.original["Tipo_operacao"] as
-                  | string
-                  | undefined;
+              {/* Virtualization: only render visible slice of rows to reduce DOM nodes */}
+              {(() => {
+                const allRows = table.getRowModel().rows;
+                const total = allRows.length;
+                if (total === 0) return null;
+                const visibleCount = Math.max(1, Math.ceil(viewportHeight / ROW_HEIGHT));
+                const startIndex = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN);
+                const endIndex = Math.min(total, startIndex + visibleCount + OVERSCAN * 2);
+                const topSpacer = startIndex * ROW_HEIGHT;
+                const bottomSpacer = Math.max(0, (total - endIndex) * ROW_HEIGHT);
+                const rowsToRender = allRows.slice(startIndex, endIndex);
+                const colSpanCount = (selectable ? 1 : 0) + 1 + visibleCols.length;
+
+                return (
+                  <>
+                    {topSpacer > 0 && (
+                      <tr style={{ height: topSpacer }}>
+                        <td colSpan={colSpanCount} />
+                      </tr>
+                    )}
+
+                    {rowsToRender.map((row, localIdx) => {
+                      const idx = startIndex + localIdx;
+                      const tipoOp = row.original["Tipo_operacao"] as
+                        | string
+                        | undefined;
                 const isEntrada = tipoOp?.includes("ENTRADA");
                 const isSaida =
                   tipoOp?.includes("SAIDA") || tipoOp?.includes("SAIDAS");
-                const rowKeyVal = rowKey
-                  ? String(row.original[rowKey] ?? "")
-                  : "";
+                      const rowKeyVal = rowKey
+                        ? String(row.original[rowKey] ?? "")
+                        : "";
                 const isSelected =
                   selectable && selectedRowKeys!.has(rowKeyVal);
                 const ruleColor = getRowHighlightColor(row.original);

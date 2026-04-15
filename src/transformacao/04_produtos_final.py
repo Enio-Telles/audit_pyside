@@ -153,22 +153,96 @@ def produtos_agrupados(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         rprint("[yellow]descricao_produtos esta vazio.[/yellow]")
         return False
 
+    # Vetorizado: agregue informações de `df_item_unid` por `descricao_normalizada`
+    # para evitar filtrar `df_item_unid` repetidamente dentro de um loop.
+    df_item_unid_norm = df_item_unid.with_columns(
+        expr_normalizar_descricao("descricao").alias("__descricao_norm")
+    )
+
+    # Agrega estatísticas por (__descricao_norm, descricao) para eleger descr_padrao
+    grouped_descrs = (
+        df_item_unid_norm
+        .with_columns(
+            [
+                pl.when(pl.col("ncm").cast(pl.Utf8, strict=False).str.strip_chars() != "").then(1).otherwise(0).alias("__has_ncm"),
+                pl.when(pl.col("cest").cast(pl.Utf8, strict=False).str.strip_chars() != "").then(1).otherwise(0).alias("__has_cest"),
+                pl.when(pl.col("gtin").cast(pl.Utf8, strict=False).str.strip_chars() != "").then(1).otherwise(0).alias("__has_gtin"),
+            ]
+        )
+        .group_by(["__descricao_norm", "descricao"])  # por descricao original dentro do grupo normalizado
+        .agg(
+            [
+                pl.count().alias("count"),
+                pl.col("__has_ncm").max().alias("has_ncm"),
+                pl.col("__has_cest").max().alias("has_cest"),
+                pl.col("__has_gtin").max().alias("has_gtin"),
+            ]
+        )
+    )
+
+    # Compacta candidatos em uma lista por descricao_normalizada
+    candidatos_por_norm = (
+        grouped_descrs
+        .group_by("__descricao_norm")
+        .agg([pl.struct(["descricao", "count", "has_ncm", "has_cest", "has_gtin"]).list().alias("candidatos")])
+    )
+
+    # Agrega listas auxiliares (ncm, cest, gtin, co_sefin, unidades, fontes)
+    listas_por_norm = (
+        df_item_unid_norm
+        .group_by("__descricao_norm")
+        .agg(
+            [
+                pl.col("ncm").drop_nulls().list().alias("lista_ncm_raw"),
+                pl.col("cest").drop_nulls().list().alias("lista_cest_raw"),
+                pl.col("gtin").drop_nulls().list().alias("lista_gtin_raw"),
+                pl.col("co_sefin_item").drop_nulls().list().alias("lista_co_sefin_raw"),
+                pl.col("lista_unid").list().alias("lista_unid_raw"),
+                pl.col("fontes").list().alias("fontes_raw"),
+            ]
+        )
+    )
+
+    # Junta as agregações em um único frame por norma
+    agregados = candidatos_por_norm.join(listas_por_norm, on="__descricao_norm", how="outer")
+
+    # Junta com as descricoes originais para produzir uma linha por descricao (sem re-filtrar df_item_unid)
+    df_join = df_descricoes.join(agregados, left_on="descricao_normalizada", right_on="__descricao_norm", how="left")
+
     registros_mestra: list[dict] = []
     registros_ponte: list[dict] = []
 
-    for seq, row in enumerate(df_descricoes.to_dicts(), start=1):
+    def _score_cand(cand: dict) -> tuple[int, int, int]:
+        preenchidos = int(cand.get("has_ncm", 0)) + int(cand.get("has_cest", 0)) + int(cand.get("has_gtin", 0))
+        return (int(cand.get("count", 0)), preenchidos, len(str(cand.get("descricao", ""))))
+
+    for seq, row in enumerate(df_join.to_dicts(), start=1):
         id_agrupado = _gerar_id_agrupado(seq)
-        desc_norm = row.get("descricao_normalizada")
 
-        if desc_norm:
-            df_base = df_item_unid.filter(pl.col("descricao").is_not_null()).with_columns(
-                expr_normalizar_descricao("descricao").alias("__descricao_norm")
-            )
-            df_base = df_base.filter(pl.col("__descricao_norm") == desc_norm).drop("__descricao_norm")
-        else:
-            df_base = df_item_unid.filter(pl.lit(False))
+        # candidatos (pode ser None)
+        candidatos = row.get("candidatos") or []
+        descr_padrao = None
+        if candidatos:
+            try:
+                candidatos.sort(key=_score_cand, reverse=True)
+                descr_padrao = candidatos[0].get("descricao")
+            except Exception:
+                descr_padrao = None
 
-        padrao = _calcular_atributos_padrao(df_base)
+        # padroes por campo a partir das listas agregadas
+        def _most_common_from_list(values):
+            if not values:
+                return None
+            flat = [str(v).strip() for v in values if v is not None and str(v).strip()]
+            if not flat:
+                return None
+            return Counter(flat).most_common(1)[0][0]
+
+        ncm_padrao = _most_common_from_list(row.get("lista_ncm_raw") or [])
+        cest_padrao = _most_common_from_list(row.get("lista_cest_raw") or [])
+        gtin_padrao = _most_common_from_list(row.get("lista_gtin_raw") or [])
+        co_sefin_padrao = _most_common_from_list(row.get("lista_co_sefin_raw") or [])
+
         lista_co_sefin = _serie_limpa_lista(row.get("lista_co_sefin"))
         lista_unidades = _serie_limpa_lista(row.get("lista_unid"))
         fontes = _serie_limpa_lista(row.get("fontes"))
@@ -177,12 +251,12 @@ def produtos_agrupados(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
             {
                 "id_agrupado": id_agrupado,
                 "lista_chave_produto": [row.get("id_descricao")] if row.get("id_descricao") else [],
-                "descr_padrao": padrao.get("descr_padrao") or row.get("descricao"),
-                "ncm_padrao": padrao.get("ncm_padrao"),
-                "cest_padrao": padrao.get("cest_padrao"),
-                "gtin_padrao": padrao.get("gtin_padrao"),
+                "descr_padrao": descr_padrao or row.get("descricao"),
+                "ncm_padrao": ncm_padrao,
+                "cest_padrao": cest_padrao,
+                "gtin_padrao": gtin_padrao,
                 "lista_co_sefin": lista_co_sefin,
-                "co_sefin_padrao": padrao.get("co_sefin_padrao"),
+                "co_sefin_padrao": co_sefin_padrao,
                 "lista_unidades": lista_unidades,
                 "co_sefin_divergentes": len(lista_co_sefin) > 1,
                 "fontes": fontes,
@@ -190,12 +264,7 @@ def produtos_agrupados(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         )
 
         if row.get("id_descricao"):
-            registros_ponte.append(
-                {
-                    "chave_produto": row["id_descricao"],
-                    "id_agrupado": id_agrupado,
-                }
-            )
+            registros_ponte.append({"chave_produto": row["id_descricao"], "id_agrupado": id_agrupado})
 
     df_mestra = pl.DataFrame(registros_mestra)
     df_ponte = pl.DataFrame(registros_ponte)

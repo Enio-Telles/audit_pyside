@@ -1,22 +1,22 @@
 from __future__ import annotations
 
-import math
-import re
-from datetime import date, datetime
 from pathlib import Path
-from typing import Any
 
 import polars as pl
 from fastapi import APIRouter, HTTPException
+from filelock import FileLock
 from pydantic import BaseModel
 
 from interface_grafica.config import CNPJ_ROOT
+from routers._common import (
+    sanitize_cnpj,
+    safe_value,
+    format_dt_inv_value,
+    df_to_response,
+    resposta_vazia,
+)
 
 router = APIRouter()
-
-
-def _sanitize(cnpj: str) -> str:
-    return re.sub(r"\D", "", cnpj or "")
 
 
 def _pasta_produtos(cnpj: str) -> Path:
@@ -49,81 +49,13 @@ def _path_bloco_h(cnpj: str) -> Path:
     return candidatos[0]
 
 
-def _safe_value(v: Any) -> Any:
-    if v is None:
-        return None
-    if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
-        return None
-    if isinstance(v, list):
-        return [_safe_value(x) for x in v]
-    return v
-
-
-def _format_dt_inv_value(v: Any) -> Any:
-    if v is None:
-        return None
-    if isinstance(v, datetime):
-        return v.strftime("%d/%m/%Y")
-    if isinstance(v, date):
-        return v.strftime("%d/%m/%Y")
-
-    s = str(v).strip()
-    if not s:
-        return s
-
-    if re.match(r"^\d{2}/\d{2}/\d{4}$", s):
-        return s
-
-    if re.match(r"^\d{4}-\d{2}-\d{2}", s):
-        return f"{s[8:10]}/{s[5:7]}/{s[0:4]}"
-
-    if re.match(r"^\d{8}$", s):
-        maybe_year = int(s[0:4])
-        if 1900 <= maybe_year <= 2100:
-            return f"{s[6:8]}/{s[4:6]}/{s[0:4]}"
-        return f"{s[0:2]}/{s[2:4]}/{s[4:8]}"
-
-    return s
-
-
-def _df_to_response(df: pl.DataFrame, page: int = 1, page_size: int = 500) -> dict:
-    total = df.height
-    start = (page - 1) * page_size
-    end = start + page_size
-    df_page = df.slice(start, page_size)
-    rows = []
-    for row in df_page.to_dicts():
-        row_out: dict[str, Any] = {}
-        for col in df_page.columns:
-            value = _safe_value(row[col])
-            if col == "dt_inv":
-                value = _format_dt_inv_value(value)
-            row_out[col] = value
-        rows.append(row_out)
-    return {
-        "total_rows": total,
-        "page": page,
-        "page_size": page_size,
-        "total_pages": max(1, math.ceil(total / page_size)),
-        "columns": df_page.columns,
-        "rows": rows,
-    }
-
-
 def _resposta_paginada_vazia(page: int = 1, page_size: int = 500) -> dict:
     """
     Retorna uma estrutura vazia compatível com o contrato esperado pelo frontend.
 
     Isso evita erro de leitura quando o parquet analítico ainda não foi gerado.
     """
-    return {
-        "total_rows": 0,
-        "page": page,
-        "page_size": page_size,
-        "total_pages": 1,
-        "columns": [],
-        "rows": [],
-    }
+    return resposta_vazia(page, page_size)
 
 
 def _ler_tabela_estoque_ou_vazia(path: Path, page: int = 1, page_size: int = 500) -> dict:
@@ -162,35 +94,35 @@ def _aplicar_filtros_bloco_h(
 
 @router.get("/{cnpj}/mov_estoque")
 def get_mov_estoque(cnpj: str, page: int = 1, page_size: int = 500):
-    cnpj = _sanitize(cnpj)
+    cnpj = sanitize_cnpj(cnpj)
     path = _pasta_produtos(cnpj) / f"mov_estoque_{cnpj}.parquet"
     return _ler_tabela_estoque_ou_vazia(path, page, page_size)
 
 
 @router.get("/{cnpj}/tabela_mensal")
 def get_tabela_mensal(cnpj: str, page: int = 1, page_size: int = 500):
-    cnpj = _sanitize(cnpj)
+    cnpj = sanitize_cnpj(cnpj)
     path = _pasta_produtos(cnpj) / f"aba_mensal_{cnpj}.parquet"
     return _ler_tabela_estoque_ou_vazia(path, page, page_size)
 
 
 @router.get("/{cnpj}/tabela_anual")
 def get_tabela_anual(cnpj: str, page: int = 1, page_size: int = 500):
-    cnpj = _sanitize(cnpj)
+    cnpj = sanitize_cnpj(cnpj)
     path = _pasta_produtos(cnpj) / f"aba_anual_{cnpj}.parquet"
     return _ler_tabela_estoque_ou_vazia(path, page, page_size)
 
 
 @router.get("/{cnpj}/id_agrupados")
 def get_id_agrupados(cnpj: str, page: int = 1, page_size: int = 500):
-    cnpj = _sanitize(cnpj)
+    cnpj = sanitize_cnpj(cnpj)
     path = _pasta_produtos(cnpj) / f"produtos_final_{cnpj}.parquet"
     return _ler_tabela_estoque_ou_vazia(path, page, page_size)
 
 
 @router.get("/{cnpj}/fatores_conversao")
 def get_fatores_conversao(cnpj: str, page: int = 1, page_size: int = 500):
-    cnpj = _sanitize(cnpj)
+    cnpj = sanitize_cnpj(cnpj)
     path = _pasta_produtos(cnpj) / f"fatores_conversao_{cnpj}.parquet"
     return _ler_tabela_estoque_ou_vazia(path, page, page_size)
 
@@ -204,7 +136,7 @@ def get_bloco_h(
     cod_mot_inv: str | None = None,
     indicador_propriedade: str | None = None,
 ):
-    cnpj = _sanitize(cnpj)
+    cnpj = sanitize_cnpj(cnpj)
     path = _path_bloco_h(cnpj)
     if not path.exists():
         return _resposta_paginada_vazia(page, page_size)
@@ -223,7 +155,7 @@ def get_bloco_h_h005(
     cod_mot_inv: str | None = None,
     indicador_propriedade: str | None = None,
 ):
-    cnpj = _sanitize(cnpj)
+    cnpj = sanitize_cnpj(cnpj)
     path = _path_bloco_h(cnpj)
     if not path.exists():
         return _resposta_paginada_vazia(page, page_size)
@@ -273,7 +205,7 @@ def get_bloco_h_resumo(
     cod_mot_inv: str | None = None,
     indicador_propriedade: str | None = None,
 ):
-    cnpj = _sanitize(cnpj)
+    cnpj = sanitize_cnpj(cnpj)
     path = _path_bloco_h(cnpj)
 
     if not path.exists():
@@ -356,43 +288,51 @@ class UnidRefBatchUpdate(BaseModel):
 
 @router.patch("/{cnpj}/fatores_conversao/batch_unid_ref")
 def patch_fatores_unid_ref_batch(cnpj: str, req: UnidRefBatchUpdate):
-    cnpj = _sanitize(cnpj)
+    cnpj = sanitize_cnpj(cnpj)
     path = _pasta_produtos(cnpj) / f"fatores_conversao_{cnpj}.parquet"
     if not path.exists():
         raise HTTPException(404, "fatores_conversao não encontrado")
-    df = pl.read_parquet(path)
-    if "unid_ref_manual" not in df.columns:
-        df = df.with_columns(pl.lit(False).alias("unid_ref_manual"))
-    mask = pl.col("id_agrupado") == req.id_agrupado
-    df = df.with_columns([
-        pl.when(mask).then(pl.lit(req.unid_ref)).otherwise(pl.col("unid_ref")).alias("unid_ref"),
-        pl.when(mask).then(pl.lit(True)).otherwise(pl.col("unid_ref_manual")).alias("unid_ref_manual"),
-    ])
-    df.write_parquet(path)
+    
+    # File lock para evitar race condition em operações concorrentes
+    lock_path = path.with_suffix(".lock")
+    with FileLock(str(lock_path)):
+        df = pl.read_parquet(path)
+        if "unid_ref_manual" not in df.columns:
+            df = df.with_columns(pl.lit(False).alias("unid_ref_manual"))
+        mask = pl.col("id_agrupado") == req.id_agrupado
+        df = df.with_columns([
+            pl.when(mask).then(pl.lit(req.unid_ref)).otherwise(pl.col("unid_ref")).alias("unid_ref"),
+            pl.when(mask).then(pl.lit(True)).otherwise(pl.col("unid_ref_manual")).alias("unid_ref_manual"),
+        ])
+        df.write_parquet(path)
     return {"ok": True}
 
 
 @router.patch("/{cnpj}/fatores_conversao")
 def patch_fatores_conversao(cnpj: str, req: FatorUpdate):
-    cnpj = _sanitize(cnpj)
+    cnpj = sanitize_cnpj(cnpj)
     path = _pasta_produtos(cnpj) / f"fatores_conversao_{cnpj}.parquet"
     if not path.exists():
         raise HTTPException(404, "fatores_conversao não encontrado")
-    df = pl.read_parquet(path)
-    if "fator_manual" not in df.columns:
-        df = df.with_columns(pl.lit(False).alias("fator_manual"))
-    if "unid_ref_manual" not in df.columns:
-        df = df.with_columns(pl.lit(False).alias("unid_ref_manual"))
-    mask = (pl.col("id_agrupado") == req.id_agrupado) & (pl.col("id_produtos") == req.id_produtos)
-    if req.fator is not None:
-        df = df.with_columns([
-            pl.when(mask).then(pl.lit(req.fator)).otherwise(pl.col("fator")).alias("fator"),
-            pl.when(mask).then(pl.lit(True)).otherwise(pl.col("fator_manual")).alias("fator_manual"),
-        ])
-    if req.unid_ref is not None:
-        df = df.with_columns([
-            pl.when(mask).then(pl.lit(req.unid_ref)).otherwise(pl.col("unid_ref")).alias("unid_ref"),
-            pl.when(mask).then(pl.lit(True)).otherwise(pl.col("unid_ref_manual")).alias("unid_ref_manual"),
-        ])
-    df.write_parquet(path)
+    
+    # File lock para evitar race condition em operações concorrentes
+    lock_path = path.with_suffix(".lock")
+    with FileLock(str(lock_path)):
+        df = pl.read_parquet(path)
+        if "fator_manual" not in df.columns:
+            df = df.with_columns(pl.lit(False).alias("fator_manual"))
+        if "unid_ref_manual" not in df.columns:
+            df = df.with_columns(pl.lit(False).alias("unid_ref_manual"))
+        mask = (pl.col("id_agrupado") == req.id_agrupado) & (pl.col("id_produtos") == req.id_produtos)
+        if req.fator is not None:
+            df = df.with_columns([
+                pl.when(mask).then(pl.lit(req.fator)).otherwise(pl.col("fator")).alias("fator"),
+                pl.when(mask).then(pl.lit(True)).otherwise(pl.col("fator_manual")).alias("fator_manual"),
+            ])
+        if req.unid_ref is not None:
+            df = df.with_columns([
+                pl.when(mask).then(pl.lit(req.unid_ref)).otherwise(pl.col("unid_ref")).alias("unid_ref"),
+                pl.when(mask).then(pl.lit(True)).otherwise(pl.col("unid_ref_manual")).alias("unid_ref_manual"),
+            ])
+        df.write_parquet(path)
     return {"ok": True}

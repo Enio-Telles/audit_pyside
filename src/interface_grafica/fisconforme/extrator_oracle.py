@@ -21,6 +21,7 @@ import pandas as pd
 from pathlib import Path
 from dotenv import load_dotenv
 from concurrent.futures import ThreadPoolExecutor
+import sys
 
 # Configuração de logging
 logging.basicConfig(
@@ -33,6 +34,17 @@ logger = logging.getLogger(__name__)
 from .path_resolver import get_root_dir, get_env_path
 ROOT_DIR = get_root_dir()
 load_dotenv(dotenv_path=get_env_path(), encoding='latin-1', override=True)
+
+# Tornar possível importar utilitários do pacote `src` quando executado diretamente
+SRC_DIR = Path(ROOT_DIR) / "src"
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
+
+# Importa função eficiente de escrita em Parquet por lotes
+try:
+    from extracao.extracao_oracle_eficiente import _gravar_cursor_em_parquet
+except Exception:
+    _gravar_cursor_em_parquet = None
 
 
 class ExtratorOracle:
@@ -188,9 +200,21 @@ class ExtratorOracle:
         logger.info(f"[*] Extraindo {nome_completo}...")
 
         def _extrair():
+            # Uso de escrita por lotes via cursor para reduzir uso de memória
             with self.obter_conexao() as conn:
-                df = pd.read_sql(sql, conn, params=params)
-                df.to_parquet(arquivo_saida, index=False)
+                if _gravar_cursor_em_parquet is None:
+                    # Fallback para pandas caso utilitário não esteja disponível
+                    df = pd.read_sql(sql, conn, params=params)
+                    df.to_parquet(arquivo_saida, index=False)
+                else:
+                    with conn.cursor() as cursor:
+                        # Configura para fetch por lotes
+                        cursor.arraysize = 50_000
+                        if params:
+                            cursor.execute(sql, params)
+                        else:
+                            cursor.execute(sql)
+                        _gravar_cursor_em_parquet(cursor, arquivo_saida, tamanho_lote=50_000, rotulo_consulta=nome_completo)
 
         try:
             self._executar_com_retry(_extrair, descricao=nome_completo)
@@ -222,9 +246,22 @@ class ExtratorOracle:
         logger.info(f"[*] Extraindo via SQL customizado → {nome_saida}...")
 
         def _extrair():
+            # Uso de escrita por lotes via cursor para reduzir uso de memória
             with self.obter_conexao() as conn:
-                df = pd.read_sql(sql, conn, params=params)
-                df.to_parquet(arquivo_saida, index=False)
+                if _gravar_cursor_em_parquet is None:
+                    df = pd.read_sql(sql, conn, params=params)
+                    df.to_parquet(arquivo_saida, index=False)
+                else:
+                    with conn.cursor() as cursor:
+                        cursor.arraysize = 50_000
+                        # prepared SQL: usar prepare + execute para binds se houver
+                        try:
+                            cursor.prepare(sql)
+                            cursor.execute(None, params or {})
+                        except Exception:
+                            # fallback simples
+                            cursor.execute(sql, params or {})
+                        _gravar_cursor_em_parquet(cursor, arquivo_saida, tamanho_lote=50_000, rotulo_consulta=nome_saida)
 
         try:
             self._executar_com_retry(_extrair, descricao=nome_saida)

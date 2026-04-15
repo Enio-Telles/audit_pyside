@@ -17,67 +17,10 @@ CNPJ_ROOT = DADOS_DIR / "CNPJ"
 try:
     from utilitarios.salvar_para_parquet import salvar_para_parquet
     from utilitarios.perf_monitor import registrar_evento_performance
+    from utilitarios.calculos_compartilhados import boolish_expr, resolver_ref, format_st_periodos
 except ImportError as e:
     rprint(f"[red]Erro ao importar modulos:[/red] {e}")
-    sys.exit(1)
-
-
-def _resolver_ref(nome_arquivo: str) -> Path | None:
-    candidatos = [
-        DADOS_DIR / "referencias" / "referencias" / "CO_SEFIN" / nome_arquivo,
-        DADOS_DIR / "referencias" / "CO_SEFIN" / nome_arquivo,
-        DADOS_DIR / "referencias" / nome_arquivo,
-    ]
-    for caminho in candidatos:
-        if caminho.exists():
-            return caminho
-    return None
-
-
-def _boolish_expr(col_name: str) -> pl.Expr:
-    col = pl.col(col_name).cast(pl.Utf8, strict=False).fill_null("").str.strip_chars().str.to_uppercase()
-    return (
-        pl.when(col.is_in(["1", "TRUE", "T", "S", "SIM", "Y", "YES"]))
-        .then(pl.lit(True))
-        .when(col.is_in(["0", "FALSE", "F", "N", "NAO", "NÃƒO", "NO", ""]))
-        .then(pl.lit(False))
-        .otherwise(pl.col(col_name).cast(pl.Int64, strict=False).fill_null(0) != 0)
-    )
-
-
-def _format_st_periodos_anuais(registros) -> str:
-    if registros is None:
-        return ""
-    if isinstance(registros, pl.Series):
-        if registros.is_empty():
-            return ""
-        registros = registros.to_list()
-    if isinstance(registros, list):
-        if not registros:
-            return ""
-    else:
-        # Caso venha um tipo inesperado, retorna string vazia
-        return ""
-
-    periodos = []
-    for registro in registros:
-        if not registro:
-            continue
-        status = str(registro.get("it_in_st") or "").strip()
-        dt_ini = registro.get("vig_ini")
-        dt_fim = registro.get("vig_fim")
-        if not status or dt_ini is None or dt_fim is None:
-            continue
-        periodos.append((status, dt_ini, dt_fim))
-
-    if not periodos:
-        return ""
-
-    periodos.sort(key=lambda item: (item[1], item[2], item[0]))
-    return ";".join(
-        f"['{status}' de {dt_ini.strftime('%d/%m/%Y')} atÃ© {dt_fim.strftime('%d/%m/%Y')}]"
-        for status, dt_ini, dt_fim in periodos
-    )
+    raise RuntimeError(f"Falha ao importar modulos ETL: {e}") from e
 
 
 def _carregar_referencia_st_anual(df_anual: pl.DataFrame) -> pl.DataFrame:
@@ -170,7 +113,7 @@ def _carregar_referencia_st_anual(df_anual: pl.DataFrame) -> pl.DataFrame:
             ]
         )
         .with_columns(
-            pl.col("__st_registros__").map_elements(_format_st_periodos_anuais, return_dtype=pl.Utf8).alias("ST")
+            pl.col("__st_registros__").map_elements(format_st_periodos, return_dtype=pl.Utf8).alias("ST")
         )
         .select(["co_sefin_agr", "ano", "ST", "__tem_st_ano__", "__aliq_ref__"])
     )

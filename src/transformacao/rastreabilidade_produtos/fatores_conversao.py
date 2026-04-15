@@ -33,7 +33,7 @@ try:
     )
 except ImportError as e:
     rprint(f"[red]Erro ao importar modulos utilitarios:[/red] {e}")
-    sys.exit(1)
+    raise RuntimeError(f"Falha ao importar modulos ETL: {e}") from e
 
 
 

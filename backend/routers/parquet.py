@@ -9,6 +9,7 @@ from pydantic import BaseModel
 
 from interface_grafica.services.parquet_service import FilterCondition, ParquetService
 from interface_grafica.config import CNPJ_ROOT
+from routers._common import safe_value
 
 router = APIRouter()
 
@@ -27,16 +28,6 @@ class QueryRequest(BaseModel):
     page_size: int = 200
     sort_by: str | None = None
     sort_desc: bool = False
-
-
-def _safe_value(v: Any) -> Any:
-    if v is None:
-        return None
-    if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
-        return None
-    if isinstance(v, list):
-        return [_safe_value(x) for x in v]
-    return v
 
 
 @router.post("/query")
@@ -65,7 +56,7 @@ def query_parquet(req: QueryRequest):
         sort_desc=req.sort_desc,
     )
     rows = [
-        {col: _safe_value(row[col]) for col in result.df_visible.columns}
+        {col: safe_value(row[col]) for col in result.df_visible.columns}
         for row in result.df_visible.to_dicts()
     ]
     total_pages = max(1, math.ceil(result.total_rows / req.page_size))

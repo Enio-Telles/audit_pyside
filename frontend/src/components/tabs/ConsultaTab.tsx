@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useRef, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { parquetApi, cnpjApi } from "../../api/client";
 import { useAppStore } from "../../store/appStore";
@@ -59,6 +59,26 @@ export function ConsultaTab() {
     .filter(([, v]) => v !== '')
     .map(([column, value]) => ({ column, operator: 'contem' as const, value }));
   const allFilters = [...consultaFilters, ...colFilterItems];
+
+  // Debounce para filtros de coluna: evita refetch a cada caractere
+  const columnFilterTimers = useRef<Record<string, number>>({});
+  useEffect(() => {
+    return () => {
+      Object.values(columnFilterTimers.current).forEach((t) => clearTimeout(t));
+      columnFilterTimers.current = {};
+    };
+  }, []);
+
+  const onColumnFilterChangeDebounced = (col: string, val: string) => {
+    const existing = columnFilterTimers.current[col];
+    if (existing) clearTimeout(existing);
+    const id = window.setTimeout(() => {
+      setConsultaColumnFilter(col, val);
+      setConsultaPage(1);
+      delete columnFilterTimers.current[col];
+    }, 350) as unknown as number;
+    columnFilterTimers.current[col] = id;
+  };
 
   const { data, isLoading } = useQuery({
     queryKey: [
@@ -203,8 +223,7 @@ export function ConsultaTab() {
           hiddenColumns={consultaHiddenCols}
           columnFilters={consultaColumnFilters}
           onColumnFilterChange={(col, val) => {
-            setConsultaColumnFilter(col, val);
-            setConsultaPage(1);
+            onColumnFilterChangeDebounced(col, val);
           }}
           showColumnFilters={showColFilters}
           highlightRules={consultaHighlightRules}
