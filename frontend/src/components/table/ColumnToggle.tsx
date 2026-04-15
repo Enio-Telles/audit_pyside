@@ -75,7 +75,7 @@ export function ColumnToggle({
       <button
         onClick={() => setOpen((o) => !o)}
         className="px-3 py-1.5 rounded text-xs font-medium cursor-pointer bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors flex items-center gap-1"
-        title="Mostrar/ocultar colunas"
+        title="Mostrar/ocultar colunas" aria-label="Mostrar ou ocultar colunas"
       >
         <span>Colunas</span>
         <span className="text-slate-400">
@@ -137,7 +137,7 @@ export function ColumnToggle({
                       type="button"
                       onClick={() => ajustarLargura(col, obterLarguraAtual(col) - 20)}
                       className="px-1 rounded bg-slate-800 hover:bg-slate-600 text-slate-300"
-                      title={`Diminuir largura de ${col}`}
+                      title={`Diminuir largura de ${col}`} aria-label={`Diminuir largura de ${col}`}
                     >
                       -
                     </button>
@@ -150,13 +150,13 @@ export function ColumnToggle({
                         ajustarLargura(col, Number(e.target.value) || 120)
                       }
                       className="w-16 bg-slate-900 border border-slate-700 rounded px-1 py-0.5 text-right text-slate-200"
-                      title={`Largura em pixels da coluna ${col}`}
+                      title={`Largura em pixels da coluna ${col}`} aria-label={`Largura em pixels da coluna ${col}`}
                     />
                     <button
                       type="button"
                       onClick={() => ajustarLargura(col, obterLarguraAtual(col) + 20)}
                       className="px-1 rounded bg-slate-800 hover:bg-slate-600 text-slate-300"
-                      title={`Aumentar largura de ${col}`}
+                      title={`Aumentar largura de ${col}`} aria-label={`Aumentar largura de ${col}`}
                     >
                       +
                     </button>
@@ -169,7 +169,7 @@ export function ColumnToggle({
                       onClick={() => moverColuna(col, -1)}
                       disabled={indice === 0}
                       className="px-1 rounded bg-slate-800 hover:bg-slate-600 text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed"
-                      title={`Mover ${col} para a esquerda`}
+                      title={`Mover ${col} para a esquerda`} aria-label={`Mover ${col} para a esquerda`}
                     >
                       ↑
                     </button>
@@ -178,7 +178,7 @@ export function ColumnToggle({
                       onClick={() => moverColuna(col, 1)}
                       disabled={indice === colunasOrdenadas.length - 1}
                       className="px-1 rounded bg-slate-800 hover:bg-slate-600 text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed"
-                      title={`Mover ${col} para a direita`}
+                      title={`Mover ${col} para a direita`} aria-label={`Mover ${col} para a direita`}
                     >
                       ↓
                     </button>

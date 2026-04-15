@@ -534,7 +534,7 @@ export function DataTable({
                 const rowsToRender = allRows.slice(startIndex, endIndex);
                 const colSpanCount = (selectable ? 1 : 0) + 1 + visibleCols.length;
 
-                const nodes: JSX.Element[] = [];
+                const nodes: React.JSX.Element[] = [];
                 if (topSpacer > 0) {
                   nodes.push(
                     <tr style={{ height: topSpacer }}>

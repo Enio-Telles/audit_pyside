@@ -321,7 +321,7 @@ export function LeftPanel() {
                 <button
                   className="px-1.5 py-0.5 rounded bg-slate-600 hover:bg-slate-500 text-slate-300 text-[10px] ml-auto"
                   onClick={() => setShowGerenciarModal(true)}
-                  title="Adicionar ou excluir consultas"
+                  title="Adicionar ou excluir consultas" aria-label="Adicionar ou excluir consultas"
                 >
                   ⚙ Gerenciar
                 </button>
@@ -459,7 +459,7 @@ export function LeftPanel() {
               </button>
               <button
                 onClick={() => setGerenciarCnpj({ cnpj: r.cnpj, razaoSocial: r.razao_social })}
-                title="Gerenciar dados do CNPJ"
+                title="Gerenciar dados do CNPJ" aria-label={`Gerenciar dados do CNPJ ${r.cnpj}`}
                 className="shrink-0 px-1.5 py-1.5 rounded text-slate-500 hover:text-slate-200 hover:bg-slate-700 opacity-0 group-hover:opacity-100 transition-opacity text-[11px]"
               >
                 ⚙
