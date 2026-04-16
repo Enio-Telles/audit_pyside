@@ -22,3 +22,7 @@ How tested:
 Notes:
 - No behavioral changes expected aside from improved startup tolerance for legacy `app_state` entries.
 - Please request review from the PySide6 UI maintainers (package `src/interface_grafica`).
+
+Follow-up changes:
+- `src/transformacao/calculos_mensais_pkg/calculos_mensais.py` and `src/transformacao/calculos_anuais_pkg/calculos_anuais.py`
+  - Replace deprecated `str.concat(";")` with `str.join(";")` to remove deprecation warnings from Polars.
