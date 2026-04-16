@@ -54,7 +54,7 @@ def get_tabela_agrupada(cnpj: str, page: int = 1, page_size: int = 300):
         raise HTTPException(404, "Tabela agrupada não encontrada")
     df = pl.read_parquet(path)
     df = _enriquecer_lista_descr_compl(df, cnpj)
-    return _df_to_response(df, page, page_size)
+    return df_to_response(df, page, page_size)
 
 
 class AggregateRequest(BaseModel):
@@ -94,7 +94,7 @@ def unmerge_agrupados(req: UnmergeRequest):
     Restaura os grupos originais a partir do historico de agregacoes
     (log_agregacoes_{cnpj}.json) e recalcula a cascata de tabelas derivadas.
     """
-    cnpj = _sanitize(req.cnpj)
+    cnpj = sanitize_cnpj(req.cnpj)
     try:
         from interface_grafica.services.aggregation_service import ServicoAgregacao
         svc = ServicoAgregacao()
@@ -113,7 +113,7 @@ def get_historico_agregacoes(cnpj: str):
 
     Le log_agregacoes_{cnpj}.json e retorna como lista de eventos.
     """
-    cnpj = _sanitize(cnpj)
+    cnpj = sanitize_cnpj(cnpj)
     log_path = _pasta_produtos(cnpj) / f"log_agregacoes_{cnpj}.json"
     if not log_path.exists():
         return {"eventos": []}
