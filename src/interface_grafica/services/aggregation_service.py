@@ -410,19 +410,32 @@ class ServicoAgregacao:
             )
 
         df_rastreavel = df.with_columns(expressoes)
+
+        # Vectorized normalization of `ids_origem_agrupamento`:
+        # - Cast to List(Utf8), strip elements and drop empty entries via list.eval
+        # - Unique to remove duplicates (preserve first occurrence order)
+        # - If resulting list is empty or original is null, fallback to [id_agrupado]
+        ids_normalized_expr = (
+            pl.col("ids_origem_agrupamento")
+            .cast(pl.List(pl.Utf8), strict=False)
+            .list.eval(
+                pl.element()
+                .cast(pl.Utf8, strict=False)
+                .str.strip_chars()
+                .filter(pl.element().is_not_null() & (pl.element().str.strip_chars() != ""))
+            )
+            .list.unique()
+        )
+
+        fallback_expr = pl.concat_list([pl.col("id_agrupado").cast(pl.Utf8, strict=False)])
+
         return df_rastreavel.with_columns(
             [
-                pl.struct(["ids_origem_agrupamento", "id_agrupado"])
-                .map_elements(
-                    lambda row: cls._normalizar_lista_ids_agrupados(
-                        row.get("ids_origem_agrupamento"), row.get("id_agrupado")
-                    ),
-                    return_dtype=pl.List(pl.Utf8),
-                )
+                pl.when(pl.col("ids_origem_agrupamento").is_null())
+                .then(fallback_expr)
+                .otherwise(ids_normalized_expr)
                 .alias("ids_origem_agrupamento"),
-                pl.col("lista_itens_agrupados")
-                .cast(pl.List(pl.Utf8), strict=False)
-                .alias("lista_itens_agrupados"),
+                pl.col("lista_itens_agrupados").cast(pl.List(pl.Utf8), strict=False).alias("lista_itens_agrupados"),
             ]
         )
 
