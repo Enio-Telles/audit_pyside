@@ -3,7 +3,7 @@ import time
 
 def map_approach(df_base, desc_norms):
     for i in range(100):
-        _ = df_base.filter(pl.col("descricao").map_elements(lambda x: x.upper(), return_dtype=pl.String).is_in(desc_norms))
+        _ = df_base.filter(pl.col("descricao").str.to_uppercase().is_in(desc_norms))
 
 def col_approach(df_base, desc_norms):
     df_base = df_base.with_columns(pl.col("descricao").str.to_uppercase().alias("descricao_upper"))
