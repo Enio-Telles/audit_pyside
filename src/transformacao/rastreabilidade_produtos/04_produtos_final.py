@@ -2,12 +2,13 @@
 04_produtos_final.py
 
 Objetivo: inicializar a camada de agrupamento manual e gerar a tabela final
-de produtos recalculavel a partir de descricao_produtos.
+de produtos recalculável a partir de descricao_produtos.
 
-Heuristica de agrupamento automatico (vetorizada):
-1. GTIN comum entre produtos -> mesmo id_agrupado
-2. descricao_normalizada igual com intersecao de NCM -> mesmo id_agrupado
-3. Fallback: descricao_normalizada igual sem NCM -> mesmo id_agrupado
+Abordagem canônica:
+1. agrupamento automático por descricao_normalizada;
+2. persistência de de-para manual por id_descricao -> id_agrupado;
+3. tabela ponte materializada por codigo_fonte, com fallback por descricao
+    apenas quando a origem não fornecer codigo_fonte.
 
 Saidas:
 - produtos_agrupados_<cnpj>.parquet   (tabela mestre / MDM)
@@ -70,6 +71,59 @@ def _limpar_lista_expr(col_nome: str) -> pl.Expr:
         )
         .list.unique()
         .list.sort()
+    )
+
+
+def _agrupar_lista_scalar(col_nome: str, alias: str) -> pl.Expr:
+    return (
+        pl.col(col_nome)
+        .cast(pl.Utf8, strict=False)
+        .str.strip_chars()
+        .drop_nulls()
+        .filter(pl.col(col_nome).cast(pl.Utf8, strict=False).str.strip_chars() != "")
+        .unique()
+        .sort()
+        .alias(alias)
+    )
+
+
+def _agrupar_lista_lista(col_nome: str, alias: str) -> pl.Expr:
+    return (
+        pl.col(col_nome)
+        .explode()
+        .cast(pl.Utf8, strict=False)
+        .str.strip_chars()
+        .drop_nulls()
+        .unique()
+        .sort()
+        .alias(alias)
+    )
+
+
+def _construir_tabela_ponte(df_descricoes: pl.DataFrame) -> pl.DataFrame:
+    if "lista_codigo_fonte" not in df_descricoes.columns:
+        return (
+            df_descricoes
+            .select([
+                pl.col("id_descricao").alias("chave_produto"),
+                "id_agrupado",
+                pl.lit(None, dtype=pl.Utf8).alias("codigo_fonte"),
+                "descricao_normalizada",
+            ])
+            .unique()
+        )
+
+    return (
+        df_descricoes
+        .select([
+            pl.col("id_descricao").alias("chave_produto"),
+            "id_agrupado",
+            "descricao_normalizada",
+            pl.col("lista_codigo_fonte").alias("codigo_fonte"),
+        ])
+        .explode("codigo_fonte")
+        .with_columns(pl.col("codigo_fonte").cast(pl.Utf8, strict=False))
+        .unique()
     )
 
 
@@ -171,12 +225,12 @@ def produtos_agrupados(cnpj: str, pasta_cnpj: Path | None = None, versao: int = 
         return False
 
     for col in ["lista_unid", "fontes", "lista_co_sefin", "lista_id_item_unid", "lista_id_item",
-                  "lista_ncm", "lista_cest", "lista_gtin", "lista_desc_compl"]:
+                  "lista_ncm", "lista_cest", "lista_gtin", "lista_desc_compl", "lista_codigo_fonte"]:
         if col not in df_descricoes.columns:
             df_descricoes = df_descricoes.with_columns(pl.lit([]).cast(pl.List(pl.String)).alias(col))
 
     # Cast any List(Null) columns to List(String)
-    _list_str_cols = ["lista_ncm", "lista_cest", "lista_gtin", "lista_unid", "lista_co_sefin", "lista_desc_compl"]
+    _list_str_cols = ["lista_ncm", "lista_cest", "lista_gtin", "lista_unid", "lista_co_sefin", "lista_desc_compl", "lista_codigo_fonte"]
     df_descricoes = df_descricoes.with_columns([
         pl.col(c).cast(pl.List(pl.String), strict=False)
         for c in _list_str_cols
@@ -238,66 +292,29 @@ def produtos_agrupados(cnpj: str, pasta_cnpj: Path | None = None, versao: int = 
     # ===========================================================================
     # Construir tabela mestre
     # ===========================================================================
-    df_mestra_base = df_descricoes.join(
-        df_padrao, on="id_agrupado", how="left"
-    )
-
-    df_mestra = df_mestra_base.with_columns([
-        pl.coalesce([pl.col("descr_padrao"), pl.col("descricao")]).alias("descr_padrao"),
-        _limpar_lista_expr("lista_ncm").alias("lista_ncm"),
-        _limpar_lista_expr("lista_cest").alias("lista_cest"),
-        _limpar_lista_expr("lista_gtin").alias("lista_gtin"),
-        _limpar_lista_expr("lista_co_sefin").alias("lista_co_sefin"),
-        _limpar_lista_expr("lista_unid").alias("lista_unidades"),
-        _limpar_lista_expr("fontes").alias("fontes"),
-
-        pl.when(pl.col("descricao").cast(pl.Utf8, strict=False).str.strip_chars() != "")
-          .then(pl.concat_list([pl.col("descricao").cast(pl.Utf8, strict=False).str.strip_chars()]))
-          .otherwise(pl.lit([], dtype=pl.List(pl.Utf8)))
-          .alias("lista_descricoes"),
-
-        _limpar_lista_expr("lista_desc_compl").alias("lista_desc_compl"),
-
-        # Rastreabilidade: IDs de origem do agrupamento automatico
-        pl.concat_str([pl.col("id_agrupado")]).cast(pl.List(pl.Utf8)).alias("ids_origem_agrupamento"),
-        pl.when(pl.col("descricao").cast(pl.Utf8, strict=False).str.strip_chars() != "")
-          .then(pl.concat_list([pl.col("descricao").cast(pl.Utf8, strict=False).str.strip_chars()]))
-          .otherwise(pl.lit([], dtype=pl.List(pl.Utf8)))
-          .alias("lista_itens_agrupados"),
-
-        # M3: versao do agrupamento
-        pl.lit(versao).cast(pl.Int64).alias("versao_agrupamento"),
-    ]).with_columns([
-        (pl.col("lista_co_sefin").list.len() > 1).alias("co_sefin_divergentes")
-    ])
-
-    # Agregar lista_chave_produto por id_agrupado
-    df_mestra_chaves = (
-        df_mestra
+    df_mestra = (
+        df_descricoes
         .group_by("id_agrupado")
         .agg([
-            pl.col("id_descricao").alias("lista_chave_produto"),
-            pl.col("descr_padrao").first().alias("descr_padrao"),
-            pl.col("ncm_padrao").first().alias("ncm_padrao"),
-            pl.col("cest_padrao").first().alias("cest_padrao"),
-            pl.col("gtin_padrao").first().alias("gtin_padrao"),
-            pl.col("lista_ncm").first().alias("lista_ncm"),
-            pl.col("lista_cest").first().alias("lista_cest"),
-            pl.col("lista_gtin").first().alias("lista_gtin"),
-            pl.col("lista_descricoes").first().alias("lista_descricoes"),
-            pl.col("lista_desc_compl").first().alias("lista_desc_compl"),
-            pl.col("lista_co_sefin").first().alias("lista_co_sefin"),
-            pl.col("co_sefin_padrao").first().alias("co_sefin_padrao"),
-            pl.col("lista_unidades").first().alias("lista_unidades"),
-            pl.col("co_sefin_divergentes").first().alias("co_sefin_divergentes"),
-            pl.col("fontes").first().alias("fontes"),
-            pl.col("ids_origem_agrupamento").first().alias("ids_origem_agrupamento"),
-            pl.col("lista_itens_agrupados").first().alias("lista_itens_agrupados"),
-            pl.col("versao_agrupamento").first().alias("versao_agrupamento"),
+            pl.col("id_descricao").drop_nulls().unique().sort().alias("lista_chave_produto"),
+            _agrupar_lista_scalar("descricao", "lista_descricoes"),
+            _agrupar_lista_scalar("descricao", "lista_itens_agrupados"),
+            _agrupar_lista_lista("lista_desc_compl", "lista_desc_compl"),
+            _agrupar_lista_lista("lista_ncm", "lista_ncm"),
+            _agrupar_lista_lista("lista_cest", "lista_cest"),
+            _agrupar_lista_lista("lista_gtin", "lista_gtin"),
+            _agrupar_lista_lista("lista_co_sefin", "lista_co_sefin"),
+            _agrupar_lista_lista("lista_unid", "lista_unidades"),
+            _agrupar_lista_lista("fontes", "fontes"),
+            pl.col("id_descricao").drop_nulls().unique().sort().alias("ids_origem_agrupamento"),
         ])
-    )
-
-    df_mestra = df_mestra_chaves.select([
+        .join(df_padrao, on="id_agrupado", how="left")
+        .with_columns([
+            pl.coalesce([pl.col("descr_padrao"), pl.col("lista_descricoes").list.first()]).alias("descr_padrao"),
+            pl.lit(versao).cast(pl.Int64).alias("versao_agrupamento"),
+            (pl.col("lista_co_sefin").list.len() > 1).alias("co_sefin_divergentes"),
+        ])
+        .select([
         pl.col("id_agrupado").cast(pl.String),
         pl.col("lista_chave_produto").cast(pl.List(pl.String)),
         pl.col("descr_padrao").cast(pl.String),
@@ -317,39 +334,13 @@ def produtos_agrupados(cnpj: str, pasta_cnpj: Path | None = None, versao: int = 
         pl.col("ids_origem_agrupamento").cast(pl.List(pl.String)),
         pl.col("lista_itens_agrupados").cast(pl.List(pl.String)),
         pl.col("versao_agrupamento").cast(pl.Int64),
-    ])
+        ])
+    )
 
     # ===========================================================================
     # R3: Tabela ponte expandida (codigo_fonte + descricao_normalizada)
     # ===========================================================================
-    df_ponte_agregacao = (
-        df_descricoes
-        .filter(pl.col("id_descricao").is_not_null())
-        .select([
-            pl.col("id_descricao").alias("chave_produto"),
-            "id_agrupado",
-            "descricao_normalizada",
-        ])
-    )
-
-    # Tentar incluir codigo_fonte se disponivel em item_unidades
-    if "codigo_fonte" in df_item_unid.columns:
-        df_cf = df_item_unid.select(["descricao", "codigo_fonte"]).unique(subset=["descricao"])
-        df_ponte_agregacao = df_ponte_agregacao.join(
-            df_cf.rename({"descricao": "descr_ref"}),
-            left_on="descricao_normalizada",
-            right_on=df_cf.select(pl.col("descr_ref").cast(pl.Utf8, strict=False).str.to_uppercase().str.replace_all(r"\s+", " ").alias("descricao_normalizada_tmp")).get_column("descricao_normalizada_tmp"),
-            how="left"
-        )
-        # Simplificacao: incluir codigo_fonte via join por descricao_normalizada
-        df_cf_norm = df_item_unid.with_columns(
-            pl.col("descricao").cast(pl.Utf8, strict=False).str.to_uppercase().str.replace_all(r"\s+", " ").alias("__dn__")
-        ).select([pl.col("__dn__").alias("descricao_normalizada"), "codigo_fonte"]).unique(subset=["descricao_normalizada"])
-        df_ponte_agregacao = df_ponte_agregacao.join(df_cf_norm, on="descricao_normalizada", how="left")
-    else:
-        df_ponte_agregacao = df_ponte_agregacao.with_columns(pl.lit(None, dtype=pl.Utf8).alias("codigo_fonte"))
-
-    df_ponte_agregacao = df_ponte_agregacao.select([
+    df_ponte_agregacao = _construir_tabela_ponte(df_descricoes).select([
         pl.col("chave_produto").cast(pl.String),
         pl.col("id_agrupado").cast(pl.String),
         pl.col("codigo_fonte").cast(pl.String),

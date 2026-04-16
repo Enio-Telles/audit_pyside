@@ -123,6 +123,7 @@ def descricao_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         "co_sefin_item",
         "gtin",
         "unid",
+        "lista_codigo_fonte",
         "fontes",
     ]
     colunas_item_unid = [col for col in required_item_cols if col in schema_item_unid]
@@ -135,7 +136,7 @@ def descricao_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
 
     for col in required_item_cols:
         if col not in df_item_unid.columns:
-            if col == "fontes":
+            if col in {"fontes", "lista_codigo_fonte"}:
                 df_item_unid = df_item_unid.with_columns(pl.lit([]).cast(pl.List(pl.String)).alias(col))
             else:
                 df_item_unid = df_item_unid.with_columns(pl.lit(None, pl.String).alias(col))
@@ -163,6 +164,7 @@ def descricao_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
                 _agg_list("co_sefin_item", "lista_co_sefin"),
                 _agg_list("gtin", "lista_gtin"),
                 _agg_list("unid", "lista_unid"),
+                pl.col("lista_codigo_fonte").explode().drop_nulls().unique().sort().alias("lista_codigo_fonte"),
                 pl.col("fontes").explode().drop_nulls().unique().sort().alias("fontes"),
                 _agg_list("id_item_unid", "lista_id_item_unid"),
             ]
@@ -185,6 +187,7 @@ def descricao_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
                 "lista_co_sefin",
                 "lista_gtin",
                 "lista_unid",
+                "lista_codigo_fonte",
                 "fontes",
                 "lista_id_item_unid",
                 "lista_id_item",

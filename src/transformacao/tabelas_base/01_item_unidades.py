@@ -157,6 +157,19 @@ def _normalizar_texto(col: str) -> pl.Expr:
     return pl.col(col).cast(pl.String, strict=False).str.strip_chars()
 
 
+def _agregar_lista_str(col: str, alias: str) -> pl.Expr:
+    return (
+        pl.col(col)
+        .cast(pl.String, strict=False)
+        .str.strip_chars()
+        .replace("", None)
+        .drop_nulls()
+        .unique()
+        .sort()
+        .alias(alias)
+    )
+
+
 def _num_expr(col: str) -> pl.Expr:
     return pl.col(col).cast(pl.Float64, strict=False).fill_null(0.0)
 
@@ -226,6 +239,7 @@ def _ler_c170(path: Path | None, cfop_mercantil: pl.DataFrame | None) -> pl.Data
                 _normalizar_texto("cest").alias("cest") if "cest" in df.columns else pl.lit(None, pl.String).alias("cest"),
                 _normalizar_texto("cod_barra").alias("gtin") if "cod_barra" in df.columns else pl.lit(None, pl.String).alias("gtin"),
                 _normalizar_texto("unid").alias("unid") if "unid" in df.columns else pl.lit(None, pl.String).alias("unid"),
+                _normalizar_texto("codigo_fonte").alias("codigo_fonte") if "codigo_fonte" in df.columns else pl.lit(None, pl.String).alias("codigo_fonte"),
                 pl.when(
                     (pl.col("ind_oper").cast(pl.String) == "0")
                     & (
@@ -247,7 +261,7 @@ def _ler_c170(path: Path | None, cfop_mercantil: pl.DataFrame | None) -> pl.Data
                 pl.lit("c170").alias("fonte"),
             ]
         )
-        .select(["codigo", "descricao", "descr_compl", "tipo_item", "ncm", "cest", "gtin", "unid", "compras", "qtd_compras", "vendas", "qtd_vendas", "fonte"])
+        .select(["codigo", "descricao", "descr_compl", "tipo_item", "ncm", "cest", "gtin", "unid", "codigo_fonte", "compras", "qtd_compras", "vendas", "qtd_vendas", "fonte"])
     )
 
 
@@ -277,6 +291,8 @@ def _ler_bloco_h(path: Path | None) -> pl.DataFrame | None:
         return None
 
     selecionar = [c for c in [col_codigo, col_desc, col_descr_compl, col_tipo, col_ncm, col_cest, col_gtin, col_unid] if c is not None]
+    if "codigo_fonte" in schema:
+        selecionar.append("codigo_fonte")
     df = pl.scan_parquet(path).select(selecionar).collect()
     if df.is_empty():
         return None
@@ -299,7 +315,7 @@ def _ler_bloco_h(path: Path | None) -> pl.DataFrame | None:
                 pl.lit("bloco_h").alias("fonte"),
             ]
         )
-        .select(["codigo", "descricao", "descr_compl", "tipo_item", "ncm", "cest", "gtin", "unid", "compras", "qtd_compras", "vendas", "qtd_vendas", "fonte"])
+        .select(["codigo", "descricao", "descr_compl", "tipo_item", "ncm", "cest", "gtin", "unid", "codigo_fonte", "compras", "qtd_compras", "vendas", "qtd_vendas", "fonte"])
     )
 
 
@@ -316,6 +332,7 @@ def _ler_nfe_ou_nfce(path: Path | None, cnpj: str, nome_fonte: str, cfop_mercant
     selecionar = [
         c
         for c in [
+            "codigo_fonte",
             "co_emitente",
             col_tp,
             "prod_cprod",
@@ -388,6 +405,7 @@ def _ler_nfe_ou_nfce(path: Path | None, cnpj: str, nome_fonte: str, cfop_mercant
             [
                 _normalizar_texto("prod_cprod").alias("codigo") if "prod_cprod" in df.columns else pl.lit(None, pl.String).alias("codigo"),
                 _normalizar_texto("prod_xprod").alias("descricao") if "prod_xprod" in df.columns else pl.lit(None, pl.String).alias("descricao"),
+                _normalizar_texto("codigo_fonte").alias("codigo_fonte") if "codigo_fonte" in df.columns else pl.lit(None, pl.String).alias("codigo_fonte"),
                 pl.lit(None, pl.String).alias("descr_compl"),
                 pl.lit(None, pl.String).alias("tipo_item"),
                 _normalizar_texto("prod_ncm").alias("ncm") if "prod_ncm" in df.columns else pl.lit(None, pl.String).alias("ncm"),
@@ -464,7 +482,7 @@ def item_unidades(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         return False
 
     df_total = pl.concat(fragmentos, how="diagonal_relaxed")
-    df_total = _garantir_colunas(df_total, ["codigo", "descricao", "descr_compl", "tipo_item", "ncm", "cest", "gtin", "unid"])
+    df_total = _garantir_colunas(df_total, ["codigo", "descricao", "descr_compl", "tipo_item", "ncm", "cest", "gtin", "unid", "codigo_fonte"])
 
     chaves_agrupamento = ["codigo", "descricao", "descr_compl", "tipo_item", "ncm", "cest", "gtin", "unid"]
 
@@ -477,6 +495,7 @@ def item_unidades(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
                 pl.col("qtd_compras").fill_null(0).sum().alias("qtd_compras"),
                 pl.col("vendas").fill_null(0).sum().alias("vendas"),
                 pl.col("qtd_vendas").fill_null(0).sum().alias("qtd_vendas"),
+                _agregar_lista_str("codigo_fonte", "lista_codigo_fonte"),
                 pl.col("fonte").drop_nulls().unique().sort().alias("fontes"),
             ]
         )
@@ -505,6 +524,7 @@ def item_unidades(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
             "qtd_compras",
             "vendas",
             "qtd_vendas",
+            "lista_codigo_fonte",
             "fontes",
         ]
     )
