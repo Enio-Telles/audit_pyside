@@ -52,6 +52,7 @@ def _registar(id: str, funcao_path: str, deps: list[str] | None = None) -> None:
 
 # Ordem lógica: dependencias criticas explícitas
 _registar("tb_documentos",       "transformacao.tabela_documentos:gerar_tabela_documentos")
+_registar("efd_atomizacao",      "transformacao.efd_atomizacao:gerar_efd_atomizacao")
 _registar("item_unidades",       "transformacao.item_unidades:gerar_item_unidades",       deps=["tb_documentos"])
 _registar("itens",               "transformacao.itens:gerar_itens",                       deps=["item_unidades"])
 _registar("descricao_produtos",  "transformacao.descricao_produtos:gerar_descricao_produtos", deps=["itens"])

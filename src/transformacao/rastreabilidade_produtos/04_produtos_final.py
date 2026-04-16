@@ -251,17 +251,19 @@ def produtos_agrupados(cnpj: str, pasta_cnpj: Path | None = None, versao: int = 
         _limpar_lista_expr("lista_unid").alias("lista_unidades"),
         _limpar_lista_expr("fontes").alias("fontes"),
 
-        pl.col("descricao").cast(pl.Utf8, strict=False).str.strip_chars()
-          .filter(pl.col("descricao").cast(pl.Utf8, strict=False).str.strip_chars() != "")
-          .map_elements(lambda x: [x] if x else [], return_dtype=pl.List(pl.Utf8)).alias("lista_descricoes"),
+        pl.when(pl.col("descricao").cast(pl.Utf8, strict=False).str.strip_chars() != "")
+          .then(pl.concat_list([pl.col("descricao").cast(pl.Utf8, strict=False).str.strip_chars()]))
+          .otherwise(pl.lit([], dtype=pl.List(pl.Utf8)))
+          .alias("lista_descricoes"),
 
         _limpar_lista_expr("lista_desc_compl").alias("lista_desc_compl"),
 
         # Rastreabilidade: IDs de origem do agrupamento automatico
         pl.concat_str([pl.col("id_agrupado")]).cast(pl.List(pl.Utf8)).alias("ids_origem_agrupamento"),
-        pl.col("descricao").cast(pl.Utf8, strict=False).str.strip_chars()
-          .filter(pl.col("descricao").cast(pl.Utf8, strict=False).str.strip_chars() != "")
-          .map_elements(lambda x: [x] if x else [], return_dtype=pl.List(pl.Utf8)).alias("lista_itens_agrupados"),
+        pl.when(pl.col("descricao").cast(pl.Utf8, strict=False).str.strip_chars() != "")
+          .then(pl.concat_list([pl.col("descricao").cast(pl.Utf8, strict=False).str.strip_chars()]))
+          .otherwise(pl.lit([], dtype=pl.List(pl.Utf8)))
+          .alias("lista_itens_agrupados"),
 
         # M3: versao do agrupamento
         pl.lit(versao).cast(pl.Int64).alias("versao_agrupamento"),

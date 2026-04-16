@@ -1,0 +1,1247 @@
+Relatório de revisão de logs
+Gerado em: 2026-04-15T14:05:06.153159Z
+Raiz escaneada: C:\funcoes - Copia
+Arquivos escaneados: 671
+Arquivos com ocorrências: 72
+
+1) .env
+  - Linha 42 | keyword=ERROR
+    # ====================
+    
+    # Log Level (DEBUG, INFO, WARNING, ERROR)
+    LOG_LEVEL=INFO
+
+2) .gitignore
+  - Linha 10 | keyword=CRITICAL
+    ENV/
+    
+    # Data (CRITICAL: Private tax data)
+    CNPJ/
+    **/CNPJ/
+
+3) AGENTS.md
+  - Linha 160 | keyword=Exception
+    - **CORS** liberado para `localhost:5173` (Vite dev) e `localhost:3000`.
+    - Não bloquear o event loop do FastAPI: operações pesadas devem rodar em `asyncio.to_thread` ou `BackgroundTasks`.
+    - Erros devem retornar `HTTPException` com código e detalhe legíveis.
+    - Nunca expor stack traces ou credenciais em respostas de produção.
+
+4) app_react.py
+  - Linha 267 | keyword=Exception
+                try:
+                    p.terminate()
+                except Exception:
+                    _print("Aviso: Erro não crítico ao terminar processo.", color="yellow")
+            time.sleep(1)
+
+  - Linha 274 | keyword=Exception
+                    if p.poll() is None:
+                        p.kill()
+                except Exception:
+                    _print("Aviso: Erro não crítico ao forçar encerramento do processo.", color="yellow")
+            sys.exit(0)
+
+  - Linha 343 | keyword=Exception
+            try:
+                proc.terminate()
+            except Exception:
+                _print("Aviso: Erro não crítico ao terminar processo.", color="yellow")
+            sys.exit(0)
+
+  - Linha 432 | keyword=Exception
+                try:
+                    processo.terminate()
+                except Exception:
+                    _print("Aviso: Erro não crítico ao terminar processo.", color="yellow")
+            time.sleep(1)
+
+  - Linha 439 | keyword=Exception
+                    if processo.poll() is None:
+                        processo.kill()
+                except Exception:
+                    _print("Aviso: Erro não crítico ao forçar encerramento do processo.", color="yellow")
+            sys.exit(0)
+
+5) plano_otimizacao_q.md
+  - Linha 145 | keyword=Exception
+    import math
+    from pathlib import Path
+    from fastapi import HTTPException
+    
+    def sanitize_cnpj(cnpj: str) -> str:
+
+  - Linha 150 | keyword=Exception
+        limpo = re.sub(r"\D", "", cnpj)
+        if len(limpo) != 14:
+            raise HTTPException(status_code=400, detail=f"CNPJ inválido: {cnpj}")
+        return limpo
+
+  - Linha 487 | keyword=Exception
+    **Solução:**
+    ```python
+    @app.exception_handler(Exception)
+    async def global_exception_handler(request, exc):
+        logger.error(f"Erro não tratado: {exc}", exc_info=True)
+
+6) pr_desc.txt
+  - Linha 8 | keyword=Exception
+    2. **Reuse:** Ensures that sequential calls on the same thread reuse the cached connection, averting redundant connection constructions.
+    3. **Thread Isolation:** Confirms that individual threads manage their distinct connection instances, effectively avoiding race conditions and connection crosstalk.
+    4. **Closing (Happy path & Exception handling):** Verifies that `close_thread_connection` efficiently terminates active connections and handles scenarios where connection close raises exceptions gracefully or no connection was established to begin with.
+    
+    ✨ **Result:** The improvement in test coverage
+
+7) pytest_collect.log
+  - Linha 223 | keyword=ERROR
+              <Function test_desc_similarity_one_empty>
+    
+    =================================== ERRORS ====================================
+    _ ERROR collecting tests/transformacao/movimentacao_estoque_pkg/test_mapeamento_fontes.py _
+    import file mismatch:
+
+  - Linha 224 | keyword=ERROR
+    
+    =================================== ERRORS ====================================
+    _ ERROR collecting tests/transformacao/movimentacao_estoque_pkg/test_mapeamento_fontes.py _
+    import file mismatch:
+    imported module 'test_mapeamento_fontes' has this __file__ attribute:
+
+  - Linha 267 | keyword=ERROR
+    -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+    =========================== short test summary info ===========================
+    ERROR tests/transformacao/movimentacao_estoque_pkg/test_mapeamento_fontes.py
+    !!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+    ==================== 172 tests collected, 1 error in 7.95s ====================
+
+8) test_polars2.py
+  - Linha 6 | keyword=Exception
+        d = df.partition_by("a", as_dict=True)
+        print(d[("x",)])
+    except Exception as e:
+        print(e)
+
+9) test_polars4.py
+  - Linha 6 | keyword=Exception
+        d = df.partition_by("a", as_dict=True)
+        print(d)
+    except Exception as e:
+        print(e)
+
+10) tmp_import_main_window.py
+  - Linha 6 | keyword=Exception
+        from interface_grafica.ui.main_window import MainWindow
+        print('Imported MainWindow')
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+
+11) tmp_import_test.py
+  - Linha 6 | keyword=Exception
+        import transformacao.calculos_mensais_pkg.calculos_mensais as m
+        print('OK')
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+
+12) traceback.txt
+  - Linha 1 | keyword=Traceback (most recent call last)
+    Traceback (most recent call last):
+      File "C:\funcoes - Copia\src\transformacao\calculos_anuais.py", line 242, in <module>
+        gerar_calculos_anuais(sys.argv[1])
+
+13) backend\routers\aggregation.py
+  - Linha 6 | keyword=Exception
+    
+    import polars as pl
+    from fastapi import APIRouter, HTTPException
+    from pydantic import BaseModel
+
+  - Linha 39 | keyword=Exception
+                pl.col("lista_descr_compl").fill_null([]).cast(pl.List(pl.String))
+            )
+        except Exception:
+            pass
+        return df
+
+  - Linha 54 | keyword=Exception
+        path = next((p for p in candidates if p.exists()), None)
+        if path is None:
+            raise HTTPException(404, "Tabela agrupada não encontrada")
+        df = pl.read_parquet(path)
+        df = _enriquecer_lista_descr_compl(df, cnpj)
+
+  - Linha 79 | keyword=Exception
+            return {"ok": True, "resultado": resultado}
+        except ValueError as exc:
+            raise HTTPException(400, "Parâmetros inválidos para agregação.") from exc
+        except Exception as exc:
+            raise HTTPException(500, "Erro interno ao processar agregação.") from exc
+
+  - Linha 80 | keyword=Exception
+        except ValueError as exc:
+            raise HTTPException(400, "Parâmetros inválidos para agregação.") from exc
+        except Exception as exc:
+            raise HTTPException(500, "Erro interno ao processar agregação.") from exc
+
+14) backend\routers\cnpj.py
+  - Linha 10 | keyword=Exception
+    import polars as pl
+    from dotenv import dotenv_values
+    from fastapi import APIRouter, HTTPException, Request
+    from pydantic import BaseModel, field_validator
+
+  - Linha 74 | keyword=Exception
+            registro = df.row(0, named=True)
+            return _extrair_nome_fantasia_de_registro(registro)
+        except Exception:
+            return None
+
+  - Linha 87 | keyword=Exception
+        except UnicodeDecodeError:
+            return SQL_DADOS_CADASTRAIS.read_text(encoding="latin-1").strip().rstrip(";")
+        except Exception as exc:
+            logger.warning("Erro ao ler SQL cadastral %s: %s", SQL_DADOS_CADASTRAIS, exc)
+            return None
+
+  - Linha 154 | keyword=Exception
+            dsn = oracledb.makedsn(host, int(porta or "1521"), service_name=servico)
+            conexao = oracledb.connect(user=usuario, password=senha, dsn=dsn)
+        except Exception as exc:
+            logger.warning("Não foi possível conectar ao Oracle para %s: %s", cnpj, exc)
+            return None
+
+  - Linha 181 | keyword=Exception
+                        dados[coluna] = str(valor)
+                return dados
+        except Exception as exc:
+            logger.warning("Erro ao consultar dados cadastrais no Oracle para %s: %s", cnpj, exc)
+            return None
+
+15) backend\routers\estoque.py
+  - Linha 7 | keyword=Exception
+    
+    import polars as pl
+    from fastapi import APIRouter, HTTPException
+    from filelock import FileLock, Timeout
+    from pydantic import BaseModel
+
+  - Linha 73 | keyword=Exception
+                yield
+        except Timeout as exc:
+            raise HTTPException(423, "Arquivo de fatores de conversão está em uso") from exc
+    
+
+  - Linha 301 | keyword=Exception
+        with _fatores_conversao_lock(path):
+            if not path.exists():
+                raise HTTPException(404, "fatores_conversao não encontrado")
+    
+            df = pl.read_parquet(path)
+
+  - Linha 322 | keyword=Exception
+        with _fatores_conversao_lock(path):
+            if not path.exists():
+                raise HTTPException(404, "fatores_conversao não encontrado")
+    
+            df = pl.read_parquet(path)
+
+16) backend\routers\fisconforme.py
+  - Linha 23 | keyword=Exception
+    
+    import polars as pl
+    from fastapi import APIRouter, HTTPException
+    from pydantic import BaseModel
+    from starlette.responses import StreamingResponse
+
+  - Linha 127 | keyword=Exception
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            logger.warning("Erro ao ler JSON %s: %s", path, exc)
+            return default
+
+  - Linha 201 | keyword=Exception
+            if str(item.get("id", "")) == dsf_id:
+                return item
+        raise HTTPException(404, f"DSF não encontrada: {dsf_id}")
+    
+
+  - Linha 218 | keyword=Exception
+        try:
+            dsf = _obter_dsf_por_id(dsf_id)
+        except HTTPException:
+            return ""
+        return str(dsf.get("output_dir", "") or "").strip()
+
+  - Linha 245 | keyword=Exception
+            row = df.row(0, named=True)
+            return {k: ("" if v is None else str(v) if not isinstance(v, str) else v) for k, v in row.items()}
+        except Exception as exc:
+            logger.warning("Erro ao ler cache cadastral %s: %s", cnpj, exc)
+            return None
+
+17) backend\routers\oracle.py
+  - Linha 17 | keyword=Exception
+    from time import perf_counter
+    
+    from fastapi import APIRouter, HTTPException
+    from pydantic import BaseModel
+
+  - Linha 159 | keyword=Exception
+        except ImportError:
+            return {"ok": False, "message": "oracledb não instalado.", "tempo_ms": 0}
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("Erro ao testar conexao Oracle")
+            tempo_ms = int((perf_counter() - t0) * 1000)
+
+  - Linha 196 | keyword=Exception
+            _ENV_PATH.write_text(conteudo.strip() + "\n", encoding="utf-8")
+            return {"ok": True}
+        except Exception as exc:
+            raise HTTPException(500, "Erro interno ao salvar as configurações.") from exc
+
+  - Linha 197 | keyword=Exception
+            return {"ok": True}
+        except Exception as exc:
+            raise HTTPException(500, "Erro interno ao salvar as configurações.") from exc
+    
+
+  - Linha 207 | keyword=Exception
+        """
+        if slot not in (1, 2):
+            raise HTTPException(400, "slot deve ser 1 ou 2")
+        env = _read_env()
+        suffix = "" if slot == 1 else "_1"
+
+18) backend\routers\parquet.py
+  - Linha 7 | keyword=Exception
+    from typing import Any
+    
+    from fastapi import APIRouter, HTTPException, Query
+    from pydantic import BaseModel
+
+  - Linha 39 | keyword=Exception
+            if not p.is_relative_to(CNPJ_ROOT.resolve()):
+                raise ValueError()
+        except Exception:
+            raise HTTPException(400, "Caminho inválido ou acesso negado")
+        if not p.exists():
+
+  - Linha 40 | keyword=Exception
+                raise ValueError()
+        except Exception:
+            raise HTTPException(400, "Caminho inválido ou acesso negado")
+        if not p.exists():
+            raise HTTPException(404, "Arquivo nao encontrado")
+
+  - Linha 42 | keyword=Exception
+            raise HTTPException(400, "Caminho inválido ou acesso negado")
+        if not p.exists():
+            raise HTTPException(404, "Arquivo nao encontrado")
+        svc = ParquetService(CNPJ_ROOT)
+        conditions = [
+
+19) backend\routers\pipeline.py
+  - Linha 7 | keyword=Exception
+    from pathlib import Path
+    
+    from fastapi import APIRouter, BackgroundTasks, HTTPException
+    from pydantic import BaseModel
+
+  - Linha 213 | keyword=Exception
+                    item_atual=_pipeline_status[cnpj].get("item_atual"),
+                )
+        except Exception as exc:
+            logger.exception("Erro interno durante execução do pipeline para CNPJ %s", cnpj)
+            atual = _pipeline_status.get(cnpj, _criar_status("error", total_etapas=total_etapas))
+
+  - Linha 231 | keyword=Exception
+        cnpj = _sanitize(req.cnpj)
+        if not cnpj:
+            raise HTTPException(400, "CNPJ invalido")
+        if _pipeline_status.get(cnpj, {}).get("status") == "running":
+            raise HTTPException(409, "Pipeline ja em execucao para este CNPJ")
+
+  - Linha 233 | keyword=Exception
+            raise HTTPException(400, "CNPJ invalido")
+        if _pipeline_status.get(cnpj, {}).get("status") == "running":
+            raise HTTPException(409, "Pipeline ja em execucao para este CNPJ")
+    
+        incluir_extracao = req.incluir_extracao
+
+  - Linha 255 | keyword=Exception
+        tabelas = _resolver_tabelas(req_normalizado)
+        if not consultas and not tabelas:
+            raise HTTPException(400, "Nenhuma etapa do pipeline foi selecionada")
+    
+        try:
+
+20) backend\routers\sql_query.py
+  - Linha 8 | keyword=Exception
+    from typing import Any
+    
+    from fastapi import APIRouter, HTTPException, Query
+    from pydantic import BaseModel
+
+  - Linha 51 | keyword=Exception
+            rows = [_safe_value(dict(row)) for row in (result or [])]
+            return {"rows": rows, "count": len(rows)}
+        except Exception as exc:
+            raise HTTPException(500, "Erro interno ao executar SQL.") from exc
+
+  - Linha 52 | keyword=Exception
+            return {"rows": rows, "count": len(rows)}
+        except Exception as exc:
+            raise HTTPException(500, "Erro interno ao executar SQL.") from exc
+    
+
+  - Linha 59 | keyword=Exception
+        sql_id = normalize_sql_id(path)
+        if sql_id is None:
+            raise HTTPException(400, "Caminho invalido ou SQL fora do catalogo")
+    
+        try:
+
+  - Linha 64 | keyword=Exception
+            return {"content": SqlService.read_sql(sql_id)}
+        except FileNotFoundError as exc:
+            raise HTTPException(404, "Arquivo SQL não encontrado.") from exc
+        except Exception as exc:
+            raise HTTPException(500, "Erro interno ao ler arquivo SQL.") from exc
+
+21) backend\routers\validadores.py
+  - Linha 6 | keyword=Exception
+    
+    from functools import wraps
+    from fastapi import HTTPException
+    from routers._common import validar_cnpj
+
+22) backend\routers\_common.py
+  - Linha 17 | keyword=Exception
+    
+    import polars as pl
+    from fastapi import HTTPException
+    
+
+  - Linha 118 | keyword=Exception
+        
+        Raises:
+            HTTPException: Se CNPJ for inválido
+        """
+        sanitized = sanitize_cnpj(cnpj)
+
+  - Linha 122 | keyword=Exception
+        sanitized = sanitize_cnpj(cnpj)
+        if not sanitized or len(sanitized) not in (14, 8):
+            raise HTTPException(
+                status_code=400,
+                detail=f"CNPJ inválido: '{cnpj}'. Deve ter 14 dígitos (CNPJ completo) ou 8 (raiz)."
+
+23) plan\feature-auditor-dsf-preview-1.md
+  - Linha 55 | keyword=Exception
+    | TASK-003 | Na `__init__` de `AuditorPage`, após o bloco `layout.addWidget(dsf_card)`, criar um novo `SectionCard("Prévia do PDF da DSF")` contendo: (a) um `QScrollArea` com política `ScrollBarAsNeeded`; (b) um `QWidget` container interno com `QVBoxLayout` para empilhar as páginas; (c) altura mínima de 240 px; (d) visibilidade inicial `setVisible(False)`. Armazenar referências: `self._preview_scroll`, `self._preview_container`, `self._preview_layout`. | | |
+    | TASK-004 | Na `__init__` de `AuditorPage`, no bloco `dsf_card` (logo após a linha `btn_pdf.clicked.connect(self._select_pdf)`), adicionar um `QCheckBox("Incluir imagens da DSF na notificação")` pré-marcado (`setChecked(True)`). Armazenar como `self.chk_incluir_dsf`. | | |
+    | TASK-005 | Criar método privado `_renderizar_preview_pdf(self, caminho_pdf: Path)` em `AuditorPage`. O método deve: (a) limpar widgets existentes em `self._preview_layout`; (b) abrir `fitz.open(str(caminho_pdf))`; (c) para cada página (limite de 20), chamar `page.get_pixmap(matrix=fitz.Matrix(72/72, 72/72))`, converter para QPixmap via `QImage.fromData(pix.tobytes('png'))`, criar `QLabel` com `setPixmap(scaled_pixmap.scaledToWidth(780, Qt.SmoothTransformation))`; (d) adicionar o QLabel ao `self._preview_layout`; (e) tornar `self._preview_scroll.parentWidget()` visível; (f) fechar o documento `fitz`; (g) tratar `Exception` com log e exibir mensagem no `status_banner`. | | |
+    | TASK-006 | Em `AuditorPage._select_pdf`, após `self.lbl_pdf.setText(...)`, chamar `self._renderizar_preview_pdf(self._pdf_path)`. | | |
+    | TASK-007 | Em `AuditorPage.load_state`, ao restaurar `state.pdf_dsf`, chamar `self._renderizar_preview_pdf(state.pdf_dsf)` se o arquivo existir. Restaurar `self.chk_incluir_dsf.setChecked(state.incluir_imagens_dsf)`. | | |
+
+24) scripts\mapeamento_sql_pdf.py
+  - Linha 51 | keyword=Exception
+                            # podemos considerar schema padrão vazio, ou não processar.
+                            pass
+            except Exception as e:
+                # Fallback regex para arquivos que sqlglot eventualmente não conseguir ler
+                # Encontra "schema.tabela"
+
+  - Linha 105 | keyword=Exception
+                    for row in cursor:
+                        tables.append((row[0], row[1]))
+        except Exception as e:
+            log_info(f"Aviso - Não foi possível ler listagem de objetos para os schemas {schemas}: {e}")
+        
+
+  - Linha 138 | keyword=Exception
+                            "NULLABLE": row[4]
+                        })
+        except Exception as e:
+            log_info(f"Aviso - Não foi possível ler colunas para {schema_name}.{table_name}: {e}")
+        
+
+  - Linha 162 | keyword=Exception
+                            lines.append(cl)
+                corpus.append({"arquivo": filename, "linhas": lines})
+            except Exception as e:
+                log_info(f"Erro lendo PDF {filename}: {e}")
+                
+
+25) scripts\migrate_app_state_active_load_workers.py
+  - Linha 52 | keyword=Exception
+            text = path.read_text(encoding="utf-8")
+            data = json.loads(text)
+        except Exception:
+            return False
+
+  - Linha 80 | keyword=Exception
+            try:
+                ok = migrate_file(jf)
+            except Exception as e:
+                print(f"Error migrating {jf}: {e}")
+                ok = False
+
+26) scripts\review_logs.py
+  - Linha 29 | keyword=Traceback (most recent call last)
+    
+    KEYWORDS = [
+        'Traceback (most recent call last)',
+        'Traceback',
+        'Exception',
+
+  - Linha 30 | keyword=Traceback
+    KEYWORDS = [
+        'Traceback (most recent call last)',
+        'Traceback',
+        'Exception',
+        'ERROR',
+
+  - Linha 31 | keyword=Exception
+        'Traceback (most recent call last)',
+        'Traceback',
+        'Exception',
+        'ERROR',
+        'CRITICAL',
+
+  - Linha 32 | keyword=ERROR
+        'Traceback',
+        'Exception',
+        'ERROR',
+        'CRITICAL',
+        'WARNING',
+
+  - Linha 33 | keyword=CRITICAL
+        'Exception',
+        'ERROR',
+        'CRITICAL',
+        'WARNING',
+    ]
+
+27) server\python\api.py
+  - Linha 2 | keyword=Exception
+    import re
+    from fastapi import HTTPException
+    
+
+  - Linha 141 | keyword=Exception
+        cnpj_limpo = re.sub(r"\D", "", cnpj)
+        if len(cnpj_limpo) != 14:
+            raise HTTPException(status_code=400, detail="CNPJ deve conter 14 digitos")
+        return cnpj_limpo
+
+28) src\orquestrador_pipeline.py
+  - Linha 119 | keyword=Exception
+                )
+                rprint("[green]Extracao concluida.[/green]")
+            except Exception as e:
+                from transformacao.auxiliares.logs import setup_logging
+                setup_logging().error(f"Falha critica na extracao para {cnpj}", exc_info=e)
+
+  - Linha 155 | keyword=Exception
+                        etapas_executadas.add(tab_id)
+                        rprint(f"[green]{tab_id} finalizada.[/green]")
+                except Exception as e:
+                    from transformacao.auxiliares.logs import setup_logging
+                    setup_logging().error(f"Erro inesperado na etapa {tab_id}", exc_info=e)
+
+29) src\extracao\extracao_oracle_eficiente.py
+  - Linha 91 | keyword=Exception
+                caminho_resolvido.relative_to(raiz.resolve())
+                return raiz
+            except Exception:
+                continue
+        return caminho_sql.parent
+
+  - Linha 175 | keyword=Exception
+        try:
+            conexao.close()
+        except Exception:
+            pass
+        finally:
+
+  - Linha 227 | keyword=Exception
+                raise TypeError("Modo texto solicitado.")
+            df_lote = pl.DataFrame(lote, schema=colunas, orient="row")
+        except Exception:
+            colunas_dict = {
+                coluna: _normalizar_valores_coluna(
+
+  - Linha 384 | keyword=Exception
+                        rotulo_consulta=rotulo_consulta,
+                    )
+                except Exception as exc:
+                    if arquivo_saida.exists():
+                        arquivo_saida.unlink(missing_ok=True)
+
+  - Linha 416 | keyword=Exception
+                    linhas=total_linhas,
+                )
+        except Exception as exc:
+            return ResultadoConsultaExtracao(
+                consulta=consulta,
+
+30) src\extracao\extrair_dados_cnpj.py
+  - Linha 22 | keyword=Exception
+                try:
+                    thread_local.conexao.close()
+                except Exception as e:
+                    logger.warning(f"Erro ao fechar conexao de thread: {e}")
+            thread_local.conexao = None
+
+  - Linha 38 | keyword=Exception
+                cursor = conn.cursor()
+                cursor.execute("SELECT 1 FROM DUAL")
+            except Exception as e:
+                logger.error(f"[{threading.current_thread().name}] Erro ao testar conexão: {e}")
+                return None
+
+  - Linha 132 | keyword=Exception
+                return True
+    
+        except Exception as e_proc:
+            rprint(f"[red]  [PROC] Erro processando {arq_sql.name}: {e_proc}[/red]")
+            return False
+
+31) src\interface_grafica\config.py
+  - Linha 42 | keyword=Exception
+                runpy.run_path(str(script_path), run_name="__main__")
+                logger.info("app_state migration executed: %s", script_path)
+            except Exception as _e:
+                logger.exception("app_state migration failed: %s", _e)
+        else:
+
+  - Linha 46 | keyword=Exception
+        else:
+            logger.debug("No app_state migration script found at %s", script_path)
+    except Exception:
+        # Never fail initialization because migration step errors
+        pass
+
+32) src\interface_grafica\fisconforme\config_service.py
+  - Linha 50 | keyword=Exception
+                "DB_PASSWORD": env_vars.get("DB_PASSWORD", ""),
+            }
+        except Exception as e:
+            logger.warning(f"Erro ao carregar configurações de DB: {e}")
+            return {}
+
+  - Linha 87 | keyword=Exception
+            logger.info(f"Configurações de banco de dados salvas em: {env_path}")
+            return True
+        except Exception as e:
+            logger.error(f"Erro ao salvar configurações de DB: {e}")
+            return False
+
+  - Linha 122 | keyword=Exception
+    
+            return configs
+        except Exception as e:
+            logger.warning(f"Erro ao carregar configurações salvas: {e}")
+            return {}
+
+  - Linha 175 | keyword=Exception
+    
+            logger.info(f"Configuração '{nome_config_sanitizado}' salva em: {env_path}")
+        except Exception as e:
+            logger.error(f"Erro ao salvar configuração: {e}")
+
+33) src\interface_grafica\fisconforme\extracao.py
+  - Linha 146 | keyword=Exception
+            return conteudo
+        
+        except Exception as e:
+            logger.error(f"Erro ao ler arquivo SQL {caminho_sql}: {e}")
+            return None
+
+  - Linha 217 | keyword=Exception
+            return None
+        
+        except Exception as e:
+            logger.error(f"Erro ao conectar ao Oracle: {e}")
+            return None
+
+  - Linha 324 | keyword=Exception
+                return dados_normalizados
+        
+        except Exception as e:
+            logger.error(f"Erro ao extrair dados do CNPJ {cnpj_limpo}: {e}")
+            return None
+
+  - Linha 333 | keyword=Exception
+                conexao.close()
+                logger.info("ConexÃ£o com Oracle fechada")
+            except Exception as e:
+                logger.warning(f"Erro ao fechar conexÃ£o: {e}")
+
+  - Linha 368 | keyword=Exception
+                    logger.warning(f"Nenhum dado retornado para CNPJ: {cnpj_limpo}")
+            
+            except Exception as e:
+                logger.error(f"Falha na extraÃ§Ã£o do CNPJ {cnpj}: {e}")
+                # Continua para o prÃ³ximo CNPJ mesmo em caso de erro
+
+34) src\interface_grafica\fisconforme\extracao_cadastral.py
+  - Linha 63 | keyword=Exception
+            return conteudo
+            
+        except Exception as e:
+            logger.error(f"Erro ao ler SQL {caminho_sql}: {e}")
+            return None
+
+  - Linha 101 | keyword=Exception
+            return conexao
+            
+        except Exception as e:
+            logger.error(f"Erro ao conectar Oracle: {e}")
+            return None
+
+  - Linha 150 | keyword=Exception
+                return dados
+                
+        except Exception as e:
+            logger.error(f"Erro ao extrair dados cadastrais para {cnpj}: {e}")
+            return None
+
+  - Linha 200 | keyword=Exception
+            logger.info(f"Cache Parquet salvo para CNPJ {cnpj}")
+            
+        except Exception as e:
+            logger.error(f"Erro ao salvar cache Parquet para {cnpj}: {e}")
+
+  - Linha 239 | keyword=Exception
+            return dados
+            
+        except Exception as e:
+            logger.warning(f"Erro ao buscar cache Parquet para {cnpj}: {e}")
+            return None
+
+35) src\interface_grafica\fisconforme\extrator_oracle.py
+  - Linha 46 | keyword=Exception
+    try:
+        from extracao.extracao_oracle_eficiente import _gravar_cursor_em_parquet
+    except Exception:
+        _gravar_cursor_em_parquet = None
+
+  - Linha 121 | keyword=Exception
+    
+            Raises:
+                Exception: Se todas as tentativas falharem
+            """
+            for tentativa in range(1, self.MAX_TENTATIVAS + 1):
+
+  - Linha 126 | keyword=Exception
+                try:
+                    return func()
+                except Exception as e:
+                    if tentativa == self.MAX_TENTATIVAS:
+                        logger.error(
+
+  - Linha 166 | keyword=Exception
+                logger.info(f"[VALIDAÇÃO] {nome_tabela}: {n_linhas} linhas OK")
+                return True
+            except Exception as e:
+                logger.error(f"[VALIDAÇÃO] Erro ao validar {nome_tabela}: {e}")
+                return False
+
+  - Linha 225 | keyword=Exception
+                logger.info(f"[{status}] {nome_completo} → {arquivo_saida.name}")
+                return valido
+            except Exception as e:
+                logger.error(f"[ERRO] Falha ao extrair {nome_completo}: {e}")
+                return False
+
+36) src\interface_grafica\fisconforme\gerar_notificacoes.py
+  - Linha 201 | keyword=Exception
+            }
+    
+        except Exception as e:
+            logger.error(f"Erro ao analisar modelo: {e}")
+            return {'erro': str(e)}
+
+  - Linha 324 | keyword=Exception
+            return resultado
+        
+        except Exception as e:
+            resultado['erro'] = f"Erro inesperado na extração: {e}"
+            resultado['etapa_falha'] = 'extracao'
+
+  - Linha 327 | keyword=Exception
+            resultado['erro'] = f"Erro inesperado na extração: {e}"
+            resultado['etapa_falha'] = 'extracao'
+            logger.error(f"Falha na extração (Exception): {e}")
+            return resultado
+        
+
+  - Linha 344 | keyword=Exception
+                else:
+                    logger.info(f"Extraídas {len(dados_tabela)} pendências do Oracle.")
+            except Exception as e:
+                logger.error(f"Erro ao extrair pendências do Oracle: {e}")
+                dados_tabela = []
+
+  - Linha 397 | keyword=Exception
+            logger.info(f"Notificação gerada com sucesso: {caminho_arquivo}")
+    
+        except Exception as e:
+            resultado['erro'] = f"Erro ao processar notificação: {e}"
+            resultado['etapa_falha'] = 'preenchimento'
+
+37) src\interface_grafica\fisconforme\pages.py
+  - Linha 184 | keyword=Exception
+                else:
+                    self.status_banner.set_status("danger", "Falha na conexão. Revise host, usuário e senha.")
+            except Exception as exc:  # pragma: no cover - depende de ambiente
+                self.status_banner.set_status("danger", f"Erro ao testar a conexão: {exc}")
+
+  - Linha 380 | keyword=Exception
+                            self._add_cnpj(linha)
+                self.status_banner.set_status("success", f"Arquivo carregado: {arquivo.name}")
+            except Exception as exc:
+                self.status_banner.set_status("danger", f"Erro ao ler arquivo: {exc}")
+
+  - Linha 728 | keyword=Exception
+                self.input_nome_config.clear()
+                self.status_banner.set_status("success", f"Perfil '{nome}' salvo com sucesso.")
+            except Exception as exc:
+                self.status_banner.set_status("danger", f"Não foi possível salvar o perfil: {exc}")
+
+38) src\interface_grafica\fisconforme\preenchimento.py
+  - Linha 89 | keyword=Exception
+            return conteudo
+        
+        except Exception as e:
+            logger.error(f"Erro ao ler arquivo modelo {caminho_modelo}: {e}")
+            return None
+
+  - Linha 174 | keyword=Exception
+                        dados_completos['DSF_IMAGENS'] = ''
+                        logger.warning(f"Nenhuma imagem gerada para DSF {dsf_num}")
+                except Exception as e:
+                    dados_completos['DSF_IMAGENS'] = ''
+                    logger.error(f"Erro ao converter PDF da DSF {dsf_num}: {e}")
+
+  - Linha 254 | keyword=Exception
+            logger.error(f"Arquivo PDF corrompido ou inválido: {caminho_pdf} - {e}")
+            return ''
+        except Exception as e:
+            logger.error(f"Erro ao converter PDF: {caminho_pdf} - {e}")
+            return ''
+
+  - Linha 296 | keyword=Exception
+            conteudo_preenchido = preencher_modelo(conteudo_modelo, dados, dados_manuais)
+            return salvar_notificacao(conteudo_preenchido, cnpj, diretorio_saida)
+        except Exception as e:
+            logger.error(f"Erro ao processar CNPJ {cnpj}: {e}")
+            return None
+
+39) src\interface_grafica\fisconforme\processador_polars.py
+  - Linha 192 | keyword=Exception
+            print(f"[ERRO] Parquet não encontrado: {e}")
+            print("Execute o ExtratorOracle primeiro para gerar os arquivos.")
+        except Exception as e:
+            print(f"[ERRO] Falha no processamento: {e}")
+            raise
+
+40) src\interface_grafica\fisconforme\workers.py
+  - Linha 41 | keyword=Exception
+                    _CACHE_DADOS_CADASTRAIS[self.cnpj] = dados
+                self.signals.finished.emit(self.cnpj, dados)
+            except Exception as exc:  # pragma: no cover - caminho operacional
+                logger.error("Erro ao buscar dados cadastrais para %s: %s", self.cnpj, exc)
+                self.signals.finished.emit(self.cnpj, None)
+
+  - Linha 128 | keyword=Exception
+                        self.log_msg.emit(f"  ❌ Falha na etapa '{etapa}': {erro}")
+                        self.cnpj_resultado.emit(cnpj_limpo, False, detalhe)
+                except Exception as exc:  # pragma: no cover - caminho operacional
+                    resumo["falhas"] += 1
+                    self.log_msg.emit(f"  ❌ Erro inesperado: {exc}")
+
+41) src\interface_grafica\models\table_model.py
+  - Linha 135 | keyword=Exception
+                try:
+                    value = self._df[row, col]
+                except Exception:
+                    return None
+                values.append("" if value is None else str(value))
+
+  - Linha 202 | keyword=Exception
+                        return QBrush(color)
+                    return QBrush(QColor(str(color)))
+                except Exception:
+                    return None
+
+  - Linha 214 | keyword=Exception
+                        return QBrush(color)
+                    return QBrush(QColor(str(color)))
+                except Exception:
+                    return None
+
+  - Linha 221 | keyword=Exception
+                    row_data = self.row_as_dict(row)
+                    return self._font_resolver(row_data, self._df.columns[col])
+                except Exception:
+                    return None
+
+  - Linha 290 | keyword=Exception
+                    else:
+                        parsed = raw
+                except Exception:
+                    return False
+
+42) src\interface_grafica\services\aggregation_service.py
+  - Linha 139 | keyword=Exception
+                    progresso(f"[LOAD] {nome}: {path.name} | {df.height} linhas, {df.width} cols | {t1-t0:.2f}s | Mem: {meminfo()}")
+                return df
+            except Exception as exc:
+                if progresso:
+                    progresso(f"[ERRO] Falha ao ler {nome}: {exc}")
+
+  - Linha 173 | keyword=Exception
+                try:
+                    return func(cnpj, progresso)
+                except Exception as exc:
+                    if progresso:
+                        progresso(f"[ERRO] Falha ao reprocessar {nome}: {exc}")
+
+  - Linha 232 | keyword=Exception
+                    mem = proc.memory_info().rss / (1024 * 1024)
+                    return f"{mem:.1f} MB"
+                except Exception:
+                    return "psutil N/A"
+            if progresso:
+
+  - Linha 1171 | keyword=Exception
+                        if isinstance(dados, list):
+                            return dados
+                except Exception:
+                    return []
+            return []
+
+  - Linha 1300 | keyword=Exception
+                        nome, df = fut.result()
+                        cache[paths[nome]] = df
+                    except Exception as exc:
+                        if progresso:
+                            progresso(f"[ERRO] Falha ao ler {futs[fut]}: {exc}")
+
+43) src\interface_grafica\services\oracle_test_worker.py
+  - Linha 72 | keyword=Exception
+                self.resultado.emit(True, msg, tempo_ms)
+    
+            except Exception as exc:  # noqa: BLE001
+                tempo_ms = int((perf_counter() - t0) * 1000)
+                self.resultado.emit(False, str(exc), tempo_ms)
+
+44) src\interface_grafica\services\parquet_service.py
+  - Linha 190 | keyword=Exception
+            try:
+                return dtype.base_type() == pl.List
+            except Exception:
+                return str(dtype).startswith("List")
+
+  - Linha 225 | keyword=Exception
+            try:
+                numeric_value = float(value.replace(",", "."))
+            except Exception:
+                numeric_value = None
+
+  - Linha 250 | keyword=Exception
+                    schema = filtered.collect_schema()
+                    available_columns = {name: schema[name] for name in schema.names()}
+                except Exception:
+                    available_columns = {}
+
+45) src\interface_grafica\services\pipeline_funcoes_service.py
+  - Linha 214 | keyword=Exception
+                    except AttributeError:
+                        return str(maior_data)
+            except Exception:
+                return None
+            return None
+
+  - Linha 252 | keyword=Exception
+                    try:
+                        sql_path = resolve_sql_path(sql_item)
+                    except Exception:
+                        # Fallback para o comportamento anterior se falhar a resolução pelo catálogo
+                        sql_path = Path(sql_item)
+
+  - Linha 302 | keyword=Exception
+                                    infer_schema_length=min(len(todas_linhas), 50_000),
+                                )
+                            except Exception as exc:
+                                _msg(
+                                    f"  Aviso: falha na inferencia automatica ({exc}). Tentando modo robusto..."
+
+  - Linha 312 | keyword=Exception
+                                try:
+                                    df = pl.DataFrame(dados_colunas)
+                                except Exception:
+                                    dados_string = {
+                                        col_name: [
+
+  - Linha 328 | keyword=Exception
+                        arquivos.append(str(arquivo_saida))
+                        _msg(f"OK {sql_path.name}: {df.height:,} linhas -> {arquivo_saida.name}")
+                    except Exception as exc:
+                        _msg(f"Erro em {sql_path.name}: {exc}")
+
+46) src\interface_grafica\services\query_worker.py
+  - Linha 184 | keyword=Exception
+                self.finished_ok.emit(df)
+    
+            except Exception as exc:
+                log_exception(exc)
+                registrar_evento_performance(
+
+  - Linha 204 | keyword=Exception
+                    try:
+                        conn.close()
+                    except Exception as close_exc:
+                        log_exception(close_exc)
+                        rprint(f"[yellow]Aviso: Erro ao fechar conexao Oracle:[/yellow] {close_exc}")
+
+47) src\interface_grafica\services\selection_persistence_service.py
+  - Linha 29 | keyword=Exception
+                self._cache = json.loads(self.file_path.read_text(encoding="utf-8"))
+                self._migrate_legacy_sql_selections()
+            except Exception:
+                self._cache = {}
+
+  - Linha 36 | keyword=Exception
+            try:
+                self.file_path.write_text(json.dumps(self._cache, indent=2, ensure_ascii=False), encoding="utf-8")
+            except Exception:
+                pass
+
+48) src\interface_grafica\services\sql_service.py
+  - Linha 126 | keyword=Exception
+            try:
+                from interface_grafica.services.query_worker import _conectar_oracle_fallback
+            except Exception as exc:
+                from transformacao.auxiliares.logs import log_exception
+                log_exception(exc)
+
+49) src\interface_grafica\ui\main_window.py
+  - Linha 115 | keyword=Exception
+                    progresso=self.progress.emit
+                )
+            except Exception as exc:  # pragma: nao cover - UI
+                from utilitarios.perf_monitor import registrar_evento_performance
+                registrar_evento_performance(
+
+  - Linha 150 | keyword=Exception
+                    if "progresso" in assinatura.parameters and "progresso" not in call_kwargs:
+                        call_kwargs["progresso"] = self.progress.emit
+                except Exception:
+                    pass
+                resultado = self.func(*self.args, **call_kwargs)
+
+  - Linha 153 | keyword=Exception
+                    pass
+                resultado = self.func(*self.args, **call_kwargs)
+            except Exception as exc:
+                from utilitarios.perf_monitor import registrar_evento_performance
+                registrar_evento_performance(
+
+  - Linha 327 | keyword=Exception
+            try:
+                self._source_model.modelReset.disconnect(self._on_source_model_reset)
+            except Exception:
+                pass
+            try:
+
+  - Linha 331 | keyword=Exception
+            try:
+                self._source_model.layoutChanged.disconnect(self._on_source_layout_changed)
+            except Exception:
+                pass
+            try:
+
+50) src\transformacao\04_produtos_final.py
+  - Linha 229 | keyword=Exception
+                    candidatos.sort(key=_score_cand, reverse=True)
+                    descr_padrao = candidatos[0].get("descricao")
+                except Exception:
+                    descr_padrao = None
+
+
+Tracebacks detectados:
+- traceback.txt (linha 1)
+    Traceback (most recent call last):
+      File "C:\funcoes - Copia\src\transformacao\calculos_anuais.py", line 242, in <module>
+        gerar_calculos_anuais(sys.argv[1])
+        ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+      File "C:\funcoes - Copia\src\transformacao\calculos_anuais.py", line 99, in gerar_calculos_anuais
+        .agg(
+         ~~~^
+            [
+            ^
+        ...<70 lines>...
+            ]
+            ^
+        )
+        ^
+      File "C:\Users\03002693901\AppData\Local\anaconda3\Lib\site-packages\polars\dataframe\group_by.py", line 298, in agg
+        .collect(optimizations=QueryOptFlags.none())
+         ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      File "C:\Users\03002693901\AppData\Local\anaconda3\Lib\site-packages\polars\_utils\deprecation.py", line 97, in wrapper
+        return function(*args, **kwargs)
+      File "C:\Users\03002693901\AppData\Local\anaconda3\Lib\site-packages\polars\lazyframe\opt_flags.py", line 324, in wrapper
+        return function(*args, **kwargs)
+      File "C:\Users\03002693901\AppData\Local\anaconda3\Lib\site-packages\polars\lazyframe\frame.py", line 2429, in collect
+        return wrap_df(ldf.collect(engine, callback))
+                       ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+      File "C:\Users\03002693901\AppData\Local\anaconda3\Lib\site-packages\polars\functions\lazy.py", line 1088, in __call__
+        rv = self.function(slp, *args, **kwargs)
+      File "C:\Users\03002693901\AppData\Local\anaconda3\Lib\site-packages\polars\expr\expr.py", line 4741, in _wrap
+        return function(sl[0], *args, **kwargs)
+      File "C:\Users\03002693901\AppData\Local\anaconda3\Lib\site-packages\polars\expr\expr.py", line 4965, in wrap_f
+        return x.map_elements(
+               ~~~~~~~~~~~~~~^
+            function, return_dtype=return_dtype, skip_nulls=skip_nulls
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        )
+        ^
+      File "C:\Users\03002693901\AppData\Local\anaconda3\Lib\site-packages\polars\series\series.py", line 5973, in map_elements
+        self._s.map_elements(
+        ~~~~~~~~~~~~~~~~~~~~^
+            function, return_dtype=pl_return_dtype, skip_nulls=skip_nulls
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        )
+        ^
+      File "C:\funcoes - Copia\src\transformacao\calculos_anuais.py", line 25, in _format_st_variations
+        if not records or not isinstance(records, list):
+               ^^^^^^^
+      File "C:\Users\03002693901\AppData\Local\anaconda3\Lib\site-packages\polars\series\series.py", line 666, in __bool__
+        raise TypeError(msg)
+    TypeError: the truth value of a Series is ambiguous
+    
+    Here are some things you might want to try:
+    Final exception: TypeError: the truth value of a Series is ambiguous
+
+- scripts\review_logs.py (linha 29)
+        'Traceback (most recent call last)',
+        'Traceback',
+        'Exception',
+        'ERROR',
+        'CRITICAL',
+        'WARNING',
+    ]
+    SKIP_DIRS = {
+        '.git', 'node_modules', '__pycache__', 'venv', 'env', 'dist', 'build', '.venv'
+    }
+    # file size limit (bytes) to skip very large files
+    MAX_FILE_SIZE = 10 * 1024 * 1024
+    MAX_MATCHES_PER_FILE = 5
+    MAX_TRACEBACK_LINES = 400
+    
+    # timestamp regex (ISO, common variants, dd/mm/yyyy)
+    TIMESTAMP_RE = re.compile(
+        r'(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z|\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}|\d{2}/\d{2}/\d{4} \d{2}:\d{2}:\d{2}|\d{2}/\d{2}/\d{4})'
+    )
+    
+    # helper to detect text files
+    def is_likely_text(path: Path) -> bool:
+        try:
+            with open(path, 'rb') as f:
+                chunk = f.read(2048)
+            if b'\x00' in chunk:
+                return False
+            return True
+        except Exception:
+            return False
+    
+    
+    def safe_read_text(path: Path) -> str | None:
+        try:
+            with open(path, 'rb') as f:
+                raw = f.read()
+            try:
+                return raw.decode('utf-8')
+            except Exception:
+                try:
+                    return raw.decode('latin-1')
+                except Exception:
+                    return None
+        except Exception:
+            return None
+    
+    
+    def find_tracebacks(lines):
+        tbs = []
+        for i, line in enumerate(lines):
+    Final exception: report.append("- Executar: PYTHONPATH=src python -m pytest tests/ (ou equivalente no Windows)")
+
+- scripts\review_logs.py (linha 79)
+            if 'Traceback (most recent call last)' in line:
+                # capture following lines up to a reasonable limit
+                start = i
+                end = min(len(lines), i + MAX_TRACEBACK_LINES)
+                snippet = lines[start:end]
+                # try to find final exception line within the snippet
+                final_exc = None
+                for l in reversed(snippet):
+                    if re.search(r"^[A-Za-z0-9_\.]+(?:Error|Exception|Warning|Exit|Interrupt)?:", l) or re.search(r": .+", l):
+                        final_exc = l.strip()
+                        break
+                tbs.append({'start_line': start + 1, 'snippet': '\n'.join(snippet[:200]), 'final': final_exc})
+        return tbs
+    
+    
+    def main():
+        files_scanned = 0
+        matches = {}
+        tracebacks = []
+        timestamps = set()
+    
+        for dirpath, dirnames, filenames in os.walk(ROOT):
+            # filter directories in-place to avoid descending into heavy folders
+            dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS and not d.startswith('.')]
+            for fname in filenames:
+                fpath = Path(dirpath) / fname
+                files_scanned += 1
+                try:
+                    size = fpath.stat().st_size
+                    if size > MAX_FILE_SIZE:
+                        continue
+                except Exception:
+                    continue
+    
+                if not is_likely_text(fpath):
+                    continue
+    
+                text = safe_read_text(fpath)
+                if text is None:
+                    continue
+    
+                lines = text.splitlines()
+                file_matches = []
+                for idx, line in enumerate(lines):
+                    for kw in KEYWORDS:
+                        if kw in line:
+                            start = max(0, idx - 2)
+                            end = min(len(lines), idx + 3)
+                            snippet = '\n'.join(lines[start:end])
+                            file_matches.append({'line_no': idx + 1, 'keyword': kw, 'snippet': snippet})
+    Final exception: report.append("- Executar: PYTHONPATH=src python -m pytest tests/ (ou equivalente no Windows)")
+
+Timestamps encontrados (amostra):
+
+Resumo priorizado:
+- 3 tracebacks detectados. Prioridade: Alta — investigar os primeiros listados.
+- Mensagens com nível ERROR/CRITICAL encontradas. Prioridade: Alta.
+
+Próximos passos sugeridos:
+- Abrir os arquivos listados no relatório (comece pelos que contêm tracebacks).
+- Reproduzir o cenário localmente com logging mais verboso ou usando testes.
+- Executar: PYTHONPATH=src python -m pytest tests/ (ou equivalente no Windows)
+- Posso gerar issues/patches ou ajudar a depurar interativamente.

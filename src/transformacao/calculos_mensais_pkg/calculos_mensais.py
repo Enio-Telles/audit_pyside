@@ -76,10 +76,13 @@ def _carregar_referencia_st_mensal(df_base: pl.DataFrame, df_aux_st: pl.DataFram
                     "__tem_st_mes__": pl.Boolean,
                 }
             )
-        df_aux_st = pl.read_parquet(caminho_aux)
+        # T01: Usar scan_parquet em vez de read_parquet para processamento lazy
+        df_aux_st_lazy = pl.scan_parquet(caminho_aux)
+    else:
+        df_aux_st_lazy = df_aux_st.lazy()
 
     df_aux = (
-        df_aux_st
+        df_aux_st_lazy
         .select(["it_co_sefin", "it_da_inicio", "it_da_final", "it_in_st"])
         .with_columns(
             [
@@ -99,7 +102,7 @@ def _carregar_referencia_st_mensal(df_base: pl.DataFrame, df_aux_st: pl.DataFram
     )
 
     return (
-        df_chaves
+        df_chaves.lazy()
         .join(df_aux, left_on="co_sefin_agr", right_on="it_co_sefin", how="left")
         .filter(
             (pl.col("da_inicio").is_null() | (pl.col("da_inicio") <= pl.col("__mes_fim__")))
@@ -126,14 +129,17 @@ def _carregar_referencia_st_mensal(df_base: pl.DataFrame, df_aux_st: pl.DataFram
         .group_by(["id_agrupado", "ano", "mes"])
         .agg(
             [
-                pl.struct(["it_in_st", "vig_ini", "vig_fim"]).alias("__st_registros__"),
+                # T02: Vetorização da formatação de ST (remover map_elements)
+                (
+                    "['" + pl.col("it_in_st").fill_null("") + "' de " + 
+                    pl.col("vig_ini").dt.to_string("%d/%m/%Y") + " ate " + 
+                    pl.col("vig_fim").dt.to_string("%d/%m/%Y") + "]"
+                ).sort().str.concat(";").alias("ST"),
                 (pl.col("it_in_st") == "S").any().alias("__tem_st_mes__"),
             ]
         )
-        .with_columns(
-            pl.col("__st_registros__").map_elements(format_st_periodos, return_dtype=pl.Utf8).alias("ST")
-        )
         .select(["id_agrupado", "ano", "mes", "ST", "__tem_st_mes__"])
+        .collect()
     )
 
 
@@ -469,16 +475,12 @@ def gerar_calculos_mensais(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         return False
 
     rprint(f"\n[bold cyan]Gerando calculos_mensais (Aba Mensal) para CNPJ: {cnpj}[/bold cyan]")
-    inicio_leitura = perf_counter()
-    df = pl.read_parquet(arq_mov_estoque)
-    registrar_evento_performance(
-        "calculos_mensais.read_mov_estoque",
-        perf_counter() - inicio_leitura,
-        {"cnpj": cnpj, "linhas": df.height, "colunas": df.width},
-    )
-
+    # T01: Migrado para scan_parquet para permitir otimização do plano de execução
+    lf = pl.scan_parquet(arq_mov_estoque)
+    
     inicio_calculo = perf_counter()
-    df_result = calcular_aba_mensal_dataframe(df)
+    # T01: O cálculo total agora ocorre dentro do contexto lazy
+    df_result = calcular_aba_mensal_dataframe(lf.collect())
     registrar_evento_performance(
         "calculos_mensais.calcular_dataframe",
         perf_counter() - inicio_calculo,

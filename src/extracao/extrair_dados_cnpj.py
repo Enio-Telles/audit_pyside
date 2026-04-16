@@ -26,7 +26,9 @@ def close_thread_connection():
 def get_thread_connection():
     if not hasattr(thread_local, "conexao"):
         # Cria uma nova conexão para esta thread
-        conn = conectar_oracle()
+        # Usa o nome `conectar` importado de utilitarios.conectar_oracle para permitir
+        # que os testes possam mockar `extracao.extrair_dados_cnpj.conectar`.
+        conn = conectar()
         if conn is None:
             logger.error(f"[{threading.current_thread().name}] Falha ao criar conexão com banco de dados.")
             return None

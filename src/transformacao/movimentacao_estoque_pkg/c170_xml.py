@@ -1,4 +1,4 @@
-﻿"""
+"""
 c170_xml.py
 
 Objetivo:
@@ -102,9 +102,9 @@ def _desc_similarity(payload: dict) -> float:
     return inter / denom
 
 
-def _build_cst_xml(df: pl.DataFrame) -> pl.Expr:
-    has_cst = "icms_cst" in df.columns
-    has_csosn = "icms_csosn" in df.columns
+def _build_cst_xml(df: pl.DataFrame | pl.LazyFrame, columns: list[str]) -> pl.Expr:
+    has_cst = "icms_cst" in columns
+    has_csosn = "icms_csosn" in columns
     if has_cst and has_csosn:
         return (
             pl.when(pl.col("icms_cst").cast(pl.Utf8, strict=False).is_not_null())
@@ -147,11 +147,12 @@ def _build_cst_xml(df: pl.DataFrame) -> pl.Expr:
     return pl.lit(None, pl.Utf8).alias("cst_xml")
 
 
-def _prepare_xml_candidates(df: pl.DataFrame, fonte: str) -> pl.DataFrame:
-    optional = {c: c in df.columns for c in df.columns}
+def _prepare_xml_candidates(df: pl.DataFrame | pl.LazyFrame, fonte: str) -> pl.DataFrame | pl.LazyFrame:
+    columns = df.collect_schema().names() if isinstance(df, pl.LazyFrame) else df.columns
+    optional = {c: c in columns for c in columns}
 
     def col_or_null(name: str, dtype=pl.Utf8):
-        if name in df.columns:
+        if name in columns:
             return pl.col(name).cast(dtype, strict=False)
         return pl.lit(None, dtype=dtype)
 
@@ -159,7 +160,7 @@ def _prepare_xml_candidates(df: pl.DataFrame, fonte: str) -> pl.DataFrame:
         pl.lit(fonte).alias("fonte_xml"),
         col_or_null("nsu", pl.Int64).alias("nsu_xml"),
         col_or_null("chave_acesso").alias("Chv_nfe"),
-        _to_int_expr("prod_nitem", "Num_item_xml") if "prod_nitem" in df.columns else pl.lit(None, pl.Int64).alias("Num_item_xml"),
+        _to_int_expr("prod_nitem", "Num_item_xml") if "prod_nitem" in columns else pl.lit(None, pl.Int64).alias("Num_item_xml"),
         col_or_null("prod_cprod").alias("Cod_item_xml"),
         pl.coalesce(
             [
@@ -167,12 +168,12 @@ def _prepare_xml_candidates(df: pl.DataFrame, fonte: str) -> pl.DataFrame:
                 col_or_null("prod_cean"),
             ]
         ).alias("Cod_barra_xml"),
-        _clean_digits_expr("prod_ncm", "Ncm_xml") if "prod_ncm" in df.columns else pl.lit("", pl.Utf8).alias("Ncm_xml"),
-        _clean_digits_expr("prod_cest", "Cest_xml") if "prod_cest" in df.columns else pl.lit("", pl.Utf8).alias("Cest_xml"),
+        _clean_digits_expr("prod_ncm", "Ncm_xml") if "prod_ncm" in columns else pl.lit("", pl.Utf8).alias("Ncm_xml"),
+        _clean_digits_expr("prod_cest", "Cest_xml") if "prod_cest" in columns else pl.lit("", pl.Utf8).alias("Cest_xml"),
         col_or_null("prod_xprod").alias("Descr_item_xml"),
         col_or_null("co_cfop").alias("Cfop_xml"),
         col_or_null("prod_ucom").alias("Unid_xml"),
-        _to_float_expr("prod_qcom", "Qtd_xml") if "prod_qcom" in df.columns else pl.lit(None, pl.Float64).alias("Qtd_xml"),
+        _to_float_expr("prod_qcom", "Qtd_xml") if "prod_qcom" in columns else pl.lit(None, pl.Float64).alias("Qtd_xml"),
         (
             col_or_null("prod_vprod", pl.Float64).fill_null(0)
             + col_or_null("prod_vfrete", pl.Float64).fill_null(0)
@@ -196,7 +197,7 @@ def _prepare_xml_candidates(df: pl.DataFrame, fonte: str) -> pl.DataFrame:
         col_or_null("co_uf_emit").alias("co_uf_emit_xml"),
         col_or_null("co_uf_dest").alias("co_uf_dest_xml"),
         col_or_null("co_finnfe").alias("finnfe_xml"),
-        _build_cst_xml(df),
+        _build_cst_xml(df, columns),
         col_or_null("id_agrupado").alias("id_agrupado_xml"),
         col_or_null("co_sefin_agr").alias("co_sefin_agr_xml"),
     ]
@@ -251,16 +252,17 @@ def gerar_c170_xml(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         rprint(f"[red]{exc}[/red]")
         return False
 
-    df_c170 = pl.read_parquet(arq_c170)
-    df_c170_agr = pl.read_parquet(arq_c170_agr)
-    df_nfe_agr = pl.read_parquet(arq_nfe_agr)
-    df_nfce_agr = pl.read_parquet(arq_nfce_agr)
+    # T01: Usar scan_parquet para processamento lazy
+    df_c170_lazy = pl.scan_parquet(arq_c170)
+    df_c170_agr_lazy = pl.scan_parquet(arq_c170_agr)
+    df_nfe_agr_lazy = pl.scan_parquet(arq_nfe_agr)
+    df_nfce_agr_lazy = pl.scan_parquet(arq_nfce_agr)
 
-    if df_c170.is_empty():
+    if df_c170_lazy.select(pl.len()).collect().item() == 0:
         return salvar_para_parquet(pl.DataFrame(), pasta_brutos, f"c170_xml_{cnpj}.parquet")
 
     df_c170_base = (
-        df_c170
+        df_c170_lazy
         .with_row_index("__rowid__")
         .with_columns(
             [
@@ -269,7 +271,7 @@ def gerar_c170_xml(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
             ]
         )
         .join(
-            df_c170_agr
+            df_c170_agr_lazy
             .with_columns(
                 [
                     _to_int_expr("num_item", "num_item"),
@@ -327,8 +329,8 @@ def gerar_c170_xml(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
 
     df_xml_candidatos = pl.concat(
         [
-            _prepare_xml_candidates(df_nfe_agr, "nfe"),
-            _prepare_xml_candidates(df_nfce_agr, "nfce"),
+            _prepare_xml_candidates(df_nfe_agr_lazy, "nfe"),
+            _prepare_xml_candidates(df_nfce_agr_lazy, "nfce"),
         ],
         how="vertical_relaxed",
     ).with_columns(
@@ -500,7 +502,8 @@ def gerar_c170_xml(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         .sort(["Dt_doc", "Chv_nfe", "Num_item"], nulls_last=True)
     )
 
-    return salvar_para_parquet(df_final, pasta_brutos, f"c170_xml_{cnpj}.parquet")
+    # T01: Finalizar computação Lazy e salvar resultados
+    return salvar_para_parquet(df_final.collect(), pasta_brutos, f"c170_xml_{cnpj}.parquet")
 
 
 if __name__ == "__main__":

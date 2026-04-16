@@ -1,7 +1,7 @@
 import json
 import pytest
 
-from services.registry_service import RegistryService, CNPJRecord
+from interface_grafica.services.registry_service import RegistryService, CNPJRecord
 
 def test_list_records_file_not_exists(tmp_path):
     registry_file = tmp_path / "cnpjs.json"

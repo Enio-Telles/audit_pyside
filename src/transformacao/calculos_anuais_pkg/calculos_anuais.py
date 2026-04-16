@@ -65,8 +65,9 @@ def _carregar_referencia_st_anual(df_anual: pl.DataFrame) -> pl.DataFrame:
             }
         )
 
+    # T01: Migrado para scan_parquet (Lazy)
     df_aux = (
-        pl.read_parquet(caminho_aux)
+        pl.scan_parquet(caminho_aux)
         .select(["it_co_sefin", "it_da_inicio", "it_da_final", "it_pc_interna", "it_in_st"])
         .with_columns(
             [
@@ -80,7 +81,7 @@ def _carregar_referencia_st_anual(df_anual: pl.DataFrame) -> pl.DataFrame:
     )
 
     df_ref = (
-        df_chaves
+        df_chaves.lazy()
         .join(df_aux, left_on="co_sefin_agr", right_on="it_co_sefin", how="left")
         .filter(
             (pl.col("da_inicio").is_null() | (pl.col("da_inicio") <= pl.col("__ano_fim__")))
@@ -107,15 +108,18 @@ def _carregar_referencia_st_anual(df_anual: pl.DataFrame) -> pl.DataFrame:
         .group_by(["co_sefin_agr", "ano"])
         .agg(
             [
-                pl.struct(["it_in_st", "vig_ini", "vig_fim"]).alias("__st_registros__"),
+                # T02: Vetorização da formatação de ST (remover map_elements)
+                (
+                    "['" + pl.col("it_in_st").fill_null("") + "' de " + 
+                    pl.col("vig_ini").dt.to_string("%d/%m/%Y") + " ate " + 
+                    pl.col("vig_fim").dt.to_string("%d/%m/%Y") + "]"
+                ).sort().str.concat(";").alias("ST"),
                 (pl.col("it_in_st") == "S").any().alias("__tem_st_ano__"),
                 pl.col("it_pc_interna").drop_nulls().first().alias("__aliq_ref__"),
             ]
         )
-        .with_columns(
-            pl.col("__st_registros__").map_elements(format_st_periodos, return_dtype=pl.Utf8).alias("ST")
-        )
         .select(["co_sefin_agr", "ano", "ST", "__tem_st_ano__", "__aliq_ref__"])
+        .collect()
     )
 
     return df_ref
@@ -337,17 +341,11 @@ def gerar_calculos_anuais(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         return False
 
     rprint(f"\n[bold cyan]Gerando calculos_anuais (Aba Anual) para CNPJ: {cnpj}[/bold cyan]")
-
-    inicio_leitura = perf_counter()
-    df = pl.read_parquet(arq_mov_estoque)
-    registrar_evento_performance(
-        "calculos_anuais.read_mov_estoque",
-        perf_counter() - inicio_leitura,
-        {"cnpj": cnpj, "linhas": df.height, "colunas": df.width},
-    )
-
+    # T01: scan_parquet para permitir otimização do Polars
+    lf = pl.scan_parquet(arq_mov_estoque)
+    
     inicio_calculo = perf_counter()
-    df_result = calcular_aba_anual_dataframe(df)
+    df_result = calcular_aba_anual_dataframe(lf.collect())
     registrar_evento_performance(
         "calculos_anuais.calcular_dataframe",
         perf_counter() - inicio_calculo,

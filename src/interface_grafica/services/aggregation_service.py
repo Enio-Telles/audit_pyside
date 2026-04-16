@@ -261,13 +261,10 @@ class ServicoAgregacao:
 
         mov_mtime = mov_path.stat().st_mtime_ns
         pasta_ressarc = pasta_prod.parent / "ressarcimento_st"
+        # Only consider the monthly and annual summary artifacts for staleness
         derivados = {
             "calculos_mensais": pasta_prod / f"aba_mensal_{cnpj}.parquet",
             "calculos_anuais": pasta_prod / f"aba_anual_{cnpj}.parquet",
-            "calculos_periodos": pasta_prod / f"aba_periodos_{cnpj}.parquet",
-            "ressarcimento_st": pasta_ressarc / f"ressarcimento_st_item_{cnpj}.parquet",
-            "aba_resumo_global": pasta_prod / f"aba_resumo_global_{cnpj}.parquet",
-            "aba_produtos_selecionados": pasta_prod / f"aba_produtos_selecionados_{cnpj}.parquet",
         }
         return [
             etapa
@@ -1487,6 +1484,10 @@ class ServicoAgregacao:
             path_base,
             ["descricao", "compras", "qtd_compras", "vendas", "qtd_vendas"],
         )
+        # Normalizar descrição para permitir joins estáveis entre produtos e itens
+        df_base = df_base.with_columns(
+            self._expr_normalizar_descricao("descricao").alias("descricao_normalizada")
+        )
         colunas_metricas = self._colunas_metricas_agregacao()
 
         if (
@@ -1543,23 +1544,45 @@ class ServicoAgregacao:
         # Optimized: Vectorized calculation of totals
         cols_agrup = df_agrup.collect_schema().names() if isinstance(df_agrup, pl.LazyFrame) else df_agrup.columns
         if "lista_chave_produto" in cols_agrup:
+            # Mapear por descrição normalizada para evitar faltas de coluna 'descricao' em df_prod
             df_mapping = (
                 df_agrup.select(["id_agrupado", "lista_chave_produto"])
                 .explode("lista_chave_produto")
                 .rename({"lista_chave_produto": "chave_item"})
-                .join(df_prod.select(["chave_item", "descricao"]), on="chave_item")
-                .select(["id_agrupado", "descricao"])
+                .join(df_prod.select(["chave_item", "descricao_normalizada"]), on="chave_item")
+                .select(["id_agrupado", "descricao_normalizada"])
                 .unique()
             )
 
             df_totais = (
-                df_base.select(["descricao", "compras", "vendas"])
-                .join(df_mapping, on="descricao")
+                df_base.select(["descricao_normalizada", "compras", "qtd_compras", "vendas", "qtd_vendas"])
+                .join(df_mapping, on="descricao_normalizada")
                 .group_by("id_agrupado")
                 .agg([
                     pl.col("compras").fill_null(0).sum().alias("total_compras"),
-                    pl.col("vendas").fill_null(0).sum().alias("total_vendas")
+                    pl.col("vendas").fill_null(0).sum().alias("total_vendas"),
+                    pl.col("qtd_compras").fill_null(0).sum().alias("qtd_compras_total"),
+                    pl.col("qtd_vendas").fill_null(0).sum().alias("qtd_vendas_total"),
                 ])
+            )
+            # Calcular preços médios protegendo divisão por zero
+            df_totais = df_totais.with_columns(
+                (
+                    pl.when(pl.col("qtd_compras_total") > 0)
+                    .then(pl.col("total_compras") / pl.col("qtd_compras_total"))
+                    .otherwise(pl.lit(None))
+                ).alias("preco_medio_compra"),
+                (
+                    pl.when(pl.col("qtd_vendas_total") > 0)
+                    .then(pl.col("total_vendas") / pl.col("qtd_vendas_total"))
+                    .otherwise(pl.lit(None))
+                ).alias("preco_medio_venda"),
+            )
+            # Campos auxiliares de entradas/saidas e movimentacao total
+            df_totais = df_totais.with_columns(
+                pl.col("total_compras").alias("total_entradas"),
+                pl.col("total_vendas").alias("total_saidas"),
+                (pl.col("total_compras") + pl.col("total_vendas")).alias("total_movimentacao"),
             )
 
             cols_to_drop = [c for c in ["total_compras", "total_vendas"] if c in cols_agrup]
