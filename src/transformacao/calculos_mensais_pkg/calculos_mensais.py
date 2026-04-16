@@ -134,7 +134,7 @@ def _carregar_referencia_st_mensal(df_base: pl.DataFrame, df_aux_st: pl.DataFram
                     "['" + pl.col("it_in_st").fill_null("") + "' de " + 
                     pl.col("vig_ini").dt.to_string("%d/%m/%Y") + " ate " + 
                     pl.col("vig_fim").dt.to_string("%d/%m/%Y") + "]"
-                ).sort().str.concat(";").alias("ST"),
+                ).sort().str.join(";").alias("ST"),
                 (pl.col("it_in_st") == "S").any().alias("__tem_st_mes__"),
             ]
         )

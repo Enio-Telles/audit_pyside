@@ -113,7 +113,7 @@ def _carregar_referencia_st_anual(df_anual: pl.DataFrame) -> pl.DataFrame:
                     "['" + pl.col("it_in_st").fill_null("") + "' de " + 
                     pl.col("vig_ini").dt.to_string("%d/%m/%Y") + " ate " + 
                     pl.col("vig_fim").dt.to_string("%d/%m/%Y") + "]"
-                ).sort().str.concat(";").alias("ST"),
+                ).sort().str.join(";").alias("ST"),
                 (pl.col("it_in_st") == "S").any().alias("__tem_st_ano__"),
                 pl.col("it_pc_interna").drop_nulls().first().alias("__aliq_ref__"),
             ]
