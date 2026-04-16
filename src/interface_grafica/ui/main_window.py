@@ -5109,7 +5109,7 @@ class MainWindow(QMainWindow):
         def _worker_consolidar():
             df = self._coletar_base_produtos_selecionados()
             # Extração de IDs únicos igual ao async loader
-            ids = df.get_column("id_agregado").cast(pl.Utf8, strict=False).drop_nulls().unique().sort().to_list() if "id_agregado" in df.columns else []
+            ids = df.get_column("id_agrupado").cast(pl.Utf8, strict=False).drop_nulls().unique().sort().to_list() if "id_agrupado" in df.columns else []
             return {"df": df, "uniques": {"id_agregado": ids}}
 
         self.lbl_produtos_sel_status.setText("⏳ Consolidando produtos em tempo real no background...")
