@@ -79,6 +79,7 @@ def gerar_id_agrupados(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         ])
         .with_columns([
             pl.col("lista_descricoes").list.eval(pl.element().filter(pl.element() != "")),
+            pl.col("lista_desc_compl").list.eval(pl.element().filter(pl.element() != "")),
             pl.col("lista_codigos").list.eval(pl.element().filter(pl.element() != "")),
             pl.col("lista_unidades").list.eval(pl.element().filter(pl.element() != ""))
         ])

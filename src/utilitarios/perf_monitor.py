@@ -34,6 +34,26 @@ def caminho_log_performance() -> Path:
     return path
 
 
+def _now_iso() -> str:
+    """Return current ISO timestamp (seconds). Tests can monkeypatch module-level
+    `datetime` to control this value (e.g. `mocker.patch("src.utilitarios.perf_monitor.datetime")`).
+    """
+    # Support tests that may patch the module under different import names.
+    import sys
+
+    for candidate in ("src.utilitarios.perf_monitor", "utilitarios.perf_monitor", __name__):
+        mod = sys.modules.get(candidate)
+        if mod is not None and hasattr(mod, "datetime"):
+            dt = getattr(mod, "datetime")
+            try:
+                return dt.now().isoformat(timespec="seconds")
+            except Exception:
+                # Fall back to module-level datetime if the patched object behaves unexpectedly
+                break
+
+    return datetime.now().isoformat(timespec="seconds")
+
+
 def _serializar_valor(valor: Any) -> Any:
     if isinstance(valor, Path):
         return str(valor)
@@ -52,21 +72,8 @@ def registrar_evento_performance(
     contexto: dict[str, Any] | None = None,
     status: str = "ok",
 ) -> None:
-    # Allow tests to patch datetime in the perf_monitor module under various import names
-    import sys
-
-    _datetime = None
-    for candidate in ("src.utilitarios.perf_monitor", "utilitarios.perf_monitor", __name__):
-        mod = sys.modules.get(candidate)
-        if mod is not None and hasattr(mod, "datetime"):
-            _datetime = getattr(mod, "datetime")
-            break
-    if _datetime is None:
-        from datetime import datetime as _dt
-
-        timestamp = _dt.now().isoformat(timespec="seconds")
-    else:
-        timestamp = _datetime.now().isoformat(timespec="seconds")
+    # Use the `_now_iso()` wrapper so tests can monkeypatch `datetime` or `_now_iso` reliably.
+    timestamp = _now_iso()
 
     registro: dict[str, Any] = {
         "timestamp": timestamp,
