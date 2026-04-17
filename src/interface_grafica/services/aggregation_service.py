@@ -411,33 +411,38 @@ class ServicoAgregacao:
 
         df_rastreavel = df.with_columns(expressoes)
 
-        # Vectorized normalization of `ids_origem_agrupamento`:
-        # - Cast to List(Utf8), strip elements and drop empty entries via list.eval
-        # - Unique to remove duplicates (preserve first occurrence order)
-        # - If resulting list is empty or original is null, fallback to [id_agrupado]
-        ids_normalized_expr = (
-            pl.col("ids_origem_agrupamento")
-            .cast(pl.List(pl.Utf8), strict=False)
-            .list.eval(
-                pl.element()
-                .cast(pl.Utf8, strict=False)
-                .str.strip_chars()
-                .filter(pl.element().is_not_null() & (pl.element().str.strip_chars() != ""))
-            )
-            .list.unique()
-        )
+        # Materializar e normalizar por linha para garantir ordem deterministica
+        # e deduplicacao preservando a primeira ocorrencia.
+        ids_col = df_rastreavel.get_column("ids_origem_agrupamento").to_list() if "ids_origem_agrupamento" in df_rastreavel.columns else [None] * df_rastreavel.height
+        id_agrupados_col = df_rastreavel.get_column("id_agrupado").to_list()
 
-        fallback_expr = pl.concat_list([pl.col("id_agrupado").cast(pl.Utf8, strict=False)])
+        normalized_ids: list[list[str]] = []
+        for orig, id_agr in zip(ids_col, id_agrupados_col):
+            if orig is None:
+                normalized = [str(id_agr).strip()]
+            else:
+                # Orig can be nested Series or lists.
+                if isinstance(orig, pl.Series):
+                    items = orig.to_list()
+                elif isinstance(orig, (list, tuple)):
+                    items = list(orig)
+                else:
+                    items = [orig]
+                # Normalize strings and drop empties
+                cleaned = [str(x).strip() for x in items if x is not None and str(x).strip()]
+                cleaned = cls._deduplicar_preservando_ordem(cleaned)
+                normalized = cleaned if cleaned else [str(id_agr).strip()]
+            normalized_ids.append(normalized)
 
-        return df_rastreavel.with_columns(
+        # Reanexar colunas normalizadas
+        df_rastreavel = df_rastreavel.with_columns(
             [
-                pl.when(pl.col("ids_origem_agrupamento").is_null())
-                .then(fallback_expr)
-                .otherwise(ids_normalized_expr)
-                .alias("ids_origem_agrupamento"),
+                pl.Series(normalized_ids).alias("ids_origem_agrupamento"),
                 pl.col("lista_itens_agrupados").cast(pl.List(pl.Utf8), strict=False).alias("lista_itens_agrupados"),
             ]
         )
+
+        return df_rastreavel
 
     @staticmethod
     def _garantir_colunas_lista_agregacao(df: pl.DataFrame) -> pl.DataFrame:
@@ -865,14 +870,9 @@ class ServicoAgregacao:
         lista_desc_compl = self._coletar_lista_coluna(df_prod_sel, "lista_desc_compl")
         lista_itens_agrupados = self._coletar_lista_coluna(df_prod_sel, "descricao") or lista_descricoes
 
-        ids_origem_agrupamento: list[str] = []
-        for row in df_para_unir.iter_rows(named=True):
-            ids_origem_agrupamento.extend(
-                self._normalizar_lista_ids_agrupados(
-                    row.get("ids_origem_agrupamento"),
-                    row.get("id_agrupado"),
-                )
-            )
+        # Definir `ids_origem_agrupamento` de forma deterministica conforme a selecao
+        # do usuário: preserva a ordem apresentada em `ids_agrupados_selecionados`.
+        ids_origem_agrupamento = [str(x).strip() for x in ids_agrupados_selecionados if str(x).strip()]
         ids_origem_agrupamento = self._deduplicar_preservando_ordem(ids_origem_agrupamento)
 
         nova_linha = {

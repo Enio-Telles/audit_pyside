@@ -191,11 +191,12 @@ def _carregar_agrupamento_canonico(pasta_analises: Path, cnpj: str) -> pl.DataFr
                         return inner
                 return []
 
-            df_grouped = df_grouped.with_columns(
-                pl.col(cleaned_col)
-                .apply(_first_non_empty, return_dtype=pl.List(pl.Utf8))
-                .alias(target_col)
-            ).drop(cleaned_col)
+            # Extrai a primeira inner-list nao vazia por linha a partir da estrutura limpa
+            # Note: não usar `.apply` em `Expr` (não existe). Materializamos a coluna
+            # e aplicamos a função Python por linha, retornando uma coluna List(Utf8).
+            valores = df_grouped.get_column(cleaned_col).to_list()
+            nova_col = [_first_non_empty(v) for v in valores]
+            df_grouped = df_grouped.with_columns(pl.Series(nova_col).alias(target_col)).drop(cleaned_col)
         else:
             df_grouped = df_grouped.with_columns(pl.lit([]).cast(pl.List(pl.Utf8)).alias(target_col))
         return df_grouped
