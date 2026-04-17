@@ -41,34 +41,6 @@ def _boolish_expr(col_name: str) -> pl.Expr:
         .otherwise(pl.col(col_name).cast(pl.Int64, strict=False).fill_null(0) != 0)
     )
 
-def _format_st_periodos(registros) -> str:
-    if registros is None:
-        return ""
-    if isinstance(registros, pl.Series):
-        registros = registros.to_list()
-    if not registros:
-        return ""
-
-    periodos = []
-    for registro in registros:
-        if not registro:
-            continue
-        status = str(registro.get("it_in_st") or "").strip()
-        dt_ini = registro.get("vig_ini")
-        dt_fim = registro.get("vig_fim")
-        if not status or dt_ini is None or dt_fim is None:
-            continue
-        periodos.append((status, dt_ini, dt_fim))
-
-    if not periodos:
-        return ""
-
-    periodos.sort(key=lambda item: (item[1], item[2], item[0]))
-    return ";".join(
-        f"['{status}' de {dt_ini.strftime('%d/%m/%Y')} até {dt_fim.strftime('%d/%m/%Y')}]"
-        for status, dt_ini, dt_fim in periodos
-    )
-
 def _carregar_referencia_st_periodo(df_periodo: pl.DataFrame) -> pl.DataFrame:
     caminho_aux = _resolver_ref("sitafe_produto_sefin_aux.parquet")
     if caminho_aux is None:
@@ -141,13 +113,26 @@ def _carregar_referencia_st_periodo(df_periodo: pl.DataFrame) -> pl.DataFrame:
         .group_by(["co_sefin_agr", "periodo_inventario"])
         .agg(
             [
-                pl.struct(["it_in_st", "vig_ini", "vig_fim"]).alias("__st_registros__"),
+                (
+                    pl.when(
+                        pl.col("it_in_st").str.strip_chars().is_not_null() & (pl.col("it_in_st").str.strip_chars() != "") &
+                        pl.col("vig_ini").is_not_null() & pl.col("vig_fim").is_not_null()
+                    )
+                    .then(
+                        "['" + pl.col("it_in_st").str.strip_chars() + "' de " +
+                        pl.col("vig_ini").dt.to_string("%d/%m/%Y") + " até " +
+                        pl.col("vig_fim").dt.to_string("%d/%m/%Y") + "]"
+                    )
+                    .otherwise(None)
+                )
+                .sort_by(["vig_ini", "vig_fim", "it_in_st"])
+                .drop_nulls()
+                .str.join(";")
+                .fill_null("")
+                .alias("ST"),
                 (pl.col("it_in_st") == "S").any().alias("__tem_st_per__"),
                 pl.col("it_pc_interna").drop_nulls().first().alias("__aliq_ref__"),
             ]
-        )
-        .with_columns(
-            pl.col("__st_registros__").map_elements(_format_st_periodos, return_dtype=pl.Utf8).alias("ST")
         )
         .select(["co_sefin_agr", "periodo_inventario", "ST", "__tem_st_per__", "__aliq_ref__"])
     )
