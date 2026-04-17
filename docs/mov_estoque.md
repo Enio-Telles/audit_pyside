@@ -79,7 +79,8 @@ Este vínculo é essencial para as colunas enriquecidas como `it_pc_interna`, `i
 | `Qtd`        | `float` | Quantidade bruta na unidade original                          |
 | `Vl_item`    | `float` | Valor total do item na nota                                   |
 | `Unid`       | `str`   | Unidade de medida original                                    |
-| `q_conv`     | `float` | Quantidade convertida para`unid_ref`: `abs(Qtd) * abs(fator)` |
+| `q_conv`     | `float` | Quantidade convertida observada na linha, inclusive em estoque final |
+| `q_conv_fisica` | `float` | Quantidade convertida que representa movimento físico de estoque |
 | `preco_unit` | `float` | Preço unitário calculado:`preco_item / q_conv`                |
 
 ### Campos Calculados de Auditoria
@@ -189,7 +190,22 @@ Neutralizações relevantes:
 - Estoque final (`3 - ESTOQUE FINAL`) captura `__qtd_decl_final_audit__` em **qualquer data**;
 - A restrição anterior de 01/01 e 31/12 foi removida para permitir auditoria anual completa.
 
-Quando a linha é neutralizada, `q_conv = 0` e ela também deixa de compor médias de preço nas camadas mensal e anual.
+Quando a linha é neutralizada, `q_conv = 0` e `q_conv_fisica = 0`; ela também deixa de compor médias de preço nas camadas mensal e anual.
+
+## Semântica das quantidades convertidas
+
+Há três papéis distintos na tabela:
+
+- `q_conv`: quantidade convertida observada na linha;
+- `q_conv_fisica`: quantidade convertida que pode ser interpretada como movimento físico;
+- `__q_conv_sinal__`: quantidade física sinalizada usada no cálculo sequencial do saldo.
+
+Em linhas de `3 - ESTOQUE FINAL`:
+
+- `q_conv` pode permanecer preenchido para auditoria row-level;
+- `q_conv_fisica = 0`;
+- `__q_conv_sinal__ = 0`;
+- `__qtd_decl_final_audit__` recebe a quantidade declarada para auditoria anual.
 
 ## Estoque final auditado
 
