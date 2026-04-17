@@ -17,13 +17,13 @@ from utilitarios.project_paths import DADOS_DIR
 def resolver_ref(nome_arquivo: str) -> Path | None:
     """
     Resolve caminho de arquivo de referência baseado em DADOS_DIR.
-    
+
     Tenta múltiplos caminhos candidatos para compatibilidade com diferentes
     estruturas de diretórios.
-    
+
     Args:
         nome_arquivo: Nome do arquivo a localizar
-        
+
     Returns:
         Path do arquivo ou None se não encontrado
     """
@@ -41,12 +41,12 @@ def resolver_ref(nome_arquivo: str) -> Path | None:
 def boolish_expr(col_name: str) -> pl.Expr:
     """
     Cria expressão para converter valores textuais booleanos.
-    
+
     Suporta múltiplos formatos: "true", "1", "s", "sim", "y", "yes", etc.
-    
+
     Args:
         col_name: Nome da coluna a converter
-        
+
     Returns:
         Expressão Polars que retorna Boolean
     """
@@ -63,10 +63,10 @@ def boolish_expr(col_name: str) -> pl.Expr:
 def format_st_periodos(registros) -> str:
     """
     Formata lista de registros ST em string legível.
-    
+
     Args:
         registros: Lista de dicts com campos it_in_st, vig_ini, vig_fim
-        
+
     Returns:
         String formatada com períodos ST ou vazia
     """

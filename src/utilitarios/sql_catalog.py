@@ -74,7 +74,9 @@ def get_sql_id(path: Path | str) -> str | None:
         return None
 
 
-def _index_entries() -> tuple[dict[str, SqlCatalogEntry], dict[str, list[SqlCatalogEntry]]]:
+def _index_entries() -> (
+    tuple[dict[str, SqlCatalogEntry], dict[str, list[SqlCatalogEntry]]]
+):
     by_id: dict[str, SqlCatalogEntry] = {}
     by_name: dict[str, list[SqlCatalogEntry]] = {}
     for entry in list_sql_entries():
@@ -119,7 +121,11 @@ def normalize_sql_id(value: Path | str | None) -> str | None:
         return matches[0].sql_id
 
     candidate_suffix = _normalizar_texto_relativo(text).lower()
-    suffix_matches = [entry for entry in by_id.values() if entry.sql_id.lower().endswith(candidate_suffix)]
+    suffix_matches = [
+        entry
+        for entry in by_id.values()
+        if entry.sql_id.lower().endswith(candidate_suffix)
+    ]
     if len(suffix_matches) == 1:
         return suffix_matches[0].sql_id
 
@@ -136,12 +142,18 @@ def resolve_sql_path(value: Path | str) -> Path:
     return path
 
 
-def migrate_sql_id_list(values: list[str] | None, *, log_context: str = "sql") -> list[str]:
+def migrate_sql_id_list(
+    values: list[str] | None, *, log_context: str = "sql"
+) -> list[str]:
     migrated: list[str] = []
     for item in values or []:
         sql_id = normalize_sql_id(item)
         if sql_id is None:
-            logger.warning("Ignorando selecao legada sem correspondencia (%s): %s", log_context, item)
+            logger.warning(
+                "Ignorando selecao legada sem correspondencia (%s): %s",
+                log_context,
+                item,
+            )
             continue
         if sql_id not in migrated:
             migrated.append(sql_id)

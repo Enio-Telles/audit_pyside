@@ -7,6 +7,7 @@ Hierarquia:  parents[0] = fisconforme/
              parents[2] = src/
              parents[3] = Sistema_pysisde/  <- ROOT_DIR
 """
+
 from __future__ import annotations
 
 import sys

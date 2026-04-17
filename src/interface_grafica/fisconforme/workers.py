@@ -81,7 +81,9 @@ class WorkerThread(QThread):
         dir_saida.mkdir(parents=True, exist_ok=True)
 
         self.log_msg.emit(f"Iniciando processamento de {total} CNPJ(s)...")
-        self.log_msg.emit(f"Período: {self.periodo_analise[0]} a {self.periodo_analise[1]}")
+        self.log_msg.emit(
+            f"Período: {self.periodo_analise[0]} a {self.periodo_analise[1]}"
+        )
         if dsf_num:
             self.log_msg.emit(f"DSF: {dsf_num}")
         self.log_msg.emit(f"Saída: {dir_saida}")

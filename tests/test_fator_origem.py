@@ -9,7 +9,16 @@ sys.path.insert(0, str(Path("src").resolve()))
 from transformacao.fatores_conversao import calcular_fatores_conversao
 
 
-def _salvar_item_unidades(pasta_prod: Path, cnpj: str, descricoes: list[str], unids: list[str], compras: list[float], vendas: list[float], qtd_compras: list[float], qtd_vendas: list[float]) -> None:
+def _salvar_item_unidades(
+    pasta_prod: Path,
+    cnpj: str,
+    descricoes: list[str],
+    unids: list[str],
+    compras: list[float],
+    vendas: list[float],
+    qtd_compras: list[float],
+    qtd_vendas: list[float],
+) -> None:
     pl.DataFrame(
         {
             "descricao": descricoes,
@@ -67,11 +76,16 @@ def test_fator_origem_manual_preservado(tmp_path: Path):
 
     assert calcular_fatores_conversao(cnpj, pasta_cnpj=pasta_cnpj) is True
 
-    df_resultado = pl.read_parquet(pasta_prod / f"fatores_conversao_{cnpj}.parquet").sort(["id_agrupado", "unid"])
+    df_resultado = pl.read_parquet(
+        pasta_prod / f"fatores_conversao_{cnpj}.parquet"
+    ).sort(["id_agrupado", "unid"])
     df_whisky = df_resultado.filter(pl.col("id_agrupado") == "id_agrupado_8")
 
     assert df_whisky.height == 2
-    assert df_whisky.filter(pl.col("unid") == "CX").row(0, named=True)["fator_origem"] == "manual"
+    assert (
+        df_whisky.filter(pl.col("unid") == "CX").row(0, named=True)["fator_origem"]
+        == "manual"
+    )
 
 
 def test_fator_origem_fallback_sem_preco(tmp_path: Path):
@@ -139,6 +153,8 @@ def test_fator_origem_preco_calculado(tmp_path: Path):
 
     assert calcular_fatores_conversao(cnpj, pasta_cnpj=pasta_cnpj) is True
 
-    df_resultado = pl.read_parquet(pasta_prod / f"fatores_conversao_{cnpj}.parquet").sort(["id_agrupado", "unid"])
+    df_resultado = pl.read_parquet(
+        pasta_prod / f"fatores_conversao_{cnpj}.parquet"
+    ).sort(["id_agrupado", "unid"])
     # todos os fatores calculados a partir de preco devem ter origem 'preco'
     assert df_resultado.filter(pl.col("fator_origem") == "preco").height >= 1

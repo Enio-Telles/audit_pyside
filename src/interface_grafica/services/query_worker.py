@@ -4,6 +4,7 @@ Worker QThread para execucao assincrona de consultas Oracle.
 Evita congelamento da interface durante consultas demoradas.
 Emite sinais de progresso, sucesso e falha.
 """
+
 from __future__ import annotations
 
 import os
@@ -78,7 +79,9 @@ def _conectar_oracle_fallback():
 
     cfg = _DB_CONFIG_CACHE
     if not all(cfg.values()):
-        raise RuntimeError("Configuracao Oracle incompleta. Verifique as variaveis ORACLE_HOST, ORACLE_PORT, ORACLE_SERVICE, DB_USER e DB_PASSWORD no .env")
+        raise RuntimeError(
+            "Configuracao Oracle incompleta. Verifique as variaveis ORACLE_HOST, ORACLE_PORT, ORACLE_SERVICE, DB_USER e DB_PASSWORD no .env"
+        )
 
     dsn = oracledb.makedsn(cfg["host"], int(cfg["porta"]), service_name=cfg["servico"])
     conn = oracledb.connect(user=cfg["usuario"], password=cfg["senha"], dsn=dsn)
@@ -155,7 +158,11 @@ class QueryWorker(QThread):
                     },
                 )
 
-                columns = [desc[0] for desc in cursor.description] if cursor.description else []
+                columns = (
+                    [desc[0] for desc in cursor.description]
+                    if cursor.description
+                    else []
+                )
                 all_rows: list[tuple] = []
 
                 batch_num = 0
@@ -186,7 +193,12 @@ class QueryWorker(QThread):
                 df = pl.DataFrame({col: [] for col in columns})
             else:
                 # Otimizacao Bolt: criar DataFrame diretamente de tuplas (muito mais rapido)
-                df = pl.DataFrame(all_rows, schema=columns, orient="row", infer_schema_length=min(len(all_rows), 1000))
+                df = pl.DataFrame(
+                    all_rows,
+                    schema=columns,
+                    orient="row",
+                    infer_schema_length=min(len(all_rows), 1000),
+                )
             registrar_evento_performance(
                 "query_worker.build_dataframe",
                 perf_counter() - inicio_dataframe,
@@ -252,4 +264,6 @@ class QueryWorker(QThread):
                     conn.close()
                 except Exception as close_exc:
                     log_exception(close_exc)
-                    rprint(f"[yellow]Aviso: Erro ao fechar conexao Oracle:[/yellow] {close_exc}")
+                    rprint(
+                        f"[yellow]Aviso: Erro ao fechar conexao Oracle:[/yellow] {close_exc}"
+                    )

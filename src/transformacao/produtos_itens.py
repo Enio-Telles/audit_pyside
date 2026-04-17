@@ -70,14 +70,22 @@ def gerar_produtos_itens(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         df_prod = df_prod.with_columns(pl.col("chave_item").alias("chave_produto"))
     df_prod = df_prod.select(["chave_item", "chave_produto", "descricao_normalizada"])
 
-    required_cols = ["descricao", "codigo", "descr_compl", "tipo_item", "ncm", "cest", "gtin", "unid"]
+    required_cols = [
+        "descricao",
+        "codigo",
+        "descr_compl",
+        "tipo_item",
+        "ncm",
+        "cest",
+        "gtin",
+        "unid",
+    ]
     for col in required_cols:
         if col not in df_unid.columns:
             df_unid = df_unid.with_columns(pl.lit(None, pl.Utf8).alias(col))
 
     df_items = (
-        df_unid
-        .with_columns(_normalizar_descricao_expr("descricao"))
+        df_unid.with_columns(_normalizar_descricao_expr("descricao"))
         .join(
             df_prod.rename({"descricao_normalizada": "__descricao_normalizada__"}),
             on="__descricao_normalizada__",
@@ -87,8 +95,7 @@ def gerar_produtos_itens(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
     )
 
     df_items = (
-        df_items
-        .with_columns(
+        df_items.with_columns(
             [
                 pl.col("descricao").cast(pl.Utf8, strict=False).alias("descricao"),
                 pl.col("codigo").cast(pl.Utf8, strict=False).alias("codigo"),
@@ -127,6 +134,3 @@ def gerar_produtos_itens(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
     arq_saida.parent.mkdir(parents=True, exist_ok=True)
     df_items.write_parquet(arq_saida, compression="snappy")
     return True
-
-
-

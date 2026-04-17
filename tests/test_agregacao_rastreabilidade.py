@@ -5,7 +5,7 @@ import polars as pl
 
 sys.path.insert(0, str(Path("src").resolve()))
 
-import transformacao.rastreabilidade_produtos.produtos_final_v2 as produtos_mod
+import transformacao.rastreabilidade_produtos._produtos_final_impl as produtos_mod
 import transformacao.rastreabilidade_produtos.fontes_produtos as fontes_mod
 
 
@@ -19,7 +19,9 @@ def test_construir_tabela_ponte_explode_lista_codigo_fonte():
         }
     )
 
-    result = produtos_mod._construir_tabela_ponte(df).sort(["codigo_fonte", "chave_produto"])
+    result = produtos_mod._construir_tabela_ponte(df).sort(
+        ["codigo_fonte", "chave_produto"]
+    )
 
     assert result["codigo_fonte"].to_list() == ["111|A", "111|B", "111|C"]
     assert set(result["id_agrupado"].to_list()) == {"AGR_1"}
@@ -70,6 +72,6 @@ def test_mapa_descricao_univoca_ignora_descricoes_ambiguas():
         }
     )
 
-    result = fontes_mod._construir_mapa_descricao_univoca(df_mapa)
+    df_univoco, _ = fontes_mod._construir_mapas_descricao(df_mapa)
 
-    assert result.is_empty()
+    assert df_univoco.is_empty()

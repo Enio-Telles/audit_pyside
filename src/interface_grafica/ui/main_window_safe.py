@@ -46,7 +46,9 @@ class SafeMainWindow(BaseMainWindow):
         return encontrados
 
     def _workers_ativos(self) -> list[QThread]:
-        return [worker for worker in self._iter_workers_registrados() if worker.isRunning()]
+        return [
+            worker for worker in self._iter_workers_registrados() if worker.isRunning()
+        ]
 
     def _solicitar_interrupcao_worker(self, worker: QThread) -> None:
         cancelar = getattr(worker, "cancelar", None)
@@ -84,7 +86,9 @@ class SafeMainWindow(BaseMainWindow):
 
         if not self._closing_after_workers:
             self._closing_after_workers = True
-            self.status.showMessage("Encerrando aplicação: interrompendo operações em execução...")
+            self.status.showMessage(
+                "Encerrando aplicação: interrompendo operações em execução..."
+            )
             self.setEnabled(False)
             self._solicitar_interrupcao_workers_ativos(ativos)
             for worker in ativos:

@@ -4,12 +4,10 @@ Painel "Fisconforme não Atendido" para incorporação no QTabWidget do sistema.
 Converte a lógica de FisconformeApp (QMainWindow standalone) para um QWidget
 embutível, preservando toda a lógica de orquestração do wizard.
 """
+
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
-    QApplication,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -21,7 +19,13 @@ from PySide6.QtWidgets import (
 )
 
 from .components import ActionFooter, PageHeader
-from .pages import AuditorPage, CNPJsPage, DatabaseConfigPage, PeriodPage, ProcessingPage
+from .pages import (
+    AuditorPage,
+    CNPJsPage,
+    DatabaseConfigPage,
+    PeriodPage,
+    ProcessingPage,
+)
 from .state import WizardState
 from .theme import SIDEBAR_WIDTH, build_stylesheet
 
@@ -77,7 +81,9 @@ class FisconformeNaoAtendidoPanel(QWidget):
             ProcessingPage(),
         ]
         for page in self.pages:
-            page.action_updated.connect(lambda page=page: self._handle_page_update(page))
+            page.action_updated.connect(
+                lambda page=page: self._handle_page_update(page)
+            )
             page.workflow_requested.connect(self._handle_workflow_request)
             wrapper = self._wrap_page(page)
             self._page_wrappers.append(wrapper)
@@ -120,7 +126,9 @@ class FisconformeNaoAtendidoPanel(QWidget):
         for index, etapa in enumerate(self.ETAPAS):
             button = QPushButton(f"{index + 1}. {etapa}")
             button.setProperty("step", True)
-            button.clicked.connect(lambda checked=False, idx=index: self._activate_step(idx))
+            button.clicked.connect(
+                lambda checked=False, idx=index: self._activate_step(idx)
+            )
             self.step_buttons.append(button)
             layout.addWidget(button)
 
@@ -237,9 +245,7 @@ class FisconformeNaoAtendidoPanel(QWidget):
             state_name = (
                 "active"
                 if index == self.state.etapa_atual
-                else "done"
-                if index < self.state.etapa_atual
-                else "idle"
+                else "done" if index < self.state.etapa_atual else "idle"
             )
             button.setProperty("stepState", state_name)
             button.style().unpolish(button)

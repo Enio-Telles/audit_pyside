@@ -4,7 +4,10 @@ import sys
 
 sys.path.insert(0, str(Path("src").resolve()))
 
-from interface_grafica.services.pipeline_funcoes_service import TABELAS_DISPONIVEIS, ServicoTabelas
+from interface_grafica.services.pipeline_funcoes_service import (
+    TABELAS_DISPONIVEIS,
+    ServicoTabelas,
+)
 from orquestrador_pipeline import REGISTO_TABELAS
 
 

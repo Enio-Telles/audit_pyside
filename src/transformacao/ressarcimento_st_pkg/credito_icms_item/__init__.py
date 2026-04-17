@@ -1,1 +1,5 @@
-from transformacao.ressarcimento_st_pkg.credito_icms_item.gerador import gerar_credito_icms_item
+from transformacao.ressarcimento_st_pkg.credito_icms_item.gerador import (  
+    gerar_credito_icms_item as gerar_credito_icms_item,
+)
+
+__all__ = ["gerar_credito_icms_item"]

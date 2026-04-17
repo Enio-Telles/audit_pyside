@@ -5,7 +5,9 @@ from pathlib import Path
 from rich import print as rprint
 
 from transformacao.atomizacao_pkg.pipeline_efd_atomizado import _base_atomizada
-from transformacao.atomizacao_pkg.pipeline_efd_atomizado import materializar_camadas_atomizadas
+from transformacao.atomizacao_pkg.pipeline_efd_atomizado import (
+    materializar_camadas_atomizadas,
+)
 
 
 def gerar_efd_atomizacao(cnpj: str, _pasta_cnpj: Path | None = None) -> bool:
@@ -26,7 +28,9 @@ def gerar_efd_atomizacao(cnpj: str, _pasta_cnpj: Path | None = None) -> bool:
         _base_atomizada(cnpj) / "bloco_h" / f"41_h010_raw_{cnpj}.parquet",
         _base_atomizada(cnpj) / "bloco_h" / f"42_h020_raw_{cnpj}.parquet",
     ]
-    faltantes = [str(caminho.name) for caminho in caminhos_esperados if not caminho.exists()]
+    faltantes = [
+        str(caminho.name) for caminho in caminhos_esperados if not caminho.exists()
+    ]
     if faltantes:
         raise RuntimeError(
             "Parquets atomizados ausentes para a EFD atomizada. "

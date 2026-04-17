@@ -288,11 +288,19 @@ def test_gerar_eventos_estoque_preserva_fonte_fisica_e_rotula_inicial_derivada()
         ]
     )
 
-    result = gerar_eventos_estoque(df).sort(["Dt_doc", "Tipo_operacao"], nulls_last=True)
+    result = gerar_eventos_estoque(df).sort(
+        ["Dt_doc", "Tipo_operacao"], nulls_last=True
+    )
 
-    assert result.filter(pl.col("Tipo_operacao") == "1 - ENTRADA")["fonte"].to_list() == ["nfe"]
-    assert result.filter(pl.col("Tipo_operacao") == "3 - ESTOQUE FINAL")["fonte"].to_list() == ["bloco_h"]
-    assert result.filter(pl.col("Tipo_operacao") == "0 - ESTOQUE INICIAL")["fonte"].to_list() == ["gerado"]
+    assert result.filter(pl.col("Tipo_operacao") == "1 - ENTRADA")[
+        "fonte"
+    ].to_list() == ["nfe"]
+    assert result.filter(pl.col("Tipo_operacao") == "3 - ESTOQUE FINAL")[
+        "fonte"
+    ].to_list() == ["bloco_h"]
+    assert result.filter(pl.col("Tipo_operacao") == "0 - ESTOQUE INICIAL")[
+        "fonte"
+    ].to_list() == ["gerado"]
 
 
 def test_gerar_eventos_estoque_rotula_eventos_sinteticos_como_gerado():
@@ -330,7 +338,11 @@ def test_gerar_eventos_estoque_rotula_eventos_sinteticos_como_gerado():
 
     result = gerar_eventos_estoque(df)
 
-    assert result.filter(pl.col("Tipo_operacao") == "3 - ESTOQUE FINAL gerado")["fonte"].to_list() == ["gerado"]
-    fontes_iniciais = result.filter(pl.col("Tipo_operacao") == "0 - ESTOQUE INICIAL gerado")["fonte"].to_list()
+    assert result.filter(pl.col("Tipo_operacao") == "3 - ESTOQUE FINAL gerado")[
+        "fonte"
+    ].to_list() == ["gerado"]
+    fontes_iniciais = result.filter(
+        pl.col("Tipo_operacao") == "0 - ESTOQUE INICIAL gerado"
+    )["fonte"].to_list()
     assert fontes_iniciais
     assert set(fontes_iniciais) == {"gerado"}
