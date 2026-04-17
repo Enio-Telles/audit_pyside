@@ -1,6 +1,5 @@
 import sys
 import re
-from datetime import date
 from pathlib import Path
 from utilitarios.project_paths import PROJECT_ROOT, TRACEBACK_PATH
 from time import perf_counter
@@ -545,7 +544,7 @@ if __name__ == "__main__":
         else:
             c = input("CNPJ: ")
             gerar_calculos_periodos(c)
-    except Exception as e:
+    except Exception:
         import traceback
 
         with open(TRACEBACK_PATH, "w", encoding="utf-8") as f:

@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import logging
 import re
-from pathlib import Path
 from typing import Dict
 
 from .path_resolver import get_env_path

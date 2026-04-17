@@ -7,7 +7,6 @@ configurando o sys.path para encontrar os pacotes dentro de src/.
 
 from __future__ import annotations
 
-import os
 import sys
 from pathlib import Path
 

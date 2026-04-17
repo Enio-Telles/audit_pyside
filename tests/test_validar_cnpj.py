@@ -1,4 +1,3 @@
-import pytest
 from src.utilitarios.validar_cnpj import validar_cnpj
 
 

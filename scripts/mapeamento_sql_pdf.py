@@ -50,7 +50,7 @@ def extract_tables_from_sqls():
                         # Se não há esquema explícito nos sqls mas precisamos mapear,
                         # podemos considerar schema padrão vazio, ou não processar.
                         pass
-        except Exception as e:
+        except Exception:
             # Fallback regex para arquivos que sqlglot eventualmente não conseguir ler
             # Encontra "schema.tabela"
             matches = re.findall(r"\b([a-zA-Z_0-9]+)\.([a-zA-Z_0-9]+)\b", sql_content)

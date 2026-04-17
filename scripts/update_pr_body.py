@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-import json, subprocess, urllib.request, sys
+import json
+import subprocess
+import urllib.request
+import sys
 from pathlib import Path
 
 REPO_OWNER = "Enio-Telles"

@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from interface_grafica.config import CNPJ_ROOT
-from routers._common import sanitize_cnpj, safe_value, df_to_response
+from routers._common import sanitize_cnpj, df_to_response
 
 router = APIRouter()
 

@@ -20,7 +20,7 @@ import polars as pl
 logger = logging.getLogger(__name__)
 
 # Importa resolvedor de caminhos do pacote integrado
-from .path_resolver import get_resource_path, get_root_dir, get_env_path
+from .path_resolver import get_root_dir, get_env_path
 from utilitarios.sql_catalog import resolve_sql_path
 
 # DiretÃ³rio raiz do projeto

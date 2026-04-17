@@ -6,7 +6,6 @@ from utilitarios.project_paths import (
     CONSULTAS_ROOT,
     DATA_ROOT,
     ENV_PATH,
-    PIPELINE_SCRIPT,
     PROJECT_ROOT,
     SQL_ROOT,
 )

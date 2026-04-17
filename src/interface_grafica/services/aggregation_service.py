@@ -5,7 +5,6 @@ try:
 except ImportError:
     psutil = None
 import json
-import sys
 import re
 from pathlib import Path
 from time import perf_counter

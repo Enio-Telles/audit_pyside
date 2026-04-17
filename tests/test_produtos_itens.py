@@ -1,4 +1,3 @@
-import pytest
 import polars as pl
 import sys
 from pathlib import Path

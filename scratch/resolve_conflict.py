@@ -1,4 +1,3 @@
-import os
 
 
 def resolve_conflict(file_path):

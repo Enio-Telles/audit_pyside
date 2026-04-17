@@ -12,7 +12,6 @@ from openpyxl import Workbook
 from openpyxl.styles import Font as OpenPyxlFont
 from PySide6.QtCore import QDate, QThread, Qt, Signal, QUrl, QByteArray, QTimer
 from PySide6.QtGui import (
-    QAction,
     QDesktopServices,
     QFont,
     QGuiApplication,
@@ -33,7 +32,6 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QInputDialog,
     QListWidget,
-    QListWidgetItem,
     QMainWindow,
     QMessageBox,
     QPushButton,
@@ -44,11 +42,7 @@ from PySide6.QtWidgets import (
     QStatusBar,
     QTabWidget,
     QTableView,
-    QTextEdit,
-    QTreeWidget,
-    QTreeWidgetItem,
     QToolBar,
-    QVBoxLayout,
     QTreeWidget,
     QTreeWidgetItem,
     QVBoxLayout,
@@ -90,7 +84,6 @@ from interface_grafica.ui.dialogs import (
 from utilitarios.text import (
     display_cell,
     is_year_column_name,
-    normalize_text,
     remove_accents,
 )
 
@@ -6597,7 +6590,7 @@ class MainWindow(QMainWindow):
         )
         if df.is_empty():
             return
-        target = self._save_dialog(f"Exportar Anual", "Excel (*.xlsx)")
+        target = self._save_dialog("Exportar Anual", "Excel (*.xlsx)")
         if not target:
             return
         try:

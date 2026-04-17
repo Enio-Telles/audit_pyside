@@ -14,8 +14,8 @@ from rich import print as rprint
 
 from utilitarios.conectar_oracle import conectar
 from utilitarios.ler_sql import ler_sql
-from utilitarios.project_paths import CNPJ_ROOT, SQL_ARCHIVE_ROOT, SQL_ROOT
-from utilitarios.sql_catalog import get_sql_id, list_sql_entries, resolve_sql_path
+from utilitarios.project_paths import CNPJ_ROOT, SQL_ROOT
+from utilitarios.sql_catalog import list_sql_entries, resolve_sql_path
 from utilitarios.validar_cnpj import validar_cnpj
 
 TAMANHO_LOTE_PADRAO = 50_000

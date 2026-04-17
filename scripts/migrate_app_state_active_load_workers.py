@@ -18,7 +18,6 @@ import json
 from pathlib import Path
 from datetime import datetime
 import shutil
-import sys
 
 
 ROOT = Path(__file__).resolve().parents[1]

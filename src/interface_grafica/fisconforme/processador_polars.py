@@ -13,7 +13,6 @@ Data: 2026-04-02
 
 import polars as pl
 import logging
-from pathlib import Path
 from .path_resolver import get_root_dir
 
 # Configuração de logging
@@ -197,7 +196,6 @@ class ProcessadorPolars:
 
 
 if __name__ == "__main__":
-    import sys
 
     logging.basicConfig(
         level=logging.INFO,

@@ -8,7 +8,6 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 import polars as pl
-import concurrent.futures
 
 from rich import print as rprint
 

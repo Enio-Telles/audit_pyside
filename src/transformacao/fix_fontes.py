@@ -1,4 +1,3 @@
-import os
 from utilitarios.project_paths import SRC_ROOT
 
 path = str(SRC_ROOT / "transformacao" / "fontes_produtos.py")

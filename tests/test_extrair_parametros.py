@@ -1,4 +1,3 @@
-import pytest
 from utilitarios.extrair_parametros import (
     extrair_parametros_sql,
     extract_sql_parameters,

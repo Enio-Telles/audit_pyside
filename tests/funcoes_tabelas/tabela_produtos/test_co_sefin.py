@@ -1,4 +1,3 @@
-import pytest
 import polars as pl
 from pathlib import Path
 from transformacao.movimentacao_estoque_pkg.co_sefin import co_sefin

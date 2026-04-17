@@ -8,7 +8,6 @@ Valida que:
 """
 
 import polars as pl
-from pathlib import Path
 import sys
 from datetime import date
 from src.utilitarios.project_paths import PROJECT_ROOT
@@ -101,7 +100,7 @@ def test_estoque_inicial_final_qualquer_data():
     saldo_final = cols["saldo_final"]
     saidas_calculadas = cols["saidas_calculadas"]
 
-    print(f"\n=== VALIDAÇÃO ===")
+    print("\n=== VALIDAÇÃO ===")
     print(f"estoque_inicial: {estoque_inicial} (esperado: 100.0)")
     print(f"entradas: {entradas} (esperado: 50.0)")
     print(f"saidas: {saidas} (esperado: 30.0)")
@@ -160,7 +159,7 @@ def test_estoque_inicial_fora_01_01():
 
     estoque_inicial = df_anual["estoque_inicial"][0]
 
-    print(f"\n=== TESTE ESTOQUE INICIAL FORA DE 01/01 ===")
+    print("\n=== TESTE ESTOQUE INICIAL FORA DE 01/01 ===")
     print(f"estoque_inicial: {estoque_inicial} (esperado: 250.0)")
 
     assert (
@@ -199,7 +198,7 @@ def test_estoque_final_fora_31_12():
 
     estoque_final = df_anual["estoque_final"][0]
 
-    print(f"\n=== TESTE ESTOQUE FINAL FORA DE 31/12 ===")
+    print("\n=== TESTE ESTOQUE FINAL FORA DE 31/12 ===")
     print(f"estoque_final: {estoque_final} (esperado: 180.0)")
 
     assert (

@@ -1,7 +1,7 @@
 import sys
 import re
 from pathlib import Path
-from utilitarios.project_paths import PROJECT_ROOT, TRACEBACK_PATH
+from utilitarios.project_paths import PROJECT_ROOT
 import polars as pl
 from rich import print as rprint
 
@@ -381,7 +381,7 @@ def gerar_movimentacao_estoque(cnpj: str, pasta_cnpj: Path | None = None) -> boo
                 # Para producao, uma funcao check columns Ã© melhor, faremos um fallback basico
 
                 exprs.append(e)
-            except Exception as ex:
+            except Exception:
                 exprs.append(pl.lit(None).alias(target))
 
         # Polars: try selecting. Se alguma coluna referenciada falhar, ele crasheia.

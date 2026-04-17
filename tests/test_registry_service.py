@@ -1,5 +1,4 @@
 import json
-import pytest
 
 from interface_grafica.services.registry_service import RegistryService, CNPJRecord
 

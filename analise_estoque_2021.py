@@ -4,7 +4,6 @@ Foco: id_agrupado_23, ano 2021
 """
 
 import polars as pl
-from pathlib import Path
 from src.utilitarios.project_paths import PROJECT_ROOT
 
 ROOT_DIR = PROJECT_ROOT
@@ -129,7 +128,7 @@ if arq_aba_anual.exists():
         print(f"Diferença: {abs(saidas_calculadas - saidas_calc_esperado)}")
 
         # Verificar equação de saldo
-        print(f"\n=== EQUAÇÃO DE SALDO ===")
+        print("\n=== EQUAÇÃO DE SALDO ===")
         print(
             f"estoque_inicial + entradas - saidas + entradas_desacob = {estoque_inicial + entradas - saidas + entradas_desacob}"
         )

@@ -1,8 +1,7 @@
 import sys
 import re
-from datetime import date
 from pathlib import Path
-from utilitarios.project_paths import PROJECT_ROOT, TRACEBACK_PATH
+from utilitarios.project_paths import PROJECT_ROOT
 from time import perf_counter
 
 import polars as pl

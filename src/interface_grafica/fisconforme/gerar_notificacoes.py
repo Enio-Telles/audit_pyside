@@ -24,7 +24,6 @@ from typing import List, Dict, Any, Optional
 # Importa os módulos especializados
 from .extracao import (
     extrair_dados_cadastrais,
-    extrair_dados_multiplos_cnpjs,
     extrair_dados_malha,
     validar_cnpj,
     limpar_cnpj,
@@ -32,13 +31,10 @@ from .extracao import (
 from .preenchimento import (
     processar_notificacao,
     ler_modelo_notificacao,
-    preencher_modelo,
-    salvar_notificacao,
 )
 
 # Importa resolvedor de caminhos do pacote integrado
 from .path_resolver import (
-    get_resource_path,
     get_root_dir,
     get_env_path,
     get_modelo_path,
@@ -1132,7 +1128,7 @@ def coletar_periodo_analise() -> tuple[str, str]:
         print("\n\nColeta de período cancelada.")
 
     print("\n" + "-" * 60)
-    print(f"Período de análise definido:")
+    print("Período de análise definido:")
     print(f"  Início: {data_inicial}")
     print(f"  Fim:    {data_final}")
     print("=" * 60)
@@ -1390,7 +1386,7 @@ def exibir_relatorio_final(resumo: Dict[str, Any]) -> None:
     print("=" * 70)
 
     # Resumo estatístico
-    print(f"\n📊 RESUMO ESTATÍSTICO")
+    print("\n📊 RESUMO ESTATÍSTICO")
     print(f"   Total de CNPJs processados: {resumo['total']}")
     print(f"   ✅ Sucessos: {resumo['sucessos']}")
     print(f"   ❌ Falhas: {resumo['falhas']}")
@@ -1401,12 +1397,12 @@ def exibir_relatorio_final(resumo: Dict[str, Any]) -> None:
         print(f"   📈 Taxa de sucesso: {taxa_sucesso:.1f}%")
 
     # DSF e estrutura de pastas
-    print(f"\n📁 ESTRUTURA DE PASTAS")
+    print("\n📁 ESTRUTURA DE PASTAS")
     dsf = resumo.get("dsf", "N/A")
     dir_saida = resumo.get("diretorio_saida", "N/A")
     print(f"   DSF: {dsf}")
     print(f"   Diretório base: {dir_saida}")
-    print(f"   Formato: <mes>_DSF_<numero_dsf>/<cnpj>/")
+    print("   Formato: <mes>_DSF_<numero_dsf>/<cnpj>/")
 
     # Arquivo DSF
     arquivo_dsf = resumo.get("arquivo_dsf")
@@ -1416,13 +1412,13 @@ def exibir_relatorio_final(resumo: Dict[str, Any]) -> None:
     # CNPJs agrupados por DSF
     cnpjs_por_dsf = resumo.get("cnpjs_por_dsf", {})
     if cnpjs_por_dsf:
-        print(f"\n📋 CNPJs AGRUPADOS POR DSF")
+        print("\n📋 CNPJs AGRUPADOS POR DSF")
         print("-" * 70)
         for dsf_key, cnpjs_lista in cnpjs_por_dsf.items():
             print(f"\n   DSF: {dsf_key}")
             print(f"   Total de CNPJs: {len(cnpjs_lista)}")
             if cnpjs_lista:
-                print(f"   CNPJs:")
+                print("   CNPJs:")
                 for cnpj in cnpjs_lista[:10]:  # Mostra até 10
                     print(f"      - {cnpj}")
                 if len(cnpjs_lista) > 10:
@@ -1454,7 +1450,7 @@ def exibir_relatorio_final(resumo: Dict[str, Any]) -> None:
             logger.warning(f"Não foi possível salvar o resumo em TXT: {e}")
 
     # Detalhes por CNPJ
-    print(f"\n📋 DETALHAMENTO POR CNPJ")
+    print("\n📋 DETALHAMENTO POR CNPJ")
     print("-" * 70)
 
     for cnpj, resultado in resumo["resultados"].items():
@@ -1477,8 +1473,8 @@ def exibir_relatorio_final(resumo: Dict[str, Any]) -> None:
             print(f"   📄 {arquivo}")
 
         # Instrução para abrir a pasta
-        print(f"\n💡 Para visualizar os arquivos:")
-        print(f"   1. Abra o Explorer de Arquivos")
+        print("\n💡 Para visualizar os arquivos:")
+        print("   1. Abra o Explorer de Arquivos")
         print(f"   2. Navegue até: {dir_saida}")
         print(f"   3. Ou execute: explorer {dir_saida}")
 

@@ -1,7 +1,5 @@
-import pytest
 import pandas as pd
 import polars as pl
-from pathlib import Path
 from utilitarios.exportar_excel import exportar_excel
 
 

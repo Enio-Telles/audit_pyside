@@ -1,4 +1,7 @@
-import sys, subprocess, os, traceback
+import sys
+import subprocess
+import os
+import traceback
 
 # Garantir que o src fique no path para imports locais
 sys.path.insert(0, "src")

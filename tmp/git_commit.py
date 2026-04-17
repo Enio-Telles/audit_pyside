@@ -1,4 +1,6 @@
-import subprocess, sys, os, traceback
+import subprocess
+import os
+import traceback
 
 OUT = "tmp/git_result.txt"
 with open(OUT, "w", encoding="utf-8") as out:

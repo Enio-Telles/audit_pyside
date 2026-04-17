@@ -6,7 +6,6 @@ Implementa Context Manager para evitar vazamentos de recursos.
 
 import os
 import logging
-import socket
 import oracledb
 from pathlib import Path
 from dotenv import load_dotenv
@@ -67,7 +66,7 @@ def conectar(cpf_usuario=None, senha=None):
             cursor.execute("ALTER SESSION SET NLS_NUMERIC_CHARACTERS = '.,'")
 
         return conexao
-    except Exception as e:
+    except Exception:
         rprint(
             "[red]Erro de conexão Oracle:[/red] Falha ao estabelecer conexão com o banco de dados. Verifique suas credenciais e configurações de rede."
         )

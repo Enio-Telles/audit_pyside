@@ -1,5 +1,4 @@
 import polars as pl
-import pytest
 from transformacao.movimentacao_estoque_pkg.mapeamento_fontes import parse_expression
 
 

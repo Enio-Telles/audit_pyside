@@ -12,12 +12,9 @@ Extraido de movimentacao_estoque.py para melhorar modularidade.
 
 from __future__ import annotations
 
-import re
-from pathlib import Path
 from utilitarios.project_paths import PROJECT_ROOT
 
 import polars as pl
-from utilitarios.text import remove_accents
 
 ROOT_DIR = PROJECT_ROOT
 DADOS_DIR = ROOT_DIR / "dados"

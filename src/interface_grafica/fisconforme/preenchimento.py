@@ -12,13 +12,12 @@ Data: 2024-04-02
 import re
 import logging
 import base64
-import unicodedata
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 import pymupdf as fitz  # PyMuPDF (fitz)
 
 # Importa funções do módulo de extração
-from .extracao import limpar_cnpj, extrair_dados_cadastrais, normalizar_texto_para_chave
+from .extracao import normalizar_texto_para_chave
 
 # Configuração do logging para rastrear execuções
 logging.basicConfig(
@@ -32,7 +31,7 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 
 # Importa resolvedor de caminhos do pacote integrado
-from .path_resolver import get_resource_path, get_root_dir, get_modelo_path
+from .path_resolver import get_root_dir, get_modelo_path
 
 # Diretório raiz do projeto
 ROOT_DIR = get_root_dir()
