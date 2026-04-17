@@ -2,8 +2,8 @@
 Descreva em 2 a 5 linhas o que esta PR implementa.
 
 ## Contexto
+- área principal: pipeline / gui / testes / docs
 - módulo/domínio afetado:
-- etapa do pipeline afetada:
 - problema resolvido:
 - issue relacionada:
 
@@ -25,7 +25,7 @@ Descreva as mudanças principais:
 - 
 
 ## Reaproveitamento
-Liste wrappers, utilitários, mapeamentos, datasets ou módulos reaproveitados:
+Liste wrappers, pacotes, mapeamentos, serviços, telas ou datasets reaproveitados:
 - 
 - 
 
@@ -66,6 +66,7 @@ Se sim, explique:
 - [ ] validação de lineage
 - [ ] validação de cálculos
 - [ ] validação de reprocessamento
+- [ ] validação de GUI
 
 Evidências:
 - 

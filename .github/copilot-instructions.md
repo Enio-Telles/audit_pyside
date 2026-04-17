@@ -1,43 +1,24 @@
-# Copilot Instructions — audit_pyside
+# Copilot Instructions — audit_pyside (PySide only)
 
 Você está trabalhando no repositório `audit_pyside`.
 
-## Objetivo geral
-Atue como um agente técnico de planejamento, implementação e revisão com foco em:
-- auditoria fiscal com rastreabilidade ponta a ponta
-- extração Oracle para Parquet por CNPJ
-- transformação analítica com Polars
-- operação do pipeline por interface gráfica em PySide6
-- preservação de ajustes manuais e compatibilidade das saídas
+## Escopo assumido
+Considere este projeto como uma aplicação desktop com PySide6 e pipeline Python.
+Ignore sugestões de arquitetura web, frontend React ou backend web, salvo se o repositório trouxer isso explicitamente em um contexto muito específico.
 
 ## Contexto do projeto
 Assuma como base:
-- ferramenta de extração, transformação e auditoria de dados fiscais com persistência em Parquet
-- interface gráfica em PySide6
-- pipeline oficial orquestrado em `src/orquestrador_pipeline.py`
-- wrappers em `src/transformacao/` podem existir por compatibilidade; a implementação real costuma estar nos subpacotes `*_pkg`
-- `id_agrupado` é a chave mestra de produto
-- `id_agregado` pode aparecer como alias de apresentação
-- `__qtd_decl_final_audit__` guarda quantidade declarada para auditoria sem alterar o saldo físico
-- ajustes manuais de conversão e agrupamento devem ser preservados em reprocessamentos
-
-## Ordem oficial do pipeline
-Considere esta sequência como referência:
-1. tb_documentos
-2. item_unidades
-3. itens
-4. descricao_produtos
-5. produtos_final
-6. fontes_produtos
-7. fatores_conversao
-8. c170_xml
-9. c176_xml
-10. movimentacao_estoque
-11. calculos_mensais
-12. calculos_anuais
+- interface desktop em PySide6
+- pipeline Python para extração, transformação e auditoria
+- persistência analítica em Parquet
+- uso de Oracle como origem auditável quando aplicável
+- orquestração principal do pipeline em `src/orquestrador_pipeline.py`
+- transformação modular em `src/transformacao/`
+- interface gráfica em `src/interface_grafica/`
+- testes em `tests/`
+- SQL em `sql/`
 
 ## Prioridades
-Priorize nesta ordem:
 1. corretude funcional e fiscal
 2. rastreabilidade ponta a ponta
 3. reaproveitamento
@@ -47,55 +28,45 @@ Priorize nesta ordem:
 7. performance
 
 ## Regras centrais
-- Reutilize módulos, wrappers, utilitários, contratos, mapeamentos e datasets antes de criar novos artefatos.
-- Não duplique regra de negócio entre pipeline, GUI e scripts soltos.
-- Trate o pipeline Python como fonte principal da lógica.
-- Preserve a rastreabilidade da linha original do documento até os totais analíticos.
-- Preserve ajustes manuais de conversão e agrupamento em reprocessamentos.
-- Não trate Parquet como mera exportação; ele é camada operacional e analítica do projeto.
+- Reutilize módulos, wrappers, utilitários, datasets e telas antes de criar novos artefatos.
+- Não duplique regra de negócio entre pipeline e interface.
+- O pipeline Python é a fonte principal da regra analítica e fiscal.
+- A interface PySide6 deve orquestrar, consultar e apoiar revisão operacional.
+- Preserve a trilha auditável da origem do documento até o total analítico final.
 
-## Organização e camadas
-Ao propor mudanças:
-- diferencie claramente extração, transformação, cálculo analítico e interface
-- não misture regra de GUI com transformação de dados
-- não esconda regra fiscal em handlers de tela
-- mantenha a ordem e dependências do pipeline explícitas
-
-## Regras de GUI (PySide6)
-Ao sugerir telas ou fluxos:
-- priorize operação, revisão e rastreabilidade
-- evite lógica analítica pesada na interface
-- trate a GUI como camada de orquestração e consulta
-- preserve feedback claro de execução, erro e progresso
-
-## Regras de GitHub
-- Nunca sugira commit direto na main.
-- Prefira branches curtas e focadas.
-- Toda mudança relevante deve passar por PR.
-- PRs devem ser pequenas, revisáveis e com objetivo claro.
-- Não misture refatoração ampla com correção funcional crítica sem justificativa.
-- Exija CI verde para merge.
-- Sugira rollback ou reprocessamento quando a mudança afetar schema, contratos, cálculos ou datasets.
+## Pipeline e dados
+Considere como convenções sensíveis:
+- `id_agrupado` como chave mestra de produto quando aplicável
+- `id_agregado` como alias de apresentação quando existir
+- `__qtd_decl_final_audit__` como valor de auditoria sem alterar indevidamente o saldo físico
+- ajustes manuais de conversão e agrupamento devem sobreviver a reprocessamentos
 
 ## Mudanças sensíveis
-Trate como mudança sensível qualquer alteração que impacte:
+Trate como sensível qualquer alteração que impacte:
 - schema de Parquet
 - chaves de join
-- conversão de unidades
 - agrupamento de produtos
+- conversão de unidades
 - movimentação de estoque
 - cálculos mensais/anuais
-- contratos consumidos pela GUI
+- comportamento da GUI PySide6
 - preservação de ajustes manuais
 
 Nesses casos:
-- explicite o risco
+- explicite risco
 - proponha validação
-- indique migração ou reprocessamento
+- indique rollback ou reprocessamento
 - preserve compatibilidade quando possível
 
+## Regras de GitHub
+- nunca sugira commit direto na main
+- prefira branches curtas e focadas
+- toda mudança relevante deve passar por PR
+- PRs devem ser pequenas, revisáveis e com objetivo claro
+- não misture refatoração ampla com correção funcional crítica sem justificativa
+- documente impacto, validação e risco
+
 ## Formato preferido de resposta
-Sempre que possível, responda com:
 - Objetivo
 - Contexto no audit_pyside
 - Reaproveitamento possível
@@ -108,22 +79,3 @@ Sempre que possível, responda com:
 - Plano de execução
 - Riscos e decisões críticas
 - MVP recomendado
-
-## Anti-padrões
-Nunca:
-- invente requisitos não informados
-- misture UI com transformação base
-- duplique regra de negócio entre GUI e pipeline
-- ignore lineage
-- quebre contratos sem avisar
-- altere schema sem avaliar migração e reprocessamento
-- faça PR gigante sem necessidade
-- descarte ajustes manuais em reprocessamento
-
-## Estilo esperado
-Seja:
-- técnico
-- direto
-- pragmático
-- orientado à execução
-- sem abstração desnecessária

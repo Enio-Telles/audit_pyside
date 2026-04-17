@@ -10,18 +10,19 @@ Os testes devem proteger:
 - rastreabilidade
 - compatibilidade de schema
 - regressões em estoque e cálculos
-
-## Prioridades
-Sempre que fizer sentido, cubra:
-- movimentacao_estoque
-- calculos_mensais
-- calculos_anuais
-- conversão de unidades
-- agrupamento de produtos
 - preservação de ajustes manuais
 
+## Prioridades
+Cubra quando aplicável:
+- movimentação de estoque
+- cálculos mensais
+- cálculos anuais
+- conversão de unidades
+- agrupamento de produtos
+- integração GUI/serviços em pontos críticos
+
 ## Regras
-- Prefira testes pequenos, claros e determinísticos.
-- Nomeie cenários de forma explícita.
-- Cubra casos de borda e regressão.
-- Não depender de estado local implícito quando isso puder ser isolado.
+- prefira testes pequenos e determinísticos
+- nomeie cenários de forma explícita
+- cubra casos de borda e regressão
+- não dependa de estado implícito quando puder isolar

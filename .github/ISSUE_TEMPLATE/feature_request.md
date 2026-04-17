@@ -1,6 +1,6 @@
 ---
 name: Feature request
-about: Planejar e implementar uma nova funcionalidade
+about: Nova funcionalidade com impacto em pipeline ou GUI PySide6
 title: "[feat] "
 labels: ["feature"]
 assignees: []
@@ -18,7 +18,7 @@ Qual problema operacional/fiscal isso resolve?
 - [ ] movimentação de estoque
 - [ ] cálculos mensais
 - [ ] cálculos anuais
-- [ ] GUI
+- [ ] GUI PySide6
 - [ ] relatórios
 - [ ] testes
 
