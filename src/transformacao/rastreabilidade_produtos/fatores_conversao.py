@@ -727,6 +727,20 @@ def calcular_fatores_conversao(cnpj: str, pasta_cnpj: Path | None = None) -> boo
                 pl.col("fator_override").is_not_null().fill_null(False).alias("fator_manual"),
             ]
         )
+        # Classifique a origem do fator de conversão para rastrear como ele foi calculado.
+        # - manual: houve override de fator (fator_manual é verdadeiro)
+        # - fallback: não houve preço de referência (origem_preco == "SEM_PRECO")
+        # - preco: fator calculado a partir do preço médio de compra/venda
+        .with_columns(
+            [
+                pl.when(pl.col("fator_manual"))
+                .then(pl.lit("manual"))
+                .when(pl.col("origem_preco") == "SEM_PRECO")
+                .then(pl.lit("fallback"))
+                .otherwise(pl.lit("preco"))
+                .alias("fator_origem"),
+            ]
+        )
         .select(
             [
                 "id_agrupado",
@@ -737,6 +751,7 @@ def calcular_fatores_conversao(cnpj: str, pasta_cnpj: Path | None = None) -> boo
                 "fator",
                 "fator_manual",
                 "unid_ref_manual",
+                "fator_origem",
                 pl.col("preco_medio_base").alias("preco_medio"),
                 "origem_preco",
             ]

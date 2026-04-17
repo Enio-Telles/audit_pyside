@@ -15,7 +15,7 @@ Descreva a melhoria técnica.
 - [ ] performance
 - [ ] testes
 - [ ] observabilidade
-- [ ] GUI
+- [ ] GUI PySide6
 - [ ] pipeline
 - [ ] CI/CD
 - [ ] documentação
