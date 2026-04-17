@@ -447,7 +447,7 @@ def _ler_nfe_ou_nfce(path: Path | None, cnpj: str, nome_fonte: str, cfop_mercant
                 pl.lit(nome_fonte).alias("fonte"),
             ]
         )
-        .select(["codigo", "descricao", "descr_compl", "tipo_item", "ncm", "cest", "gtin", "unid", "compras", "qtd_compras", "vendas", "qtd_vendas", "fonte"])
+        .select(["codigo", "descricao", "descr_compl", "tipo_item", "ncm", "cest", "gtin", "unid", "codigo_fonte", "compras", "qtd_compras", "vendas", "qtd_vendas", "fonte"])
     )
 
 def item_unidades(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
