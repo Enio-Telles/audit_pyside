@@ -51,9 +51,19 @@ class ParquetService:
         self.root = root
         self.root.mkdir(parents=True, exist_ok=True)
         self._schema_cache: dict[tuple[str, int, int], list[str]] = {}
-        self._count_cache: dict[tuple[str, int, int, tuple[tuple[str, str, str], ...]], int] = {}
+        self._count_cache: dict[
+            tuple[str, int, int, tuple[tuple[str, str, str], ...]], int
+        ] = {}
         self._page_cache: OrderedDict[
-            tuple[str, int, int, tuple[tuple[str, str, str], ...], tuple[str, ...], int, int],
+            tuple[
+                str,
+                int,
+                int,
+                tuple[tuple[str, str, str], ...],
+                tuple[str, ...],
+                int,
+                int,
+            ],
             PageResult,
         ] = OrderedDict()
         self._page_cache_limit = 10
@@ -69,15 +79,23 @@ class ParquetService:
         return (str(parquet_path.resolve()), stat.st_mtime_ns, stat.st_size)
 
     @staticmethod
-    def _conditions_key(conditions: Iterable[FilterCondition] | None) -> tuple[tuple[str, str, str], ...]:
+    def _conditions_key(
+        conditions: Iterable[FilterCondition] | None,
+    ) -> tuple[tuple[str, str, str], ...]:
         if not conditions:
             return ()
-        return tuple((c.column or "", c.operator or "", c.value or "") for c in conditions)
+        return tuple(
+            (c.column or "", c.operator or "", c.value or "") for c in conditions
+        )
 
     def list_cnpjs(self) -> list[str]:
         if not self.root.exists():
             return []
-        rows = [p.name for p in self.root.iterdir() if p.is_dir() and (p.name.isdigit() and len(p.name) >= 11)]
+        rows = [
+            p.name
+            for p in self.root.iterdir()
+            if p.is_dir() and (p.name.isdigit() and len(p.name) >= 11)
+        ]
         return sorted(rows)
 
     def cnpj_dir(self, cnpj: str) -> Path:
@@ -87,13 +105,13 @@ class ParquetService:
         base = self.cnpj_dir(cnpj)
         if not base.exists():
             return []
-        
+
         # New structure
         brutos = base / "arquivos_parquet"
         analises = base / "analises" / "produtos"
         # Old structure fallback
         old_prod = base / "produtos"
-        
+
         files = []
         if brutos.exists():
             files.extend(brutos.glob("*.parquet"))
@@ -101,15 +119,18 @@ class ParquetService:
             files.extend(analises.glob("*.parquet"))
         if old_prod.exists():
             files.extend(old_prod.glob("*.parquet"))
-        
+
         # Also check root of CNPJ folder for any loose parquets
         files.extend(base.glob("*.parquet"))
-        
+
         filtrados: list[Path] = []
         for path in set(files):
             parent_str = str(path.parent)
             if "arquivos_parquet" in parent_str:
-                if any(tag in path.name for tag in ("_produtos_", "_enriquecido_", "_sem_id_agrupado_")):
+                if any(
+                    tag in path.name
+                    for tag in ("_produtos_", "_enriquecido_", "_sem_id_agrupado_")
+                ):
                     continue
                 filtrados.append(path)
                 continue
@@ -118,7 +139,7 @@ class ParquetService:
                     filtrados.append(path)
                 continue
             filtrados.append(path)
-        
+
         return sorted(filtrados, key=lambda p: (str(p.parent), p.name))
 
     def get_schema(self, parquet_path: Path) -> list[str]:
@@ -194,9 +215,7 @@ class ParquetService:
         col = pl.col(column)
         if self._is_list_dtype(dtype):
             return (
-                col.cast(pl.List(pl.Utf8), strict=False)
-                .list.join(" | ")
-                .fill_null("")
+                col.cast(pl.List(pl.Utf8), strict=False).list.join(" | ").fill_null("")
             )
         return col.cast(pl.Utf8, strict=False).fill_null("")
 
@@ -225,7 +244,10 @@ class ParquetService:
         except Exception:
             numeric_value = None
 
-        if op in {"maior", "maior_igual", "menor", "menor_igual"} and numeric_value is not None:
+        if (
+            op in {"maior", "maior_igual", "menor", "menor_igual"}
+            and numeric_value is not None
+        ):
             mapping = {
                 "maior": numeric_col > numeric_value,
                 "maior_igual": numeric_col >= numeric_value,
@@ -259,14 +281,22 @@ class ParquetService:
             op_norm = self._normalize_operator(cond.operator)
             if op_norm not in {"e_nulo", "nao_e_nulo"} and cond.value == "":
                 continue
-            filtered = filtered.filter(self._build_expr(cond, available_columns.get(cond.column)))
+            filtered = filtered.filter(
+                self._build_expr(cond, available_columns.get(cond.column))
+            )
         return filtered
 
-    def build_lazyframe(self, parquet_path: Path, conditions: Iterable[FilterCondition] | None = None) -> pl.LazyFrame:
+    def build_lazyframe(
+        self, parquet_path: Path, conditions: Iterable[FilterCondition] | None = None
+    ) -> pl.LazyFrame:
         lf = pl.scan_parquet(parquet_path)
         if conditions:
             schema = pl.read_parquet_schema(parquet_path)
-            lf = self.apply_filters(lf, conditions, available_columns={name: schema[name] for name in schema.names()})
+            lf = self.apply_filters(
+                lf,
+                conditions,
+                available_columns={name: schema[name] for name in schema.names()},
+            )
         return lf
 
     def get_page(
@@ -394,7 +424,12 @@ class ParquetService:
             self._page_cache.popitem(last=False)
         return result
 
-    def load_dataset(self, parquet_path: Path, conditions: list[FilterCondition] | None = None, columns: list[str] | None = None) -> pl.DataFrame:
+    def load_dataset(
+        self,
+        parquet_path: Path,
+        conditions: list[FilterCondition] | None = None,
+        columns: list[str] | None = None,
+    ) -> pl.DataFrame:
         inicio = perf_counter()
         cache_key = (
             *self._path_signature(parquet_path),
@@ -443,10 +478,17 @@ class ParquetService:
         parquet_path.parent.mkdir(parents=True, exist_ok=True)
         df.write_parquet(parquet_path, compression="snappy")
         target = str(parquet_path.resolve())
-        self._schema_cache = {k: v for k, v in self._schema_cache.items() if k[0] != target}
-        self._count_cache = {k: v for k, v in self._count_cache.items() if k[0] != target}
-        self._page_cache = OrderedDict((k, v) for k, v in self._page_cache.items() if k[0] != target)
-        self._dataset_cache = OrderedDict((k, v) for k, v in self._dataset_cache.items() if k[0] != target)
+        self._schema_cache = {
+            k: v for k, v in self._schema_cache.items() if k[0] != target
+        }
+        self._count_cache = {
+            k: v for k, v in self._count_cache.items() if k[0] != target
+        }
+        self._page_cache = OrderedDict(
+            (k, v) for k, v in self._page_cache.items() if k[0] != target
+        )
+        self._dataset_cache = OrderedDict(
+            (k, v) for k, v in self._dataset_cache.items() if k[0] != target
+        )
 
     paginate = get_page
-

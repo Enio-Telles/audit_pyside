@@ -15,8 +15,12 @@ class PolarsTableModel(QAbstractTableModel):
         df: pl.DataFrame | None = None,
         checkable: bool = False,
         editable_columns: set[str] | None = None,
-        foreground_resolver: Callable[[dict[str, Any], str], QColor | str | None] | None = None,
-        background_resolver: Callable[[dict[str, Any], str], QColor | str | None] | None = None,
+        foreground_resolver: (
+            Callable[[dict[str, Any], str], QColor | str | None] | None
+        ) = None,
+        background_resolver: (
+            Callable[[dict[str, Any], str], QColor | str | None] | None
+        ) = None,
         font_resolver: Callable[[dict[str, Any], str], QFont | None] | None = None,
     ) -> None:
         super().__init__()
@@ -232,10 +236,12 @@ class PolarsTableModel(QAbstractTableModel):
             row = index.row()
             # Handle both enum values and integers
             if isinstance(value, Qt.CheckState):
-                is_checked = (value == Qt.CheckState.Checked)
+                is_checked = value == Qt.CheckState.Checked
             else:
-                is_checked = (value == Qt.Checked or value == 2) # 2 is usually Qt.Checked
-                
+                is_checked = (
+                    value == Qt.Checked or value == 2
+                )  # 2 is usually Qt.Checked
+
             if is_checked:
                 self._checked_rows.add(row)
                 key = self._row_key(row)
@@ -246,7 +252,7 @@ class PolarsTableModel(QAbstractTableModel):
                 key = self._row_key(row)
                 if key is not None:
                     self._checked_keys.discard(key)
-            
+
             self.dataChanged.emit(index, index, [Qt.CheckStateRole])
             return True
 
@@ -277,13 +283,22 @@ class PolarsTableModel(QAbstractTableModel):
                     if raw == "":
                         parsed = None
                     else:
-                        raw = raw.replace(',', '.')
-                        if '/' in raw:
-                            numerador, denominador = raw.split('/', 1)
+                        raw = raw.replace(",", ".")
+                        if "/" in raw:
+                            numerador, denominador = raw.split("/", 1)
                             parsed = float(numerador) / float(denominador)
                         else:
                             parsed = float(raw)
-                elif dtype in (pl.Int64, pl.Int32, pl.Int16, pl.Int8, pl.UInt64, pl.UInt32, pl.UInt16, pl.UInt8):
+                elif dtype in (
+                    pl.Int64,
+                    pl.Int32,
+                    pl.Int16,
+                    pl.Int8,
+                    pl.UInt64,
+                    pl.UInt32,
+                    pl.UInt16,
+                    pl.UInt8,
+                ):
                     parsed = None if raw == "" else int(float(raw))
                 else:
                     parsed = raw
@@ -303,11 +318,16 @@ class PolarsTableModel(QAbstractTableModel):
             # Explicitly set necessary flags for interactivity
             return Qt.ItemIsEnabled | Qt.ItemIsSelectable | Qt.ItemIsUserCheckable
         col = index.column() - (1 if self._checkable else 0)
-        if 0 <= col < self._df.width and self._df.columns[col] in self._editable_columns:
+        if (
+            0 <= col < self._df.width
+            and self._df.columns[col] in self._editable_columns
+        ):
             return f | Qt.ItemIsEditable
         return f
 
-    def headerData(self, section: int, orientation: Qt.Orientation, role: int = Qt.DisplayRole) -> Any:
+    def headerData(
+        self, section: int, orientation: Qt.Orientation, role: int = Qt.DisplayRole
+    ) -> Any:
         if role != Qt.DisplayRole:
             return None
         if orientation == Qt.Horizontal:
@@ -353,7 +373,9 @@ class PolarsTableModel(QAbstractTableModel):
                 results.append(self.row_as_dict(r))
         return results
 
-    def set_checked_keys(self, keys: set[tuple[str, ...]] | list[tuple[str, ...]]) -> None:
+    def set_checked_keys(
+        self, keys: set[tuple[str, ...]] | list[tuple[str, ...]]
+    ) -> None:
         self._checked_keys = set(keys or set())
         self._rebuild_checked_rows_from_keys()
         self.layoutChanged.emit()

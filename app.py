@@ -4,6 +4,7 @@ Lançador principal do Fiscal Parquet Analyzer.
 Executa a interface gráfica a partir da raiz do projeto C:\\Sistema_pysisde,
 configurando o sys.path para encontrar os pacotes dentro de src/.
 """
+
 from __future__ import annotations
 
 import os
@@ -24,6 +25,7 @@ if str(UTILITARIOS_DIR) not in sys.path:
 from PySide6.QtWidgets import QApplication
 from interface_grafica.ui.main_window import MainWindow
 
+
 def main() -> int:
     app = QApplication(sys.argv)
     app.setApplicationName("Fiscal Parquet Analyzer (Refatorado)")
@@ -34,4 +36,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

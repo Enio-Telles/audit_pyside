@@ -18,4 +18,6 @@ def test_preset_mov_estoque_expoe_fonte_nos_perfis_de_auditoria():
 
     assert '"exportar": ["ordem_operacoes", "Tipo_operacao", "fonte"' in conteudo
     assert '"auditoria": ["ordem_operacoes", "Tipo_operacao", "fonte"' in conteudo
-    assert '"auditoria fiscal": ["ordem_operacoes", "Tipo_operacao", "fonte"' in conteudo
+    assert (
+        '"auditoria fiscal": ["ordem_operacoes", "Tipo_operacao", "fonte"' in conteudo
+    )

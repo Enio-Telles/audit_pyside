@@ -11,17 +11,54 @@ def test_recalcular_referencias_agr_inclui_calculos_periodos(monkeypatch):
     ordem = []
     servico = aggregation_service_module.ServicoAgregacao()
 
-    monkeypatch.setattr(servico, "recalcular_produtos_final", lambda cnpj: ordem.append("produtos_final") or True)
-    monkeypatch.setattr(servico, "refazer_tabelas_agr", lambda cnpj: ordem.append("fontes_agr") or True)
-    monkeypatch.setattr(aggregation_service_module, "calcular_fatores_conversao", lambda cnpj: ordem.append("fatores_conversao") or True)
-    monkeypatch.setattr(aggregation_service_module, "gerar_c170_xml", lambda cnpj: ordem.append("c170_xml") or True)
-    monkeypatch.setattr(aggregation_service_module, "gerar_c176_xml", lambda cnpj: ordem.append("c176_xml") or True)
-    monkeypatch.setattr(aggregation_service_module, "gerar_movimentacao_estoque", lambda cnpj: ordem.append("mov_estoque") or True)
-    monkeypatch.setattr(aggregation_service_module, "gerar_calculos_mensais", lambda cnpj: ordem.append("calculos_mensais") or True)
-    monkeypatch.setattr(aggregation_service_module, "gerar_calculos_anuais", lambda cnpj: ordem.append("calculos_anuais") or True)
-    monkeypatch.setattr(aggregation_service_module, "gerar_calculos_periodos", lambda cnpj: ordem.append("calculos_periodos") or True)
+    monkeypatch.setattr(
+        servico,
+        "recalcular_produtos_final",
+        lambda cnpj: ordem.append("produtos_final") or True,
+    )
+    monkeypatch.setattr(
+        servico, "refazer_tabelas_agr", lambda cnpj: ordem.append("fontes_agr") or True
+    )
+    monkeypatch.setattr(
+        aggregation_service_module,
+        "calcular_fatores_conversao",
+        lambda cnpj: ordem.append("fatores_conversao") or True,
+    )
+    monkeypatch.setattr(
+        aggregation_service_module,
+        "gerar_c170_xml",
+        lambda cnpj: ordem.append("c170_xml") or True,
+    )
+    monkeypatch.setattr(
+        aggregation_service_module,
+        "gerar_c176_xml",
+        lambda cnpj: ordem.append("c176_xml") or True,
+    )
+    monkeypatch.setattr(
+        aggregation_service_module,
+        "gerar_movimentacao_estoque",
+        lambda cnpj: ordem.append("mov_estoque") or True,
+    )
+    monkeypatch.setattr(
+        aggregation_service_module,
+        "gerar_calculos_mensais",
+        lambda cnpj: ordem.append("calculos_mensais") or True,
+    )
+    monkeypatch.setattr(
+        aggregation_service_module,
+        "gerar_calculos_anuais",
+        lambda cnpj: ordem.append("calculos_anuais") or True,
+    )
+    monkeypatch.setattr(
+        aggregation_service_module,
+        "gerar_calculos_periodos",
+        lambda cnpj: ordem.append("calculos_periodos") or True,
+    )
 
-    assert servico.recalcular_referencias_agr("12345678000190", reset_timings=False) is True
+    assert (
+        servico.recalcular_referencias_agr("12345678000190", reset_timings=False)
+        is True
+    )
     assert ordem == [
         "produtos_final",
         "fontes_agr",
@@ -39,11 +76,31 @@ def test_recalcular_mov_estoque_inclui_calculos_periodos(monkeypatch):
     ordem = []
     servico = aggregation_service_module.ServicoAgregacao()
 
-    monkeypatch.setattr(aggregation_service_module, "gerar_c176_xml", lambda cnpj: ordem.append("c176_xml") or True)
-    monkeypatch.setattr(aggregation_service_module, "gerar_movimentacao_estoque", lambda cnpj: ordem.append("mov_estoque") or True)
-    monkeypatch.setattr(aggregation_service_module, "gerar_calculos_mensais", lambda cnpj: ordem.append("calculos_mensais") or True)
-    monkeypatch.setattr(aggregation_service_module, "gerar_calculos_anuais", lambda cnpj: ordem.append("calculos_anuais") or True)
-    monkeypatch.setattr(aggregation_service_module, "gerar_calculos_periodos", lambda cnpj: ordem.append("calculos_periodos") or True)
+    monkeypatch.setattr(
+        aggregation_service_module,
+        "gerar_c176_xml",
+        lambda cnpj: ordem.append("c176_xml") or True,
+    )
+    monkeypatch.setattr(
+        aggregation_service_module,
+        "gerar_movimentacao_estoque",
+        lambda cnpj: ordem.append("mov_estoque") or True,
+    )
+    monkeypatch.setattr(
+        aggregation_service_module,
+        "gerar_calculos_mensais",
+        lambda cnpj: ordem.append("calculos_mensais") or True,
+    )
+    monkeypatch.setattr(
+        aggregation_service_module,
+        "gerar_calculos_anuais",
+        lambda cnpj: ordem.append("calculos_anuais") or True,
+    )
+    monkeypatch.setattr(
+        aggregation_service_module,
+        "gerar_calculos_periodos",
+        lambda cnpj: ordem.append("calculos_periodos") or True,
+    )
 
     assert servico.recalcular_mov_estoque("12345678000190", reset_timings=False) is True
     assert ordem == [

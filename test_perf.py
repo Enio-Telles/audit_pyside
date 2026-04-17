@@ -1,9 +1,11 @@
 import polars as pl
 import time
 
+
 def filter_approach(df_base, desc_norms):
     for i in range(100):
         _ = df_base.filter(pl.col("descricao").is_in(desc_norms))
+
 
 def dict_approach(df_base, desc_norms):
     d = df_base.partition_by("descricao", as_dict=True)
@@ -12,19 +14,20 @@ def dict_approach(df_base, desc_norms):
         parts = [d.get((n,), empty) for n in desc_norms]
         _ = pl.concat(parts) if parts else empty
 
+
 # Setup
 N = 100000
 import random
 import string
+
+
 def get_random_string(length):
     letters = string.ascii_lowercase
-    return ''.join(random.choice(letters) for i in range(length))
+    return "".join(random.choice(letters) for i in range(length))
+
 
 descricoes = [get_random_string(10) for _ in range(N)]
-df = pl.DataFrame({
-    "descricao": descricoes,
-    "val": range(N)
-})
+df = pl.DataFrame({"descricao": descricoes, "val": range(N)})
 
 # Select 100 norms
 norms = random.sample(descricoes, 100)

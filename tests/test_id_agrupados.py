@@ -10,7 +10,9 @@ import transformacao.rastreabilidade_produtos.id_agrupados as id_agrupados_modul
 from transformacao.rastreabilidade_produtos.id_agrupados import gerar_id_agrupados
 
 
-def test_gerar_id_agrupados_separa_descricoes_de_complementos(monkeypatch, tmp_path: Path):
+def test_gerar_id_agrupados_separa_descricoes_de_complementos(
+    monkeypatch, tmp_path: Path
+):
     cnpj = "12345678000190"
     pasta_cnpj = tmp_path / cnpj
     pasta_prod = pasta_cnpj / "analises" / "produtos"

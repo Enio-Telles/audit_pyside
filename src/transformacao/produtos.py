@@ -78,29 +78,28 @@ def gerar_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
                 .alias(target_alias)
             )
 
-        df_grouped = (
-            df.group_by("codigo_fonte")
-            .agg(
-                [
-                    pl.col("descricao_normalizada").first().alias("descricao_normalizada"),
-                    pl.col("descricao").first().alias("descricao"),
-                    _agg_list("descr_compl"),
-                    _agg_list("codigo"),
-                    _agg_list("tipo_item"),
-                    _agg_list("ncm"),
-                    _agg_list("cest"),
-                    _agg_list("gtin"),
-                    _agg_list("co_sefin_item", suffix="co_sefin"),
-                    _agg_list("unid", suffix="unid"),
-                    pl.col("compras").sum().alias("total_compras"),
-                    pl.col("vendas").sum().alias("total_vendas"),
-                ]
-            )
+        df_grouped = df.group_by("codigo_fonte").agg(
+            [
+                pl.col("descricao_normalizada").first().alias("descricao_normalizada"),
+                pl.col("descricao").first().alias("descricao"),
+                _agg_list("descr_compl"),
+                _agg_list("codigo"),
+                _agg_list("tipo_item"),
+                _agg_list("ncm"),
+                _agg_list("cest"),
+                _agg_list("gtin"),
+                _agg_list("co_sefin_item", suffix="co_sefin"),
+                _agg_list("unid", suffix="unid"),
+                pl.col("compras").sum().alias("total_compras"),
+                pl.col("vendas").sum().alias("total_vendas"),
+            ]
         )
 
         df_grouped = df_grouped.with_columns(
             pl.col("codigo_fonte").alias("chave_produto"),
-            pl.col("codigo_fonte").alias("chave_item") # Mantido para compatibilidade temporaria
+            pl.col("codigo_fonte").alias(
+                "chave_item"
+            ),  # Mantido para compatibilidade temporaria
         )
 
         list_cols = [c for c in df_grouped.columns if c.startswith("lista_")]
@@ -124,7 +123,9 @@ def gerar_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         return True
 
     except Exception as exc:
-        ERR_CONSOLE.print(f"[red]Erro fatal no processamento de produtos para {cnpj}:[/red] {exc}")
+        ERR_CONSOLE.print(
+            f"[red]Erro fatal no processamento de produtos para {cnpj}:[/red] {exc}"
+        )
         raise
 
 

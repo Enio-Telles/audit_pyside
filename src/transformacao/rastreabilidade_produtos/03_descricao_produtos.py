@@ -92,7 +92,9 @@ def descricao_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
             return False
 
     if not arq_item_unid.exists() or not arq_itens.exists():
-        rprint("[red]Arquivos base para descricao_produtos nao foram encontrados.[/red]")
+        rprint(
+            "[red]Arquivos base para descricao_produtos nao foram encontrados.[/red]"
+        )
         return False
 
     rprint(f"[bold cyan]Gerando descricao_produtos para CNPJ: {cnpj}[/bold cyan]")
@@ -137,9 +139,13 @@ def descricao_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
     for col in required_item_cols:
         if col not in df_item_unid.columns:
             if col in {"fontes", "lista_codigo_fonte"}:
-                df_item_unid = df_item_unid.with_columns(pl.lit([]).cast(pl.List(pl.String)).alias(col))
+                df_item_unid = df_item_unid.with_columns(
+                    pl.lit([]).cast(pl.List(pl.String)).alias(col)
+                )
             else:
-                df_item_unid = df_item_unid.with_columns(pl.lit(None, pl.String).alias(col))
+                df_item_unid = df_item_unid.with_columns(
+                    pl.lit(None, pl.String).alias(col)
+                )
 
     df_item_unid = df_item_unid.with_columns(_normalizar_descricao_expr("descricao"))
 
@@ -164,7 +170,12 @@ def descricao_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
                 _agg_list("co_sefin_item", "lista_co_sefin"),
                 _agg_list("gtin", "lista_gtin"),
                 _agg_list("unid", "lista_unid"),
-                pl.col("lista_codigo_fonte").explode().drop_nulls().unique().sort().alias("lista_codigo_fonte"),
+                pl.col("lista_codigo_fonte")
+                .explode()
+                .drop_nulls()
+                .unique()
+                .sort()
+                .alias("lista_codigo_fonte"),
                 pl.col("fontes").explode().drop_nulls().unique().sort().alias("fontes"),
                 _agg_list("id_item_unid", "lista_id_item_unid"),
             ]
@@ -195,7 +206,9 @@ def descricao_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         )
     )
 
-    return salvar_para_parquet(df_descricoes, pasta_analises, f"descricao_produtos_{cnpj}.parquet")
+    return salvar_para_parquet(
+        df_descricoes, pasta_analises, f"descricao_produtos_{cnpj}.parquet"
+    )
 
 
 def gerar_descricao_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
@@ -207,5 +220,3 @@ if __name__ == "__main__":
         descricao_produtos(sys.argv[1])
     else:
         descricao_produtos(input("CNPJ: "))
-
-

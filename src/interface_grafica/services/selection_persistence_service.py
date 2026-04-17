@@ -32,7 +32,9 @@ class SelectionPersistenceService:
     def _save(self) -> None:
         self.file_path.parent.mkdir(parents=True, exist_ok=True)
         try:
-            self.file_path.write_text(json.dumps(self._cache, indent=2, ensure_ascii=False), encoding="utf-8")
+            self.file_path.write_text(
+                json.dumps(self._cache, indent=2, ensure_ascii=False), encoding="utf-8"
+            )
         except Exception:
             pass
 

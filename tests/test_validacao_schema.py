@@ -22,7 +22,9 @@ def test_garantir_colunas_obrigatorias_retorna_dataframe_quando_ok():
 
 def test_garantir_colunas_obrigatorias_falha_com_contexto():
     df = pl.DataFrame({"a": [1]})
-    with pytest.raises(SchemaValidacaoError, match="teste: colunas obrigatorias ausentes: b"):
+    with pytest.raises(
+        SchemaValidacaoError, match="teste: colunas obrigatorias ausentes: b"
+    ):
         garantir_colunas_obrigatorias(df, ["a", "b"], contexto="teste")
 
 

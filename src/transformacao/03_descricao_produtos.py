@@ -78,11 +78,12 @@ def descricao_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
             return False
 
     if not arq_item_unid.exists() or not arq_itens.exists():
-        rprint("[red]Arquivos base para descricao_produtos nao foram encontrados.[/red]")
+        rprint(
+            "[red]Arquivos base para descricao_produtos nao foram encontrados.[/red]"
+        )
         return False
 
     rprint(f"[bold cyan]Gerando descricao_produtos para CNPJ: {cnpj}[/bold cyan]")
-
 
     lf_item_unid = pl.scan_parquet(arq_item_unid)
     lf_itens = pl.scan_parquet(arq_itens)
@@ -104,22 +105,24 @@ def descricao_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
     for col in required_item_cols:
         if col not in lf_item_unid.schema:
             if col == "fontes":
-                lf_item_unid = lf_item_unid.with_columns(pl.lit([]).cast(pl.List(pl.String)).alias(col))
+                lf_item_unid = lf_item_unid.with_columns(
+                    pl.lit([]).cast(pl.List(pl.String)).alias(col)
+                )
             else:
-                lf_item_unid = lf_item_unid.with_columns(pl.lit(None, pl.String).alias(col))
+                lf_item_unid = lf_item_unid.with_columns(
+                    pl.lit(None, pl.String).alias(col)
+                )
 
     lf_item_unid = lf_item_unid.with_columns(_normalizar_descricao_expr("descricao"))
 
     lf_lista_ids = (
-        lf_itens
-        .select(["descricao_normalizada", "id_item"])
+        lf_itens.select(["descricao_normalizada", "id_item"])
         .group_by("descricao_normalizada")
         .agg(_agg_list("id_item", "lista_id_item"))
     )
 
-    lf_descricoes = (
-        lf_item_unid.group_by("descricao_normalizada")
-        .agg([
+    lf_descricoes = lf_item_unid.group_by("descricao_normalizada").agg(
+        [
             pl.col("descricao").drop_nulls().first().alias("descricao"),
             _agg_list("descr_compl", "lista_desc_compl"),
             _agg_list("codigo", "lista_codigos"),
@@ -131,36 +134,46 @@ def descricao_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
             _agg_list("unid", "lista_unid"),
             pl.col("fontes").explode().drop_nulls().unique().sort().alias("fontes"),
             _agg_list("id_item_unid", "lista_id_item_unid"),
-        ])
+        ]
     )
     # Join LazyFrames
-    lf_descricoes = lf_descricoes.join(lf_lista_ids, on="descricao_normalizada", how="left")
-    lf_descricoes = lf_descricoes.sort(["descricao_normalizada", "descricao"], nulls_last=True)
+    lf_descricoes = lf_descricoes.join(
+        lf_lista_ids, on="descricao_normalizada", how="left"
+    )
+    lf_descricoes = lf_descricoes.sort(
+        ["descricao_normalizada", "descricao"], nulls_last=True
+    )
     lf_descricoes = lf_descricoes.with_row_count("seq", offset=1)
-    lf_descricoes = lf_descricoes.with_columns(pl.format("id_descricao_{}", pl.col("seq")).alias("id_descricao"))
+    lf_descricoes = lf_descricoes.with_columns(
+        pl.format("id_descricao_{}", pl.col("seq")).alias("id_descricao")
+    )
     lf_descricoes = lf_descricoes.drop("seq")
-    lf_descricoes = lf_descricoes.select([
-        "id_descricao",
-        "descricao_normalizada",
-        "descricao",
-        "lista_desc_compl",
-        "lista_codigos",
-        "lista_tipo_item",
-        "lista_ncm",
-        "lista_cest",
-        "lista_co_sefin",
-        "lista_gtin",
-        "lista_unid",
-        "fontes",
-        "lista_id_item_unid",
-        "lista_id_item",
-    ])
+    lf_descricoes = lf_descricoes.select(
+        [
+            "id_descricao",
+            "descricao_normalizada",
+            "descricao",
+            "lista_desc_compl",
+            "lista_codigos",
+            "lista_tipo_item",
+            "lista_ncm",
+            "lista_cest",
+            "lista_co_sefin",
+            "lista_gtin",
+            "lista_unid",
+            "fontes",
+            "lista_id_item_unid",
+            "lista_id_item",
+        ]
+    )
 
     df_descricoes = lf_descricoes.collect()
     if df_descricoes.is_empty():
         rprint("[yellow]Arquivo descricao_produtos resultou vazio.[/yellow]")
         return False
-    return salvar_para_parquet(df_descricoes, pasta_analises, f"descricao_produtos_{cnpj}.parquet")
+    return salvar_para_parquet(
+        df_descricoes, pasta_analises, f"descricao_produtos_{cnpj}.parquet"
+    )
 
 
 def gerar_descricao_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
@@ -172,5 +185,3 @@ if __name__ == "__main__":
         descricao_produtos(sys.argv[1])
     else:
         descricao_produtos(input("CNPJ: "))
-
-

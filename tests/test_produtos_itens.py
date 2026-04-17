@@ -19,16 +19,22 @@ def test_normalizar_descricao_expr_various_cases():
     - Numeric values
     - Empty strings
     """
-    df = pl.DataFrame({
-        "descricao": pl.Series("descricao", [
-            "Normal Text",             # 0: Happy path
-            "Açúcar, Café & Maçã",     # 1: Diacritics
-            "  Extra   Spaces  ",      # 2: Multiple spaces
-            None,                      # 3: Null value
-            12345,                     # 4: Numeric value
-            "",                        # 5: Empty string
-        ], strict=False)
-    })
+    df = pl.DataFrame(
+        {
+            "descricao": pl.Series(
+                "descricao",
+                [
+                    "Normal Text",  # 0: Happy path
+                    "Açúcar, Café & Maçã",  # 1: Diacritics
+                    "  Extra   Spaces  ",  # 2: Multiple spaces
+                    None,  # 3: Null value
+                    12345,  # 4: Numeric value
+                    "",  # 5: Empty string
+                ],
+                strict=False,
+            )
+        }
+    )
 
     # Apply the expression
     result_df = df.with_columns(_normalizar_descricao_expr("descricao"))
@@ -60,9 +66,7 @@ def test_normalizar_descricao_expr_various_cases():
 
 def test_normalizar_descricao_expr_special_chars():
     """Test with special characters."""
-    df = pl.DataFrame({
-        "desc": ["C@misa! (Polo) #1"]
-    })
+    df = pl.DataFrame({"desc": ["C@misa! (Polo) #1"]})
 
     result_df = df.with_columns(_normalizar_descricao_expr("desc"))
 

@@ -1,4 +1,5 @@
 """conftest.py raiz — garante que src/ e src/utilitarios/ estejam no sys.path."""
+
 import sys
 from pathlib import Path
 

@@ -19,7 +19,9 @@ def test_construir_tabela_ponte_explode_lista_codigo_fonte():
         }
     )
 
-    result = produtos_mod._construir_tabela_ponte(df).sort(["codigo_fonte", "chave_produto"])
+    result = produtos_mod._construir_tabela_ponte(df).sort(
+        ["codigo_fonte", "chave_produto"]
+    )
 
     assert result["codigo_fonte"].to_list() == ["111|A", "111|B", "111|C"]
     assert set(result["id_agrupado"].to_list()) == {"AGR_1"}

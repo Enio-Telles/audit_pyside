@@ -70,4 +70,3 @@ class WizardState:
             "Auditor": auditor or "—",
             "Período": periodo,
         }
-

@@ -111,11 +111,17 @@ def _preservar_colunas_rastreabilidade(df_src: pl.DataFrame) -> list[pl.Expr]:
         if "cnpj" in df_src.columns and col_codigo:
             exprs.append(
                 pl.concat_str(
-                    [pl.col("cnpj").cast(pl.Utf8, strict=False), pl.lit("|"), pl.col(col_codigo).cast(pl.Utf8, strict=False)]
+                    [
+                        pl.col("cnpj").cast(pl.Utf8, strict=False),
+                        pl.lit("|"),
+                        pl.col(col_codigo).cast(pl.Utf8, strict=False),
+                    ]
                 ).alias("codigo_fonte")
             )
         elif col_codigo:
-            exprs.append(pl.col(col_codigo).cast(pl.Utf8, strict=False).alias("codigo_fonte"))
+            exprs.append(
+                pl.col(col_codigo).cast(pl.Utf8, strict=False).alias("codigo_fonte")
+            )
         # Se nao ha como derivar, nao forcamos — a validacao a jusante reclamara.
 
     # --- id_linha_origem ---
@@ -128,8 +134,10 @@ def _preservar_colunas_rastreabilidade(df_src: pl.DataFrame) -> list[pl.Expr]:
 
 def _construir_mapa_descricao_univoca(df_mapa: pl.DataFrame) -> pl.DataFrame:
     return (
-        df_mapa
-        .filter(pl.col("descricao_normalizada").is_not_null() & (pl.col("descricao_normalizada") != ""))
+        df_mapa.filter(
+            pl.col("descricao_normalizada").is_not_null()
+            & (pl.col("descricao_normalizada") != "")
+        )
         .group_by("descricao_normalizada")
         .agg(pl.col("id_agrupado").drop_nulls().unique().sort().alias("ids_agrupados"))
         .filter(pl.col("ids_agrupados").list.len() == 1)
@@ -147,8 +155,9 @@ def _anexar_id_agrupado_por_codigo_ou_descricao(
     df_base = df_src.with_columns(_normalizar_descricao_expr(col_desc))
 
     df_mapa_codigo = (
-        df_mapa
-        .filter(pl.col("codigo_fonte").is_not_null() & (pl.col("codigo_fonte") != ""))
+        df_mapa.filter(
+            pl.col("codigo_fonte").is_not_null() & (pl.col("codigo_fonte") != "")
+        )
         .select(["codigo_fonte", pl.col("id_agrupado").alias("id_agrupado_codigo")])
         .unique(subset=["codigo_fonte"])
     )
@@ -157,11 +166,17 @@ def _anexar_id_agrupado_por_codigo_ou_descricao(
     if "codigo_fonte" in df_base.columns:
         df_base = df_base.join(df_mapa_codigo, on="codigo_fonte", how="left")
     else:
-        df_base = df_base.with_columns(pl.lit(None, dtype=pl.Utf8).alias("id_agrupado_codigo"))
+        df_base = df_base.with_columns(
+            pl.lit(None, dtype=pl.Utf8).alias("id_agrupado_codigo")
+        )
 
     df_base = (
-        df_base
-        .join(df_mapa_desc, left_on="__descricao_normalizada__", right_on="descricao_normalizada", how="left")
+        df_base.join(
+            df_mapa_desc,
+            left_on="__descricao_normalizada__",
+            right_on="descricao_normalizada",
+            how="left",
+        )
         .with_columns(
             pl.coalesce(["id_agrupado_codigo", "id_agrupado_desc"]).alias("id_agrupado")
         )
@@ -188,7 +203,9 @@ def gerar_fontes_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
     arq_mapa = pasta_analises / f"map_produto_agrupado_{cnpj}.parquet"
 
     if not arq_prod_final.exists() or not arq_mapa.exists():
-        rprint("[red]Arquivos de agregacao nao encontrados (produtos_final / map_produto_agrupado).[/red]")
+        rprint(
+            "[red]Arquivos de agregacao nao encontrados (produtos_final / map_produto_agrupado).[/red]"
+        )
         return False
     if not pasta_brutos.exists():
         rprint("[red]Pasta de arquivos_parquet nao encontrada.[/red]")
@@ -229,7 +246,12 @@ def gerar_fontes_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
                 "co_sefin_final",
                 "unid_ref_sugerida",
             ]
-            + (["versao_agrupamento"] if "versao_agrupamento" in pl.read_parquet_schema(arq_prod_final).names() else [])
+            + (
+                ["versao_agrupamento"]
+                if "versao_agrupamento"
+                in pl.read_parquet_schema(arq_prod_final).names()
+                else []
+            )
         )
         .rename({"co_sefin_final": "co_sefin_agr"})
         .unique(subset=["id_agrupado"])
@@ -245,7 +267,9 @@ def gerar_fontes_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
 
         col_desc = _detectar_coluna_descricao(df_src, fonte)
         if not col_desc:
-            rprint(f"[yellow]Fonte {fonte} ignorada: sem coluna de descricao reconhecida.[/yellow]")
+            rprint(
+                f"[yellow]Fonte {fonte} ignorada: sem coluna de descricao reconhecida.[/yellow]"
+            )
             continue
 
         # Garantir preservacao de codigo_fonte e id_linha_origem
@@ -274,21 +298,32 @@ def gerar_fontes_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
             # no C170/Bloco H que nao casam com produtos_final
             df_out = df_out.filter(pl.col("id_agrupado").is_not_null())
             if df_out.is_empty():
-                rprint(f"[yellow]Fonte {fonte}: todas as linhas foram excluidas (sem correspondencia). Pulando.[/yellow]")
+                rprint(
+                    f"[yellow]Fonte {fonte}: todas as linhas foram excluidas (sem correspondencia). Pulando.[/yellow]"
+                )
                 continue
 
         # Mapear descricao_normalizada para a saida (preservar para auditoria)
         # e drop da coluna temporaria
-        if "descricao_normalizada" not in df_out.columns and "__descricao_normalizada__" in df_out.columns:
-            df_out = df_out.rename({"__descricao_normalizada__": "descricao_normalizada"})
+        if (
+            "descricao_normalizada" not in df_out.columns
+            and "__descricao_normalizada__" in df_out.columns
+        ):
+            df_out = df_out.rename(
+                {"__descricao_normalizada__": "descricao_normalizada"}
+            )
         else:
             df_out = df_out.drop("__descricao_normalizada__", strict=False)
 
         # Validar colunas obrigatorias na saida
         colunas_presentes = set(df_out.columns)
-        colunas_faltando = [c for c in COLUNAS_OBRIGATORIAS_FONTES_AGR if c not in colunas_presentes]
+        colunas_faltando = [
+            c for c in COLUNAS_OBRIGATORIAS_FONTES_AGR if c not in colunas_presentes
+        ]
         if colunas_faltando:
-            rprint(f"[yellow]Fonte {fonte}: colunas obrigatorias faltando na saida: {colunas_faltando}[/yellow]")
+            rprint(
+                f"[yellow]Fonte {fonte}: colunas obrigatorias faltando na saida: {colunas_faltando}[/yellow]"
+            )
 
         # Garantir colunas de rastreabilidade (mesmo que nulas)
         for col in COLUNAS_RASTREABILIDADE_FONTES:
@@ -303,10 +338,9 @@ def gerar_fontes_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
 
     return gerou_algum
 
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         gerar_fontes_produtos(sys.argv[1])
     else:
         gerar_fontes_produtos(input("CNPJ: "))
-
-

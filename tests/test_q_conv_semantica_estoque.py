@@ -6,8 +6,12 @@ import polars as pl
 
 sys.path.insert(0, str(Path("src").resolve()))
 
-from transformacao.calculos_anuais_pkg.calculos_anuais import calcular_aba_anual_dataframe
-from transformacao.calculos_mensais_pkg.calculos_mensais import calcular_aba_mensal_dataframe
+from transformacao.calculos_anuais_pkg.calculos_anuais import (
+    calcular_aba_anual_dataframe,
+)
+from transformacao.calculos_mensais_pkg.calculos_mensais import (
+    calcular_aba_mensal_dataframe,
+)
 
 
 def test_anual_usa_q_conv_fisica_e_nao_q_conv_para_movimento():
@@ -20,8 +24,18 @@ def test_anual_usa_q_conv_fisica_e_nao_q_conv_para_movimento():
                 "2 - SAIDAS",
                 "3 - ESTOQUE FINAL",
             ],
-            "Dt_doc": [date(2021, 1, 1), date(2021, 1, 5), date(2021, 1, 10), date(2021, 12, 31)],
-            "Dt_e_s": [date(2021, 1, 1), date(2021, 1, 5), date(2021, 1, 10), date(2021, 12, 31)],
+            "Dt_doc": [
+                date(2021, 1, 1),
+                date(2021, 1, 5),
+                date(2021, 1, 10),
+                date(2021, 12, 31),
+            ],
+            "Dt_e_s": [
+                date(2021, 1, 1),
+                date(2021, 1, 5),
+                date(2021, 1, 10),
+                date(2021, 12, 31),
+            ],
             "q_conv": [100.0, 50.0, 20.0, 130.0],
             "q_conv_fisica": [100.0, 50.0, 20.0, 0.0],
             "__qtd_decl_final_audit__": [0.0, 0.0, 0.0, 130.0],
@@ -96,7 +110,11 @@ def test_q_conv_fallback_and_semantics():
     df = pl.DataFrame(
         {
             "id_agrupado": ["A", "A", "A"],
-            "Tipo_operacao": ["0 - ESTOQUE INICIAL", "1 - ENTRADA", "3 - ESTOQUE FINAL"],
+            "Tipo_operacao": [
+                "0 - ESTOQUE INICIAL",
+                "1 - ENTRADA",
+                "3 - ESTOQUE FINAL",
+            ],
             "Qtd": [10, 5, 2],
             "fator": [1.0, 1.0, 1.0],
             "Dt_e_s": ["2023-01-01", "2023-02-01", "2023-12-31"],
@@ -108,12 +126,16 @@ def test_q_conv_fallback_and_semantics():
         }
     )
 
-    df = df.with_columns([pl.col("Dt_e_s").str.strptime(pl.Date, "%Y-%m-%d").alias("Dt_e_s")])
+    df = df.with_columns(
+        [pl.col("Dt_e_s").str.strptime(pl.Date, "%Y-%m-%d").alias("Dt_e_s")]
+    )
 
     # Simula parquet antigo sem q_conv_fisica
     res = calcular_aba_mensal_dataframe(df)
 
     # No mês de 2023-02 (entrada) esperamos qtd_entradas == 5.0
-    res_feb = res.filter((pl.col("ano") == 2023) & (pl.col("mes") == 2) & (pl.col("id_agregado") == "A"))
+    res_feb = res.filter(
+        (pl.col("ano") == 2023) & (pl.col("mes") == 2) & (pl.col("id_agregado") == "A")
+    )
     assert res_feb.height == 1
     assert float(res_feb["qtd_entradas"][0]) == 5.0

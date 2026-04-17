@@ -11,6 +11,7 @@ Run from repository root:
   python scripts/migrate_app_state_active_load_workers.py
 
 """
+
 from __future__ import annotations
 
 import json

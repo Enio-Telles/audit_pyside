@@ -2,7 +2,12 @@ import pytest
 import threading
 from unittest.mock import patch, MagicMock
 
-from extracao.extrair_dados_cnpj import get_thread_connection, close_thread_connection, thread_local
+from extracao.extrair_dados_cnpj import (
+    get_thread_connection,
+    close_thread_connection,
+    thread_local,
+)
+
 
 def test_get_thread_connection_creates_new():
     # Ensure thread_local is clean
@@ -19,6 +24,7 @@ def test_get_thread_connection_creates_new():
         assert mock_conectar.call_count == 1
         assert thread_local.conexao is mock_conn
 
+
 def test_get_thread_connection_reuses_existing():
     if hasattr(thread_local, "conexao"):
         del thread_local.conexao
@@ -34,6 +40,7 @@ def test_get_thread_connection_reuses_existing():
         assert conn2 is mock_conn
         assert mock_conectar.call_count == 1
 
+
 def test_get_thread_connection_thread_isolation():
     if hasattr(thread_local, "conexao"):
         del thread_local.conexao
@@ -45,6 +52,7 @@ def test_get_thread_connection_thread_isolation():
         conn_main = get_thread_connection()
 
         conn_thread = []
+
         def worker():
             conn_thread.append(get_thread_connection())
 
@@ -55,6 +63,7 @@ def test_get_thread_connection_thread_isolation():
         assert len(conn_thread) == 1
         assert conn_main is not conn_thread[0]
         assert mock_conectar.call_count == 2
+
 
 def test_close_thread_connection():
     if hasattr(thread_local, "conexao"):
@@ -71,6 +80,7 @@ def test_close_thread_connection():
 
         assert mock_conn.close.call_count == 1
         assert getattr(thread_local, "conexao", None) is None
+
 
 def test_close_thread_connection_exception_handling():
     if hasattr(thread_local, "conexao"):
@@ -89,6 +99,7 @@ def test_close_thread_connection_exception_handling():
 
         assert mock_conn.close.call_count == 1
         assert getattr(thread_local, "conexao", None) is None
+
 
 def test_close_thread_connection_no_connection():
     # Ensure thread_local is clean

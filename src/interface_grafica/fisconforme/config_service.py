@@ -4,6 +4,7 @@ Serviço de configuração para o módulo Fisconforme integrado.
 Expõe as funções de leitura/escrita do .env e de perfis de auditores,
 originalmente definidas em gerar_notificacoes.py, como um serviço isolado.
 """
+
 from __future__ import annotations
 
 import logging
@@ -64,7 +65,13 @@ def salvar_config_db(dados: Dict[str, str]) -> bool:
             with open(env_path, "r", encoding="utf-8") as f:
                 conteudo_atual = f.read()
 
-        chaves = ["ORACLE_HOST", "ORACLE_PORT", "ORACLE_SERVICE", "DB_USER", "DB_PASSWORD"]
+        chaves = [
+            "ORACLE_HOST",
+            "ORACLE_PORT",
+            "ORACLE_SERVICE",
+            "DB_USER",
+            "DB_PASSWORD",
+        ]
         conteudo_final = conteudo_atual
         for chave in chaves:
             valor = str(dados.get(chave, "")).strip()
@@ -112,9 +119,13 @@ def carregar_dados_salvos() -> Dict[str, Dict[str, str]]:
                 nome_config = match.group(1)
                 configs[nome_config] = {
                     "AUDITOR": str(valor or ""),
-                    "MATRICULA": str(env_vars.get(f"CONFIG_{nome_config}_MATRICULA", "") or ""),
+                    "MATRICULA": str(
+                        env_vars.get(f"CONFIG_{nome_config}_MATRICULA", "") or ""
+                    ),
                     "DSF": str(env_vars.get(f"CONFIG_{nome_config}_DSF", "") or ""),
-                    "CONTATO": str(env_vars.get(f"CONFIG_{nome_config}_CONTATO", "") or ""),
+                    "CONTATO": str(
+                        env_vars.get(f"CONFIG_{nome_config}_CONTATO", "") or ""
+                    ),
                     "ORGAO": str(env_vars.get(f"CONFIG_{nome_config}_ORGAO", "") or ""),
                 }
 

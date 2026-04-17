@@ -3,16 +3,19 @@ import pytest
 
 from interface_grafica.services.registry_service import RegistryService, CNPJRecord
 
+
 def test_list_records_file_not_exists(tmp_path):
     registry_file = tmp_path / "cnpjs.json"
     service = RegistryService(registry_file=registry_file)
     assert service.list_records() == []
+
 
 def test_list_records_empty_file(tmp_path):
     registry_file = tmp_path / "cnpjs.json"
     registry_file.write_text("[]", encoding="utf-8")
     service = RegistryService(registry_file=registry_file)
     assert service.list_records() == []
+
 
 def test_list_records_sorted_multiple(tmp_path):
     registry_file = tmp_path / "cnpjs.json"
@@ -35,10 +38,15 @@ def test_list_records_sorted_multiple(tmp_path):
     assert records[2].added_at == "2023-01-01T10:00:00"
     assert all(isinstance(r, CNPJRecord) for r in records)
 
+
 def test_list_records_with_last_run_at(tmp_path):
     registry_file = tmp_path / "cnpjs.json"
     data = [
-        {"cnpj": "11111111000111", "added_at": "2023-01-01T10:00:00", "last_run_at": "2023-01-01T11:00:00"},
+        {
+            "cnpj": "11111111000111",
+            "added_at": "2023-01-01T10:00:00",
+            "last_run_at": "2023-01-01T11:00:00",
+        },
     ]
     registry_file.write_text(json.dumps(data), encoding="utf-8")
     service = RegistryService(registry_file=registry_file)

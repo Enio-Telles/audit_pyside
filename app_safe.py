@@ -4,6 +4,7 @@ Lançador seguro do Fiscal Parquet Analyzer.
 Usa a SafeMainWindow, que solicita cancelamento/interrupção dos workers
 ativos ao fechar a aplicação, reduzindo risco de threads zumbis.
 """
+
 from __future__ import annotations
 
 import sys

@@ -40,19 +40,33 @@ def gerar_produtos_final(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         ERR_CONSOLE.print(f"[red]Arquivo nao encontrado:[/red] {arq_agrupados}")
         return False
 
-    OUT_CONSOLE.print(f"[bold cyan]Gerando produtos_final para CNPJ: {cnpj}[/bold cyan]")
+    OUT_CONSOLE.print(
+        f"[bold cyan]Gerando produtos_final para CNPJ: {cnpj}[/bold cyan]"
+    )
 
     try:
         df_produtos = pl.read_parquet(arq_produtos)
-        if "chave_item" not in df_produtos.columns and "chave_produto" in df_produtos.columns:
-            df_produtos = df_produtos.with_columns(pl.col("chave_produto").alias("chave_item"))
-        if "chave_produto" not in df_produtos.columns and "chave_item" in df_produtos.columns:
-            df_produtos = df_produtos.with_columns(pl.col("chave_item").alias("chave_produto"))
+        if (
+            "chave_item" not in df_produtos.columns
+            and "chave_produto" in df_produtos.columns
+        ):
+            df_produtos = df_produtos.with_columns(
+                pl.col("chave_produto").alias("chave_item")
+            )
+        if (
+            "chave_produto" not in df_produtos.columns
+            and "chave_item" in df_produtos.columns
+        ):
+            df_produtos = df_produtos.with_columns(
+                pl.col("chave_item").alias("chave_produto")
+            )
         df_agrupados = pl.read_parquet(arq_agrupados)
         arq_pont = pasta_analises / f"map_produto_agrupado_{cnpj}.parquet"
         if arq_pont.exists() and "lista_chave_produto" not in df_agrupados.columns:
             df_pont = pl.read_parquet(arq_pont)
-            df_list = df_pont.group_by("id_agrupado").agg(pl.col("chave_produto").alias("lista_chave_produto"))
+            df_list = df_pont.group_by("id_agrupado").agg(
+                pl.col("chave_produto").alias("lista_chave_produto")
+            )
             df_agrupados = df_agrupados.join(df_list, on="id_agrupado", how="left")
 
         if "co_sefin_agr" not in df_agrupados.columns:
@@ -86,8 +100,7 @@ def gerar_produtos_final(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
             cols_agrup_opt_names.append("total_vendas_agr")
 
         df_map = (
-            df_agrupados
-            .select([*cols_agrup_base, *cols_agrup_opt])
+            df_agrupados.select([*cols_agrup_base, *cols_agrup_opt])
             .explode("lista_chave_produto")
             .rename({"lista_chave_produto": "chave_item"})
         )
@@ -96,10 +109,18 @@ def gerar_produtos_final(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
 
         df_final = df_final.with_columns(
             [
-                pl.coalesce([pl.col("descr_padrao"), pl.col("descricao")]).alias("descricao_final"),
-                pl.coalesce([pl.col("ncm_padrao"), pl.col("lista_ncm").list.first()]).alias("ncm_final"),
-                pl.coalesce([pl.col("cest_padrao"), pl.col("lista_cest").list.first()]).alias("cest_final"),
-                pl.coalesce([pl.col("gtin_padrao"), pl.col("lista_gtin").list.first()]).alias("gtin_final"),
+                pl.coalesce([pl.col("descr_padrao"), pl.col("descricao")]).alias(
+                    "descricao_final"
+                ),
+                pl.coalesce(
+                    [pl.col("ncm_padrao"), pl.col("lista_ncm").list.first()]
+                ).alias("ncm_final"),
+                pl.coalesce(
+                    [pl.col("cest_padrao"), pl.col("lista_cest").list.first()]
+                ).alias("cest_final"),
+                pl.coalesce(
+                    [pl.col("gtin_padrao"), pl.col("lista_gtin").list.first()]
+                ).alias("gtin_final"),
                 pl.coalesce(
                     [
                         pl.col("co_sefin_padrao"),
@@ -107,9 +128,12 @@ def gerar_produtos_final(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
                         pl.col("lista_co_sefin").list.first(),
                     ]
                 ).alias("co_sefin_final"),
-                pl.coalesce([pl.col("lista_unidades_agr").list.first(), pl.col("lista_unid").list.first()]).alias(
-                    "unid_ref_sugerida"
-                ),
+                pl.coalesce(
+                    [
+                        pl.col("lista_unidades_agr").list.first(),
+                        pl.col("lista_unid").list.first(),
+                    ]
+                ).alias("unid_ref_sugerida"),
             ]
         )
 
@@ -135,11 +159,9 @@ def gerar_produtos_final(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
             "unid_ref_sugerida",
         ]
 
-        df_final = (
-            df_final
-            .select([*colunas_base, *colunas_agrup, *colunas_finais])
-            .sort(["id_agrupado", "chave_item"], nulls_last=True)
-        )
+        df_final = df_final.select(
+            [*colunas_base, *colunas_agrup, *colunas_finais]
+        ).sort(["id_agrupado", "chave_item"], nulls_last=True)
 
         arquivo_final = f"produtos_final_{cnpj}.parquet"
         OUT_CONSOLE.print(f"[dim]Salvando {arquivo_final} em {pasta_analises}[/dim]")
@@ -148,7 +170,9 @@ def gerar_produtos_final(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
             raise RuntimeError(f"Falha ao salvar {arquivo_final}.")
         return True
     except Exception as exc:
-        ERR_CONSOLE.print(f"[red]Erro fatal ao gerar produtos_final para {cnpj}:[/red] {exc}")
+        ERR_CONSOLE.print(
+            f"[red]Erro fatal ao gerar produtos_final para {cnpj}:[/red] {exc}"
+        )
         raise
 
 

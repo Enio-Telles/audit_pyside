@@ -14,6 +14,7 @@ from rich import print as rprint
 
 thread_local = threading.local()
 
+
 def close_thread_connection():
     if hasattr(thread_local, "conexao"):
         if thread_local.conexao:
@@ -23,6 +24,7 @@ def close_thread_connection():
                 logger.warning(f"Erro ao fechar conexao de thread: {e}")
         thread_local.conexao = None
 
+
 def get_thread_connection():
     if not hasattr(thread_local, "conexao"):
         # Cria uma nova conexão para esta thread
@@ -30,7 +32,9 @@ def get_thread_connection():
         # que os testes possam mockar `extracao.extrair_dados_cnpj.conectar`.
         conn = conectar()
         if conn is None:
-            logger.error(f"[{threading.current_thread().name}] Falha ao criar conexão com banco de dados.")
+            logger.error(
+                f"[{threading.current_thread().name}] Falha ao criar conexão com banco de dados."
+            )
             return None
 
         try:
@@ -38,7 +42,9 @@ def get_thread_connection():
             cursor = conn.cursor()
             cursor.execute("SELECT 1 FROM DUAL")
         except Exception as e:
-            logger.error(f"[{threading.current_thread().name}] Erro ao testar conexão: {e}")
+            logger.error(
+                f"[{threading.current_thread().name}] Erro ao testar conexão: {e}"
+            )
             return None
 
         thread_local.conexao = conn
@@ -52,11 +58,12 @@ def extrair_dados(
 ) -> bool:
     """Extrai as consultas SQL em parquet usando escrita incremental por lotes."""
 
-ROOT_DIR        = Path(r"c:\funcoes - Copia")
-SRC_DIR         = ROOT_DIR / "src"
-SQL_DIR         = ROOT_DIR / "sql"
-DADOS_DIR       = ROOT_DIR / "dados"
-CNPJ_ROOT       = DADOS_DIR / "CNPJ"
+
+ROOT_DIR = Path(r"c:\funcoes - Copia")
+SRC_DIR = ROOT_DIR / "src"
+SQL_DIR = ROOT_DIR / "sql"
+DADOS_DIR = ROOT_DIR / "dados"
+CNPJ_ROOT = DADOS_DIR / "CNPJ"
 
 
 try:
@@ -69,11 +76,14 @@ except ImportError as e:
     sys.exit(1)
 
 
-
-def processar_arquivo(arq_sql, cnpj_limpo, data_limite_input, consultas_dir, pasta_saida):
+def processar_arquivo(
+    arq_sql, cnpj_limpo, data_limite_input, consultas_dir, pasta_saida
+):
     # Garantir que arq_sql e consultas_dir sejam Path (podem vir como str do catalogo)
     arq_sql = Path(arq_sql) if not isinstance(arq_sql, Path) else arq_sql
-    consultas_dir = Path(consultas_dir) if not isinstance(consultas_dir, Path) else consultas_dir
+    consultas_dir = (
+        Path(consultas_dir) if not isinstance(consultas_dir, Path) else consultas_dir
+    )
     try:
         conexao = get_thread_connection()
         if not conexao:
@@ -83,11 +93,15 @@ def processar_arquivo(arq_sql, cnpj_limpo, data_limite_input, consultas_dir, pas
         with conexao.cursor() as cursor:
             cursor.arraysize = 1000
 
-            rprint(f"\n[bold cyan]Processando: {arq_sql.relative_to(consultas_dir)}[/bold cyan]")
+            rprint(
+                f"\n[bold cyan]Processando: {arq_sql.relative_to(consultas_dir)}[/bold cyan]"
+            )
 
             sql_txt = ler_sql(arq_sql)
             if not sql_txt:
-                rprint(f"[yellow]Arquivo {arq_sql.name} vazio ou com erro de leitura.[/yellow]")
+                rprint(
+                    f"[yellow]Arquivo {arq_sql.name} vazio ou com erro de leitura.[/yellow]"
+                )
                 return True
 
             cursor.prepare(sql_txt)
@@ -106,9 +120,13 @@ def processar_arquivo(arq_sql, cnpj_limpo, data_limite_input, consultas_dir, pas
             # Executa consulta
             if not tem_bind_cnpj:
                 if nomes_binds:
-                    rprint(f"[yellow]⚠️ Consulta possui os binds ({', '.join(nomes_binds)}) mas não o :CNPJ. Pulando para evitar extração imensa.[/yellow]")
+                    rprint(
+                        f"[yellow]⚠️ Consulta possui os binds ({', '.join(nomes_binds)}) mas não o :CNPJ. Pulando para evitar extração imensa.[/yellow]"
+                    )
                 else:
-                    rprint("[yellow]⚠️ Consulta não possui nenhuma variável de bind. Pulando para evitar extração imensa da base.[/yellow]")
+                    rprint(
+                        "[yellow]⚠️ Consulta não possui nenhuma variável de bind. Pulando para evitar extração imensa da base.[/yellow]"
+                    )
                 return True
 
             cursor.execute(None, binds)
@@ -117,11 +135,15 @@ def processar_arquivo(arq_sql, cnpj_limpo, data_limite_input, consultas_dir, pas
             dados = cursor.fetchall()
 
             if not dados:
-                rprint(f"[yellow]  Zero linhas retornadas para {arq_sql.name}. Pulando gravação.[/yellow]")
+                rprint(
+                    f"[yellow]  Zero linhas retornadas para {arq_sql.name}. Pulando gravação.[/yellow]"
+                )
                 return True
 
             df = pl.DataFrame(dados, schema=colunas, orient="row")
-            rprint(f"[green]  {len(df)} linhas lidas com sucesso para {arq_sql.name}.[/green]")
+            rprint(
+                f"[green]  {len(df)} linhas lidas com sucesso para {arq_sql.name}.[/green]"
+            )
 
             # Nome do arquivo no formato nomedaconsulta_<cnpj>.parquet (mantendo subpastas se houver)
             caminho_relativo = arq_sql.relative_to(consultas_dir)
@@ -136,13 +158,16 @@ def processar_arquivo(arq_sql, cnpj_limpo, data_limite_input, consultas_dir, pas
         return False
     # finally block removed because connection is thread-local and will be closed later
 
+
 def extrair_dados(cnpj_input, data_limite_input=None):
     if not validar_cnpj(cnpj_input):
         rprint(f"[red]Erro:[/red] CNPJ '{cnpj_input}' invalido!")
         return False
 
     cnpj_limpo = re.sub(r"[^0-9]", "", cnpj_input)
-    msg_inicio = f"[bold green]Iniciando extracao para o CNPJ: {cnpj_limpo}[/bold green]"
+    msg_inicio = (
+        f"[bold green]Iniciando extracao para o CNPJ: {cnpj_limpo}[/bold green]"
+    )
     if data_limite_input:
         msg_inicio += f" [cyan](Data Limite: {data_limite_input})[/cyan]"
     rprint(msg_inicio)
@@ -179,7 +204,9 @@ def main() -> None:
         try:
             cnpj_arg = input("Informe o CNPJ para extracao: ").strip()
             if cnpj_arg:
-                data_limite_arg = input("Data Limite Processamento (DD/MM/YYYY) [opcional, Enter para pular]: ").strip()
+                data_limite_arg = input(
+                    "Data Limite Processamento (DD/MM/YYYY) [opcional, Enter para pular]: "
+                ).strip()
                 if not data_limite_arg:
                     data_limite_arg = None
         except KeyboardInterrupt:
