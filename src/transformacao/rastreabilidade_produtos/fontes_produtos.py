@@ -12,8 +12,10 @@ Saidas (em arquivos_parquet):
 - nfce_agr_<cnpj>.parquet
 
 Regra de consistencia:
-- toda linha precisa sair com `id_agrupado`
-- se houver qualquer linha sem `id_agrupado`, a rotina falha
+- idealmente, toda linha deve possuir `id_agrupado`.
+- quando existirem linhas sem `id_agrupado`, a rotina gera um arquivo de auditoria
+    (`<fonte>_agr_sem_id_agrupado_<cnpj>.parquet`) e exclui essas linhas da saída
+    principal; o pipeline NÃO falha.
 
 Rastreabilidade:
 - `codigo_fonte` e `id_linha_origem` (quando presente na fonte) sao preservados
