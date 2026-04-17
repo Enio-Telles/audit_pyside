@@ -89,6 +89,16 @@ Interpretação:
 - `fator > 1`: a unidade da linha representa múltiplas unidades de referência;
 - `fator < 1`: a unidade da linha representa fração da unidade de referência.
 
+## Classificação do fator
+
+Além do valor numérico `fator`, o arquivo `fatores_conversao_<cnpj>.parquet` agora inclui a coluna `fator_origem`, com os seguintes valores:
+
+- `manual`: o fator foi definido/ajustado manualmente pelo usuário (override preservado);
+- `fallback`: não havia preço de referência utilizável para calcular o fator (caso `preco_unid_ref <= 0` ou ausência de preços);
+- `preco`: o fator foi calculado automaticamente a partir do preço médio (`preco_medio_base / preco_unid_ref`).
+
+Essa classificação facilita rastreabilidade e auditoria, permitindo identificar quando um fator foi aplicado por intervenção humana, quando foi estimado por falta de preço, ou quando deriva de dados de preço observados.
+
 ## Preservação de ajustes manuais
 
 Esta é uma regra crítica do projeto.
