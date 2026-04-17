@@ -153,7 +153,6 @@ def _prepare_xml_candidates(
     columns = (
         df.collect_schema().names() if isinstance(df, pl.LazyFrame) else df.columns
     )
-    optional = {c: c in columns for c in columns}
 
     def col_or_null(name: str, dtype=pl.Utf8):
         if name in columns:

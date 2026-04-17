@@ -19,7 +19,6 @@ try:
     from utilitarios.calculos_compartilhados import (
         boolish_expr,
         resolver_ref,
-        format_st_periodos,
     )
 except ImportError as e:
     rprint(f"[red]Erro ao importar modulos:[/red] {e}")

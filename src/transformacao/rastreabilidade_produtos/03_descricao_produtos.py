@@ -25,7 +25,6 @@ CNPJ_ROOT = DADOS_DIR / "CNPJ"
 
 try:
     from utilitarios.salvar_para_parquet import salvar_para_parquet
-    from utilitarios.text import remove_accents
     from utilitarios.validacao_schema import (
         SchemaValidacaoError,
         validar_parquet_essencial,

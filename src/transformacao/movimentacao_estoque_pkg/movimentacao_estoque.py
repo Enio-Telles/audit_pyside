@@ -18,7 +18,6 @@ try:
         validar_parquet_essencial,
     )
     from transformacao.co_sefin_class import enriquecer_co_sefin_class
-    from utilitarios.text import remove_accents
     from transformacao.movimentacao_estoque_pkg.calculo_saldos import (
         _padronizar_tipo_operacao_expr,
         _boolish_expr,

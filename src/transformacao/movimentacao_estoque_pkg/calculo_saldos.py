@@ -431,11 +431,7 @@ def _calc_saldos_loop(df: pl.DataFrame, sufixo: str) -> pl.DataFrame:
 
     # T03: Pré-processamento dos tipos para inteiro
     # Usamos pl.len() se for lazy, ou .height se for DataFrame
-    n = (
-        df.select(pl.len()).collect().item()
-        if isinstance(df, pl.LazyFrame)
-        else df.height
-    )
+    
 
     # T03: Pré-processamento dos tipos para inteiro (Numba não gosta de strings em loops)
     # 0: ENTRADA/INICIAL, 1: SAIDA, 2: FINAL, 3: OUTROS

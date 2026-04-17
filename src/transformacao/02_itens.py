@@ -30,7 +30,7 @@ for _dir in (SRC_DIR, UTILITARIOS_DIR):
 
 try:
     from salvar_para_parquet import salvar_para_parquet
-    from text import remove_accents, expr_normalizar_descricao
+    from text import expr_normalizar_descricao
     from item_unidades import item_unidades
 except ImportError as e:
     rprint(f"[red]Erro ao importar modulos:[/red] {e}")

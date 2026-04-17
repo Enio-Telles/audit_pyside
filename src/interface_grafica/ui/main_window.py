@@ -2852,36 +2852,43 @@ class MainWindow(QMainWindow):
         return tab
 
     def _connect_signals(self) -> None:
-        schedule_mov = lambda: self._schedule_debounced(
-            "mov_filters", self.aplicar_filtros_mov_estoque
-        )
-        schedule_anual = lambda: self._schedule_debounced(
-            "anual_filters", self.aplicar_filtros_aba_anual
-        )
-        schedule_mensal = lambda: self._schedule_debounced(
-            "mensal_filters", self.aplicar_filtros_aba_mensal
-        )
-        schedule_nfe_entrada = lambda: self._schedule_debounced(
-            "nfe_entrada_filters", self.aplicar_filtros_nfe_entrada
-        )
-        schedule_produtos_sel = lambda: self._schedule_debounced(
-            "produtos_sel_filters", self.aplicar_filtros_produtos_selecionados
-        )
-        schedule_id_agrupados = lambda: self._schedule_debounced(
-            "id_agrupados_filters", self.aplicar_filtros_id_agrupados
-        )
-        schedule_conv = lambda: self._schedule_debounced(
-            "conversao_filters", self.aplicar_filtros_conversao
-        )
-        schedule_consulta_quick = lambda: self._schedule_debounced(
-            "consulta_quick_filters", self.apply_quick_filters
-        )
-        schedule_agregacao_bottom = lambda: self._schedule_debounced(
-            "agregacao_bottom_filters", self.apply_aggregation_results_filters
-        )
-        schedule_sql_search = lambda: self._schedule_debounced(
-            "sql_result_search", self._filter_sql_results
-        )
+        def schedule_mov() -> None:
+            self._schedule_debounced("mov_filters", self.aplicar_filtros_mov_estoque)
+
+        def schedule_anual() -> None:
+            self._schedule_debounced("anual_filters", self.aplicar_filtros_aba_anual)
+
+        def schedule_mensal() -> None:
+            self._schedule_debounced("mensal_filters", self.aplicar_filtros_aba_mensal)
+
+        def schedule_nfe_entrada() -> None:
+            self._schedule_debounced(
+                "nfe_entrada_filters", self.aplicar_filtros_nfe_entrada
+            )
+
+        def schedule_produtos_sel() -> None:
+            self._schedule_debounced(
+                "produtos_sel_filters", self.aplicar_filtros_produtos_selecionados
+            )
+
+        def schedule_id_agrupados() -> None:
+            self._schedule_debounced(
+                "id_agrupados_filters", self.aplicar_filtros_id_agrupados
+            )
+
+        def schedule_conv() -> None:
+            self._schedule_debounced("conversao_filters", self.aplicar_filtros_conversao)
+
+        def schedule_consulta_quick() -> None:
+            self._schedule_debounced("consulta_quick_filters", self.apply_quick_filters)
+
+        def schedule_agregacao_bottom() -> None:
+            self._schedule_debounced(
+                "agregacao_bottom_filters", self.apply_aggregation_results_filters
+            )
+
+        def schedule_sql_search() -> None:
+            self._schedule_debounced("sql_result_search", self._filter_sql_results)
 
         self.btn_refresh_cnpjs.clicked.connect(self.refresh_cnpjs)
         self.btn_run_pipeline.clicked.connect(self.run_pipeline_for_input)
@@ -2975,9 +2982,8 @@ class MainWindow(QMainWindow):
         )
         self.btn_limpar_filtro_cruzado.clicked.connect(self.limpar_filtro_cruzado_anual)
         self.btn_export_aba_anual.clicked.connect(self.exportar_aba_anual_excel)
-        schedule_periodos = lambda: self._schedule_debounced(
-            "periodos_filters", self.aplicar_filtros_aba_periodos
-        )
+        def schedule_periodos() -> None:
+            self._schedule_debounced("periodos_filters", self.aplicar_filtros_aba_periodos)
         self.btn_refresh_aba_periodos.clicked.connect(self.atualizar_aba_periodos)
         self.btn_apply_aba_periodos_filters.clicked.connect(
             self.aplicar_filtros_aba_periodos
@@ -4333,31 +4339,7 @@ class MainWindow(QMainWindow):
             self.left_panel_widget.show()
             self.btn_toggle_panel.setText("<< Ocultar Painel Lateral")
 
-    def on_cnpj_selected(self) -> None:
-        item = self.cnpj_list.currentItem()
-        if not item:
-            return
-        cnpj = item.text()
-        self.state.current_cnpj = cnpj
-        self._reset_table_resize_flag("conversao")
-        self._reset_table_resize_flag("mov_estoque")
-        self._reset_table_resize_flag("aba_mensal")
-        self._reset_table_resize_flag("aba_anual")
-        self._reset_table_resize_flag("nfe_entrada")
-        self._reset_table_resize_flag("produtos_selecionados")
-        self._reset_table_resize_flag("id_agrupados")
-        self._reset_table_resize_flag("agregacao_top")
-        self._reset_table_resize_flag("agregacao_bottom")
-        self.status.showMessage(f"CNPJ selecionado: {cnpj}")
-        self._refresh_profile_combos()
-        self.refresh_file_tree(cnpj)
-        self.atualizar_aba_conversao()
-        self.atualizar_aba_mov_estoque()
-        self.atualizar_aba_mensal()
-        self.atualizar_aba_anual()
-        self.atualizar_aba_periodos()
-        self.atualizar_aba_nfe_entrada()
-        self.atualizar_aba_id_agrupados()
+    
 
     def atualizar_aba_mov_estoque(self) -> None:
         cnpj = self.state.current_cnpj
