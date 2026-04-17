@@ -91,11 +91,11 @@ def find_tracebacks(lines):
             snippet = lines[start:end]
             # try to find final exception line within the snippet
             final_exc = None
-            for l in reversed(snippet):
+            for line in reversed(snippet):
                 if re.search(
-                    r"^[A-Za-z0-9_\.]+(?:Error|Exception|Warning|Exit|Interrupt)?:", l
-                ) or re.search(r": .+", l):
-                    final_exc = l.strip()
+                    r"^[A-Za-z0-9_\.]+(?:Error|Exception|Warning|Exit|Interrupt)?:", line
+                ) or re.search(r": .+", line):
+                    final_exc = line.strip()
                     break
             tbs.append(
                 {
@@ -177,18 +177,18 @@ def main():
     # include up to 50 files with samples
     for i, (fpath, fm) in enumerate(list(matches.items())[:50], start=1):
         report.append(f"{i}) {fpath}")
-        for m in fm[:MAX_MATCHES_PER_FILE]:
-            report.append(f'  - Linha {m["line_no"]} | keyword={m["keyword"]}')
-            for l in m["snippet"].splitlines():
-                report.append("    " + l)
+            for m in fm[:MAX_MATCHES_PER_FILE]:
+                report.append(f'  - Linha {m["line_no"]} | keyword={m["keyword"]}')
+                for line in m["snippet"].splitlines():
+                    report.append("    " + line)
             report.append("")
 
     if tracebacks:
         report.append("\nTracebacks detectados:")
         for tb in tracebacks[:20]:
-            report.append(f'- {tb["file"]} (linha {tb["start_line"]})')
-            for l in tb["snippet"].splitlines()[:50]:
-                report.append("    " + l)
+            report.append(f'- {tb["file"]} (linha {tb["start_line"]})')   
+            for line in tb["snippet"].splitlines()[:50]:
+                report.append("    " + line)
             if tb.get("final"):
                 report.append("    Final exception: " + str(tb["final"]))
             report.append("")

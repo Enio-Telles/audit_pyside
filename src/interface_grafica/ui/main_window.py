@@ -269,7 +269,10 @@ class DetachedTableWindow(QMainWindow):
 
         self._on_source_model_reset = self._refresh_from_source
         self._on_source_layout_changed = self._refresh_from_source
-        self._on_source_data_changed = lambda *_args: self._refresh_from_source()
+        def _on_source_data_changed_handler(*_args):
+            self._refresh_from_source()
+
+        self._on_source_data_changed = _on_source_data_changed_handler
         self._source_model.modelReset.connect(self._on_source_model_reset)
         self._source_model.layoutChanged.connect(self._on_source_layout_changed)
         self._source_model.dataChanged.connect(self._on_source_data_changed)

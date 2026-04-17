@@ -1,5 +1,7 @@
 import polars as pl
 import time
+import random
+import string
 
 
 def filter_approach(df_base, desc_norms):
@@ -17,8 +19,6 @@ def dict_approach(df_base, desc_norms):
 
 # Setup
 N = 100000
-import random
-import string
 
 
 def get_random_string(length):

@@ -5,12 +5,12 @@ import threading
 import logging
 import sys
 from pathlib import Path
+from typing import Sequence
 
-logger = logging.getLogger(__name__)
 import polars as pl
-
 from rich import print as rprint
 
+logger = logging.getLogger(__name__)
 thread_local = threading.local()
 
 
@@ -50,14 +50,6 @@ def get_thread_connection():
     return thread_local.conexao
 
 
-def extrair_dados(
-    cnpj_input: str,
-    data_limite_input: str | None = None,
-    consultas_selecionadas: Sequence[Path | str] | None = None,
-) -> bool:
-    """Extrai as consultas SQL em parquet usando escrita incremental por lotes."""
-
-
 ROOT_DIR = Path(r"c:\funcoes - Copia")
 SRC_DIR = ROOT_DIR / "src"
 SQL_DIR = ROOT_DIR / "sql"
@@ -73,6 +65,13 @@ try:
 except ImportError as e:
     rprint(f"[red]Erro ao importar módulos utilitários:[/red] {e}")
     sys.exit(1)
+
+# Import helpers from the efficient extractor module (same package)
+from .extracao_oracle_eficiente import (
+    descobrir_consultas_sql,
+    executar_extracao_oracle,
+    imprimir_resumo_extracao,
+)
 
 
 def processar_arquivo(
@@ -158,7 +157,11 @@ def processar_arquivo(
     # finally block removed because connection is thread-local and will be closed later
 
 
-def extrair_dados(cnpj_input, data_limite_input=None):
+def extrair_dados(
+    cnpj_input: str,
+    data_limite_input: str | None = None,
+    consultas_selecionadas: Sequence[Path | str] | None = None,
+) -> bool:
     if not validar_cnpj(cnpj_input):
         rprint(f"[red]Erro:[/red] CNPJ '{cnpj_input}' invalido!")
         return False

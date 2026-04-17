@@ -19,8 +19,8 @@ UTILITARIOS_DIR = SRC_DIR / "utilitarios"
 if str(UTILITARIOS_DIR) not in sys.path:
     sys.path.insert(0, str(UTILITARIOS_DIR))
 
-from PySide6.QtWidgets import QApplication
-from interface_grafica.ui.main_window_safe import SafeMainWindow
+from PySide6.QtWidgets import QApplication  # noqa: E402
+from interface_grafica.ui.main_window_safe import SafeMainWindow  # noqa: E402
 
 
 def main() -> int:

@@ -300,7 +300,7 @@ class ServicoAgregacao:
             return []
 
         mov_mtime = mov_path.stat().st_mtime_ns
-        pasta_ressarc = pasta_prod.parent / "ressarcimento_st"
+        _pasta_ressarc = pasta_prod.parent / "ressarcimento_st"
         # Consider every analytical table derived from mov_estoque so manual
         # regrouping is reflected consistently across monthly, annual and
         # period views.
@@ -2035,14 +2035,14 @@ class ServicoAgregacao:
                     ]
                 )
             else:
-                df_metricas = pl.DataFrame(
+                df_metricas = pl.DataFrame(  # noqa: F841
                     schema={
                         "id_agrupado": pl.Utf8,
                         **{col: pl.Float64 for col in colunas_metricas},
                     }
                 )
         else:
-            df_desc_por_grupo = (
+            df_desc_por_grupo = (  # noqa: F841
                 df_agrup.select(["id_agrupado", "lista_chave_produto"])
                 .explode("lista_chave_produto")
                 .drop_nulls("lista_chave_produto")

@@ -72,6 +72,6 @@ def test_mapa_descricao_univoca_ignora_descricoes_ambiguas():
         }
     )
 
-    result = fontes_mod._construir_mapa_descricao_univoca(df_mapa)
+    df_univoco, _ = fontes_mod._construir_mapas_descricao(df_mapa)
 
-    assert result.is_empty()
+    assert df_univoco.is_empty()

@@ -25,7 +25,6 @@ CNPJ_ROOT = DADOS_DIR / "CNPJ"
 
 try:
     from utilitarios.salvar_para_parquet import salvar_para_parquet
-    from utilitarios.text import remove_accents
     from transformacao.item_unidades import item_unidades
 except ImportError as e:
     rprint(f"[red]Erro ao importar modulos:[/red] {e}")

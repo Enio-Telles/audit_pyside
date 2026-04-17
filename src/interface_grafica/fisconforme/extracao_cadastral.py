@@ -153,9 +153,9 @@ def extrair_dados_cadastrais_oracle(cnpj: str) -> Optional[Dict[str, Any]]:
 
     finally:
         try:
-            conexao.close()
-        except:
-            pass
+                conexao.close()
+            except Exception:
+                pass
 
 
 def salvar_cache_cadastral(cnpj: str, dados: Dict[str, Any]):

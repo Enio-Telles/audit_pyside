@@ -90,7 +90,7 @@ def normalize_desc(text: str | None) -> str:
     return t
 
 
-def expr_normalizar_descricao(coluna: str) -> pl.Expr:
+def expr_normalizar_descricao(coluna: str) -> "pl.Expr":
     """Expressao Polars unificada para normalizacao de descricoes."""
     import polars as pl
 

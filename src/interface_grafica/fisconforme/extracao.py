@@ -408,7 +408,7 @@ def extrair_dados_malha(
         try:
             m, y = data_inicio.split("/")
             d_ini = f"{y.strip()}{m.strip().zfill(2)}"
-        except:
+        except Exception:
             pass
 
     d_fim = "209912"  # Valor padrÃ£o remoto
@@ -416,7 +416,7 @@ def extrair_dados_malha(
         try:
             m, y = data_fim.split("/")
             d_fim = f"{y.strip()}{m.strip().zfill(2)}"
-        except:
+        except Exception:
             pass
 
     # LÃª o arquivo SQL
@@ -469,7 +469,7 @@ def extrair_dados_malha(
     finally:
         try:
             conexao.close()
-        except:
+        except Exception:
             pass
 
 

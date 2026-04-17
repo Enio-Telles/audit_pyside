@@ -1159,7 +1159,7 @@ def validar_formato_data(data: str) -> bool:
         mes_int = int(mes)
         if mes_int < 1 or mes_int > 12:
             return False
-    except:
+    except Exception:
         return False
 
     return True
