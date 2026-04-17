@@ -142,7 +142,7 @@ def _carregar_agrupamento_canonico(pasta_analises: Path, cnpj: str) -> pl.DataFr
     if not bases:
         return _df_vazio_agrupamento_canonico()
 
-    return (
+    df_grouped = (
         pl.concat(bases, how="vertical_relaxed")
         .sort(["id_agrupado", "__ordem_fonte"])
         .group_by("id_agrupado", maintain_order=True)
@@ -153,18 +153,58 @@ def _carregar_agrupamento_canonico(pasta_analises: Path, cnpj: str) -> pl.DataFr
                 pl.col("lista_desc_compl").drop_nulls().alias("__listas_desc_compl"),
             ]
         )
-        .with_columns(
-            [
-                pl.col("__listas_descricoes")
-                .map_elements(_primeira_lista_textos_nao_vazia, return_dtype=pl.List(pl.Utf8))
-                .alias("lista_descricoes"),
-                pl.col("__listas_desc_compl")
-                .map_elements(_primeira_lista_textos_nao_vazia, return_dtype=pl.List(pl.Utf8))
-                .alias("lista_desc_compl"),
-            ]
-        )
-        .drop(["__listas_descricoes", "__listas_desc_compl"])
     )
+
+    def _selecionar_primeira_lista_nao_vazia(df_grouped: pl.DataFrame, source_col: str, target_col: str) -> pl.DataFrame:
+        """Seleciona a primeira inner-list nao vazia em uma coluna List(List(Utf8)) sem explodir.
+
+        Estrategia:
+        1. Limpa cada inner-list via nested `list.eval(...)` (remoção de nulls/espacos).
+        2. Usa um `apply` por linha apenas para extrair a primeira inner-list nao vazia
+           a partir da estrutura ja limpa (evita expandir linhas com `explode`).
+        Observacao: o passo `apply` trabalha em cada grupo (numero de `id_agrupado`) e evita
+        a explosao completa do DataFrame; é uma troca prática entre legibilidade e memoria.
+        """
+        if source_col in df_grouped.columns:
+            cleaned_col = f"__cleaned_{source_col}"
+
+            # Limpeza vetorizada das inner-lists (remove elementos vazios/null)
+            df_grouped = df_grouped.with_columns(
+                pl.col(source_col)
+                .list.eval(
+                    pl.element().list.eval(
+                        pl.element()
+                        .cast(pl.Utf8, strict=False)
+                        .str.strip_chars()
+                        .filter(pl.element().is_not_null() & (pl.element().str.strip_chars() != ""))
+                    )
+                )
+                .alias(cleaned_col)
+            )
+
+            # Extrai a primeira inner-list nao vazia por linha a partir da estrutura limpa
+            def _first_non_empty(lists):
+                if not lists:
+                    return []
+                for inner in lists:
+                    if inner:
+                        return inner
+                return []
+
+            df_grouped = df_grouped.with_columns(
+                pl.col(cleaned_col)
+                .apply(_first_non_empty, return_dtype=pl.List(pl.Utf8))
+                .alias(target_col)
+            ).drop(cleaned_col)
+        else:
+            df_grouped = df_grouped.with_columns(pl.lit([]).cast(pl.List(pl.Utf8)).alias(target_col))
+        return df_grouped
+
+    # Aplicar helper para as duas colunas de listas (evita duplicacao de codigo)
+    df_grouped = _selecionar_primeira_lista_nao_vazia(df_grouped, "__listas_descricoes", "lista_descricoes")
+    df_grouped = _selecionar_primeira_lista_nao_vazia(df_grouped, "__listas_desc_compl", "lista_desc_compl")
+
+    return df_grouped.drop(["__listas_descricoes", "__listas_desc_compl"]) 
 
 
 def _construir_mapa_descricoes_canonicas(df_agrupamento_canonico: pl.DataFrame) -> pl.DataFrame:

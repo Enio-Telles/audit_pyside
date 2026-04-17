@@ -2202,30 +2202,34 @@ class MainWindow(QMainWindow):
     def atualizar_aba_periodos(self) -> None:
         cnpj = self.state.current_cnpj
         if not cnpj:
+            self._atualizar_titulo_aba_periodos()
             return
 
-        caminho = Path(f"dados/CNPJ/{cnpj}/analises/produtos/aba_periodos_{cnpj}.parquet")
+        caminho = CNPJ_ROOT / cnpj / "analises" / "produtos" / f"aba_periodos_{cnpj}.parquet"
+        if not caminho.exists():
+            self.aba_periodos_model.set_dataframe(pl.DataFrame())
+            self._aba_periodos_df = pl.DataFrame()
+            self._aba_periodos_file_path = None
+            self.lbl_aba_periodos_status.setText("⏳ Arquivo ausente. Iniciando geração automática...")
+            self._atualizar_titulo_aba_periodos()
+            self._reprocessar_periodos_auto(cnpj)
+            return
 
-        def _finalizar_carga_periodos(df):
-            if df is not None:
-                self._aba_periodos_df = df
-                self._aba_periodos_file_path = caminho
-                self.aba_periodos_table.setUpdatesEnabled(False)
-                self.aba_periodos_model.set_dataframe(df)
-                self.aba_periodos_table.setUpdatesEnabled(True)
+        def _finalizar_carga_periodos(df: pl.DataFrame, uniques: dict | None = None):
+            self._aba_periodos_df = df
+            self._aba_periodos_file_path = caminho
+            self._reset_table_resize_flag("aba_periodos")
 
-                ids = sorted(df["id_agrupado"].unique().to_list()) if "id_agrupado" in df.columns else []
-                self.periodo_filter_id.clear()
-                self.periodo_filter_id.addItem("")
-                self.periodo_filter_id.addItems([str(x) for x in ids])
+            id_atual = self.periodo_filter_id.currentText()
+            if uniques and "id_agrupado" in uniques:
+                self._popular_combo_texto(self.periodo_filter_id, [str(i) for i in uniques["id_agrupado"]], id_atual, "")
 
-                self.lbl_aba_periodos_status.setText(f"Sucesso! {df.height} registros carregados.")
-                self._aplicar_preferencias_tabela("aba_periodos", self.aba_periodos_table, self.aba_periodos_model)
-            else:
-                self.lbl_aba_periodos_status.setText("⏳ Arquivo ausente. Iniciando geração automática...")
-                self._reprocessar_periodos_auto(cnpj)
+            self.aplicar_filtros_aba_periodos()
+            self.atualizar_aba_produtos_selecionados()
+            self._atualizar_titulo_aba_periodos()
 
-        self._carregar_dados_parquet_async(caminho, _finalizar_carga_periodos, "Carregando Períodos")
+        self.lbl_aba_periodos_status.setText("⏳ Carregando períodos em segundo plano...")
+        self._carregar_dados_parquet_async(caminho, _finalizar_carga_periodos, "Carregando Períodos", unique_cols=["id_agrupado"])
 
     def _reprocessar_periodos_auto(self, cnpj: str) -> None:
         """Gera a aba_periodos automaticamente se estiver faltando."""
@@ -2263,7 +2267,7 @@ class MainWindow(QMainWindow):
         id_val = self.periodo_filter_id.currentText().strip()
         if id_val:
             filtros.append(f"ID={id_val}")
-            df_filtrado = df_filtrado.filter(pl.col("id_agregado").cast(pl.Utf8).str.contains(id_val))
+            df_filtrado = df_filtrado.filter(pl.col("id_agrupado").cast(pl.Utf8).str.contains(id_val))
 
         desc_val = self.periodo_filter_desc.text().strip().lower()
         if desc_val:
@@ -3240,6 +3244,9 @@ class MainWindow(QMainWindow):
             self.cnpj_list.setCurrentItem(matches[0])
             self.refresh_file_tree(result.cnpj)
             self.atualizar_aba_conversao()
+            self.atualizar_aba_mensal()
+            self.atualizar_aba_anual()
+            self.atualizar_aba_periodos()
             
         msg = "\n".join(result.mensagens[-10:]) if result.mensagens else "Processado com sucesso."
         self.show_info("Pipeline concluido", f"CNPJ {result.cnpj} processado.\n\nUltimas mensagens:\n{msg}")
@@ -3532,23 +3539,22 @@ class MainWindow(QMainWindow):
             self.atualizar_aba_produtos_selecionados()
             return
 
-        def _finalizar_carga_estoque(df: pl.DataFrame):
+        def _finalizar_carga_estoque(df: pl.DataFrame, uniques: dict | None = None):
             self._mov_estoque_df = df
             self._mov_estoque_file_path = path
             self._reset_table_resize_flag("mov_estoque")
 
-            # Popular combo de id_agrupado
+            # Popular combo de id_agrupado com dados pre-calculados no background
             id_atual = self.mov_filter_id.currentText()
-            if "id_agrupado" in df.columns:
-                ids = df.get_column("id_agrupado").unique().sort().to_list()
-                self._popular_combo_texto(self.mov_filter_id, [str(i) for i in ids], id_atual, "")
+            if uniques and "id_agrupado" in uniques:
+                self._popular_combo_texto(self.mov_filter_id, [str(i) for i in uniques["id_agrupado"]], id_atual, "")
             
             self.aplicar_filtros_mov_estoque()
             self.atualizar_aba_produtos_selecionados()
             self._atualizar_titulo_aba_mov_estoque()
 
         self.lbl_mov_estoque_status.setText("⏳ Carregando dados de estoque em segundo plano...")
-        self._carregar_dados_parquet_async(path, _finalizar_carga_estoque, "Carregando Estoque")
+        self._carregar_dados_parquet_async(path, _finalizar_carga_estoque, "Carregando Estoque", unique_cols=["id_agrupado"])
 
     def aplicar_filtros_mov_estoque(self) -> None:
         if self._mov_estoque_df.is_empty():
@@ -3697,6 +3703,28 @@ class MainWindow(QMainWindow):
             self.estoque_tabs.setTabText(idx, f"id_agrupados ({visiveis})")
             return
         self.estoque_tabs.setTabText(idx, f"id_agrupados ({visiveis}/{total})")
+
+    def _atualizar_titulo_aba_mensal(self, visiveis: int | None = None, total: int | None = None) -> None:
+        if not hasattr(self, "estoque_tabs") or not hasattr(self, "tab_aba_mensal"):
+            return
+        idx = self.estoque_tabs.indexOf(self.tab_aba_mensal)
+        if idx < 0:
+            return
+        if visiveis is None or total is None:
+            self.estoque_tabs.setTabText(idx, "Tabela mensal")
+            return
+        self.estoque_tabs.setTabText(idx, f"Tabela mensal ({visiveis}/{total})")
+
+    def _atualizar_titulo_aba_anual(self, visiveis: int | None = None, total: int | None = None) -> None:
+        if not hasattr(self, "estoque_tabs") or not hasattr(self, "tab_aba_anual"):
+            return
+        idx = self.estoque_tabs.indexOf(self.tab_aba_anual)
+        if idx < 0:
+            return
+        if visiveis is None or total is None:
+            self.estoque_tabs.setTabText(idx, "Tabela anual")
+            return
+        self.estoque_tabs.setTabText(idx, f"Tabela anual ({visiveis}/{total})")
 
     def _atualizar_titulo_aba_nfe_entrada(self, visiveis: int | None = None, total: int | None = None) -> None:
         if not hasattr(self, "tabs") or not hasattr(self, "tab_nfe_entrada"):
@@ -4400,22 +4428,45 @@ class MainWindow(QMainWindow):
                 return pl.DataFrame()
         return self.parquet_service.load_dataset(path, conditions or [], colunas_solicitadas)
 
-    def _carregar_dados_parquet_async(self, path: Path, callback: Callable[[pl.DataFrame], None], status_msg: str = "") -> None:
-        """Carrega um arquivo Parquet em background e chama o callback com o DataFrame resultante."""
+    def _carregar_dados_parquet_async(
+        self, 
+        path: Path, 
+        callback: Callable, 
+        status_msg: str = "",
+        unique_cols: list[str] | None = None
+    ) -> None:
+        """
+        Carrega um arquivo Parquet em background.
+        Se unique_cols for fornecido, extrai valores únicos dessas colunas no background.
+        O callback será chamado como callback(df) ou callback(df, uniques_dict).
+        """
         if status_msg:
             self.status.showMessage(f"⏳ {status_msg}...")
 
         def _worker_load():
             if not path.exists():
                 return None
-            return pl.read_parquet(path)
+            df = pl.read_parquet(path)
+            if not unique_cols:
+                return df
+            
+            uniques = {}
+            for col in unique_cols:
+                if col in df.columns:
+                    # Extração pesada feita no worker (background thread)
+                    uniques[col] = df.get_column(col).cast(pl.Utf8, strict=False).drop_nulls().unique().sort().to_list()
+            return {"df": df, "uniques": uniques}
 
         worker = ServiceTaskWorker(_worker_load)
         
-        def _on_success(df: pl.DataFrame):
+        def _on_success(result):
             if status_msg:
                 self.status.showMessage(f"✔ {status_msg.replace('Carregando', 'Feito')}", 3000)
-            callback(df)
+            
+            if isinstance(result, dict) and "df" in result:
+                callback(result["df"], result.get("uniques"))
+            else:
+                callback(result)
 
         def _on_failed(err: str):
             self.show_error("Erro de Carregamento", f"Falha ao carregar {path.name}: {err}")
@@ -4423,7 +4474,6 @@ class MainWindow(QMainWindow):
         worker.finished_ok.connect(_on_success)
         worker.failed.connect(_on_failed)
         
-        # Manter referência para evitar GC prematuro
         if not hasattr(self, "_active_load_workers") or not isinstance(self._active_load_workers, set):
             self._active_load_workers = set()
         
@@ -4516,15 +4566,14 @@ class MainWindow(QMainWindow):
             self.atualizar_aba_produtos_selecionados()
             return
             
-        def _finalizar_carga_anual(df: pl.DataFrame):
+        def _finalizar_carga_anual(df: pl.DataFrame, uniques: dict | None = None):
             self._aba_anual_df = df
             self._aba_anual_file_path = path
             self._reset_table_resize_flag("aba_anual")
 
             id_atual = self.anual_filter_id.currentText()
-            if "id_agrupado" in df.columns:
-                ids = df.get_column("id_agrupado").unique().sort().to_list()
-                self._popular_combo_texto(self.anual_filter_id, [str(i) for i in ids], id_atual, "")
+            if uniques and "id_agrupado" in uniques:
+                self._popular_combo_texto(self.anual_filter_id, [str(i) for i in uniques["id_agrupado"]], id_atual, "")
 
             self.aplicar_filtros_aba_anual()
             self.atualizar_aba_produtos_selecionados()
@@ -4532,7 +4581,7 @@ class MainWindow(QMainWindow):
             self._atualizar_titulo_aba_anual()
 
         self.lbl_aba_anual_status.setText("⏳ Carregando tabela anual em segundo plano...")
-        self._carregar_dados_parquet_async(path, _finalizar_carga_anual, "Carregando Anual")
+        self._carregar_dados_parquet_async(path, _finalizar_carga_anual, "Carregando Anual", unique_cols=["id_agrupado"])
 
     def atualizar_aba_mensal(self) -> None:
         cnpj = self.state.current_cnpj
@@ -4553,26 +4602,25 @@ class MainWindow(QMainWindow):
             self.atualizar_aba_produtos_selecionados()
             return
 
-        def _finalizar_carga_mensal(df: pl.DataFrame):
+        def _finalizar_carga_mensal(df: pl.DataFrame, uniques: dict | None = None):
             self._aba_mensal_df = df
             self._aba_mensal_file_path = path
             self._reset_table_resize_flag("aba_mensal")
 
             id_atual = self.mensal_filter_id.currentText()
-            if "id_agrupado" in df.columns:
-                ids = df.get_column("id_agrupado").unique().sort().to_list()
-                self._popular_combo_texto(self.mensal_filter_id, [str(i) for i in ids], id_atual, "")
+            if uniques and "id_agrupado" in uniques:
+                self._popular_combo_texto(self.mensal_filter_id, [str(i) for i in uniques["id_agrupado"]], id_atual, "")
 
             ano_atual = self.mensal_filter_ano.currentText()
-            if "ano" in df.columns:
-                anos = df.get_column("ano").unique().sort().to_list()
-                self._popular_combo_texto(self.mensal_filter_ano, [str(a) for a in anos], ano_atual, "Todos")
+            if uniques and "ano" in uniques:
+                self._popular_combo_texto(self.mensal_filter_ano, [str(a) for a in uniques["ano"]], ano_atual, "Todos")
 
+            self.aplicar_filtros_aba_mensal()
             self.atualizar_aba_resumo_global()
             self._atualizar_titulo_aba_mensal()
 
         self.lbl_aba_mensal_status.setText("⏳ Carregando tabela mensal em segundo plano...")
-        self._carregar_dados_parquet_async(path, _finalizar_carga_mensal, "Carregando Mensal")
+        self._carregar_dados_parquet_async(path, _finalizar_carga_mensal, "Carregando Mensal", unique_cols=["id_agrupado", "ano"])
 
     def aplicar_filtros_aba_mensal(self) -> None:
         if self._aba_mensal_df.is_empty():
@@ -4794,21 +4842,20 @@ class MainWindow(QMainWindow):
             self._atualizar_titulo_aba_nfe_entrada()
             return
 
-        def _finalizar_carga_nfe(df: pl.DataFrame):
+        def _finalizar_carga_nfe(df: pl.DataFrame, uniques: dict | None = None):
             self._nfe_entrada_df = df
             self._nfe_entrada_file_path = path
             self._reset_table_resize_flag("nfe_entrada")
             
             id_atual = self.nfe_entrada_filter_id.currentText()
-            if "id_agrupado" in df.columns:
-                ids = df.get_column("id_agrupado").cast(pl.Utf8, strict=False).drop_nulls().unique().sort().to_list()
-                self._popular_combo_texto(self.nfe_entrada_filter_id, [str(i) for i in ids], id_atual, "")
+            if uniques and "id_agrupado" in uniques:
+                self._popular_combo_texto(self.nfe_entrada_filter_id, [str(i) for i in uniques["id_agrupado"]], id_atual, "")
 
             self.aplicar_filtros_nfe_entrada()
             self._atualizar_titulo_aba_nfe_entrada()
 
         self.status.showMessage("⏳ Carregando NFe Entrada em segundo plano...")
-        self._carregar_dados_parquet_async(path, _finalizar_carga_nfe, "Carregando NFe Entrada")
+        self._carregar_dados_parquet_async(path, _finalizar_carga_nfe, "Carregando NFe Entrada", unique_cols=["id_agrupado"])
         self._atualizar_titulo_aba_nfe_entrada()
 
     def aplicar_filtros_nfe_entrada(self) -> None:
@@ -4919,21 +4966,20 @@ class MainWindow(QMainWindow):
             self._atualizar_titulo_aba_id_agrupados()
             return
 
-        def _finalizar_carga_id_agrupados(df: pl.DataFrame):
+        def _finalizar_carga_id_agrupados(df: pl.DataFrame, uniques: dict | None = None):
             self._id_agrupados_df = df
             self._id_agrupados_file_path = path
             self._reset_table_resize_flag("id_agrupados")
 
             id_atual = self.id_agrupados_filter_id.currentText()
-            if "id_agrupado" in df.columns:
-                ids = df.get_column("id_agrupado").cast(pl.Utf8, strict=False).drop_nulls().unique().sort().to_list()
-                self._popular_combo_texto(self.id_agrupados_filter_id, [str(i) for i in ids], id_atual, "")
+            if uniques and "id_agrupado" in uniques:
+                self._popular_combo_texto(self.id_agrupados_filter_id, [str(i) for i in uniques["id_agrupado"]], id_atual, "")
             
             self.aplicar_filtros_id_agrupados()
             self._atualizar_titulo_aba_id_agrupados()
 
         self.lbl_id_agrupados_status.setText("⏳ Carregando id_agrupados em segundo plano...")
-        self._carregar_dados_parquet_async(path, _finalizar_carga_id_agrupados, "Carregando ID Agrupados")
+        self._carregar_dados_parquet_async(path, _finalizar_carga_id_agrupados, "Carregando ID Agrupados", unique_cols=["id_agrupado"])
 
     def aplicar_filtros_id_agrupados(self) -> None:
         if self._id_agrupados_df.is_empty():
@@ -5036,48 +5082,47 @@ class MainWindow(QMainWindow):
             self._atualizar_titulo_aba_produtos_selecionados()
             return
 
-        # Priorizar carregamento permanente
         path = CNPJ_ROOT / cnpj / "analises" / "produtos" / f"aba_produtos_selecionados_{cnpj}.parquet"
-        if path.exists():
-            try:
-                df_produtos = self._carregar_dataset_ui(path)
-                self._produtos_selecionados_df = df_produtos
-                self._reset_table_resize_flag("produtos_selecionados")
 
-                id_atual = self.produtos_sel_filter_id.currentText()
-                ids = df_produtos.get_column("id_agregado").cast(pl.Utf8, strict=False).drop_nulls().unique().sort().to_list() if "id_agregado" in df_produtos.columns else []
-                self._popular_combo_texto(self.produtos_sel_filter_id, [str(i) for i in ids], id_atual, "")
-
-                anos = self._anos_disponiveis_produtos_selecionados()
-                anos_texto = [str(a) for a in anos]
-                self._popular_combo_texto(self.produtos_sel_filter_id, [str(i) for i in ids], id_atual, "")
-                self._popular_combo_texto(self.produtos_sel_filter_ano_ini, anos_texto, self.produtos_sel_filter_ano_ini.currentText(), "Todos")
-                self._popular_combo_texto(self.produtos_sel_filter_ano_fim, anos_texto, self.produtos_sel_filter_ano_fim.currentText(), "Todos")
-
-                self.aplicar_filtros_produtos_selecionados()
-                return
-            except Exception as e:
-                self.status.showMessage(f"Erro ao carregar base de produtos do arquivo: {e}")
-
-        # Fallback para consolidar em tempo real
-        try:
-            df_produtos = self._coletar_base_produtos_selecionados()
+        def _finalizar_carga_produtos_sel(df: pl.DataFrame, uniques: dict | None = None):
+            self._produtos_selecionados_df = df
             self._reset_table_resize_flag("produtos_selecionados")
 
             id_atual = self.produtos_sel_filter_id.currentText()
-            ids = df_produtos.get_column("id_agregado").cast(pl.Utf8, strict=False).drop_nulls().unique().sort().to_list() if "id_agregado" in df_produtos.columns else []
-            self._popular_combo_texto(self.produtos_sel_filter_id, [str(i) for i in ids], id_atual, "")
+            if uniques and "id_agregado" in uniques:
+                self._popular_combo_texto(self.produtos_sel_filter_id, [str(i) for i in uniques["id_agregado"]], id_atual, "")
 
             anos = self._anos_disponiveis_produtos_selecionados()
-            ano_ini_atual = self.produtos_sel_filter_ano_ini.currentText()
-            ano_fim_atual = self.produtos_sel_filter_ano_fim.currentText()
             anos_texto = [str(a) for a in anos]
-            self._popular_combo_texto(self.produtos_sel_filter_ano_ini, anos_texto, ano_ini_atual, "Todos")
-            self._popular_combo_texto(self.produtos_sel_filter_ano_fim, anos_texto, ano_fim_atual, "Todos")
+            self._popular_combo_texto(self.produtos_sel_filter_ano_ini, anos_texto, self.produtos_sel_filter_ano_ini.currentText(), "Todos")
+            self._popular_combo_texto(self.produtos_sel_filter_ano_fim, anos_texto, self.produtos_sel_filter_ano_fim.currentText(), "Todos")
 
             self.aplicar_filtros_produtos_selecionados()
-        except Exception as e:
-            self.show_error("Erro de leitura", f"Falha ao consolidar produtos selecionados: {e}")
+            self._atualizar_titulo_aba_produtos_selecionados()
+
+        if path.exists():
+            self.lbl_id_agrupados_status.setText("⏳ Carregando base de produtos selecionados em segundo plano...")
+            self._carregar_dados_parquet_async(path, _finalizar_carga_produtos_sel, "Carregando Produtos Selecionados", unique_cols=["id_agregado"])
+            return
+
+        # Fallback para consolidar em tempo real (também em background para não travar)
+        def _worker_consolidar():
+            df = self._coletar_base_produtos_selecionados()
+            # Extração de IDs únicos igual ao async loader
+            ids = df.get_column("id_agrupado").cast(pl.Utf8, strict=False).drop_nulls().unique().sort().to_list() if "id_agrupado" in df.columns else []
+            return {"df": df, "uniques": {"id_agregado": ids}}
+
+        self.lbl_produtos_sel_status.setText("⏳ Consolidando produtos em tempo real no background...")
+        worker = ServiceTaskWorker(_worker_consolidar)
+        worker.finished_ok.connect(lambda res: _finalizar_carga_produtos_sel(res["df"], res["uniques"]))
+        worker.failed.connect(lambda err: self.show_error("Erro de leitura", f"Falha ao consolidar produtos selecionados: {err}"))
+        
+        if not hasattr(self, "_active_load_workers") or not isinstance(self._active_load_workers, set):
+            self._active_load_workers = set()
+        self._active_load_workers.add(worker)
+        worker.finished.connect(lambda: self._active_load_workers.discard(worker))
+        worker.finished.connect(worker.deleteLater)
+        worker.start()
 
     def _coletar_base_produtos_selecionados(self) -> pl.DataFrame:
         bases: list[pl.DataFrame] = []
@@ -5540,7 +5585,7 @@ class MainWindow(QMainWindow):
 
         path = CNPJ_ROOT / cnpj / "analises" / "produtos" / f"aba_resumo_global_{cnpj}.parquet"
         
-        def _finalizar_carga_resumo(df: pl.DataFrame):
+        def _finalizar_carga_resumo(df: pl.DataFrame, uniques: dict | None = None):
             self._resumo_global_df = df
             self.resumo_global_model.set_dataframe(df)
             self.lbl_resumo_global_status.setText(f"Resumo global carregado (total {df.height} competencias).")
@@ -5886,6 +5931,8 @@ class MainWindow(QMainWindow):
             self.atualizar_aba_mensal()
         elif "anual" in texto_aba:
             self.atualizar_aba_anual()
+        elif "periodos" in texto_aba:
+            self.atualizar_aba_periodos()
         elif "id" in texto_aba and "agrupado" in texto_aba:
             self.atualizar_aba_id_agrupados()
 

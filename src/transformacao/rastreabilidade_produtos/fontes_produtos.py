@@ -2,7 +2,8 @@
 fontes_produtos.py
 
 Gera arquivos derivados das fontes brutas com a coluna `id_agrupado`
-vinculada pela descricao_normalizada da cadeia nova.
+vinculada prioritariamente por `codigo_fonte` e, como fallback controlado,
+por `descricao_normalizada`.
 
 Saidas (em arquivos_parquet):
 - c170_agr_<cnpj>.parquet
@@ -123,6 +124,52 @@ def _preservar_colunas_rastreabilidade(df_src: pl.DataFrame) -> list[pl.Expr]:
     return exprs
 
 
+def _construir_mapa_descricao_univoca(df_mapa: pl.DataFrame) -> pl.DataFrame:
+    return (
+        df_mapa
+        .filter(pl.col("descricao_normalizada").is_not_null() & (pl.col("descricao_normalizada") != ""))
+        .group_by("descricao_normalizada")
+        .agg(pl.col("id_agrupado").drop_nulls().unique().sort().alias("ids_agrupados"))
+        .filter(pl.col("ids_agrupados").list.len() == 1)
+        .with_columns(pl.col("ids_agrupados").list.first().alias("id_agrupado_desc"))
+        .select(["descricao_normalizada", "id_agrupado_desc"])
+    )
+
+
+def _anexar_id_agrupado_por_codigo_ou_descricao(
+    df_src: pl.DataFrame,
+    df_mapa: pl.DataFrame,
+    df_attrs: pl.DataFrame,
+    col_desc: str,
+) -> pl.DataFrame:
+    df_base = df_src.with_columns(_normalizar_descricao_expr(col_desc))
+
+    df_mapa_codigo = (
+        df_mapa
+        .filter(pl.col("codigo_fonte").is_not_null() & (pl.col("codigo_fonte") != ""))
+        .select(["codigo_fonte", pl.col("id_agrupado").alias("id_agrupado_codigo")])
+        .unique(subset=["codigo_fonte"])
+    )
+    df_mapa_desc = _construir_mapa_descricao_univoca(df_mapa)
+
+    if "codigo_fonte" in df_base.columns:
+        df_base = df_base.join(df_mapa_codigo, on="codigo_fonte", how="left")
+    else:
+        df_base = df_base.with_columns(pl.lit(None, dtype=pl.Utf8).alias("id_agrupado_codigo"))
+
+    df_base = (
+        df_base
+        .join(df_mapa_desc, left_on="__descricao_normalizada__", right_on="descricao_normalizada", how="left")
+        .with_columns(
+            pl.coalesce(["id_agrupado_codigo", "id_agrupado_desc"]).alias("id_agrupado")
+        )
+        .drop(["id_agrupado_codigo", "id_agrupado_desc"], strict=False)
+        .join(df_attrs, on="id_agrupado", how="left")
+    )
+
+    return df_base
+
+
 def gerar_fontes_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
     cnpj = re.sub(r"\D", "", cnpj or "")
     if len(cnpj) not in {11, 14}:
@@ -135,8 +182,11 @@ def gerar_fontes_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
     pasta_brutos = pasta_cnpj / "arquivos_parquet"
 
     arq_prod_final = pasta_analises / f"produtos_final_{cnpj}.parquet"
-    if not arq_prod_final.exists():
-        rprint("[red]produtos_final.parquet nao encontrado.[/red]")
+    arq_prod_agr = pasta_analises / f"produtos_agrupados_{cnpj}.parquet"
+    arq_mapa = pasta_analises / f"map_produto_agrupado_{cnpj}.parquet"
+
+    if not arq_prod_final.exists() or not arq_mapa.exists():
+        rprint("[red]Arquivos de agregacao nao encontrados (produtos_final / map_produto_agrupado).[/red]")
         return False
     if not pasta_brutos.exists():
         rprint("[red]Pasta de arquivos_parquet nao encontrada.[/red]")
@@ -160,23 +210,27 @@ def gerar_fontes_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         rprint(f"[red]{exc}[/red]")
         return False
 
-    df_prod_final = (
+    df_mapa = (
+        pl.read_parquet(arq_mapa)
+        .select(["id_agrupado", "codigo_fonte", "descricao_normalizada"])
+        .unique()
+    )
+
+    df_attrs = (
         pl.read_parquet(arq_prod_final)
         .select(
             [
                 "id_agrupado",
-                "descricao_normalizada",
                 "descr_padrao",
                 "ncm_padrao",
                 "cest_padrao",
                 "co_sefin_final",
                 "unid_ref_sugerida",
             ]
-            # Incluir versao_agrupamento se disponivel (M3)
             + (["versao_agrupamento"] if "versao_agrupamento" in pl.read_parquet_schema(arq_prod_final).names() else [])
         )
-        .rename({"descricao_normalizada": "__descricao_normalizada__", "co_sefin_final": "co_sefin_agr"})
-        .unique(subset=["__descricao_normalizada__"])
+        .rename({"co_sefin_final": "co_sefin_agr"})
+        .unique(subset=["id_agrupado"])
     )
 
     fontes = ["c170", "bloco_h", "nfe", "nfce"]
@@ -197,10 +251,11 @@ def gerar_fontes_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         if exprs_rastreabilidade:
             df_src = df_src.with_columns(exprs_rastreabilidade)
 
-        df_out = (
-            df_src
-            .with_columns(_normalizar_descricao_expr(col_desc))
-            .join(df_prod_final, on="__descricao_normalizada__", how="left")
+        df_out = _anexar_id_agrupado_por_codigo_ou_descricao(
+            df_src=df_src,
+            df_mapa=df_mapa,
+            df_attrs=df_attrs,
+            col_desc=col_desc,
         )
 
         faltantes = df_out.filter(pl.col("id_agrupado").is_null())
