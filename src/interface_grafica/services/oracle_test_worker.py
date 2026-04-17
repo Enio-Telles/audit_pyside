@@ -4,6 +4,7 @@ Worker assíncrono para testar conexão Oracle sem bloquear a UI.
 Aceita os parâmetros da conexão diretamente (não lê do .env),
 para que o teste reflita exatamente o que está digitado nos campos.
 """
+
 from __future__ import annotations
 
 from time import perf_counter
@@ -53,8 +54,15 @@ class OracleConnectionTestWorker(QThread):
 
             import oracledb  # lazy import — safe inside thread
 
-            if not self._host or not self._service or not self._user or not self._password:
-                self._emitir_resultado(False, "Preencha host, serviço, usuário e senha antes de testar.", 0)
+            if (
+                not self._host
+                or not self._service
+                or not self._user
+                or not self._password
+            ):
+                self._emitir_resultado(
+                    False, "Preencha host, serviço, usuário e senha antes de testar.", 0
+                )
                 return
 
             porta = int(self._port) if self._port.isdigit() else 1521
@@ -70,15 +78,17 @@ class OracleConnectionTestWorker(QThread):
                     conn.close()
                 except Exception as close_exc:  # pragma: no cover - caminho operacional
                     log_exception(close_exc)
-                self._emitir_resultado(False, "Teste de conexão cancelado.", int((perf_counter() - t0) * 1000))
+                self._emitir_resultado(
+                    False,
+                    "Teste de conexão cancelado.",
+                    int((perf_counter() - t0) * 1000),
+                )
                 return
 
             versao = ""
             try:
                 with conn.cursor() as cur:
-                    cur.execute(
-                        "SELECT BANNER FROM V$VERSION WHERE ROWNUM = 1"
-                    )
+                    cur.execute("SELECT BANNER FROM V$VERSION WHERE ROWNUM = 1")
                     row = cur.fetchone()
                     if row:
                         versao = row[0]

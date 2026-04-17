@@ -1,4 +1,3 @@
-import re
 
 with open("src/transformacao/rastreabilidade_produtos/produtos_agrupados.py", "r") as f:
     content = f.read()

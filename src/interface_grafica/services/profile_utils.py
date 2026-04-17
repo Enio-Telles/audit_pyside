@@ -9,7 +9,9 @@ def ordenar_colunas_perfil(
     disponiveis = [str(col) for col in available_columns]
     disponiveis_set = set(disponiveis)
 
-    visiveis = [str(col) for col in (visible_columns or []) if str(col) in disponiveis_set]
+    visiveis = [
+        str(col) for col in (visible_columns or []) if str(col) in disponiveis_set
+    ]
     if not visiveis:
         return []
 

@@ -13,7 +13,6 @@ Data: 2026-04-02
 
 import polars as pl
 import logging
-from pathlib import Path
 from .path_resolver import get_root_dir
 
 # Configuração de logging
@@ -36,7 +35,8 @@ class ProcessadorPolars:
             "regime_pagto": PASTA_DADOS / "BI_DM_REGIME_PAGTO_DESCRICAO.parquet",
             "situacao": PASTA_DADOS / "BI_DM_SITUACAO_CONTRIBUINTE.parquet",
             "notificacao": PASTA_DADOS / "BI_FATO_DET_NOTIFICACAO.parquet",
-            "chaves_nota": PASTA_DADOS / "APP_PENDENCIA_VW_FISCONFORME_CHAVE_NOTA.parquet",
+            "chaves_nota": PASTA_DADOS
+            / "APP_PENDENCIA_VW_FISCONFORME_CHAVE_NOTA.parquet",
             "nfe_detalhe": PASTA_DADOS / "BI_DM_NFE_CHAVE_E_FISCONFORME.parquet",
             "consolidado": PASTA_DADOS / "BI_DM_CONSOLIDADO_PENDENCIAS.parquet",
         }
@@ -63,23 +63,35 @@ class ProcessadorPolars:
             pl.Expr com alias 'status_pendencia'
         """
         return (
-            pl.when(pl.col("STATUS") == 0).then(pl.lit("0 - pendente"))
-            .when(pl.col("STATUS") == 1).then(pl.lit("1 - contestado"))
-            .when(pl.col("STATUS") == 2).then(pl.lit("2 - resolvido"))
-            .when(pl.col("STATUS") == 3).then(pl.lit("3 - acao fiscal"))
-            .when(pl.col("STATUS") == 4).then(pl.lit("4 - pendente indeferido"))
-            .when(pl.col("STATUS") == 5).then(pl.lit("5 - deferido"))
-            .when(pl.col("STATUS") == 6).then(pl.lit("6 - notificado"))
-            .when(pl.col("STATUS") == 7).then(pl.lit("7 - deferido automaticamente"))
-            .when(pl.col("STATUS") == 8).then(pl.lit("8 - aguardando autorizacao"))
-            .when(pl.col("STATUS") == 9).then(pl.lit("9 - cancelado"))
-            .when(pl.col("STATUS") == 10).then(pl.lit("10 - fiscalizado"))
-            .when(pl.col("STATUS") == 11).then(pl.lit("11 - inapta - 5 anos"))
-            .when(pl.col("STATUS") == 12).then(pl.lit("12 - pre-fiscalizacao"))
+            pl.when(pl.col("STATUS") == 0)
+            .then(pl.lit("0 - pendente"))
+            .when(pl.col("STATUS") == 1)
+            .then(pl.lit("1 - contestado"))
+            .when(pl.col("STATUS") == 2)
+            .then(pl.lit("2 - resolvido"))
+            .when(pl.col("STATUS") == 3)
+            .then(pl.lit("3 - acao fiscal"))
+            .when(pl.col("STATUS") == 4)
+            .then(pl.lit("4 - pendente indeferido"))
+            .when(pl.col("STATUS") == 5)
+            .then(pl.lit("5 - deferido"))
+            .when(pl.col("STATUS") == 6)
+            .then(pl.lit("6 - notificado"))
+            .when(pl.col("STATUS") == 7)
+            .then(pl.lit("7 - deferido automaticamente"))
+            .when(pl.col("STATUS") == 8)
+            .then(pl.lit("8 - aguardando autorizacao"))
+            .when(pl.col("STATUS") == 9)
+            .then(pl.lit("9 - cancelado"))
+            .when(pl.col("STATUS") == 10)
+            .then(pl.lit("10 - fiscalizado"))
+            .when(pl.col("STATUS") == 11)
+            .then(pl.lit("11 - inapta - 5 anos"))
+            .when(pl.col("STATUS") == 12)
+            .then(pl.lit("12 - pre-fiscalizacao"))
             .otherwise(pl.col("STATUS").cast(pl.Utf8))
             .alias("status_pendencia")
         )
-
 
     # =========================================================================
     # RELATÓRIO: DADOS CADASTRAIS
@@ -94,27 +106,42 @@ class ProcessadorPolars:
         situacao = self.carregar_tabela("situacao")
 
         resultado = (
-            pessoa
-            .join(localidade, on="CO_MUNICIPIO", how="left")
-            .join(regime, left_on="CO_REGIME_PAGTO", right_on="CO_REGIME_PAGAMENTO", how="left")
-            .join(situacao, left_on="IN_SITUACAO", right_on="CO_SITUACAO_CONTRIBUINTE", how="left")
-            .select([
-                pl.col("CO_CNPJ_CPF").alias("CNPJ"),
-                pl.col("CO_CAD_ICMS").alias("IE"),
-                pl.col("NO_RAZAO_SOCIAL").alias("RAZAO_SOCIAL"),
-                pl.col("NO_FANTASIA").alias("Nome Fantasia"),
-                (pl.col("DESC_ENDERECO") + " " + pl.col("BAIRRO")).alias("Endereço"),
-                "NO_MUNICIPIO",
-                "CO_UF",
-                (
-                    pl.col("CO_REGIME_PAGTO").cast(pl.Utf8)
-                    + " - "
-                    + pl.col("NO_REGIME_PAGAMENTO")
-                ).alias("Regime de Pagamento"),
-                (
-                    pl.col("IN_SITUACAO") + " - " + pl.col("NO_SITUACAO_CONTRIBUINTE")
-                ).alias("Situação da IE"),
-            ])
+            pessoa.join(localidade, on="CO_MUNICIPIO", how="left")
+            .join(
+                regime,
+                left_on="CO_REGIME_PAGTO",
+                right_on="CO_REGIME_PAGAMENTO",
+                how="left",
+            )
+            .join(
+                situacao,
+                left_on="IN_SITUACAO",
+                right_on="CO_SITUACAO_CONTRIBUINTE",
+                how="left",
+            )
+            .select(
+                [
+                    pl.col("CO_CNPJ_CPF").alias("CNPJ"),
+                    pl.col("CO_CAD_ICMS").alias("IE"),
+                    pl.col("NO_RAZAO_SOCIAL").alias("RAZAO_SOCIAL"),
+                    pl.col("NO_FANTASIA").alias("Nome Fantasia"),
+                    (pl.col("DESC_ENDERECO") + " " + pl.col("BAIRRO")).alias(
+                        "Endereço"
+                    ),
+                    "NO_MUNICIPIO",
+                    "CO_UF",
+                    (
+                        pl.col("CO_REGIME_PAGTO").cast(pl.Utf8)
+                        + " - "
+                        + pl.col("NO_REGIME_PAGAMENTO")
+                    ).alias("Regime de Pagamento"),
+                    (
+                        pl.col("IN_SITUACAO")
+                        + " - "
+                        + pl.col("NO_SITUACAO_CONTRIBUINTE")
+                    ).alias("Situação da IE"),
+                ]
+            )
         )
 
         return resultado.collect()
@@ -138,8 +165,7 @@ class ProcessadorPolars:
 
         # Sort global e ranking via cum_sum dentro do grupo
         resultado = (
-            pendencias
-            .join(malhas, left_on="MALHAS_ID", right_on="ID", how="left")
+            pendencias.join(malhas, left_on="MALHAS_ID", right_on="ID", how="left")
             .join(notificacoes, left_on="ID", right_on="ID_FISCONFORME", how="left")
             .with_columns(
                 pl.coalesce(["DT_CIENCIA", "DATA_CIENCIA"]).alias("data_consolidada")
@@ -149,28 +175,27 @@ class ProcessadorPolars:
                 descending=[False, True],
                 nulls_last=[False, True],
             )
-            .with_columns(
-                pl.lit(1).cum_sum().over("ID").alias("rn")
-            )
+            .with_columns(pl.lit(1).cum_sum().over("ID").alias("rn"))
             .filter(pl.col("rn") == 1)
-            .select([
-                pl.col("CO_CNPJ_CPF").alias("cnpj"),
-                pl.col("ID").alias("id_pendencia"),
-                "ID_NOTIFICACAO",
-                "MALHAS_ID",
-                pl.col("TITULO").alias("titulo_malha"),
-                "PERIODO",
-                "STATUS",
-                pl.col("TP_STATUS").alias("status_notificacao"),
-                "data_consolidada",
-            ])
+            .select(
+                [
+                    pl.col("CO_CNPJ_CPF").alias("cnpj"),
+                    pl.col("ID").alias("id_pendencia"),
+                    "ID_NOTIFICACAO",
+                    "MALHAS_ID",
+                    pl.col("TITULO").alias("titulo_malha"),
+                    "PERIODO",
+                    "STATUS",
+                    pl.col("TP_STATUS").alias("status_notificacao"),
+                    "data_consolidada",
+                ]
+            )
         )
 
         return resultado.collect()
 
 
 if __name__ == "__main__":
-    import sys
 
     logging.basicConfig(
         level=logging.INFO,

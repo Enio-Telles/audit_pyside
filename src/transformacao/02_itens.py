@@ -30,7 +30,7 @@ for _dir in (SRC_DIR, UTILITARIOS_DIR):
 
 try:
     from salvar_para_parquet import salvar_para_parquet
-    from text import remove_accents, expr_normalizar_descricao
+    from text import expr_normalizar_descricao
     from item_unidades import item_unidades
 except ImportError as e:
     rprint(f"[red]Erro ao importar modulos:[/red] {e}")
@@ -66,7 +66,9 @@ def itens(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
     arq_item_unid = pasta_analises / f"item_unidades_{cnpj}.parquet"
 
     if not arq_item_unid.exists():
-        rprint("[yellow]item_unidades nao encontrado. Gerando base antes de consolidar itens...[/yellow]")
+        rprint(
+            "[yellow]item_unidades nao encontrado. Gerando base antes de consolidar itens...[/yellow]"
+        )
         if not item_unidades(cnpj, pasta_cnpj):
             return False
 
@@ -105,19 +107,55 @@ def itens(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
 
     # Ordena primeiro os registros mais "ricos" para que os campos canonicos usem
     # uma linha representativa com mais informacao preenchida.
-    df = (
-        df.with_columns(
-            (
-                pl.when(pl.col("codigo").is_not_null() & (pl.col("codigo").cast(pl.String).str.strip_chars() != "")).then(1).otherwise(0)
-                + pl.when(pl.col("descr_compl").is_not_null() & (pl.col("descr_compl").cast(pl.String).str.strip_chars() != "")).then(1).otherwise(0)
-                + pl.when(pl.col("tipo_item").is_not_null() & (pl.col("tipo_item").cast(pl.String).str.strip_chars() != "")).then(1).otherwise(0)
-                + pl.when(pl.col("ncm").is_not_null() & (pl.col("ncm").cast(pl.String).str.strip_chars() != "")).then(1).otherwise(0)
-                + pl.when(pl.col("cest").is_not_null() & (pl.col("cest").cast(pl.String).str.strip_chars() != "")).then(1).otherwise(0)
-                + pl.when(pl.col("co_sefin_item").is_not_null() & (pl.col("co_sefin_item").cast(pl.String).str.strip_chars() != "")).then(1).otherwise(0)
-                + pl.when(pl.col("gtin").is_not_null() & (pl.col("gtin").cast(pl.String).str.strip_chars() != "")).then(1).otherwise(0)
-            ).alias("__score")
-        )
-        .sort(["descricao_normalizada", "__score", "descricao", "codigo"], descending=[False, True, False, False], nulls_last=True)
+    df = df.with_columns(
+        (
+            pl.when(
+                pl.col("codigo").is_not_null()
+                & (pl.col("codigo").cast(pl.String).str.strip_chars() != "")
+            )
+            .then(1)
+            .otherwise(0)
+            + pl.when(
+                pl.col("descr_compl").is_not_null()
+                & (pl.col("descr_compl").cast(pl.String).str.strip_chars() != "")
+            )
+            .then(1)
+            .otherwise(0)
+            + pl.when(
+                pl.col("tipo_item").is_not_null()
+                & (pl.col("tipo_item").cast(pl.String).str.strip_chars() != "")
+            )
+            .then(1)
+            .otherwise(0)
+            + pl.when(
+                pl.col("ncm").is_not_null()
+                & (pl.col("ncm").cast(pl.String).str.strip_chars() != "")
+            )
+            .then(1)
+            .otherwise(0)
+            + pl.when(
+                pl.col("cest").is_not_null()
+                & (pl.col("cest").cast(pl.String).str.strip_chars() != "")
+            )
+            .then(1)
+            .otherwise(0)
+            + pl.when(
+                pl.col("co_sefin_item").is_not_null()
+                & (pl.col("co_sefin_item").cast(pl.String).str.strip_chars() != "")
+            )
+            .then(1)
+            .otherwise(0)
+            + pl.when(
+                pl.col("gtin").is_not_null()
+                & (pl.col("gtin").cast(pl.String).str.strip_chars() != "")
+            )
+            .then(1)
+            .otherwise(0)
+        ).alias("__score")
+    ).sort(
+        ["descricao_normalizada", "__score", "descricao", "codigo"],
+        descending=[False, True, False, False],
+        nulls_last=True,
     )
 
     df_itens = (

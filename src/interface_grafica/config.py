@@ -6,9 +6,9 @@ from utilitarios.project_paths import (
     CONSULTAS_ROOT,
     DATA_ROOT,
     ENV_PATH,
-    PIPELINE_SCRIPT,
     PROJECT_ROOT,
     SQL_ROOT,
+    PIPELINE_SCRIPT,  # noqa: F401 (re-exported for pipeline compatibility)
 )
 
 APP_NAME = "Fiscal Parquet Analyzer"

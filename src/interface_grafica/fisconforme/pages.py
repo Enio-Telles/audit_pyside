@@ -35,6 +35,7 @@ from .config_service import (
 
 # Resolvedor de caminhos do pacote integrado
 from .path_resolver import get_root_dir
+
 ROOT_DIR = get_root_dir()
 
 from .components import (
@@ -166,9 +167,13 @@ class DatabaseConfigPage(BaseWizardPage):
     def _save_config(self) -> bool:
         dados = {key: widget.text().strip() for key, widget in self.inputs.items()}
         if salvar_config_db(dados):
-            self.status_banner.set_status("success", "Configurações salvas com sucesso no arquivo .env.")
+            self.status_banner.set_status(
+                "success", "Configurações salvas com sucesso no arquivo .env."
+            )
             return True
-        self.status_banner.set_status("danger", "Não foi possível salvar as configurações no arquivo .env.")
+        self.status_banner.set_status(
+            "danger", "Não foi possível salvar as configurações no arquivo .env."
+        )
         return False
 
     def _test_connection(self):
@@ -178,9 +183,13 @@ class DatabaseConfigPage(BaseWizardPage):
             conexao = conectar_oracle()
             if conexao:
                 conexao.close()
-                self.status_banner.set_status("success", "Conexão estabelecida com sucesso.")
+                self.status_banner.set_status(
+                    "success", "Conexão estabelecida com sucesso."
+                )
             else:
-                self.status_banner.set_status("danger", "Falha na conexão. Revise host, usuário e senha.")
+                self.status_banner.set_status(
+                    "danger", "Falha na conexão. Revise host, usuário e senha."
+                )
         except Exception as exc:  # pragma: no cover - depende de ambiente
             self.status_banner.set_status("danger", f"Erro ao testar a conexão: {exc}")
 
@@ -193,7 +202,9 @@ class DatabaseConfigPage(BaseWizardPage):
             self._load_config()
 
     def persist_state(self, state: WizardState):
-        state.db_config = {key: widget.text().strip() for key, widget in self.inputs.items()}
+        state.db_config = {
+            key: widget.text().strip() for key, widget in self.inputs.items()
+        }
 
     def validate(self, state: WizardState) -> bool:
         db_user = state.db_config.get("DB_USER", "")
@@ -216,7 +227,9 @@ class DatabaseConfigPage(BaseWizardPage):
         return "Confirmar banco e seguir"
 
     def footer_context(self, state: WizardState) -> str:
-        return "Etapa 1 de 5  •  Configure a base de conexão para as próximas consultas."
+        return (
+            "Etapa 1 de 5  •  Configure a base de conexão para as próximas consultas."
+        )
 
 
 class CNPJsPage(BaseWizardPage):
@@ -291,13 +304,25 @@ class CNPJsPage(BaseWizardPage):
         self.view = DataTable()
         self.view.setModel(self.model)
         self.view.setSelectionMode(QAbstractItemView.ExtendedSelection)
-        self.view.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
-        self.view.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        self.view.horizontalHeader().setSectionResizeMode(
+            0, QHeaderView.ResizeToContents
+        )
+        self.view.horizontalHeader().setSectionResizeMode(
+            1, QHeaderView.ResizeToContents
+        )
         self.view.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
-        self.view.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)
-        self.view.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeToContents)
-        self.view.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeToContents)
-        self.view.horizontalHeader().setSectionResizeMode(6, QHeaderView.ResizeToContents)
+        self.view.horizontalHeader().setSectionResizeMode(
+            3, QHeaderView.ResizeToContents
+        )
+        self.view.horizontalHeader().setSectionResizeMode(
+            4, QHeaderView.ResizeToContents
+        )
+        self.view.horizontalHeader().setSectionResizeMode(
+            5, QHeaderView.ResizeToContents
+        )
+        self.view.horizontalHeader().setSectionResizeMode(
+            6, QHeaderView.ResizeToContents
+        )
         tabela_layout.addWidget(self.view, 1)
 
         bottom_row = QHBoxLayout()
@@ -342,7 +367,9 @@ class CNPJsPage(BaseWizardPage):
     def validate(self, state: WizardState) -> bool:
         validos = state.cnpjs_validos()
         if not validos:
-            QMessageBox.warning(self, "Atenção", "Adicione ao menos um CNPJ válido para continuar.")
+            QMessageBox.warning(
+                self, "Atenção", "Adicione ao menos um CNPJ válido para continuar."
+            )
             return False
         resposta = QMessageBox.question(
             self,
@@ -376,14 +403,18 @@ class CNPJsPage(BaseWizardPage):
                     linha = linha.strip()
                     if linha and not linha.startswith("#"):
                         self._add_cnpj(linha)
-            self.status_banner.set_status("success", f"Arquivo carregado: {arquivo.name}")
+            self.status_banner.set_status(
+                "success", f"Arquivo carregado: {arquivo.name}"
+            )
         except Exception as exc:
             self.status_banner.set_status("danger", f"Erro ao ler arquivo: {exc}")
 
     def _add_batch(self):
         texto = self.input_cnpj.toPlainText().strip()
         if not texto:
-            self.status_banner.set_status("warning", "Cole ou digite ao menos um CNPJ antes de adicionar.")
+            self.status_banner.set_status(
+                "warning", "Cole ou digite ao menos um CNPJ antes de adicionar."
+            )
             return
 
         partes = re.split(r"[\n,;\t ]+", texto)
@@ -396,9 +427,14 @@ class CNPJsPage(BaseWizardPage):
                 adicionados += 1
         self.input_cnpj.clear()
         if adicionados:
-            self.status_banner.set_status("success", f"{adicionados} CNPJ(s) adicionados à grade.")
+            self.status_banner.set_status(
+                "success", f"{adicionados} CNPJ(s) adicionados à grade."
+            )
         else:
-            self.status_banner.set_status("warning", "Nenhum novo CNPJ foi adicionado. Verifique duplicidades e formato.")
+            self.status_banner.set_status(
+                "warning",
+                "Nenhum novo CNPJ foi adicionado. Verifique duplicidades e formato.",
+            )
 
     def _add_cnpj(self, raw_value: str) -> bool:
         cnpj = limpar_cnpj(raw_value)
@@ -412,7 +448,11 @@ class CNPJsPage(BaseWizardPage):
             valido=valido,
             status="Buscando dados" if valido else "Inválido",
             carregando=valido,
-            tooltip=f"CNPJ: {cnpj}\nAguardando busca cadastral..." if valido else f"CNPJ inválido: {cnpj}",
+            tooltip=(
+                f"CNPJ: {cnpj}\nAguardando busca cadastral..."
+                if valido
+                else f"CNPJ inválido: {cnpj}"
+            ),
         )
         self.model.add_record(record)
         self._update_count()
@@ -441,7 +481,9 @@ class CNPJsPage(BaseWizardPage):
                 f"Razão Social: {razao_social}",
                 f"CNPJ: {cnpj}",
                 f"Fantasia: {dados.get('NOME_FANTASIA', '—')}",
-                f"Município/UF: {dados.get('MUNICIPIO', '—')}/{dados.get('UF', '')}".rstrip("/"),
+                f"Município/UF: {dados.get('MUNICIPIO', '—')}/{dados.get('UF', '')}".rstrip(
+                    "/"
+                ),
                 f"Situação: {dados.get('SITUACAO_DA_IE', '—')}",
                 f"Regime: {dados.get('REGIME_DE_PAGAMENTO', '—')}",
                 f"Origem: {origem}",
@@ -476,7 +518,9 @@ class CNPJsPage(BaseWizardPage):
         if self._pending_lookups > 0:
             self.lookup_progress.setVisible(True)
             self.lookup_progress.setRange(0, 0)
-            self.lbl_loading.setText(f"Consultando {self._pending_lookups} cadastro(s)...")
+            self.lbl_loading.setText(
+                f"Consultando {self._pending_lookups} cadastro(s)..."
+            )
         else:
             self.lookup_progress.setVisible(False)
             self.lbl_loading.setText("")
@@ -509,20 +553,27 @@ class CNPJsPage(BaseWizardPage):
         pendentes = [
             registro.cnpj
             for registro in registros
-            if registro.valido and (registro.carregando or registro.erro or not registro.razao_social)
+            if registro.valido
+            and (registro.carregando or registro.erro or not registro.razao_social)
         ]
         if not pendentes:
-            self.status_banner.set_status("info", "Todos os CNPJs já possuem dados cadastrais carregados.")
+            self.status_banner.set_status(
+                "info", "Todos os CNPJs já possuem dados cadastrais carregados."
+            )
             return
         for cnpj in pendentes:
             self.model.update_record(cnpj, status="Buscando dados", carregando=True)
             self._lookup_cadastral(cnpj)
-        self.status_banner.set_status("info", f"Atualizando {len(pendentes)} cadastro(s) pendente(s).")
+        self.status_banner.set_status(
+            "info", f"Atualizando {len(pendentes)} cadastro(s) pendente(s)."
+        )
 
     def _export_cache(self):
         stats = obter_estatisticas_cache()
         if stats.get("total", 0) == 0:
-            QMessageBox.information(self, "Cache vazio", "Nenhum dado cadastral em cache foi encontrado.")
+            QMessageBox.information(
+                self, "Cache vazio", "Nenhum dado cadastral em cache foi encontrado."
+            )
             return
 
         nome_sugerido = f"dados_cadastrais_cache_{datetime.now():%Y%m%d_%H%M%S}.parquet"
@@ -542,11 +593,15 @@ class CNPJsPage(BaseWizardPage):
                 f"Cache exportado com sucesso para {Path(caminho_saida).name} ({stats['total']} linha(s)).",
             )
         else:
-            self.status_banner.set_status("danger", "Não foi possível exportar o cache cadastral.")
+            self.status_banner.set_status(
+                "danger", "Não foi possível exportar o cache cadastral."
+            )
 
     def _update_count(self):
         total = self.model.rowCount()
-        validos = len([registro for registro in self.model.records() if registro.valido])
+        validos = len(
+            [registro for registro in self.model.records() if registro.valido]
+        )
         self.lbl_count.setText(f"{total} registro(s) na grade  •  {validos} válido(s)")
 
 
@@ -637,7 +692,7 @@ class AuditorPage(BaseWizardPage):
         btn_output.clicked.connect(self._select_output_directory)
         output_row.addWidget(btn_output)
         dsf_layout.addLayout(output_row)
-        
+
         layout.addWidget(dsf_card)
 
         salvar_card = SectionCard("Salvar configuração reutilizável")
@@ -696,7 +751,9 @@ class AuditorPage(BaseWizardPage):
             return
         self._pdf_path = Path(caminho)
         self.lbl_pdf.setText(str(self._pdf_path))
-        self.status_banner.set_status("success", f"PDF selecionado: {self._pdf_path.name}")
+        self.status_banner.set_status(
+            "success", f"PDF selecionado: {self._pdf_path.name}"
+        )
         self.action_updated.emit()
 
     def _select_output_directory(self):
@@ -710,23 +767,33 @@ class AuditorPage(BaseWizardPage):
         if pasta_selecionada:
             self._output_dir = Path(pasta_selecionada)
             self.lbl_output.setText(str(self._output_dir))
-            self.lbl_output.setStyleSheet(f"color: {COLORS['secondary']}; font-weight: 600;")
-            self.status_banner.set_status("success", f"Pasta de saída definida: {self._output_dir.name}")
+            self.lbl_output.setStyleSheet(
+                f"color: {COLORS['secondary']}; font-weight: 600;"
+            )
+            self.status_banner.set_status(
+                "success", f"Pasta de saída definida: {self._output_dir.name}"
+            )
             self.action_updated.emit()
 
     def _save_profile(self):
         nome = self.input_nome_config.text().strip()
         if not nome:
-            QMessageBox.warning(self, "Nome obrigatório", "Informe um nome para salvar o perfil.")
+            QMessageBox.warning(
+                self, "Nome obrigatório", "Informe um nome para salvar o perfil."
+            )
             return
         dados = self._collect_data()
         try:
             salvar_dados_manuais(nome, dados)
             self._load_saved_configs(selecionar=nome)
             self.input_nome_config.clear()
-            self.status_banner.set_status("success", f"Perfil '{nome}' salvo com sucesso.")
+            self.status_banner.set_status(
+                "success", f"Perfil '{nome}' salvo com sucesso."
+            )
         except Exception as exc:
-            self.status_banner.set_status("danger", f"Não foi possível salvar o perfil: {exc}")
+            self.status_banner.set_status(
+                "danger", f"Não foi possível salvar o perfil: {exc}"
+            )
 
     def _collect_data(self) -> Dict[str, str]:
         return {
@@ -761,15 +828,19 @@ class AuditorPage(BaseWizardPage):
         if state.pdf_dsf:
             self._pdf_path = state.pdf_dsf
             self.lbl_pdf.setText(str(state.pdf_dsf))
-        
+
         if state.diretorio_saida:
             self._output_dir = state.diretorio_saida
             self.lbl_output.setText(str(state.diretorio_saida))
-            self.lbl_output.setStyleSheet(f"color: {COLORS['secondary']}; font-weight: 600;")
+            self.lbl_output.setStyleSheet(
+                f"color: {COLORS['secondary']}; font-weight: 600;"
+            )
         else:
             self._output_dir = None
             self.lbl_output.setText("Pasta padrão: notificacoes/")
-            self.lbl_output.setStyleSheet(f"color: {COLORS['muted']}; font-style: italic;")
+            self.lbl_output.setStyleSheet(
+                f"color: {COLORS['muted']}; font-style: italic;"
+            )
 
     def persist_state(self, state: WizardState):
         state.auditor_data = self._collect_data()
@@ -778,7 +849,9 @@ class AuditorPage(BaseWizardPage):
 
     def validate(self, state: WizardState) -> bool:
         if not state.auditor_data.get("DSF"):
-            QMessageBox.warning(self, "Atenção", "Informe pelo menos o número da DSF para continuar.")
+            QMessageBox.warning(
+                self, "Atenção", "Informe pelo menos o número da DSF para continuar."
+            )
             return False
         return True
 
@@ -786,7 +859,9 @@ class AuditorPage(BaseWizardPage):
         return "Confirmar auditor e seguir"
 
     def footer_context(self, state: WizardState) -> str:
-        return "Etapa 3 de 5  •  Cadastre o responsável e a referência documental da DSF."
+        return (
+            "Etapa 3 de 5  •  Cadastre o responsável e a referência documental da DSF."
+        )
 
 
 class PeriodPage(BaseWizardPage):
@@ -836,7 +911,9 @@ class PeriodPage(BaseWizardPage):
 
     def validate(self, state: WizardState) -> bool:
         if not state.periodo_inicio or not state.periodo_fim:
-            QMessageBox.warning(self, "Atenção", "Informe data inicial e data final antes de continuar.")
+            QMessageBox.warning(
+                self, "Atenção", "Informe data inicial e data final antes de continuar."
+            )
             return False
         return True
 
@@ -926,9 +1003,15 @@ class ProcessingPage(BaseWizardPage):
         self.results_model = ResultsTableModel()
         self.results_view = DataTable()
         self.results_view.setModel(self.results_model)
-        self.results_view.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
-        self.results_view.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
-        self.results_view.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
+        self.results_view.horizontalHeader().setSectionResizeMode(
+            0, QHeaderView.ResizeToContents
+        )
+        self.results_view.horizontalHeader().setSectionResizeMode(
+            1, QHeaderView.ResizeToContents
+        )
+        self.results_view.horizontalHeader().setSectionResizeMode(
+            2, QHeaderView.Stretch
+        )
         result_layout.addWidget(self.results_view)
         splitter.addWidget(result_card)
         splitter.setSizes([280, 280])
@@ -946,7 +1029,7 @@ class ProcessingPage(BaseWizardPage):
             self._prepare_execution(state)
         elif state.logs_processamento and not self._running:
             self._restore_state(state)
-        
+
         self._output_dir = state.diretorio_saida
 
     def persist_state(self, state: WizardState):
@@ -1032,7 +1115,9 @@ class ProcessingPage(BaseWizardPage):
         self.progress_bar.setMaximum(max(1, len(state.cnpjs_validos())))
         self.btn_cancel.setEnabled(True)
         self.btn_open.setEnabled(False)
-        self.status_banner.set_status("info", "Processamento iniciado. O log será atualizado em tempo real.")
+        self.status_banner.set_status(
+            "info", "Processamento iniciado. O log será atualizado em tempo real."
+        )
         self.lbl_progress.setText("Iniciando processamento...")
 
         self._worker = WorkerThread(
@@ -1060,7 +1145,9 @@ class ProcessingPage(BaseWizardPage):
         scrollbar.setValue(scrollbar.maximum())
 
     def _append_result(self, cnpj: str, sucesso: bool, detalhe: str):
-        self.results_model.add_result(ProcessingResult(cnpj=cnpj, sucesso=sucesso, detalhe=detalhe))
+        self.results_model.add_result(
+            ProcessingResult(cnpj=cnpj, sucesso=sucesso, detalhe=detalhe)
+        )
 
     def _finish_processing(self, resumo: dict):
         self._running = False
@@ -1077,7 +1164,9 @@ class ProcessingPage(BaseWizardPage):
                 f"Processamento concluído com {falhas} falha(s). Consulte a tabela de resultados para detalhes.",
             )
         else:
-            self.status_banner.set_status("success", "Processamento concluído sem falhas.")
+            self.status_banner.set_status(
+                "success", "Processamento concluído sem falhas."
+            )
         self.action_updated.emit()
         self._prompt_next_action()
 
@@ -1085,7 +1174,10 @@ class ProcessingPage(BaseWizardPage):
         if self._worker and self._worker.isRunning():
             self._worker.cancelar()
             self.btn_cancel.setEnabled(False)
-            self.status_banner.set_status("warning", "Solicitação de cancelamento enviada. Aguarde a finalização da thread.")
+            self.status_banner.set_status(
+                "warning",
+                "Solicitação de cancelamento enviada. Aguarde a finalização da thread.",
+            )
 
     def _open_output_folder(self):
         if not self._output_dir:

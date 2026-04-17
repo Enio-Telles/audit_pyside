@@ -19,7 +19,11 @@ def caminho_log_performance() -> Path:
     import sys
 
     perf_mod = None
-    for candidate in ("src.utilitarios.perf_monitor", "utilitarios.perf_monitor", __name__):
+    for candidate in (
+        "src.utilitarios.perf_monitor",
+        "utilitarios.perf_monitor",
+        __name__,
+    ):
         perf_mod = sys.modules.get(candidate)
         if perf_mod is not None:
             break
@@ -41,7 +45,11 @@ def _now_iso() -> str:
     # Support tests that may patch the module under different import names.
     import sys
 
-    for candidate in ("src.utilitarios.perf_monitor", "utilitarios.perf_monitor", __name__):
+    for candidate in (
+        "src.utilitarios.perf_monitor",
+        "utilitarios.perf_monitor",
+        __name__,
+    ):
         mod = sys.modules.get(candidate)
         if mod is not None and hasattr(mod, "datetime"):
             dt = getattr(mod, "datetime")
@@ -58,7 +66,9 @@ def _serializar_valor(valor: Any) -> Any:
     if isinstance(valor, Path):
         return str(valor)
     if isinstance(valor, dict):
-        return {str(chave): _serializar_valor(conteudo) for chave, conteudo in valor.items()}
+        return {
+            str(chave): _serializar_valor(conteudo) for chave, conteudo in valor.items()
+        }
     if isinstance(valor, (list, tuple, set)):
         return [_serializar_valor(item) for item in valor]
     if isinstance(valor, (str, int, float, bool)) or valor is None:
@@ -90,7 +100,11 @@ def registrar_evento_performance(
         import sys
 
         caminho_fn = None
-        for candidate in ("src.utilitarios.perf_monitor", "utilitarios.perf_monitor", __name__):
+        for candidate in (
+            "src.utilitarios.perf_monitor",
+            "utilitarios.perf_monitor",
+            __name__,
+        ):
             mod = sys.modules.get(candidate)
             if mod is not None and hasattr(mod, "caminho_log_performance"):
                 caminho_fn = getattr(mod, "caminho_log_performance")

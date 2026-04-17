@@ -17,9 +17,24 @@ def test_calcular_aba_anual_zera_apenas_icms_saidas_quando_st_ativo_no_ano():
             "co_sefin_agr": ["1001"] * 4,
             "descr_padrao": ["Produto ST"] * 4,
             "unid_ref": ["UN"] * 4,
-            "Tipo_operacao": ["0 - ESTOQUE INICIAL", "1 - ENTRADA", "2 - SAIDAS", "3 - ESTOQUE FINAL"],
-            "Dt_doc": [date(2024, 1, 1), date(2024, 3, 1), date(2024, 6, 1), date(2024, 12, 31)],
-            "Dt_e_s": [date(2024, 1, 1), date(2024, 3, 1), date(2024, 6, 1), date(2024, 12, 31)],
+            "Tipo_operacao": [
+                "0 - ESTOQUE INICIAL",
+                "1 - ENTRADA",
+                "2 - SAIDAS",
+                "3 - ESTOQUE FINAL",
+            ],
+            "Dt_doc": [
+                date(2024, 1, 1),
+                date(2024, 3, 1),
+                date(2024, 6, 1),
+                date(2024, 12, 31),
+            ],
+            "Dt_e_s": [
+                date(2024, 1, 1),
+                date(2024, 3, 1),
+                date(2024, 6, 1),
+                date(2024, 12, 31),
+            ],
             "ordem_operacoes": [1, 2, 3, 4],
             "q_conv": [10.0, 5.0, 4.0, 0.0],
             "__qtd_decl_final_audit__": [0.0, 0.0, 0.0, 8.0],
@@ -63,7 +78,11 @@ def test_calcular_aba_anual_usa_fallback_pme_mva_quando_nao_ha_pms():
             "co_sefin_agr": ["2002"] * 3,
             "descr_padrao": ["Produto sem PMS"] * 3,
             "unid_ref": ["CX"] * 3,
-            "Tipo_operacao": ["0 - ESTOQUE INICIAL", "1 - ENTRADA", "3 - ESTOQUE FINAL"],
+            "Tipo_operacao": [
+                "0 - ESTOQUE INICIAL",
+                "1 - ENTRADA",
+                "3 - ESTOQUE FINAL",
+            ],
             "Dt_doc": [date(2024, 1, 1), date(2024, 2, 1), date(2024, 12, 31)],
             "Dt_e_s": [date(2024, 1, 1), date(2024, 2, 1), date(2024, 12, 31)],
             "ordem_operacoes": [1, 2, 3],
@@ -108,7 +127,11 @@ def test_calcular_aba_anual_inclui_entradas_desacob_em_saidas_calculadas():
             "co_sefin_agr": ["3003"] * 3,
             "descr_padrao": ["Produto com entrada desacob"] * 3,
             "unid_ref": ["UN"] * 3,
-            "Tipo_operacao": ["0 - ESTOQUE INICIAL", "1 - ENTRADA", "3 - ESTOQUE FINAL"],
+            "Tipo_operacao": [
+                "0 - ESTOQUE INICIAL",
+                "1 - ENTRADA",
+                "3 - ESTOQUE FINAL",
+            ],
             "Dt_doc": [date(2024, 1, 1), date(2024, 5, 1), date(2024, 12, 31)],
             "Dt_e_s": [date(2024, 1, 1), date(2024, 5, 1), date(2024, 12, 31)],
             "ordem_operacoes": [1, 2, 3],
@@ -248,7 +271,11 @@ def test_calcular_aba_anual_zera_estoque_final_desacob_quando_saldo_igual_estoqu
             "co_sefin_agr": ["5005"] * 3,
             "descr_padrao": ["Produto saldo igual"] * 3,
             "unid_ref": ["UN"] * 3,
-            "Tipo_operacao": ["0 - ESTOQUE INICIAL", "1 - ENTRADA", "3 - ESTOQUE FINAL"],
+            "Tipo_operacao": [
+                "0 - ESTOQUE INICIAL",
+                "1 - ENTRADA",
+                "3 - ESTOQUE FINAL",
+            ],
             "Dt_doc": [date(2024, 1, 1), date(2024, 6, 1), date(2024, 12, 31)],
             "Dt_e_s": [date(2024, 1, 1), date(2024, 6, 1), date(2024, 12, 31)],
             "ordem_operacoes": [1, 2, 3],
@@ -281,7 +308,11 @@ def test_calcular_aba_anual_zera_estoque_final_desacob_quando_saldo_menor_que_es
             "co_sefin_agr": ["6006"] * 3,
             "descr_padrao": ["Produto saldo menor"] * 3,
             "unid_ref": ["UN"] * 3,
-            "Tipo_operacao": ["0 - ESTOQUE INICIAL", "1 - ENTRADA", "3 - ESTOQUE FINAL"],
+            "Tipo_operacao": [
+                "0 - ESTOQUE INICIAL",
+                "1 - ENTRADA",
+                "3 - ESTOQUE FINAL",
+            ],
             "Dt_doc": [date(2024, 1, 1), date(2024, 6, 1), date(2024, 12, 31)],
             "Dt_e_s": [date(2024, 1, 1), date(2024, 6, 1), date(2024, 12, 31)],
             "ordem_operacoes": [1, 2, 3],
@@ -314,7 +345,11 @@ def test_calcular_aba_anual_mantem_estoque_final_zero_para_inventario_gerado():
             "co_sefin_agr": ["7007"] * 3,
             "descr_padrao": ["Produto inventario gerado"] * 3,
             "unid_ref": ["UN"] * 3,
-            "Tipo_operacao": ["0 - ESTOQUE INICIAL", "1 - ENTRADA", "3 - ESTOQUE FINAL gerado"],
+            "Tipo_operacao": [
+                "0 - ESTOQUE INICIAL",
+                "1 - ENTRADA",
+                "3 - ESTOQUE FINAL gerado",
+            ],
             "Dt_doc": [date(2024, 1, 1), date(2024, 6, 1), date(2024, 12, 31)],
             "Dt_e_s": [date(2024, 1, 1), date(2024, 6, 1), date(2024, 12, 31)],
             "ordem_operacoes": [1, 2, 3],
@@ -379,9 +414,24 @@ def test_calcular_aba_anual_mantem_exclusividade_entre_saidas_e_estoque_desacob(
             "co_sefin_agr": ["9009", "9009", "9010", "9010"],
             "descr_padrao": ["Produto A", "Produto A", "Produto B", "Produto B"],
             "unid_ref": ["UN", "UN", "UN", "UN"],
-            "Tipo_operacao": ["1 - ENTRADA", "3 - ESTOQUE FINAL", "1 - ENTRADA", "3 - ESTOQUE FINAL"],
-            "Dt_doc": [date(2024, 1, 2), date(2024, 12, 31), date(2024, 1, 2), date(2024, 12, 31)],
-            "Dt_e_s": [date(2024, 1, 2), date(2024, 12, 31), date(2024, 1, 2), date(2024, 12, 31)],
+            "Tipo_operacao": [
+                "1 - ENTRADA",
+                "3 - ESTOQUE FINAL",
+                "1 - ENTRADA",
+                "3 - ESTOQUE FINAL",
+            ],
+            "Dt_doc": [
+                date(2024, 1, 2),
+                date(2024, 12, 31),
+                date(2024, 1, 2),
+                date(2024, 12, 31),
+            ],
+            "Dt_e_s": [
+                date(2024, 1, 2),
+                date(2024, 12, 31),
+                date(2024, 1, 2),
+                date(2024, 12, 31),
+            ],
             "ordem_operacoes": [1, 2, 3, 4],
             "q_conv": [5.0, 0.0, 12.0, 0.0],
             "__qtd_decl_final_audit__": [0.0, 8.0, 0.0, 7.0],
@@ -397,4 +447,9 @@ def test_calcular_aba_anual_mantem_exclusividade_entre_saidas_e_estoque_desacob(
 
     result = calcular_aba_anual_dataframe(df, pl.DataFrame())
 
-    assert result.filter((pl.col("saidas_desacob") > 0) & (pl.col("estoque_final_desacob") > 0)).height == 0
+    assert (
+        result.filter(
+            (pl.col("saidas_desacob") > 0) & (pl.col("estoque_final_desacob") > 0)
+        ).height
+        == 0
+    )

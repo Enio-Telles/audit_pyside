@@ -42,13 +42,18 @@ def gerar_id_agrupados(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
 
     # Intermediate columns used only during aggregation; dropped from the final result.
     _TMP_AGG_COLS = [
-        "_tmp_desc_padrao", "_tmp_desc_final", "_tmp_desc", "_tmp_desc_compl",
-        "_tmp_codigos", "_tmp_unid", "_tmp_unid_agr", "_tmp_unid_ref",
+        "_tmp_desc_padrao",
+        "_tmp_desc_final",
+        "_tmp_desc",
+        "_tmp_desc_compl",
+        "_tmp_codigos",
+        "_tmp_unid",
+        "_tmp_unid_agr",
+        "_tmp_unid_ref",
     ]
 
     df_id_agrupados = (
-        df_final
-        .with_columns(
+        df_final.with_columns(
             [
                 pl.col("id_agrupado").cast(pl.Utf8, strict=False),
                 pl.col("descr_padrao").cast(pl.Utf8, strict=False),
@@ -62,31 +67,77 @@ def gerar_id_agrupados(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
             ]
         )
         .group_by("id_agrupado")
-        .agg([
-            pl.col("descr_padrao").filter(pl.col("descr_padrao").str.strip_chars() != "").drop_nulls().first().alias("descr_padrao"),
-            pl.concat_list([
-                pl.col("descr_padrao").drop_nulls().implode(),
-                pl.col("descricao_final").drop_nulls().implode(),
-                pl.col("descricao").drop_nulls().implode(),
-            ]).explode().drop_nulls().str.strip_chars().unique().sort().alias("lista_descricoes"),
-            pl.col("lista_codigos").explode().drop_nulls().str.strip_chars().unique().sort().alias("lista_codigos"),
-            pl.col("lista_desc_compl").explode().drop_nulls().str.strip_chars().unique().sort().alias("lista_desc_compl"),
-            pl.concat_list([
-                pl.col("lista_unid").explode().drop_nulls().implode(),
-                pl.col("lista_unidades_agr").explode().drop_nulls().implode(),
-                pl.col("unid_ref_sugerida").drop_nulls().implode()
-            ]).explode().drop_nulls().str.strip_chars().unique().sort().alias("lista_unidades")
-        ])
-        .with_columns([
-            pl.col("lista_descricoes").list.eval(pl.element().filter(pl.element() != "")),
-            pl.col("lista_desc_compl").list.eval(pl.element().filter(pl.element() != "")),
-            pl.col("lista_codigos").list.eval(pl.element().filter(pl.element() != "")),
-            pl.col("lista_unidades").list.eval(pl.element().filter(pl.element() != ""))
-        ])
+        .agg(
+            [
+                pl.col("descr_padrao")
+                .filter(pl.col("descr_padrao").str.strip_chars() != "")
+                .drop_nulls()
+                .first()
+                .alias("descr_padrao"),
+                pl.concat_list(
+                    [
+                        pl.col("descr_padrao").drop_nulls().implode(),
+                        pl.col("descricao_final").drop_nulls().implode(),
+                        pl.col("descricao").drop_nulls().implode(),
+                    ]
+                )
+                .explode()
+                .drop_nulls()
+                .str.strip_chars()
+                .unique()
+                .sort()
+                .alias("lista_descricoes"),
+                pl.col("lista_codigos")
+                .explode()
+                .drop_nulls()
+                .str.strip_chars()
+                .unique()
+                .sort()
+                .alias("lista_codigos"),
+                pl.col("lista_desc_compl")
+                .explode()
+                .drop_nulls()
+                .str.strip_chars()
+                .unique()
+                .sort()
+                .alias("lista_desc_compl"),
+                pl.concat_list(
+                    [
+                        pl.col("lista_unid").explode().drop_nulls().implode(),
+                        pl.col("lista_unidades_agr").explode().drop_nulls().implode(),
+                        pl.col("unid_ref_sugerida").drop_nulls().implode(),
+                    ]
+                )
+                .explode()
+                .drop_nulls()
+                .str.strip_chars()
+                .unique()
+                .sort()
+                .alias("lista_unidades"),
+            ]
+        )
+        .with_columns(
+            [
+                pl.col("lista_descricoes").list.eval(
+                    pl.element().filter(pl.element() != "")
+                ),
+                pl.col("lista_desc_compl").list.eval(
+                    pl.element().filter(pl.element() != "")
+                ),
+                pl.col("lista_codigos").list.eval(
+                    pl.element().filter(pl.element() != "")
+                ),
+                pl.col("lista_unidades").list.eval(
+                    pl.element().filter(pl.element() != "")
+                ),
+            ]
+        )
         .sort("id_agrupado")
     )
 
-    return salvar_para_parquet(df_id_agrupados, pasta_analises, f"id_agrupados_{cnpj}.parquet")
+    return salvar_para_parquet(
+        df_id_agrupados, pasta_analises, f"id_agrupados_{cnpj}.parquet"
+    )
 
 
 if __name__ == "__main__":
@@ -94,5 +145,3 @@ if __name__ == "__main__":
         gerar_id_agrupados(sys.argv[1])
     else:
         gerar_id_agrupados(input("CNPJ: "))
-
-

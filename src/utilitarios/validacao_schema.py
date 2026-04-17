@@ -22,7 +22,9 @@ def garantir_colunas_obrigatorias(
     colunas: list[str] | tuple[str, ...],
     contexto: str | None = None,
 ) -> pl.DataFrame | pl.LazyFrame:
-    columns = df.collect_schema().names() if isinstance(df, pl.LazyFrame) else df.columns
+    columns = (
+        df.collect_schema().names() if isinstance(df, pl.LazyFrame) else df.columns
+    )
     colunas_ausentes = [col for col in colunas if col not in columns]
     if colunas_ausentes:
         raise SchemaValidacaoError(
@@ -37,7 +39,9 @@ def validar_parquet_essencial(
     contexto: str | None = None,
 ) -> list[str]:
     if not path.exists():
-        raise FileNotFoundError(f"{_prefixo_contexto(contexto)}arquivo nao encontrado: {path}")
+        raise FileNotFoundError(
+            f"{_prefixo_contexto(contexto)}arquivo nao encontrado: {path}"
+        )
 
     schema_cols = list(pl.read_parquet_schema(path).names())
     colunas_ausentes = [col for col in colunas if col not in schema_cols]

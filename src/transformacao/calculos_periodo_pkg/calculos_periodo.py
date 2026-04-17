@@ -1,6 +1,5 @@
 import sys
 import re
-from datetime import date
 from pathlib import Path
 from utilitarios.project_paths import PROJECT_ROOT, TRACEBACK_PATH
 from time import perf_counter
@@ -20,6 +19,7 @@ except ImportError as e:
     rprint(f"[red]Erro ao importar modulos:[/red] {e}")
     sys.exit(1)
 
+
 def _resolver_ref(nome_arquivo: str) -> Path | None:
     candidatos = [
         DADOS_DIR / "referencias" / "referencias" / "CO_SEFIN" / nome_arquivo,
@@ -31,8 +31,15 @@ def _resolver_ref(nome_arquivo: str) -> Path | None:
             return caminho
     return None
 
+
 def _boolish_expr(col_name: str) -> pl.Expr:
-    col = pl.col(col_name).cast(pl.Utf8, strict=False).fill_null("").str.strip_chars().str.to_uppercase()
+    col = (
+        pl.col(col_name)
+        .cast(pl.Utf8, strict=False)
+        .fill_null("")
+        .str.strip_chars()
+        .str.to_uppercase()
+    )
     return (
         pl.when(col.is_in(["1", "TRUE", "T", "S", "SIM", "Y", "YES"]))
         .then(pl.lit(True))
@@ -40,6 +47,7 @@ def _boolish_expr(col_name: str) -> pl.Expr:
         .then(pl.lit(False))
         .otherwise(pl.col(col_name).cast(pl.Int64, strict=False).fill_null(0) != 0)
     )
+
 
 def _carregar_referencia_st_periodo(df_periodo: pl.DataFrame) -> pl.DataFrame:
     caminho_aux = _resolver_ref("sitafe_produto_sefin_aux.parquet")
@@ -55,8 +63,9 @@ def _carregar_referencia_st_periodo(df_periodo: pl.DataFrame) -> pl.DataFrame:
         )
 
     df_chaves = (
-        df_periodo
-        .select(["co_sefin_agr", "periodo_inventario", "__data_inicio__", "__data_fim__"])
+        df_periodo.select(
+            ["co_sefin_agr", "periodo_inventario", "__data_inicio__", "__data_fim__"]
+        )
         .drop_nulls("co_sefin_agr")
         .unique()
     )
@@ -73,28 +82,52 @@ def _carregar_referencia_st_periodo(df_periodo: pl.DataFrame) -> pl.DataFrame:
 
     df_aux = (
         pl.read_parquet(caminho_aux)
-        .select(["it_co_sefin", "it_da_inicio", "it_da_final", "it_pc_interna", "it_in_st"])
+        .select(
+            ["it_co_sefin", "it_da_inicio", "it_da_final", "it_pc_interna", "it_in_st"]
+        )
         .with_columns(
             [
                 pl.col("it_co_sefin").cast(pl.Utf8, strict=False).alias("it_co_sefin"),
-                pl.col("it_da_inicio").cast(pl.Utf8, strict=False).str.strptime(pl.Date, "%Y%m%d", strict=False).alias("da_inicio"),
-                pl.col("it_da_final").cast(pl.Utf8, strict=False).str.strptime(pl.Date, "%Y%m%d", strict=False).alias("da_final"),
-                pl.col("it_pc_interna").cast(pl.Float64, strict=False).alias("it_pc_interna"),
-                pl.col("it_in_st").cast(pl.Utf8, strict=False).fill_null("").str.strip_chars().str.to_uppercase().alias("it_in_st"),
+                pl.col("it_da_inicio")
+                .cast(pl.Utf8, strict=False)
+                .str.strptime(pl.Date, "%Y%m%d", strict=False)
+                .alias("da_inicio"),
+                pl.col("it_da_final")
+                .cast(pl.Utf8, strict=False)
+                .str.strptime(pl.Date, "%Y%m%d", strict=False)
+                .alias("da_final"),
+                pl.col("it_pc_interna")
+                .cast(pl.Float64, strict=False)
+                .alias("it_pc_interna"),
+                pl.col("it_in_st")
+                .cast(pl.Utf8, strict=False)
+                .fill_null("")
+                .str.strip_chars()
+                .str.to_uppercase()
+                .alias("it_in_st"),
             ]
         )
     )
 
     df_ref = (
-        df_chaves
-        .join(df_aux, left_on="co_sefin_agr", right_on="it_co_sefin", how="left")
+        df_chaves.join(
+            df_aux, left_on="co_sefin_agr", right_on="it_co_sefin", how="left"
+        )
         .filter(
-            (pl.col("da_inicio").is_null() | (pl.col("da_inicio") <= pl.col("__data_fim__")))
-            & (pl.col("da_final").is_null() | (pl.col("da_final") >= pl.col("__data_inicio__")))
+            (
+                pl.col("da_inicio").is_null()
+                | (pl.col("da_inicio") <= pl.col("__data_fim__"))
+            )
+            & (
+                pl.col("da_final").is_null()
+                | (pl.col("da_final") >= pl.col("__data_inicio__"))
+            )
         )
         .with_columns(
             [
-                pl.max_horizontal([pl.col("da_inicio"), pl.col("__data_inicio__")]).alias("vig_ini"),
+                pl.max_horizontal(
+                    [pl.col("da_inicio"), pl.col("__data_inicio__")]
+                ).alias("vig_ini"),
                 pl.min_horizontal(
                     [
                         pl.coalesce([pl.col("da_final"), pl.col("__data_fim__")]),
@@ -106,7 +139,14 @@ def _carregar_referencia_st_periodo(df_periodo: pl.DataFrame) -> pl.DataFrame:
             ]
         )
         .sort(
-            ["co_sefin_agr", "periodo_inventario", "__tem_inicio__", "vig_ini", "__tem_final__", "vig_fim"],
+            [
+                "co_sefin_agr",
+                "periodo_inventario",
+                "__tem_inicio__",
+                "vig_ini",
+                "__tem_final__",
+                "vig_fim",
+            ],
             descending=[False, False, True, True, True, True],
             nulls_last=True,
         )
@@ -115,13 +155,19 @@ def _carregar_referencia_st_periodo(df_periodo: pl.DataFrame) -> pl.DataFrame:
             [
                 (
                     pl.when(
-                        pl.col("it_in_st").str.strip_chars().is_not_null() & (pl.col("it_in_st").str.strip_chars() != "") &
-                        pl.col("vig_ini").is_not_null() & pl.col("vig_fim").is_not_null()
+                        pl.col("it_in_st").str.strip_chars().is_not_null()
+                        & (pl.col("it_in_st").str.strip_chars() != "")
+                        & pl.col("vig_ini").is_not_null()
+                        & pl.col("vig_fim").is_not_null()
                     )
                     .then(
-                        "['" + pl.col("it_in_st").str.strip_chars() + "' de " +
-                        pl.col("vig_ini").dt.to_string("%d/%m/%Y") + " até " +
-                        pl.col("vig_fim").dt.to_string("%d/%m/%Y") + "]"
+                        "['"
+                        + pl.col("it_in_st").str.strip_chars()
+                        + "' de "
+                        + pl.col("vig_ini").dt.to_string("%d/%m/%Y")
+                        + " até "
+                        + pl.col("vig_fim").dt.to_string("%d/%m/%Y")
+                        + "]"
                     )
                     .otherwise(None)
                 )
@@ -134,17 +180,30 @@ def _carregar_referencia_st_periodo(df_periodo: pl.DataFrame) -> pl.DataFrame:
                 pl.col("it_pc_interna").drop_nulls().first().alias("__aliq_ref__"),
             ]
         )
-        .select(["co_sefin_agr", "periodo_inventario", "ST", "__tem_st_per__", "__aliq_ref__"])
+        .select(
+            [
+                "co_sefin_agr",
+                "periodo_inventario",
+                "ST",
+                "__tem_st_per__",
+                "__aliq_ref__",
+            ]
+        )
     )
 
     return df_ref
 
-def calcular_aba_periodos_dataframe(df: pl.DataFrame, df_aux_st: pl.DataFrame | None = None) -> pl.DataFrame:
+
+def calcular_aba_periodos_dataframe(
+    df: pl.DataFrame, df_aux_st: pl.DataFrame | None = None
+) -> pl.DataFrame:
     if df.is_empty():
         return pl.DataFrame()
 
     df = df.with_columns(
-        pl.coalesce([pl.col("Dt_e_s"), pl.col("Dt_doc")]).cast(pl.Date, strict=False).alias("__data_efetiva__")
+        pl.coalesce([pl.col("Dt_e_s"), pl.col("Dt_doc")])
+        .cast(pl.Date, strict=False)
+        .alias("__data_efetiva__")
     )
 
     expected_cols = [
@@ -162,13 +221,21 @@ def calcular_aba_periodos_dataframe(df: pl.DataFrame, df_aux_st: pl.DataFrame | 
         "Tipo_operacao",
         "descr_padrao",
         "unid_ref",
-        "periodo_inventario"
+        "periodo_inventario",
     ]
     for c in expected_cols:
         if c not in df.columns:
             if c in {"dev_simples", "excluir_estoque"}:
                 df = df.with_columns(pl.lit(False).alias(c))
-            elif c in {"Vl_item", "preco_item", "entr_desac_periodo", "q_conv", "__qtd_decl_final_audit__", "it_pc_interna", "saldo_estoque_periodo"}:
+            elif c in {
+                "Vl_item",
+                "preco_item",
+                "entr_desac_periodo",
+                "q_conv",
+                "__qtd_decl_final_audit__",
+                "it_pc_interna",
+                "saldo_estoque_periodo",
+            }:
                 df = df.with_columns(pl.lit(0.0).alias(c))
             elif c == "periodo_inventario":
                 df = df.with_columns(pl.lit(0).cast(pl.Int64).alias(c))
@@ -182,7 +249,9 @@ def calcular_aba_periodos_dataframe(df: pl.DataFrame, df_aux_st: pl.DataFrame | 
             pl.lit(0.0),
         ]
     )
-    q_conv_positiva_expr = pl.col("q_conv").cast(pl.Float64, strict=False).fill_null(0.0) > 0
+    q_conv_positiva_expr = (
+        pl.col("q_conv").cast(pl.Float64, strict=False).fill_null(0.0) > 0
+    )
     entrada_valida_media_expr = (
         pl.col("Tipo_operacao").str.starts_with("1 - ENTRADA")
         & ~_boolish_expr("dev_simples").fill_null(False)
@@ -201,31 +270,87 @@ def calcular_aba_periodos_dataframe(df: pl.DataFrame, df_aux_st: pl.DataFrame | 
         .agg(
             [
                 pl.col("descr_padrao").drop_nulls().last().alias("descr_padrao"),
-                pl.col("unid_ref").cast(pl.Utf8, strict=False).drop_nulls().last().alias("unid_ref"),
-                pl.col("co_sefin_agr").cast(pl.Utf8, strict=False).drop_nulls().last().alias("co_sefin_agr"),
+                pl.col("unid_ref")
+                .cast(pl.Utf8, strict=False)
+                .drop_nulls()
+                .last()
+                .alias("unid_ref"),
+                pl.col("co_sefin_agr")
+                .cast(pl.Utf8, strict=False)
+                .drop_nulls()
+                .last()
+                .alias("co_sefin_agr"),
                 pl.col("__data_efetiva__").min().alias("__data_inicio__"),
                 pl.col("__data_efetiva__").max().alias("__data_fim__"),
-                pl.when(pl.col("Tipo_operacao").str.starts_with("0 - ESTOQUE INICIAL")).then(pl.col("q_conv")).otherwise(0.0).sum().alias("estoque_inicial"),
-                pl.when(pl.col("Tipo_operacao").str.starts_with("1 - ENTRADA")).then(pl.col("q_conv")).otherwise(0.0).sum().alias("entradas"),
-                pl.when(pl.col("Tipo_operacao").str.starts_with("2 - SAIDA")).then(pl.col("q_conv")).otherwise(0.0).sum().alias("saidas"),
+                pl.when(pl.col("Tipo_operacao").str.starts_with("0 - ESTOQUE INICIAL"))
+                .then(pl.col("q_conv"))
+                .otherwise(0.0)
+                .sum()
+                .alias("estoque_inicial"),
+                pl.when(pl.col("Tipo_operacao").str.starts_with("1 - ENTRADA"))
+                .then(pl.col("q_conv"))
+                .otherwise(0.0)
+                .sum()
+                .alias("entradas"),
+                pl.when(pl.col("Tipo_operacao").str.starts_with("2 - SAIDA"))
+                .then(pl.col("q_conv"))
+                .otherwise(0.0)
+                .sum()
+                .alias("saidas"),
                 pl.when(pl.col("Tipo_operacao").str.starts_with("3 - ESTOQUE FINAL"))
-                .then(pl.col("__qtd_decl_final_audit__").cast(pl.Float64, strict=False).fill_null(0.0))
+                .then(
+                    pl.col("__qtd_decl_final_audit__")
+                    .cast(pl.Float64, strict=False)
+                    .fill_null(0.0)
+                )
                 .otherwise(0.0)
                 .sum()
                 .alias("estoque_final"),
-                pl.when(entrada_valida_media_expr).then(valor_item_expr).otherwise(0.0).sum().alias("soma_valor_entradas"),
-                pl.when(entrada_valida_media_expr).then(pl.col("q_conv")).otherwise(0.0).sum().alias("soma_qtd_entradas"),
-                pl.when(saida_valida_media_expr).then(valor_item_expr).otherwise(0.0).sum().alias("soma_valor_saidas"),
-                pl.when(saida_valida_media_expr).then(pl.col("q_conv")).otherwise(0.0).sum().alias("soma_qtd_saidas"),
+                pl.when(entrada_valida_media_expr)
+                .then(valor_item_expr)
+                .otherwise(0.0)
+                .sum()
+                .alias("soma_valor_entradas"),
+                pl.when(entrada_valida_media_expr)
+                .then(pl.col("q_conv"))
+                .otherwise(0.0)
+                .sum()
+                .alias("soma_qtd_entradas"),
+                pl.when(saida_valida_media_expr)
+                .then(valor_item_expr)
+                .otherwise(0.0)
+                .sum()
+                .alias("soma_valor_saidas"),
+                pl.when(saida_valida_media_expr)
+                .then(pl.col("q_conv"))
+                .otherwise(0.0)
+                .sum()
+                .alias("soma_qtd_saidas"),
                 pl.col("entr_desac_periodo").sum().alias("entradas_desacob"),
-                pl.col("saldo_estoque_periodo").sort_by("ordem_operacoes").last().alias("saldo_final"),
-                pl.col("it_pc_interna").cast(pl.Float64, strict=False).drop_nulls().last().alias("aliq_interna_mov"),
+                pl.col("saldo_estoque_periodo")
+                .sort_by("ordem_operacoes")
+                .last()
+                .alias("saldo_final"),
+                pl.col("it_pc_interna")
+                .cast(pl.Float64, strict=False)
+                .drop_nulls()
+                .last()
+                .alias("aliq_interna_mov"),
             ]
         )
         .with_columns(
             [
-                (pl.col("__data_inicio__").dt.strftime("%d/%m/%Y") + " até " + pl.col("__data_fim__").dt.strftime("%d/%m/%Y")).alias("periodo_label"),
-                (pl.col("estoque_inicial") + pl.col("entradas") + pl.col("entradas_desacob") - pl.col("estoque_final")).alias("saidas_calculadas"),
+                (
+                    pl.col("__data_inicio__").dt.strftime("%d/%m/%Y")
+                    + " até "
+                    + pl.col("__data_fim__").dt.strftime("%d/%m/%Y")
+                ).alias("periodo_label"),
+                (
+                    pl.col("estoque_inicial")
+                    + pl.col("entradas")
+                    + pl.col("entradas_desacob")
+                    - pl.col("estoque_final")
+                ).alias("saidas_calculadas"),
                 pl.when(pl.col("estoque_final") > pl.col("saldo_final"))
                 .then(pl.col("estoque_final") - pl.col("saldo_final"))
                 .otherwise(0.0)
@@ -235,7 +360,7 @@ def calcular_aba_periodos_dataframe(df: pl.DataFrame, df_aux_st: pl.DataFrame | 
                 .otherwise(0.0)
                 .alias("estoque_final_desacob"),
                 pl.when(pl.col("soma_qtd_entradas") > 0)
-                .then(pl.col("soma_valor_entradas") / pl.col("soma_qtd_entradas") )
+                .then(pl.col("soma_valor_entradas") / pl.col("soma_qtd_entradas"))
                 .otherwise(0.0)
                 .alias("pme"),
                 pl.when(pl.col("soma_qtd_saidas") > 0)
@@ -252,7 +377,9 @@ def calcular_aba_periodos_dataframe(df: pl.DataFrame, df_aux_st: pl.DataFrame | 
         df_st_per = df_aux_st
 
     if not df_st_per.is_empty():
-        df_per = df_per.join(df_st_per, on=["co_sefin_agr", "periodo_inventario"], how="left")
+        df_per = df_per.join(
+            df_st_per, on=["co_sefin_agr", "periodo_inventario"], how="left"
+        )
     else:
         df_per = df_per.with_columns(
             [
@@ -264,14 +391,18 @@ def calcular_aba_periodos_dataframe(df: pl.DataFrame, df_aux_st: pl.DataFrame | 
 
     df_per = df_per.with_columns(
         [
-            pl.coalesce([pl.col("__aliq_ref__"), pl.col("aliq_interna_mov"), pl.lit(0.0)]).alias("aliq_interna"),
+            pl.coalesce(
+                [pl.col("__aliq_ref__"), pl.col("aliq_interna_mov"), pl.lit(0.0)]
+            ).alias("aliq_interna"),
             pl.col("__tem_st_per__").fill_null(False).alias("__tem_st_per__"),
             pl.col("ST").fill_null("").alias("ST"),
             pl.col("pms").round(2).alias("__pms_icms__"),
         ]
     )
 
-    aliq_factor = pl.col("aliq_interna").cast(pl.Float64, strict=False).fill_null(0.0) / 100.0
+    aliq_factor = (
+        pl.col("aliq_interna").cast(pl.Float64, strict=False).fill_null(0.0) / 100.0
+    )
     base_saida = (
         pl.when(pl.col("__pms_icms__") > 0)
         .then(pl.col("saidas_desacob") * pl.col("__pms_icms__"))
@@ -304,38 +435,44 @@ def calcular_aba_periodos_dataframe(df: pl.DataFrame, df_aux_st: pl.DataFrame | 
         "saidas_desacob",
         "estoque_final_desacob",
     ]
-    cols_valor = ["pme", "pms", "ICMS_saidas_desac", "ICMS_estoque_desac", "aliq_interna"]
+    cols_valor = [
+        "pme",
+        "pms",
+        "ICMS_saidas_desac",
+        "ICMS_estoque_desac",
+        "aliq_interna",
+    ]
     exprs_arredondamento = [pl.col(c).round(4) for c in cols_qtd if c in df_per.columns]
-    exprs_arredondamento += [pl.col(c).round(2) for c in cols_valor if c in df_per.columns]
+    exprs_arredondamento += [
+        pl.col(c).round(2) for c in cols_valor if c in df_per.columns
+    ]
     df_per = df_per.with_columns(exprs_arredondamento)
 
-    return (
-        df_per.select(
-            [
-                pl.col("periodo_inventario").alias("cod_per"),
-                "periodo_label",
-                pl.col("id_agrupado").alias("id_agregado"),
-                "descr_padrao",
-                "unid_ref",
-                "ST",
-                "estoque_inicial",
-                "entradas",
-                "saidas",
-                "estoque_final",
-                "saidas_calculadas",
-                "saldo_final",
-                "entradas_desacob",
-                "saidas_desacob",
-                "estoque_final_desacob",
-                "pme",
-                "pms",
-                "aliq_interna",
-                "ICMS_saidas_desac",
-                "ICMS_estoque_desac",
-            ]
-        )
-        .sort(["cod_per", "id_agregado"])
-    )
+    return df_per.select(
+        [
+            pl.col("periodo_inventario").alias("cod_per"),
+            "periodo_label",
+            pl.col("id_agrupado").alias("id_agregado"),
+            "descr_padrao",
+            "unid_ref",
+            "ST",
+            "estoque_inicial",
+            "entradas",
+            "saidas",
+            "estoque_final",
+            "saidas_calculadas",
+            "saldo_final",
+            "entradas_desacob",
+            "saidas_desacob",
+            "estoque_final_desacob",
+            "pme",
+            "pms",
+            "aliq_interna",
+            "ICMS_saidas_desac",
+            "ICMS_estoque_desac",
+        ]
+    ).sort(["cod_per", "id_agregado"])
+
 
 def gerar_calculos_periodos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
     inicio_total = perf_counter()
@@ -353,7 +490,9 @@ def gerar_calculos_periodos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         rprint(f"[red]Arquivo necessário não encontrado:[/red] {arq_mov_estoque}")
         return False
 
-    rprint(f"\n[bold cyan]Gerando calculos_periodos (Aba Períodos) para CNPJ: {cnpj}[/bold cyan]")
+    rprint(
+        f"\n[bold cyan]Gerando calculos_periodos (Aba Períodos) para CNPJ: {cnpj}[/bold cyan]"
+    )
 
     inicio_leitura = perf_counter()
     df = pl.read_parquet(arq_mov_estoque)
@@ -368,7 +507,11 @@ def gerar_calculos_periodos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
     registrar_evento_performance(
         "calculos_periodos.calcular_dataframe",
         perf_counter() - inicio_calculo,
-        {"cnpj": cnpj, "linhas_saida": df_result.height, "colunas_saida": df_result.width},
+        {
+            "cnpj": cnpj,
+            "linhas_saida": df_result.height,
+            "colunas_saida": df_result.width,
+        },
     )
 
     saida = pasta_analises / f"aba_periodos_{cnpj}.parquet"
@@ -381,7 +524,9 @@ def gerar_calculos_periodos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         status="ok" if ok else "error",
     )
     if ok:
-        rprint(f"[green]Sucesso! {df_result.height} registros salvos na aba períodos.[/green]")
+        rprint(
+            f"[green]Sucesso! {df_result.height} registros salvos na aba períodos.[/green]"
+        )
     registrar_evento_performance(
         "calculos_periodos.total",
         perf_counter() - inicio_total,
@@ -391,6 +536,7 @@ def gerar_calculos_periodos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
 
     return ok
 
+
 if __name__ == "__main__":
     try:
         if len(sys.argv) > 1:
@@ -398,8 +544,9 @@ if __name__ == "__main__":
         else:
             c = input("CNPJ: ")
             gerar_calculos_periodos(c)
-    except Exception as e:
+    except Exception:
         import traceback
+
         with open(TRACEBACK_PATH, "w", encoding="utf-8") as f:
             traceback.print_exc(file=f)
         raise
