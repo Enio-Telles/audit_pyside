@@ -155,10 +155,18 @@ def calcular_aba_anual_dataframe(df: pl.DataFrame, df_aux_st: pl.DataFrame | Non
         if c not in df.columns:
             if c in {"dev_simples", "excluir_estoque"}:
                 df = df.with_columns(pl.lit(False).alias(c))
-            elif c in {"Vl_item", "preco_item", "entr_desac_anual", "q_conv", "__qtd_decl_final_audit__", "it_pc_interna", "saldo_estoque_anual"}:
+            elif c in {"Vl_item", "preco_item", "entr_desac_anual", "q_conv", "q_conv_fisica", "__qtd_decl_final_audit__", "it_pc_interna", "saldo_estoque_anual"}:
                 df = df.with_columns(pl.lit(0.0).alias(c))
             else:
                 df = df.with_columns(pl.lit(None).alias(c))
+
+    if "q_conv_fisica" not in df.columns:
+        df = df.with_columns(
+            pl.when(pl.col("Tipo_operacao").cast(pl.Utf8, strict=False).str.starts_with("3 - ESTOQUE FINAL"))
+            .then(pl.lit(0.0))
+            .otherwise(pl.col("q_conv").cast(pl.Float64, strict=False).fill_null(0.0))
+            .alias("q_conv_fisica")
+        )
 
     valor_item_expr = pl.coalesce(
         [
@@ -167,7 +175,8 @@ def calcular_aba_anual_dataframe(df: pl.DataFrame, df_aux_st: pl.DataFrame | Non
             pl.lit(0.0),
         ]
     )
-    q_conv_positiva_expr = pl.col("q_conv").cast(pl.Float64, strict=False).fill_null(0.0) > 0
+    q_conv_fisica_expr = pl.col("q_conv_fisica").cast(pl.Float64, strict=False).fill_null(0.0)
+    q_conv_positiva_expr = q_conv_fisica_expr > 0
     entrada_valida_media_expr = (
         pl.col("Tipo_operacao").str.starts_with("1 - ENTRADA")
         & ~boolish_expr("dev_simples").fill_null(False)
@@ -188,18 +197,18 @@ def calcular_aba_anual_dataframe(df: pl.DataFrame, df_aux_st: pl.DataFrame | Non
                 pl.col("descr_padrao").drop_nulls().last().alias("descr_padrao"),
                 pl.col("unid_ref").cast(pl.Utf8, strict=False).drop_nulls().last().alias("unid_ref"),
                 pl.col("co_sefin_agr").cast(pl.Utf8, strict=False).drop_nulls().last().alias("co_sefin_agr"),
-                pl.when(pl.col("Tipo_operacao").str.starts_with("0 - ESTOQUE INICIAL")).then(pl.col("q_conv")).otherwise(0.0).sum().alias("estoque_inicial"),
-                pl.when(pl.col("Tipo_operacao").str.starts_with("1 - ENTRADA")).then(pl.col("q_conv")).otherwise(0.0).sum().alias("entradas"),
-                pl.when(pl.col("Tipo_operacao").str.starts_with("2 - SAIDA")).then(pl.col("q_conv")).otherwise(0.0).sum().alias("saidas"),
+                pl.when(pl.col("Tipo_operacao").str.starts_with("0 - ESTOQUE INICIAL")).then(pl.col("q_conv_fisica")).otherwise(0.0).sum().alias("estoque_inicial"),
+                pl.when(pl.col("Tipo_operacao").str.starts_with("1 - ENTRADA")).then(pl.col("q_conv_fisica")).otherwise(0.0).sum().alias("entradas"),
+                pl.when(pl.col("Tipo_operacao").str.starts_with("2 - SAIDA")).then(pl.col("q_conv_fisica")).otherwise(0.0).sum().alias("saidas"),
                 pl.when(pl.col("Tipo_operacao").str.starts_with("3 - ESTOQUE FINAL"))
                 .then(pl.col("__qtd_decl_final_audit__").cast(pl.Float64, strict=False).fill_null(0.0))
                 .otherwise(0.0)
                 .sum()
                 .alias("estoque_final"),
                 pl.when(entrada_valida_media_expr).then(valor_item_expr).otherwise(0.0).sum().alias("soma_valor_entradas"),
-                pl.when(entrada_valida_media_expr).then(pl.col("q_conv")).otherwise(0.0).sum().alias("soma_qtd_entradas"),
+                pl.when(entrada_valida_media_expr).then(pl.col("q_conv_fisica")).otherwise(0.0).sum().alias("soma_qtd_entradas"),
                 pl.when(saida_valida_media_expr).then(valor_item_expr).otherwise(0.0).sum().alias("soma_valor_saidas"),
-                pl.when(saida_valida_media_expr).then(pl.col("q_conv")).otherwise(0.0).sum().alias("soma_qtd_saidas"),
+                pl.when(saida_valida_media_expr).then(pl.col("q_conv_fisica")).otherwise(0.0).sum().alias("soma_qtd_saidas"),
                 pl.col("entr_desac_anual").sum().alias("entradas_desacob"),
                 pl.col("saldo_estoque_anual").sort_by("ordem_operacoes").last().alias("saldo_final"),
                 pl.col("it_pc_interna").cast(pl.Float64, strict=False).drop_nulls().last().alias("aliq_interna_mov"),

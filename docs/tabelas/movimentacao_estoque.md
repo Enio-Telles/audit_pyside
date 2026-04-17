@@ -45,7 +45,8 @@ Materializar o fluxo cronológico de estoque por produto e data, calculando:
 | `fonte` | str | Origem: `c170`, `nfe`, `nfce`, `bloco_h`, `gerado` |
 | `Tipo_operacao` | str | Tipo: `0 - ESTOQUE INICIAL`, `1 - ENTRADA`, `2 - SAIDAS`, `3 - ESTOQUE FINAL` |
 | `Dt_e_s` / `Dt_doc` | date | Data da operação |
-| `q_conv` | float | Quantidade convertida para `unid_ref` |
+| `q_conv` | float | Quantidade convertida observada na linha, inclusive em estoque final |
+| `q_conv_fisica` | float | Quantidade convertida que representa movimento físico de estoque |
 | `preco_item` | float | Valor total da linha |
 | `Vl_item` | float | Valor unitário da linha |
 | `saldo_estoque_anual` | float | Saldo físico acumulado |
@@ -84,12 +85,17 @@ Ao mudar o ano, reiniciam: saldo físico, saldo financeiro, custo médio, contad
 q_conv = abs(Qtd) * abs(fator)
 ```
 
-**Neutralizações** (`q_conv = 0`):
+**Neutralizações** (`q_conv = 0` e `q_conv_fisica = 0`):
 
 - `mov_rep = true`
 - `excluir_estoque = true`
 - `infprot_cstat` diferente de `100` ou `150`
 - Base da linha igual a zero
+
+### Semântica
+
+- `q_conv`: quantidade convertida observada na linha; pode ser preenchida em `3 - ESTOQUE FINAL` para fins de auditoria.
+- `q_conv_fisica`: quantidade convertida que representa movimento físico; para `3 - ESTOQUE FINAL` permanece `0`.
 
 ### Saldo e Entradas Desacobertadas
 
@@ -108,7 +114,9 @@ saldo_estoque_anual = 0
 
 Para linhas `3 - ESTOQUE FINAL`:
 
-- `q_conv` permanece `0` (não impacta saldo)
+- `q_conv` pode permanecer preenchido para auditoria row-level
+- `q_conv_fisica = 0`
+- `__q_conv_sinal__ = 0`
 - Quantidade declarada fica em `__qtd_decl_final_audit__`
 - `saldo_estoque_anual` não muda
 - `custo_medio_anual` não muda

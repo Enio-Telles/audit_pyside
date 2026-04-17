@@ -517,9 +517,9 @@ def gerar_movimentacao_estoque(cnpj: str, pasta_cnpj: Path | None = None) -> boo
                 .then(q_conv_valido_expr)
                 .otherwise(pl.lit(0.0))
                 .alias("__qtd_decl_final_audit__"),
-                # q_conv: estoque inicial, entradas, saidas e final capturados independente da data
-                # para permitir auditoria anual completa
-                # Nota: estoque final tem q_conv populado, mas nao afeta o saldo sequencial
+                # q_conv: quantidade convertida observada na linha.
+                # Em ESTOQUE FINAL ela permanece preenchida para auditoria row-level
+                # e conferencias fora do calculo sequencial.
                 pl.when(
                     pl.col("Tipo_operacao").cast(pl.Utf8, strict=False).str.starts_with("0 - ESTOQUE INICIAL")
                 )
@@ -534,6 +534,19 @@ def gerar_movimentacao_estoque(cnpj: str, pasta_cnpj: Path | None = None) -> boo
                 .then(q_conv_valido_expr)
                 .otherwise(pl.lit(0.0))
                 .alias("q_conv"),
+                # q_conv_fisica: quantidade convertida que representa movimento fisico.
+                # Estoque final permanece zerado aqui para separar quantidade declarada
+                # da quantidade que pode ser interpretada como movimentacao do saldo.
+                pl.when(
+                    pl.col("Tipo_operacao").cast(pl.Utf8, strict=False).str.starts_with("0 - ESTOQUE INICIAL")
+                )
+                .then(q_conv_valido_expr)
+                .when(pl.col("Tipo_operacao") == "1 - ENTRADA")
+                .then(q_conv_valido_expr)
+                .when(pl.col("Tipo_operacao") == "2 - SAIDAS")
+                .then(q_conv_valido_expr)
+                .otherwise(pl.lit(0.0))
+                .alias("q_conv_fisica"),
                 # __q_conv_sinal__: usado no calculo sequencial de saldo
                 # estoque final nao entra aqui para nao afetar o saldo acumulado
                 pl.when(
@@ -561,7 +574,7 @@ def gerar_movimentacao_estoque(cnpj: str, pasta_cnpj: Path | None = None) -> boo
         .drop(["__data_ref_calc__", "__q_conv_base__"], strict=False)
     )
 
-    for coluna, referencia in [("q_conv", "Qtd"), ("preco_unit", "preco_item")]:
+    for coluna, referencia in [("q_conv", "Qtd"), ("q_conv_fisica", "q_conv"), ("preco_unit", "preco_item")]:
         cols = list(df_final.columns)
         if coluna in cols and referencia in cols:
             cols.remove(coluna)

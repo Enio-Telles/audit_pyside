@@ -228,6 +228,14 @@ def calcular_aba_mensal_dataframe(df: pl.DataFrame, df_aux_st: pl.DataFrame | No
             else:
                 df = df.with_columns(pl.lit(0.0).alias(col))
 
+    if "q_conv_fisica" not in df.columns:
+        df = df.with_columns(
+            pl.when(pl.col("Tipo_operacao").cast(pl.Utf8, strict=False).str.starts_with("3 - ESTOQUE FINAL"))
+            .then(pl.lit(0.0))
+            .otherwise(pl.col("q_conv").cast(pl.Float64, strict=False).fill_null(0.0))
+            .alias("q_conv_fisica")
+        )
+
     data_efetiva = pl.coalesce(
         [
             pl.col("Dt_e_s").cast(pl.Date, strict=False),
@@ -245,7 +253,7 @@ def calcular_aba_mensal_dataframe(df: pl.DataFrame, df_aux_st: pl.DataFrame | No
         | _finnfe_4_expr()
     ).fill_null(False)
     is_excluida = boolish_expr("excluir_estoque").fill_null(False)
-    is_q_conv_positiva = pl.col("q_conv").cast(pl.Float64, strict=False).fill_null(0.0) > 0
+    is_q_conv_positiva = pl.col("q_conv_fisica").cast(pl.Float64, strict=False).fill_null(0.0) > 0
     is_valida_media = ~is_devolucao & ~is_excluida & is_q_conv_positiva
 
     df_base = (
@@ -255,7 +263,7 @@ def calcular_aba_mensal_dataframe(df: pl.DataFrame, df_aux_st: pl.DataFrame | No
                 data_efetiva.dt.year().alias("ano"),
                 data_efetiva.dt.month().alias("mes"),
                 pl.col(preco_col).cast(pl.Float64, strict=False).fill_null(0.0).alias("__preco_calc__"),
-                pl.col("q_conv").cast(pl.Float64, strict=False).fill_null(0.0).alias("__q_conv_calc__"),
+                pl.col("q_conv_fisica").cast(pl.Float64, strict=False).fill_null(0.0).alias("__q_conv_calc__"),
                 pl.col("entr_desac_anual").cast(pl.Float64, strict=False).fill_null(0.0).alias("__entr_desac_calc__"),
                 pl.col("saldo_estoque_anual").cast(pl.Float64, strict=False).fill_null(0.0).alias("__saldo_calc__"),
                 pl.col("custo_medio_anual").cast(pl.Float64, strict=False).fill_null(0.0).alias("__custo_calc__"),
