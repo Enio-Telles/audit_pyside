@@ -52,6 +52,8 @@ def test_estoque_inicial_final_qualquer_data():
             date(2021, 12, 31),
         ],
         "q_conv": [100.0, 50.0, 30.0, 0.0, 0.0, 0.0],  # ESTOQUE FINAL tem q_conv = 0
+        "q_conv_fisica": [100.0, 50.0, 30.0, 0.0, 0.0, 0.0],
+        "q_conv": [100.0, 50.0, 30.0, 50.0, 30.0, 20.0],
         "__qtd_decl_final_audit__": [0.0, 0.0, 0.0, 50.0, 30.0, 20.0],  # Valores declarados
         "entr_desac_anual": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
         "saldo_estoque_anual": [100.0, 150.0, 120.0, 120.0, 120.0, 120.0],
@@ -124,6 +126,7 @@ def test_estoque_inicial_fora_01_01():
         "Dt_doc": [date(2021, 6, 15)],  # 15/06, não 01/01
         "Dt_e_s": [date(2021, 6, 15)],
         "q_conv": [250.0],  # Deve ser capturado
+        "q_conv_fisica": [250.0],
         "__qtd_decl_final_audit__": [0.0],
         "entr_desac_anual": [0.0],
         "saldo_estoque_anual": [250.0],
@@ -160,7 +163,8 @@ def test_estoque_final_fora_31_12():
         "Tipo_operacao": ["3 - ESTOQUE FINAL"],
         "Dt_doc": [date(2021, 6, 30)],  # 30/06, não 31/12
         "Dt_e_s": [date(2021, 6, 30)],
-        "q_conv": [0.0],
+        "q_conv": [180.0],
+        "q_conv_fisica": [0.0],
         "__qtd_decl_final_audit__": [180.0],  # Deve ser capturado
         "entr_desac_anual": [0.0],
         "saldo_estoque_anual": [180.0],
