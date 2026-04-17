@@ -324,7 +324,7 @@ def test_artefatos_estoque_defasados_identifica_derivados_antigos_ou_ausentes(mo
 
     servico = ServicoAgregacao()
 
-    assert servico.artefatos_estoque_defasados(cnpj) == ["calculos_mensais", "calculos_anuais"]
+    assert servico.artefatos_estoque_defasados(cnpj) == ["calculos_mensais", "calculos_anuais", "calculos_periodos"]
 
 
 def test_recalcular_resumos_estoque_executa_apenas_etapas_defasadas(monkeypatch, tmp_path: Path):
@@ -358,8 +358,13 @@ def test_recalcular_resumos_estoque_executa_apenas_etapas_defasadas(monkeypatch,
         "gerar_calculos_anuais",
         lambda cnpj_recebido: chamadas.append(f"anual:{cnpj_recebido}") or True,
     )
+    monkeypatch.setattr(
+        aggregation_service_module,
+        "gerar_calculos_periodos",
+        lambda cnpj_recebido: chamadas.append(f"periodos:{cnpj_recebido}") or True,
+    )
 
     servico = ServicoAgregacao()
 
     assert servico.recalcular_resumos_estoque(cnpj) is True
-    assert chamadas == [f"mensal:{cnpj}"]
+    assert chamadas == [f"mensal:{cnpj}", f"periodos:{cnpj}"]

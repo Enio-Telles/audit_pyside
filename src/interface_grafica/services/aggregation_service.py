@@ -261,15 +261,18 @@ class ServicoAgregacao:
 
         mov_mtime = mov_path.stat().st_mtime_ns
         pasta_ressarc = pasta_prod.parent / "ressarcimento_st"
-        # Only consider the monthly and annual summary artifacts for staleness
+        # Consider every analytical table derived from mov_estoque so manual
+        # regrouping is reflected consistently across monthly, annual and
+        # period views.
         derivados = {
             "calculos_mensais": pasta_prod / f"aba_mensal_{cnpj}.parquet",
             "calculos_anuais": pasta_prod / f"aba_anual_{cnpj}.parquet",
+            "calculos_periodos": pasta_prod / f"aba_periodos_{cnpj}.parquet",
         }
         return [
             etapa
             for etapa, caminho in derivados.items()
-            if not caminho.exists() or caminho.stat().st_mtime_ns < mov_mtime
+            if not caminho.exists() or caminho.stat().st_mtime_ns <= mov_mtime
         ]
 
     @staticmethod
@@ -1045,6 +1048,7 @@ class ServicoAgregacao:
         - mov_estoque
         - aba_mensal
         - aba_anual
+        - aba_periodos
         """
         if reset_timings:
             self.ultimo_tempo_etapas = {}
@@ -1064,6 +1068,8 @@ class ServicoAgregacao:
             raise ImportError("Nao foi possivel importar calculos_mensais.py.")
         if gerar_calculos_anuais is None:
             raise ImportError("Nao foi possivel importar calculos_anuais.py.")
+        if gerar_calculos_periodos is None:
+            raise ImportError("Nao foi possivel importar calculos_periodos.py.")
 
         ok_fatores = self._executar_etapa_tempo("fatores_conversao", lambda: bool(calcular_fatores_conversao(cnpj)), progresso, contexto=contexto_base) if (ok_final and ok_fontes) else False
         ok_c170 = self._executar_etapa_tempo("c170_xml", lambda: bool(gerar_c170_xml(cnpj)), progresso, contexto=contexto_base) if ok_fatores else False
@@ -1071,7 +1077,8 @@ class ServicoAgregacao:
         ok_mov = self._executar_etapa_tempo("mov_estoque", lambda: bool(gerar_movimentacao_estoque(cnpj)), progresso, contexto=contexto_base) if ok_c176 else False
         ok_mensal = self._executar_etapa_tempo("calculos_mensais", lambda: bool(gerar_calculos_mensais(cnpj)), progresso, contexto=contexto_base) if ok_mov else False
         ok_anual = self._executar_etapa_tempo("calculos_anuais", lambda: bool(gerar_calculos_anuais(cnpj)), progresso, contexto=contexto_base) if ok_mensal else False
-        ok_total = bool(ok_final and ok_fontes and ok_fatores and ok_c170 and ok_c176 and ok_mov and ok_mensal and ok_anual)
+        ok_periodos = self._executar_etapa_tempo("calculos_periodos", lambda: bool(gerar_calculos_periodos(cnpj)), progresso, contexto=contexto_base) if ok_anual else False
+        ok_total = bool(ok_final and ok_fontes and ok_fatores and ok_c170 and ok_c176 and ok_mov and ok_mensal and ok_anual and ok_periodos)
         self._registrar_tempo(
             "recalcular_referencias_agr_total",
             perf_counter() - inicio_total,
@@ -1090,7 +1097,8 @@ class ServicoAgregacao:
 
     def recalcular_mov_estoque(self, cnpj: str, progresso=None, reset_timings: bool = True) -> bool:
         """
-        Recalcula artefatos diretamente afetados por ajustes manuais em fatores de conversao.
+        Recalcula artefatos diretamente afetados por ajustes manuais em fatores de conversao,
+        incluindo a tabela de periodos derivada de mov_estoque.
         """
         if gerar_c176_xml is None:
             raise ImportError("Nao foi possivel importar c176_xml.py.")
@@ -1100,6 +1108,8 @@ class ServicoAgregacao:
             raise ImportError("Nao foi possivel importar calculos_mensais.py.")
         if gerar_calculos_anuais is None:
             raise ImportError("Nao foi possivel importar calculos_anuais.py.")
+        if gerar_calculos_periodos is None:
+            raise ImportError("Nao foi possivel importar calculos_periodos.py.")
 
         if reset_timings:
             self.ultimo_tempo_etapas = {}
@@ -1109,7 +1119,8 @@ class ServicoAgregacao:
         ok_mov = self._executar_etapa_tempo("mov_estoque", lambda: bool(gerar_movimentacao_estoque(cnpj)), progresso, contexto=contexto_base) if ok_c176 else False
         ok_mensal = self._executar_etapa_tempo("calculos_mensais", lambda: bool(gerar_calculos_mensais(cnpj)), progresso, contexto=contexto_base) if ok_mov else False
         ok_anual = self._executar_etapa_tempo("calculos_anuais", lambda: bool(gerar_calculos_anuais(cnpj)), progresso, contexto=contexto_base) if ok_mensal else False
-        ok_total = bool(ok_c176 and ok_mov and ok_mensal and ok_anual)
+        ok_periodos = self._executar_etapa_tempo("calculos_periodos", lambda: bool(gerar_calculos_periodos(cnpj)), progresso, contexto=contexto_base) if ok_anual else False
+        ok_total = bool(ok_c176 and ok_mov and ok_mensal and ok_anual and ok_periodos)
         self._registrar_tempo(
             "recalcular_mov_estoque_total",
             perf_counter() - inicio_total,
@@ -1120,12 +1131,15 @@ class ServicoAgregacao:
 
     def recalcular_resumos_estoque(self, cnpj: str, progresso=None, reset_timings: bool = True) -> bool:
         """
-        Recalcula apenas os resumos mensal/anual quando estiverem ausentes ou defasados da mov_estoque.
+        Recalcula as tabelas analiticas derivadas de mov_estoque quando estiverem ausentes
+        ou defasadas: mensal, anual e periodos.
         """
         if gerar_calculos_mensais is None:
             raise ImportError("Nao foi possivel importar calculos_mensais.py.")
         if gerar_calculos_anuais is None:
             raise ImportError("Nao foi possivel importar calculos_anuais.py.")
+        if gerar_calculos_periodos is None:
+            raise ImportError("Nao foi possivel importar calculos_periodos.py.")
 
         if reset_timings:
             self.ultimo_tempo_etapas = {}
@@ -1141,11 +1155,12 @@ class ServicoAgregacao:
                 contexto={**contexto_base, "sucesso": True, "etapas": []},
             )
             if progresso:
-                progresso("Mensal e anual ja estao sincronizadas com mov_estoque.")
+                progresso("Mensal, anual e periodos ja estao sincronizados com mov_estoque.")
             return True
 
         ok_mensal = True
         ok_anual = True
+        ok_periodos = True
         if "calculos_mensais" in artefatos_defasados:
             ok_mensal = self._executar_etapa_tempo(
                 "calculos_mensais",
@@ -1160,8 +1175,15 @@ class ServicoAgregacao:
                 progresso,
                 contexto=contexto_base,
             )
+        if "calculos_periodos" in artefatos_defasados:
+            ok_periodos = self._executar_etapa_tempo(
+                "calculos_periodos",
+                lambda: bool(gerar_calculos_periodos(cnpj)),
+                progresso,
+                contexto=contexto_base,
+            )
 
-        ok_total = bool(ok_mensal and ok_anual)
+        ok_total = bool(ok_mensal and ok_anual and ok_periodos)
         self._registrar_tempo(
             "recalcular_resumos_estoque_total",
             perf_counter() - inicio_total,
