@@ -8,6 +8,7 @@ from utilitarios.project_paths import (
     ENV_PATH,
     PROJECT_ROOT,
     SQL_ROOT,
+    PIPELINE_SCRIPT,
 )
 
 APP_NAME = "Fiscal Parquet Analyzer"
