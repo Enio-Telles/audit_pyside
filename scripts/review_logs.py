@@ -143,7 +143,8 @@ def main():
                     tracebacks.extend(tbs)
 
     # build report
-    now = datetime.utcnow().isoformat() + 'Z'
+    from datetime import timezone
+    now = datetime.now(timezone.utc).isoformat() + 'Z'
     report = []
     report.append('Relatório de revisão de logs')
     report.append('Gerado em: ' + now)
