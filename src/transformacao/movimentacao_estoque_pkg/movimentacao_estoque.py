@@ -14,6 +14,10 @@ DADOS_DIR = ROOT_DIR / "dados"
 CNPJ_ROOT = DADOS_DIR / "CNPJ"
 
 try:
+    from utilitarios.codigo_fonte import (
+        expr_gerar_codigo_fonte,
+        expr_normalizar_codigo_fonte,
+    )
     from utilitarios.salvar_para_parquet import salvar_para_parquet
     from utilitarios.validacao_schema import (
         SchemaValidacaoError,
@@ -40,6 +44,35 @@ except ImportError as e:
 
 
 def marcar_mov_rep_por_chave_item(df: pl.DataFrame) -> pl.DataFrame:
+    """Marca duplicidade com chave documental forte antes de recorrer a fallbacks fracos."""
+    if df.is_empty() or "Num_item" not in df.columns:
+        return df
+
+    candidatos: list[pl.Expr] = []
+    if "Chv_nfe" in df.columns:
+        candidatos.append(pl.col("Chv_nfe").cast(pl.Utf8, strict=False).fill_null("").str.strip_chars())
+
+    if "num_doc" in df.columns:
+        col_emitente = next((c for c in ["cnpj_emitente", "cnpj_participante", "co_emitente", "emit_cnpj_cpf"] if c in df.columns), None)
+        col_serie = next((c for c in ["Serie", "serie", "ser"] if c in df.columns), None)
+        partes = []
+        if col_emitente:
+            partes.append(pl.col(col_emitente).cast(pl.Utf8, strict=False).fill_null("").str.strip_chars())
+        if col_serie:
+            partes.append(pl.col(col_serie).cast(pl.Utf8, strict=False).fill_null("").str.strip_chars())
+        partes.append(pl.col("num_doc").cast(pl.Utf8, strict=False).fill_null("").str.strip_chars())
+        candidatos.append(pl.concat_str(partes, separator="|"))
+
+    if "id_linha_origem" in df.columns:
+        candidatos.append(pl.col("id_linha_origem").cast(pl.Utf8, strict=False).fill_null("").str.strip_chars())
+    elif "num_doc" in df.columns:
+        candidatos.append(pl.col("num_doc").cast(pl.Utf8, strict=False).fill_null("").str.strip_chars())
+
+    if not candidatos:
+        return df
+
+    item_expr = pl.col("Num_item").cast(pl.Utf8, strict=False).fill_null("").str.strip_chars()
+    df = df.with_columns(pl.coalesce(candidatos).fill_null("").alias("__chave_doc__"))
     if df.is_empty() or "Num_item" not in df.columns:
         return df
 
@@ -61,6 +94,9 @@ def marcar_mov_rep_por_chave_item(df: pl.DataFrame) -> pl.DataFrame:
     )
 
     if "mov_rep" in df.columns:
+        df = df.with_columns((repetido_expr | _boolish_expr("mov_rep").fill_null(False)).alias("mov_rep"))
+    else:
+        df = df.with_columns(repetido_expr.alias("mov_rep"))
         df = df.with_columns(
             (repetido_expr | _boolish_expr("mov_rep").fill_null(False)).alias("mov_rep")
         )
@@ -86,6 +122,72 @@ def filtrar_movimentacoes_por_fonte(df: pl.DataFrame) -> pl.DataFrame:
     return df.filter(filtro_expr)
 
 
+def _construir_vinculos_produto(arq_prod_final: Path, arq_mapa: Path):
+    df_prod_base = pl.read_parquet(arq_prod_final)
+    df_prod_por_id = (
+        df_prod_base
+        .select([
+            pl.col("id_agrupado").cast(pl.Utf8, strict=False),
+            pl.col("descr_padrao").cast(pl.Utf8, strict=False),
+            pl.col("ncm_padrao").cast(pl.Utf8, strict=False),
+            pl.col("cest_padrao").cast(pl.Utf8, strict=False),
+            pl.col("descricao_final").cast(pl.Utf8, strict=False),
+            pl.col("co_sefin_final").cast(pl.Utf8, strict=False),
+            pl.col("unid_ref_sugerida").cast(pl.Utf8, strict=False),
+        ])
+        .rename({"co_sefin_final": "co_sefin_agr"})
+        .unique(subset=["id_agrupado"])
+    )
+
+    df_desc = (
+        df_prod_base
+        .select([
+            pl.col("descricao_normalizada").cast(pl.Utf8, strict=False),
+            pl.col("id_agrupado").cast(pl.Utf8, strict=False),
+            pl.col("descr_padrao").cast(pl.Utf8, strict=False),
+            pl.col("ncm_padrao").cast(pl.Utf8, strict=False),
+            pl.col("cest_padrao").cast(pl.Utf8, strict=False),
+            pl.col("descricao_final").cast(pl.Utf8, strict=False),
+            pl.col("co_sefin_final").cast(pl.Utf8, strict=False),
+            pl.col("unid_ref_sugerida").cast(pl.Utf8, strict=False),
+        ])
+        .group_by("descricao_normalizada")
+        .agg([
+            pl.col("id_agrupado").n_unique().alias("__qtd_ids__"),
+            pl.col("id_agrupado").first().alias("id_agrupado"),
+            pl.col("descr_padrao").drop_nulls().first().alias("descr_padrao"),
+            pl.col("ncm_padrao").drop_nulls().first().alias("ncm_padrao"),
+            pl.col("cest_padrao").drop_nulls().first().alias("cest_padrao"),
+            pl.col("descricao_final").drop_nulls().first().alias("descricao_final"),
+            pl.col("co_sefin_final").drop_nulls().first().alias("co_sefin_agr"),
+            pl.col("unid_ref_sugerida").drop_nulls().first().alias("unid_ref_sugerida"),
+        ])
+        .filter(pl.col("__qtd_ids__") == 1)
+        .drop("__qtd_ids__")
+        .with_columns(pl.lit("descricao_normalizada").alias("origem_vinculo_produto"))
+    )
+
+    df_codigo = pl.DataFrame(schema={"codigo_fonte": pl.Utf8, "id_agrupado": pl.Utf8, "descr_padrao": pl.Utf8, "ncm_padrao": pl.Utf8, "cest_padrao": pl.Utf8, "descricao_final": pl.Utf8, "co_sefin_agr": pl.Utf8, "unid_ref_sugerida": pl.Utf8, "origem_vinculo_produto": pl.Utf8})
+    if arq_mapa.exists():
+        df_codigo = (
+            pl.read_parquet(arq_mapa)
+            .select([
+                expr_normalizar_codigo_fonte("codigo_fonte"),
+                pl.col("id_agrupado").cast(pl.Utf8, strict=False),
+            ])
+            .drop_nulls(["codigo_fonte", "id_agrupado"])
+            .group_by("codigo_fonte")
+            .agg([
+                pl.col("id_agrupado").n_unique().alias("__qtd_ids__"),
+                pl.col("id_agrupado").first().alias("id_agrupado"),
+            ])
+            .filter(pl.col("__qtd_ids__") == 1)
+            .drop("__qtd_ids__")
+            .join(df_prod_por_id, on="id_agrupado", how="left")
+            .with_columns(pl.lit("codigo_fonte").alias("origem_vinculo_produto"))
+        )
+
+    return df_codigo, df_desc
 def _salvar_log_vinculo_produto(resumo: dict, pasta_analises: Path, cnpj: str) -> None:
     """Persiste resumo do vínculo de produto para rastreabilidade."""
     caminho = pasta_analises / f"log_vinculo_produto_estoque_{cnpj}.json"
@@ -259,6 +361,7 @@ def gerar_movimentacao_estoque(cnpj: str, pasta_cnpj: Path | None = None) -> boo
 
     arq_prod_final = pasta_analises / f"produtos_final_{cnpj}.parquet"
     arq_fatores = pasta_analises / f"fatores_conversao_{cnpj}.parquet"
+    arq_mapa = pasta_analises / f"map_produto_agrupado_{cnpj}.parquet"
     if not arq_prod_final.exists():
         rprint(f"[red]Arquivo necessario nao encontrado:[/red] {arq_prod_final}")
         return False
@@ -325,6 +428,7 @@ def gerar_movimentacao_estoque(cnpj: str, pasta_cnpj: Path | None = None) -> boo
         .rename({"unid": "__unid_fator__"})
         .unique(subset=["id_agrupado", "__unid_fator__"])
     )
+    df_vinculo_codigo, df_vinculo_desc = _construir_vinculos_produto(arq_prod_final, arq_mapa)
     df_flags_cfop = _carregar_flags_cfop()
 
     df_parts = []
@@ -353,6 +457,30 @@ def gerar_movimentacao_estoque(cnpj: str, pasta_cnpj: Path | None = None) -> boo
         col_desc = _detectar_coluna_descricao(df_raw, prefix_sys)
         col_unid = _detectar_coluna_unidade(df_raw, prefix_sys)
 
+        if "id_agrupado" not in df_raw.columns:
+            if "codigo_fonte" in df_raw.columns:
+                df_raw = df_raw.with_columns(expr_normalizar_codigo_fonte("codigo_fonte"))
+            else:
+                for cand in ["Cod_item", "cod_item", "prod_cprod", "codigo_produto", "codigo_produto_original"]:
+                    if cand in df_raw.columns:
+                        df_raw = df_raw.with_columns([pl.lit(cnpj).alias("__cnpj_ref__"), expr_gerar_codigo_fonte("__cnpj_ref__", cand, alias="codigo_fonte")]).drop("__cnpj_ref__", strict=False)
+                        break
+
+            if "codigo_fonte" in df_raw.columns and not df_vinculo_codigo.is_empty():
+                df_raw = df_raw.join(df_vinculo_codigo, on="codigo_fonte", how="left")
+
+            if col_desc and not df_vinculo_desc.is_empty():
+                df_raw = df_raw.with_columns(_normalizar_descricao_expr(col_desc))
+                sem_match = df_raw.filter(pl.col("id_agrupado").is_null()) if "id_agrupado" in df_raw.columns else df_raw
+                if not sem_match.is_empty():
+                    sem_match = (
+                        sem_match.drop([c for c in ["id_agrupado", "descr_padrao", "ncm_padrao", "cest_padrao", "descricao_final", "co_sefin_agr", "unid_ref_sugerida", "origem_vinculo_produto"] if c in sem_match.columns])
+                        .join(df_vinculo_desc.rename({"descricao_normalizada": "__descricao_normalizada__"}), on="__descricao_normalizada__", how="left")
+                    )
+                    com_match = df_raw.filter(pl.col("id_agrupado").is_not_null()) if "id_agrupado" in df_raw.columns else pl.DataFrame()
+                    df_raw = pl.concat([com_match, sem_match], how="diagonal_relaxed")
+                if "__descricao_normalizada__" in df_raw.columns:
+                    df_raw = df_raw.drop("__descricao_normalizada__", strict=False)
         if col_desc and "id_agrupado" not in df_raw.columns:
             df_raw = (
                 df_raw
@@ -388,6 +516,7 @@ def gerar_movimentacao_estoque(cnpj: str, pasta_cnpj: Path | None = None) -> boo
             except Exception:
                 exprs.append(pl.lit(None).alias(target))
             v = str(orig)
+            if v and v not in ["(vazio)", "correspondência com chave NF", "icms_orig & icms_cst ou icms_csosn", "prod_ceantrib ou caso for nulo -> prod_cean", "vl_item-vl_desc", "prod_vprod+prod_vfrete+prod_vseg+prod_voutro-prod_vdesc", "\"gerado\" ou \"registro\" (se está no bloco_h)"] and not v.startswith('"'):
             if v and v not in [
                 "(vazio)",
                 "correspondência com chave NF",
@@ -405,6 +534,7 @@ def gerar_movimentacao_estoque(cnpj: str, pasta_cnpj: Path | None = None) -> boo
                 df_raw = df_raw.with_columns(pl.lit(None).alias(c))
 
         df_selecionado = df_raw.select(exprs)
+        cols_extras_manter = ["id_agrupado", "ncm_padrao", "cest_padrao", "descr_padrao", "co_sefin_agr", "unid_ref", "fator", "origem_vinculo_produto"]
 
         cols_extras_manter = ["id_agrupado", "ncm_padrao", "cest_padrao", "descr_padrao", "co_sefin_agr", "unid_ref", "fator", "origem_vinculo_produto", "origem_evento_estoque", "evento_sintetico"]
         for c in cols_extras_manter:
@@ -470,12 +600,10 @@ def gerar_movimentacao_estoque(cnpj: str, pasta_cnpj: Path | None = None) -> boo
         df_final
         .with_columns(
             [
-                pl.coalesce(
-                    [
-                        pl.col("Dt_e_s").cast(pl.Date, strict=False),
-                        pl.col("Dt_doc").cast(pl.Date, strict=False),
-                    ]
-                ).alias("__data_ord__"),
+                pl.coalesce([
+                    pl.col("Dt_e_s").cast(pl.Date, strict=False),
+                    pl.col("Dt_doc").cast(pl.Date, strict=False),
+                ]).alias("__data_ord__"),
                 pl.col("nsu").cast(pl.Int64, strict=False).alias("__nsu_ord__"),
                 pl.when(pl.col("Tipo_operacao").cast(pl.Utf8, strict=False).str.starts_with("0 - ESTOQUE INICIAL"))
                 .then(pl.lit(0))
@@ -489,15 +617,15 @@ def gerar_movimentacao_estoque(cnpj: str, pasta_cnpj: Path | None = None) -> boo
                 .alias("__ord_tipo__"),
             ]
         )
-        .sort(
-            ["id_agrupado", "__data_ord__", "__ord_tipo__", "__nsu_ord__", "Dt_doc", "Dt_e_s"],
-            descending=[False, False, False, False, False, False],
-            nulls_last=True,
-        )
+        .sort(["id_agrupado", "__data_ord__", "__ord_tipo__", "__nsu_ord__", "Dt_doc", "Dt_e_s"], descending=[False, False, False, False, False, False], nulls_last=True)
         .with_row_index("ordem_operacoes", offset=1)
         .drop(["__data_ord__", "__nsu_ord__", "__ord_tipo__"], strict=False)
     )
 
+    data_ref_expr = pl.coalesce([
+        pl.col("Dt_e_s").cast(pl.Date, strict=False),
+        pl.col("Dt_doc").cast(pl.Date, strict=False),
+    ])
     data_ref_expr = pl.coalesce(
         [
             pl.col("Dt_e_s").cast(pl.Date, strict=False),
@@ -507,32 +635,19 @@ def gerar_movimentacao_estoque(cnpj: str, pasta_cnpj: Path | None = None) -> boo
     qtd_bruta_expr = pl.col("Qtd").cast(pl.Float64, strict=False).fill_null(0.0).abs()
     fator_expr = pl.col("fator").cast(pl.Float64, strict=False).fill_null(1.0).abs()
     q_conv_base_expr = (qtd_bruta_expr * fator_expr)
-    linha_neutra_expr = (
-        _boolish_expr("excluir_estoque").fill_null(False)
-        | _boolish_expr("mov_rep").fill_null(False)
-    )
+    linha_neutra_expr = (_boolish_expr("excluir_estoque").fill_null(False) | _boolish_expr("mov_rep").fill_null(False))
     infprot_valido_expr = (
-        pl.col("infprot_cstat")
-        .cast(pl.Utf8, strict=False)
-        .fill_null("")
-        .str.strip_chars()
-        .is_in(["", "100", "150"])
+        pl.col("infprot_cstat").cast(pl.Utf8, strict=False).fill_null("").str.strip_chars().is_in(["", "100", "150"])
     )
-    q_conv_valido_expr = (
-        pl.when(infprot_valido_expr & ~linha_neutra_expr)
-        .then(q_conv_base_expr)
-        .otherwise(pl.lit(0.0))
-    )
+    q_conv_valido_expr = pl.when(infprot_valido_expr & ~linha_neutra_expr).then(q_conv_base_expr).otherwise(pl.lit(0.0))
 
     df_final = (
         df_final
-        .with_columns(
-            [
-                data_ref_expr.alias("__data_ref_calc__"),
-                data_ref_expr.dt.year().alias("__ano_saldo__"),
-                q_conv_base_expr.alias("__q_conv_base__"),
-            ]
-        )
+        .with_columns([
+            data_ref_expr.alias("__data_ref_calc__"),
+            data_ref_expr.dt.year().alias("__ano_saldo__"),
+            q_conv_base_expr.alias("__q_conv_base__"),
+        ])
         .with_columns(
             pl.when(pl.col("Tipo_operacao").cast(pl.Utf8, strict=False).str.starts_with("0"))
             .then(1)
@@ -541,6 +656,38 @@ def gerar_movimentacao_estoque(cnpj: str, pasta_cnpj: Path | None = None) -> boo
             .over("id_agrupado")
             .alias("periodo_inventario")
         )
+        .with_columns([
+            pl.when(pl.col("Tipo_operacao").cast(pl.Utf8, strict=False).str.starts_with("3 - ESTOQUE FINAL"))
+            .then(q_conv_valido_expr)
+            .otherwise(pl.lit(0.0))
+            .alias("__qtd_decl_final_audit__"),
+            pl.when(pl.col("Tipo_operacao").cast(pl.Utf8, strict=False).str.starts_with("0 - ESTOQUE INICIAL"))
+            .then(q_conv_valido_expr)
+            .when(pl.col("Tipo_operacao") == "1 - ENTRADA")
+            .then(q_conv_valido_expr)
+            .when(pl.col("Tipo_operacao") == "2 - SAIDAS")
+            .then(q_conv_valido_expr)
+            .when(pl.col("Tipo_operacao").cast(pl.Utf8, strict=False).str.starts_with("3 - ESTOQUE FINAL"))
+            .then(q_conv_valido_expr)
+            .otherwise(pl.lit(0.0))
+            .alias("q_conv"),
+            pl.when(pl.col("Tipo_operacao").cast(pl.Utf8, strict=False).str.starts_with("0 - ESTOQUE INICIAL"))
+            .then(q_conv_valido_expr)
+            .when(pl.col("Tipo_operacao") == "1 - ENTRADA")
+            .then(q_conv_valido_expr)
+            .when(pl.col("Tipo_operacao") == "2 - SAIDAS")
+            .then(q_conv_valido_expr)
+            .otherwise(pl.lit(0.0))
+            .alias("q_conv_fisica"),
+            pl.when(pl.col("Tipo_operacao").cast(pl.Utf8, strict=False).str.starts_with("0 - ESTOQUE INICIAL"))
+            .then(q_conv_valido_expr)
+            .when(pl.col("Tipo_operacao") == "1 - ENTRADA")
+            .then(q_conv_valido_expr)
+            .when(pl.col("Tipo_operacao") == "2 - SAIDAS")
+            .then(-q_conv_valido_expr)
+            .otherwise(pl.lit(0.0))
+            .alias("__q_conv_sinal__"),
+        ])
         .with_columns(
             [
                 pl.when(
@@ -595,6 +742,16 @@ def gerar_movimentacao_estoque(cnpj: str, pasta_cnpj: Path | None = None) -> boo
         .map_groups(_calcular_saldo_estoque_anual)
         .group_by("id_agrupado", "periodo_inventario", maintain_order=True)
         .map_groups(_calcular_saldo_estoque_periodo)
+        .with_columns([
+            pl.when(pl.col("Tipo_operacao").cast(pl.Utf8, strict=False).str.starts_with("3 - ESTOQUE FINAL"))
+            .then(pl.col("saldo_estoque_anual") - pl.col("__qtd_decl_final_audit__"))
+            .otherwise(pl.lit(None, dtype=pl.Float64))
+            .alias("delta_decl_final_anual"),
+            pl.when(pl.col("Tipo_operacao").cast(pl.Utf8, strict=False).str.starts_with("3 - ESTOQUE FINAL"))
+            .then(pl.col("saldo_estoque_periodo") - pl.col("__qtd_decl_final_audit__"))
+            .otherwise(pl.lit(None, dtype=pl.Float64))
+            .alias("delta_decl_final_periodo"),
+        ])
         .drop(["__data_ref_calc__", "__q_conv_base__"], strict=False)
     )
 

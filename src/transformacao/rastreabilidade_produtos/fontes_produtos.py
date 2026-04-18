@@ -35,6 +35,7 @@ DADOS_DIR = ROOT_DIR / "dados"
 CNPJ_ROOT = DADOS_DIR / "CNPJ"
 
 try:
+    from utilitarios.codigo_fonte import expr_gerar_codigo_fonte, expr_normalizar_codigo_fonte
     from utilitarios.salvar_para_parquet import salvar_para_parquet
     from utilitarios.text import expr_normalizar_descricao
     from utilitarios.validacao_schema import (
@@ -51,6 +52,22 @@ except ImportError as e:
 
 
 def _normalizar_descricao_expr(col: str) -> pl.Expr:
+    return (
+        pl.col(col)
+        .cast(pl.Utf8, strict=False)
+        .fill_null("")
+        .str.to_uppercase()
+        .str.replace_all(r"[ÁÀÂÃÄ]", "A")
+        .str.replace_all(r"[ÉÈÊË]", "E")
+        .str.replace_all(r"[ÍÌÎÏ]", "I")
+        .str.replace_all(r"[ÓÒÔÕÖ]", "O")
+        .str.replace_all(r"[ÚÙÛÜ]", "U")
+        .str.replace_all(r"Ç", "C")
+        .str.replace_all(r"Ñ", "N")
+        .str.strip_chars()
+        .str.replace_all(r"\s+", " ")
+        .alias("__descricao_normalizada__")
+    )
     return expr_normalizar_descricao(col).alias("__descricao_normalizada__")
 
 
@@ -76,6 +93,53 @@ def _ler_primeiro(arq_dir: Path, prefix: str) -> pl.DataFrame | None:
     return pl.read_parquet(arquivos[0])
 
 
+def _preservar_colunas_rastreabilidade(df_src: pl.DataFrame, cnpj: str) -> pl.DataFrame:
+    exprs: list[pl.Expr] = []
+    if "codigo_fonte" in df_src.columns:
+        exprs.append(expr_normalizar_codigo_fonte("codigo_fonte"))
+    else:
+        for cand in ["codigo_produto", "codigo_produto_original", "cod_item", "prod_cprod"]:
+            if cand in df_src.columns:
+                exprs.append(expr_gerar_codigo_fonte("__cnpj_ref__", cand, alias="codigo_fonte"))
+                break
+    if exprs:
+        return df_src.with_columns([pl.lit(cnpj).alias("__cnpj_ref__"), *exprs]).drop("__cnpj_ref__", strict=False)
+    return df_src
+
+
+def _construir_mapas(df_mapa: pl.DataFrame) -> tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame]:
+    df_codigo = (
+        df_mapa
+        .filter(pl.col("codigo_fonte").is_not_null() & (pl.col("codigo_fonte") != ""))
+        .group_by("codigo_fonte")
+        .agg(pl.col("id_agrupado").drop_nulls().unique().sort().alias("ids"))
+    )
+    df_codigo_unico = (
+        df_codigo
+        .filter(pl.col("ids").list.len() == 1)
+        .with_columns(pl.col("ids").list.first().alias("id_agrupado_codigo"))
+        .select(["codigo_fonte", "id_agrupado_codigo"])
+    )
+
+    df_desc = (
+        df_mapa
+        .filter(pl.col("descricao_normalizada").is_not_null() & (pl.col("descricao_normalizada") != ""))
+        .group_by("descricao_normalizada")
+        .agg(pl.col("id_agrupado").drop_nulls().unique().sort().alias("ids"))
+    )
+    df_desc_unico = (
+        df_desc
+        .filter(pl.col("ids").list.len() == 1)
+        .with_columns(pl.col("ids").list.first().alias("id_agrupado_desc"))
+        .select(["descricao_normalizada", "id_agrupado_desc"])
+    )
+    df_desc_ambiguo = (
+        df_desc
+        .filter(pl.col("ids").list.len() > 1)
+        .with_columns(pl.lit(True).alias("descricao_ambigua"))
+        .select(["descricao_normalizada", "descricao_ambigua", "ids"])
+    )
+    return df_codigo_unico, df_desc_unico, df_desc_ambiguo
 def _preservar_colunas_rastreabilidade(df_src: pl.DataFrame) -> list[pl.Expr]:
     exprs: list[pl.Expr] = []
     if "codigo_fonte" not in df_src.columns:
@@ -237,12 +301,38 @@ def gerar_fontes_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
             ],
             contexto="fontes_produtos/produtos_final",
         )
+        validar_parquet_essencial(
+            arq_mapa,
+            ["id_agrupado", "descricao_normalizada", "codigo_fonte"],
+            contexto="fontes_produtos/map_produto_agrupado",
+        )
     except SchemaValidacaoError as exc:
         rprint(f"[red]{exc}[/red]")
         return False
 
     df_mapa = (
         pl.read_parquet(arq_mapa)
+        .select([
+            pl.col("id_agrupado").cast(pl.Utf8, strict=False),
+            expr_normalizar_codigo_fonte("codigo_fonte"),
+            pl.col("descricao_normalizada").cast(pl.Utf8, strict=False),
+        ])
+        .unique()
+    )
+    df_codigo_unico, df_desc_unico, df_desc_ambiguo = _construir_mapas(df_mapa)
+
+    df_prod_final = (
+        pl.read_parquet(arq_prod_final)
+        .select(
+            [
+                "id_agrupado",
+                "descr_padrao",
+                "ncm_padrao",
+                "cest_padrao",
+                "co_sefin_final",
+                "unid_ref_sugerida",
+            ]
+        )
         .select(["id_agrupado", "codigo_fonte", "descricao_normalizada"])
         .unique()
     )
@@ -278,6 +368,36 @@ def gerar_fontes_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
             rprint(f"[yellow]Fonte {fonte} ignorada: sem coluna de descricao reconhecida.[/yellow]")
             continue
 
+        df_src = _preservar_colunas_rastreabilidade(df_src, cnpj)
+        df_out = (
+            df_src
+            .with_columns(_normalizar_descricao_expr(col_desc))
+            .join(df_codigo_unico, on="codigo_fonte", how="left")
+            .join(df_desc_unico, left_on="__descricao_normalizada__", right_on="descricao_normalizada", how="left")
+            .join(df_desc_ambiguo.rename({"descricao_normalizada": "__descricao_normalizada__"}), on="__descricao_normalizada__", how="left")
+            .with_columns([
+                pl.coalesce([pl.col("id_agrupado_codigo"), pl.col("id_agrupado_desc")]).alias("id_agrupado"),
+                pl.when(pl.col("id_agrupado_codigo").is_not_null())
+                .then(pl.lit("codigo_fonte"))
+                .when(pl.col("id_agrupado_desc").is_not_null())
+                .then(pl.lit("descricao_normalizada"))
+                .otherwise(pl.lit(None, dtype=pl.Utf8))
+                .alias("origem_vinculo_agrupamento"),
+            ])
+            .with_columns(
+                pl.when(pl.col("id_agrupado").is_not_null())
+                .then(pl.lit(None, dtype=pl.Utf8))
+                .when(pl.col("codigo_fonte").cast(pl.Utf8, strict=False).fill_null("").str.strip_chars() != "")
+                .then(pl.lit("codigo_fonte_sem_mapeamento"))
+                .when(pl.col("descricao_ambigua").fill_null(False))
+                .then(pl.lit("descricao_normalizada_ambigua"))
+                .when(pl.col("__descricao_normalizada__").cast(pl.Utf8, strict=False).fill_null("").str.strip_chars() == "")
+                .then(pl.lit("sem_codigo_fonte_sem_descricao"))
+                .otherwise(pl.lit("descricao_normalizada_sem_match"))
+                .alias("motivo_sem_id_agrupado")
+            )
+            .drop(["id_agrupado_codigo", "id_agrupado_desc"], strict=False)
+            .join(df_prod_final, on="id_agrupado", how="left")
         exprs_rastreabilidade = _preservar_colunas_rastreabilidade(df_src)
         if exprs_rastreabilidade:
             df_src = df_src.with_columns(exprs_rastreabilidade)
@@ -301,6 +421,7 @@ def gerar_fontes_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
             )
             df_out = df_out.filter(pl.col("id_agrupado").is_not_null())
             if df_out.is_empty():
+                continue
                 rprint(f"[yellow]Fonte {fonte}: todas as linhas foram excluidas (sem correspondencia). Pulando.[/yellow]")
                 continue
 
@@ -318,6 +439,7 @@ def gerar_fontes_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
             if col not in df_out.columns:
                 df_out = df_out.with_columns(pl.lit(None, dtype=pl.Utf8).alias(col))
 
+        df_out = df_out.drop("__descricao_normalizada__", strict=False)
         nome_saida = f"{fonte}_agr_{cnpj}.parquet"
         ok = salvar_para_parquet(df_out, pasta_brutos, nome_saida)
         if not ok:
