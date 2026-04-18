@@ -2,7 +2,8 @@
 fontes_produtos.py
 
 Gera arquivos derivados das fontes brutas com a coluna `id_agrupado`
-vinculada pela descricao_normalizada da cadeia nova.
+vinculada prioritariamente por `codigo_fonte` e, como fallback controlado,
+por `descricao_normalizada`.
 
 Saidas (em arquivos_parquet):
 - c170_agr_<cnpj>.parquet
@@ -11,8 +12,10 @@ Saidas (em arquivos_parquet):
 - nfce_agr_<cnpj>.parquet
 
 Regra de consistencia:
-- toda linha precisa sair com `id_agrupado`
-- se houver qualquer linha sem `id_agrupado`, a rotina falha
+- idealmente, toda linha deve possuir `id_agrupado`.
+- quando existirem linhas sem `id_agrupado`, a rotina gera um arquivo de auditoria
+  (`<fonte>_agr_sem_id_agrupado_<cnpj>.parquet`) e exclui essas linhas da saída
+  principal; o pipeline NÃO falha.
 """
 
 from __future__ import annotations
@@ -32,8 +35,8 @@ CNPJ_ROOT = DADOS_DIR / "CNPJ"
 
 
 try:
+    from utilitarios.codigo_fonte import expr_gerar_codigo_fonte, expr_normalizar_codigo_fonte
     from utilitarios.salvar_para_parquet import salvar_para_parquet
-    from utilitarios.text import remove_accents
     from utilitarios.validacao_schema import (
         SchemaValidacaoError,
         validar_parquet_essencial,
@@ -43,15 +46,7 @@ except ImportError as e:
     sys.exit(1)
 
 
-def _norm(text: str | None) -> str:
-    if text is None:
-        return ""
-    return re.sub(r"\s+", " ", (remove_accents(text) or "").upper().strip())
-
-
 def _normalizar_descricao_expr(col: str) -> pl.Expr:
-    # Optimization: Replace .map_elements with native Polars string operations to preserve vectorization
-    # and improve performance for large datasets.
     return (
         pl.col(col)
         .cast(pl.Utf8, strict=False)
@@ -92,6 +87,55 @@ def _ler_primeiro(arq_dir: Path, prefix: str) -> pl.DataFrame | None:
     return pl.read_parquet(arquivos[0])
 
 
+def _preservar_colunas_rastreabilidade(df_src: pl.DataFrame, cnpj: str) -> pl.DataFrame:
+    exprs: list[pl.Expr] = []
+    if "codigo_fonte" in df_src.columns:
+        exprs.append(expr_normalizar_codigo_fonte("codigo_fonte"))
+    else:
+        for cand in ["codigo_produto", "codigo_produto_original", "cod_item", "prod_cprod"]:
+            if cand in df_src.columns:
+                exprs.append(expr_gerar_codigo_fonte("__cnpj_ref__", cand, alias="codigo_fonte"))
+                break
+    if exprs:
+        return df_src.with_columns([pl.lit(cnpj).alias("__cnpj_ref__"), *exprs]).drop("__cnpj_ref__", strict=False)
+    return df_src
+
+
+def _construir_mapas(df_mapa: pl.DataFrame) -> tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame]:
+    df_codigo = (
+        df_mapa
+        .filter(pl.col("codigo_fonte").is_not_null() & (pl.col("codigo_fonte") != ""))
+        .group_by("codigo_fonte")
+        .agg(pl.col("id_agrupado").drop_nulls().unique().sort().alias("ids"))
+    )
+    df_codigo_unico = (
+        df_codigo
+        .filter(pl.col("ids").list.len() == 1)
+        .with_columns(pl.col("ids").list.first().alias("id_agrupado_codigo"))
+        .select(["codigo_fonte", "id_agrupado_codigo"])
+    )
+
+    df_desc = (
+        df_mapa
+        .filter(pl.col("descricao_normalizada").is_not_null() & (pl.col("descricao_normalizada") != ""))
+        .group_by("descricao_normalizada")
+        .agg(pl.col("id_agrupado").drop_nulls().unique().sort().alias("ids"))
+    )
+    df_desc_unico = (
+        df_desc
+        .filter(pl.col("ids").list.len() == 1)
+        .with_columns(pl.col("ids").list.first().alias("id_agrupado_desc"))
+        .select(["descricao_normalizada", "id_agrupado_desc"])
+    )
+    df_desc_ambiguo = (
+        df_desc
+        .filter(pl.col("ids").list.len() > 1)
+        .with_columns(pl.lit(True).alias("descricao_ambigua"))
+        .select(["descricao_normalizada", "descricao_ambigua", "ids"])
+    )
+    return df_codigo_unico, df_desc_unico, df_desc_ambiguo
+
+
 def gerar_fontes_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
     cnpj = re.sub(r"\D", "", cnpj or "")
     if len(cnpj) not in {11, 14}:
@@ -104,8 +148,9 @@ def gerar_fontes_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
     pasta_brutos = pasta_cnpj / "arquivos_parquet"
 
     arq_prod_final = pasta_analises / f"produtos_final_{cnpj}.parquet"
-    if not arq_prod_final.exists():
-        rprint("[red]produtos_final.parquet nao encontrado.[/red]")
+    arq_mapa = pasta_analises / f"map_produto_agrupado_{cnpj}.parquet"
+    if not arq_prod_final.exists() or not arq_mapa.exists():
+        rprint("[red]Arquivos de agregacao nao encontrados (produtos_final / map_produto_agrupado).[/red]")
         return False
     if not pasta_brutos.exists():
         rprint("[red]Pasta de arquivos_parquet nao encontrada.[/red]")
@@ -125,16 +170,31 @@ def gerar_fontes_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
             ],
             contexto="fontes_produtos/produtos_final",
         )
+        validar_parquet_essencial(
+            arq_mapa,
+            ["id_agrupado", "descricao_normalizada", "codigo_fonte"],
+            contexto="fontes_produtos/map_produto_agrupado",
+        )
     except SchemaValidacaoError as exc:
         rprint(f"[red]{exc}[/red]")
         return False
+
+    df_mapa = (
+        pl.read_parquet(arq_mapa)
+        .select([
+            pl.col("id_agrupado").cast(pl.Utf8, strict=False),
+            expr_normalizar_codigo_fonte("codigo_fonte"),
+            pl.col("descricao_normalizada").cast(pl.Utf8, strict=False),
+        ])
+        .unique()
+    )
+    df_codigo_unico, df_desc_unico, df_desc_ambiguo = _construir_mapas(df_mapa)
 
     df_prod_final = (
         pl.read_parquet(arq_prod_final)
         .select(
             [
                 "id_agrupado",
-                "descricao_normalizada",
                 "descr_padrao",
                 "ncm_padrao",
                 "cest_padrao",
@@ -142,8 +202,8 @@ def gerar_fontes_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
                 "unid_ref_sugerida",
             ]
         )
-        .rename({"descricao_normalizada": "__descricao_normalizada__", "co_sefin_final": "co_sefin_agr"})
-        .unique(subset=["__descricao_normalizada__"])
+        .rename({"co_sefin_final": "co_sefin_agr"})
+        .unique(subset=["id_agrupado"])
     )
 
     fontes = ["c170", "bloco_h", "nfe", "nfce"]
@@ -159,10 +219,36 @@ def gerar_fontes_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
             rprint(f"[yellow]Fonte {fonte} ignorada: sem coluna de descricao reconhecida.[/yellow]")
             continue
 
+        df_src = _preservar_colunas_rastreabilidade(df_src, cnpj)
         df_out = (
             df_src
             .with_columns(_normalizar_descricao_expr(col_desc))
-            .join(df_prod_final, on="__descricao_normalizada__", how="left")
+            .join(df_codigo_unico, on="codigo_fonte", how="left")
+            .join(df_desc_unico, left_on="__descricao_normalizada__", right_on="descricao_normalizada", how="left")
+            .join(df_desc_ambiguo.rename({"descricao_normalizada": "__descricao_normalizada__"}), on="__descricao_normalizada__", how="left")
+            .with_columns([
+                pl.coalesce([pl.col("id_agrupado_codigo"), pl.col("id_agrupado_desc")]).alias("id_agrupado"),
+                pl.when(pl.col("id_agrupado_codigo").is_not_null())
+                .then(pl.lit("codigo_fonte"))
+                .when(pl.col("id_agrupado_desc").is_not_null())
+                .then(pl.lit("descricao_normalizada"))
+                .otherwise(pl.lit(None, dtype=pl.Utf8))
+                .alias("origem_vinculo_agrupamento"),
+            ])
+            .with_columns(
+                pl.when(pl.col("id_agrupado").is_not_null())
+                .then(pl.lit(None, dtype=pl.Utf8))
+                .when(pl.col("codigo_fonte").cast(pl.Utf8, strict=False).fill_null("").str.strip_chars() != "")
+                .then(pl.lit("codigo_fonte_sem_mapeamento"))
+                .when(pl.col("descricao_ambigua").fill_null(False))
+                .then(pl.lit("descricao_normalizada_ambigua"))
+                .when(pl.col("__descricao_normalizada__").cast(pl.Utf8, strict=False).fill_null("").str.strip_chars() == "")
+                .then(pl.lit("sem_codigo_fonte_sem_descricao"))
+                .otherwise(pl.lit("descricao_normalizada_sem_match"))
+                .alias("motivo_sem_id_agrupado")
+            )
+            .drop(["id_agrupado_codigo", "id_agrupado_desc"], strict=False)
+            .join(df_prod_final, on="id_agrupado", how="left")
         )
 
         faltantes = df_out.filter(pl.col("id_agrupado").is_null())
@@ -170,13 +256,14 @@ def gerar_fontes_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
             nome_log = f"{fonte}_agr_sem_id_agrupado_{cnpj}.parquet"
             salvar_para_parquet(faltantes, pasta_analises, nome_log)
             rprint(
-                f"[red]Erro: {fonte} possui {faltantes.height} linhas sem id_agrupado. "
-                f"Verifique {nome_log}.[/red]"
+                f"[yellow]Aviso: {fonte} possui {faltantes.height} linhas sem id_agrupado. "
+                f"Detalhes em {nome_log}. Essas linhas serao excluidas da saida {fonte}_agr.[/yellow]"
             )
-            return False
+            df_out = df_out.filter(pl.col("id_agrupado").is_not_null())
+            if df_out.is_empty():
+                continue
 
-        df_out = df_out.drop("__descricao_normalizada__")
-
+        df_out = df_out.drop("__descricao_normalizada__", strict=False)
         nome_saida = f"{fonte}_agr_{cnpj}.parquet"
         ok = salvar_para_parquet(df_out, pasta_brutos, nome_saida)
         if not ok:
@@ -190,5 +277,3 @@ if __name__ == "__main__":
         gerar_fontes_produtos(sys.argv[1])
     else:
         gerar_fontes_produtos(input("CNPJ: "))
-
-
