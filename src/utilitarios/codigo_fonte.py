@@ -47,11 +47,14 @@ def expr_normalizar_codigo_fonte(col: str, alias: str = "codigo_fonte") -> pl.Ex
 
 
 def expr_gerar_codigo_fonte(col_cnpj: str, col_codigo: str, alias: str = "codigo_fonte") -> pl.Expr:
+    cnpj_expr = pl.col(col_cnpj).cast(pl.Utf8).fill_null("").str.replace_all(r"\D", "")
+    cod_expr = pl.col(col_codigo).cast(pl.Utf8).fill_null("").str.strip_chars().str.replace_all(r"\s+", " ")
+
     return (
-        pl.struct([pl.col(col_cnpj), pl.col(col_codigo)])
-        .map_elements(
-            lambda row: gerar_codigo_fonte(row.get(col_cnpj), row.get(col_codigo)),
-            return_dtype=pl.Utf8,
-        )
+        pl.when(cod_expr == "")
+        .then(pl.lit(None))
+        .when(cnpj_expr != "")
+        .then(pl.concat_str([cnpj_expr, pl.lit("|"), cod_expr]))
+        .otherwise(cod_expr)
         .alias(alias)
     )
