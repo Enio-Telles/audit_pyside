@@ -83,9 +83,9 @@ def test_override_manual_remapeado_quando_descricao_mudou(tmp_path: Path):
     assert df_log.filter(pl.col("acao") == "remapeado").height == 1
 
 
-def test_orfao_manual_sem_descricao_correspondente_eh_descartado_e_logado(tmp_path: Path):
+def test_orfao_manual_sem_descricao_correspondente_eh_preservado_e_logado(tmp_path: Path):
     # Quando id_agrupado some do canonico E descr_padrao não encontra novo match,
-    # o override é removido do resultado e registrado como "descartado" no log.
+    # o override é mantido no resultado como orfao e registrado como "orfao_preservado" no log.
     cnpj = "88888888000102"
     pasta_analises = tmp_path / "analises"
     pasta_analises.mkdir(parents=True, exist_ok=True)
@@ -97,12 +97,12 @@ def test_orfao_manual_sem_descricao_correspondente_eh_descartado_e_logado(tmp_pa
         df_existente, df_canonico, pasta_analises, cnpj
     )
 
-    assert df_result.height == 0
+    assert df_result.height == 1
 
     log_path = pasta_analises / f"log_reconciliacao_overrides_fatores_{cnpj}.parquet"
     assert log_path.exists()
     df_log = pl.read_parquet(log_path)
-    assert df_log.filter(pl.col("acao") == "descartado").height == 1
+    assert df_log.filter(pl.col("acao") == "orfao_preservado").height == 1
 
 
 def test_descricao_ambigua_nao_vincula_e_gera_log(tmp_path: Path):

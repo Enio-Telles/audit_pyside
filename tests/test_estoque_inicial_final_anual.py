@@ -52,21 +52,11 @@ def test_estoque_inicial_final_qualquer_data():
             date(2021, 6, 30),
             date(2021, 12, 31),
         ],
-        "q_conv": [100.0, 50.0, 30.0, 0.0, 0.0, 0.0],  # ESTOQUE FINAL tem q_conv = 0
-<<<<<<< HEAD
-        "q_conv_fisica": [100.0, 50.0, 30.0, 0.0, 0.0, 0.0],
+        # Observado: q_conv inclui a quantidade observada na linha (inclusive estoques finais)
+        # q_conv_fisica: quantidade que representa movimento físico (estoque final -> 0)
         "q_conv": [100.0, 50.0, 30.0, 50.0, 30.0, 20.0],
+        "q_conv_fisica": [100.0, 50.0, 30.0, 0.0, 0.0, 0.0],
         "__qtd_decl_final_audit__": [0.0, 0.0, 0.0, 50.0, 30.0, 20.0],  # Valores declarados
-=======
-        "__qtd_decl_final_audit__": [
-            0.0,
-            0.0,
-            0.0,
-            50.0,
-            30.0,
-            20.0,
-        ],  # Valores declarados
->>>>>>> fix/pr100-lint-manual
         "entr_desac_anual": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
         "saldo_estoque_anual": [100.0, 150.0, 120.0, 120.0, 120.0, 120.0],
         "ordem_operacoes": [1, 2, 3, 4, 5, 6],

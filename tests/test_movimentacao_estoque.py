@@ -346,3 +346,17 @@ def test_gerar_eventos_estoque_rotula_eventos_sinteticos_como_gerado():
     )["fonte"].to_list()
     assert fontes_iniciais
     assert set(fontes_iniciais) == {"gerado"}
+
+
+def test_mov_rep_c170_orfaos():
+    """Dois C170 com mesmo num_doc e Num_item mas sem Chv_nfe devem ser marcados como mov_rep."""
+    df = pl.DataFrame(
+        {
+            "Chv_nfe": [None, None],
+            "num_doc": ["DOC001", "DOC001"],
+            "Num_item": ["1", "1"],
+            "Qtd": [10.0, 10.0],
+        }
+    )
+    result = marcar_mov_rep_por_chave_item(df)
+    assert result["mov_rep"].to_list().count(True) >= 1
