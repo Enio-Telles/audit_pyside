@@ -3,16 +3,15 @@ from __future__ import annotations
 import html
 from datetime import datetime
 from pathlib import Path
-from typing import Any
 
 import polars as pl
 from docx import Document
-from docx.shared import Inches
-from openpyxl import Workbook
 
 from interface_grafica.config import MAX_DOCX_ROWS
 from utilitarios.text import display_cell
-from utilitarios.exportar_excel_adaptado import exportar_excel as exportar_excel_adaptado
+from utilitarios.exportar_excel_adaptado import (
+    exportar_excel as exportar_excel_adaptado,
+)
 
 
 class ExportService:
@@ -21,7 +20,9 @@ class ExportService:
         for row in df.iter_rows(named=True):
             yield [display_cell(row.get(col), col) for col in df.columns]
 
-    def export_excel(self, target: Path, df: pl.DataFrame, sheet_name: str = "Dados") -> Path:
+    def export_excel(
+        self, target: Path, df: pl.DataFrame, sheet_name: str = "Dados"
+    ) -> Path:
         target.parent.mkdir(parents=True, exist_ok=True)
         gerado = exportar_excel_adaptado(
             df=df,
@@ -104,7 +105,9 @@ th {{ background: #eef2f7; position: sticky; top: 0; }}
         doc.add_paragraph(f"CNPJ: {cnpj}")
         doc.add_paragraph(f"Tabela: {table_name}")
         doc.add_paragraph(f"Filtros: {filters_text or 'Sem filtros'}")
-        doc.add_paragraph(f"Colunas visíveis: {', '.join(visible_columns) if visible_columns else 'Todas'}")
+        doc.add_paragraph(
+            f"Colunas visíveis: {', '.join(visible_columns) if visible_columns else 'Todas'}"
+        )
         doc.add_paragraph(f"Gerado em: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
         doc.add_paragraph(f"Linhas incluídas: {df.height}")
 

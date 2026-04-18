@@ -38,6 +38,7 @@ Calregar coeficientes que permitem converter quantidades de qualquer unidade de 
 | `fator` | float | Fator de conversão: `qtd_padronizada = qtd_original * fator` |
 | `preco_medio` | float | Preço médio base do produto |
 | `origem_preco` | str | Origem do preço: `COMPRA`, `VENDA` ou `SEM_PRECO` |
+| `fator_origem` | str | Origem do fator de conversão: `manual` (override aplicado pelo usuário), `fallback` (sem preço de referência disponível), `preco` (fator calculado a partir do preço médio) |
 
 ## Regras de Processamento
 
@@ -126,3 +127,7 @@ dados/CNPJ/<cnpj>/analises/produtos/log_sem_preco_medio_compra_<cnpj>.json
 - Se não houver vínculo entre `item_unidades` e `produtos_final`, salva saída vazia
 - O log de itens sem preço de compra ajuda a identificar problemas de dados
 - Fatores são essenciais para somar movimentações de unidades diferentes
+ - A tabela agora inclui a coluna `fator_origem`, que classifica como cada `fator` foi obtido: `manual`, `fallback` ou `preco`.
+ - Se não houver vínculo entre `item_unidades` e `produtos_final`, salva saída vazia
+ - O log de itens sem preço de compra ajuda a identificar problemas de dados
+ - Fatores são essenciais para somar movimentações de unidades diferentes

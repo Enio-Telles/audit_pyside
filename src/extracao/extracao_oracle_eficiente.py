@@ -14,8 +14,8 @@ from rich import print as rprint
 
 from utilitarios.conectar_oracle import conectar
 from utilitarios.ler_sql import ler_sql
-from utilitarios.project_paths import CNPJ_ROOT, SQL_ARCHIVE_ROOT, SQL_ROOT
-from utilitarios.sql_catalog import get_sql_id, list_sql_entries, resolve_sql_path
+from utilitarios.project_paths import CNPJ_ROOT, SQL_ROOT
+from utilitarios.sql_catalog import list_sql_entries, resolve_sql_path
 from utilitarios.validar_cnpj import validar_cnpj
 
 TAMANHO_LOTE_PADRAO = 50_000
@@ -30,6 +30,10 @@ class ConsultaSql:
 
     caminho: Path
     raiz_sql: Path
+
+    def __post_init__(self):
+        # Garante que caminho seja sempre Path (pode vir como str do catalogo)
+        object.__setattr__(self, "caminho", Path(self.caminho))
 
     @property
     def caminho_relativo(self) -> Path:
@@ -58,7 +62,9 @@ def _deduplicar_preservando_ordem(caminhos: Iterable[Path]) -> list[Path]:
     vistos: set[str] = set()
     resultado: list[Path] = []
     for caminho in caminhos:
-        chave = str(caminho.resolve()).lower() if caminho.exists() else str(caminho).lower()
+        chave = (
+            str(caminho.resolve()).lower() if caminho.exists() else str(caminho).lower()
+        )
         if chave in vistos:
             continue
         vistos.add(chave)
@@ -106,25 +112,31 @@ def descobrir_consultas_sql(
             consulta_path = Path(consulta)
             if diretorios_explicitados:
                 for raiz in diretorios:
-                    candidato = (raiz / consulta_path).resolve() if (raiz / consulta_path).exists() else raiz / consulta_path
+                    candidato = (
+                        (raiz / consulta_path).resolve()
+                        if (raiz / consulta_path).exists()
+                        else raiz / consulta_path
+                    )
                     if candidato.exists():
-                        consultas.append(ConsultaSql(caminho=candidato, raiz_sql=raiz))
+                        consultas.append(
+                            ConsultaSql(caminho=Path(candidato), raiz_sql=raiz)
+                        )
                         break
                 else:
-                    caminho = resolve_sql_path(consulta)
+                    caminho = Path(resolve_sql_path(consulta))
                     consultas.append(ConsultaSql(caminho=caminho, raiz_sql=SQL_ROOT))
             else:
-                caminho = resolve_sql_path(consulta)
+                caminho = Path(resolve_sql_path(consulta))
                 raiz_consulta = _resolver_raiz_sql(caminho, diretorios)
                 consultas.append(ConsultaSql(caminho=caminho, raiz_sql=raiz_consulta))
     else:
         if diretorios_explicitados:
             for raiz in diretorios:
                 for sql_path in raiz.rglob("*.sql"):
-                    consultas.append(ConsultaSql(caminho=sql_path, raiz_sql=raiz))
+                    consultas.append(ConsultaSql(caminho=Path(sql_path), raiz_sql=raiz))
         else:
             for entry in list_sql_entries():
-                caminho = entry.path
+                caminho = Path(entry.path)
                 consultas.append(ConsultaSql(caminho=caminho, raiz_sql=SQL_ROOT))
 
     consultas_unicas: list[ConsultaSql] = []
@@ -146,10 +158,24 @@ def obter_caminho_saida_parquet(
 ) -> Path:
     """Mantem a hierarquia relativa da SQL dentro de arquivos_parquet."""
 
-    caminho_relativo = consulta.caminho_relativo
-    if caminho_relativo.parts and caminho_relativo.parts[0].lower() == "arquivos_parquet":
-        caminho_relativo = Path(*caminho_relativo.parts[1:]) if len(caminho_relativo.parts) > 1 else Path()
-    nome_arquivo = f"{consulta.caminho.stem}_{cnpj_limpo}.parquet"
+    # Garantir que caminho seja Path (pode vir como str)
+    caminho_path = (
+        Path(consulta.caminho)
+        if not isinstance(consulta.caminho, Path)
+        else consulta.caminho
+    )
+
+    caminho_relativo = caminho_path.relative_to(consulta.raiz_sql)
+    if (
+        caminho_relativo.parts
+        and caminho_relativo.parts[0].lower() == "arquivos_parquet"
+    ):
+        caminho_relativo = (
+            Path(*caminho_relativo.parts[1:])
+            if len(caminho_relativo.parts) > 1
+            else Path()
+        )
+    nome_arquivo = f"{caminho_path.stem}_{cnpj_limpo}.parquet"
     return pasta_saida_base / caminho_relativo.parent / nome_arquivo
 
 
@@ -171,7 +197,9 @@ def fechar_conexao_thread() -> None:
         _thread_local.conexao = None
 
 
-def _montar_binds_cursor(cursor, cnpj_limpo: str, data_limite_input: str | None) -> tuple[dict[str, str | None], bool]:
+def _montar_binds_cursor(
+    cursor, cnpj_limpo: str, data_limite_input: str | None
+) -> tuple[dict[str, str | None], bool]:
     binds: dict[str, str | None] = {}
     tem_bind_cnpj = False
     aliases_padrao: dict[str, str | None] = {
@@ -193,7 +221,9 @@ def _montar_binds_cursor(cursor, cnpj_limpo: str, data_limite_input: str | None)
     return binds, tem_bind_cnpj
 
 
-def _normalizar_valores_coluna(valores: list[object | None], forcar_texto: bool = False) -> list[object | None]:
+def _normalizar_valores_coluna(
+    valores: list[object | None], forcar_texto: bool = False
+) -> list[object | None]:
     if forcar_texto:
         return [None if valor is None else str(valor) for valor in valores]
 
@@ -232,7 +262,9 @@ def _criar_dataframe_lote(
 
 
 def _escrever_dataframe_vazio(colunas: list[str], arquivo_saida: Path) -> None:
-    pl.DataFrame({coluna: [] for coluna in colunas}).write_parquet(arquivo_saida, compression="snappy")
+    pl.DataFrame({coluna: [] for coluna in colunas}).write_parquet(
+        arquivo_saida, compression="snappy"
+    )
 
 
 def _gravar_cursor_em_parquet(
@@ -271,7 +303,9 @@ def _gravar_cursor_em_parquet(
             tabela_arrow = df_lote.to_arrow()
             if schema_arrow is None:
                 schema_arrow = tabela_arrow.schema
-                writer = pq.ParquetWriter(arquivo_saida, schema_arrow, compression="snappy")
+                writer = pq.ParquetWriter(
+                    arquivo_saida, schema_arrow, compression="snappy"
+                )
             elif tabela_arrow.schema != schema_arrow:
                 tabela_arrow = tabela_arrow.cast(schema_arrow, safe=False)
 
@@ -291,7 +325,13 @@ def _gravar_cursor_em_parquet(
 
 
 def _formatar_rotulo_consulta(consulta: ConsultaSql) -> str:
-    return str(consulta.caminho_relativo).replace("\\", "/")
+    # Garantir que caminho seja Path
+    caminho = (
+        Path(consulta.caminho)
+        if not isinstance(consulta.caminho, Path)
+        else consulta.caminho
+    )
+    return str(caminho.relative_to(consulta.raiz_sql)).replace("\\", "/")
 
 
 def _extrair_comandos_pre_sql(sql_texto: str) -> tuple[list[str], str]:
@@ -320,6 +360,12 @@ def processar_consulta_oracle(
 ) -> ResultadoConsultaExtracao:
     """Executa uma consulta SQL Oracle e grava o resultado em parquet por lotes."""
 
+    # Garantir que caminho seja Path (defesa em profundidade)
+    caminho_path = (
+        Path(consulta.caminho)
+        if not isinstance(consulta.caminho, Path)
+        else consulta.caminho
+    )
     rotulo_consulta = _formatar_rotulo_consulta(consulta)
 
     try:
@@ -331,7 +377,7 @@ def processar_consulta_oracle(
                 erro="Falha ao obter conexao Oracle para a thread.",
             )
 
-        sql_texto_bruto = ler_sql(consulta.caminho)
+        sql_texto_bruto = ler_sql(caminho_path)
         if not sql_texto_bruto:
             return ResultadoConsultaExtracao(consulta=consulta, ok=True, ignorada=True)
         comandos_pre, sql_texto = _extrair_comandos_pre_sql(sql_texto_bruto)
@@ -346,7 +392,9 @@ def processar_consulta_oracle(
                 cursor.execute(comando_pre)
 
             cursor.prepare(sql_texto)
-            binds, tem_bind_cnpj = _montar_binds_cursor(cursor, cnpj_limpo, data_limite_input)
+            binds, tem_bind_cnpj = _montar_binds_cursor(
+                cursor, cnpj_limpo, data_limite_input
+            )
 
             if not tem_bind_cnpj:
                 return ResultadoConsultaExtracao(
@@ -361,7 +409,9 @@ def processar_consulta_oracle(
 
             cursor.execute(None, binds)
 
-            arquivo_saida = obter_caminho_saida_parquet(consulta, cnpj_limpo, pasta_saida_base)
+            arquivo_saida = obter_caminho_saida_parquet(
+                consulta, cnpj_limpo, pasta_saida_base
+            )
             try:
                 total_linhas = _gravar_cursor_em_parquet(
                     cursor=cursor,
@@ -394,7 +444,9 @@ def processar_consulta_oracle(
                     )
 
             if progresso:
-                progresso(f"OK {rotulo_consulta}: {total_linhas:,} linhas -> {arquivo_saida.name}")
+                progresso(
+                    f"OK {rotulo_consulta}: {total_linhas:,} linhas -> {arquivo_saida.name}"
+                )
 
             return ResultadoConsultaExtracao(
                 consulta=consulta,
@@ -457,14 +509,20 @@ def executar_extracao_oracle(
 
             if progresso and resultado.erro:
                 if resultado.ignorada:
-                    progresso(f"Aviso {resultado.consulta.caminho.name}: {resultado.erro}")
+                    progresso(
+                        f"Aviso {resultado.consulta.caminho.name}: {resultado.erro}"
+                    )
                 else:
-                    progresso(f"Erro em {resultado.consulta.caminho.name}: {resultado.erro}")
+                    progresso(
+                        f"Erro em {resultado.consulta.caminho.name}: {resultado.erro}"
+                    )
 
         for _ in range(max_workers):
             executor.submit(fechar_conexao_thread)
 
-    return sorted(resultados, key=lambda item: str(item.consulta.caminho_relativo).lower())
+    return sorted(
+        resultados, key=lambda item: str(item.consulta.caminho_relativo).lower()
+    )
 
 
 def imprimir_resumo_extracao(resultados: Sequence[ResultadoConsultaExtracao]) -> bool:
@@ -475,5 +533,7 @@ def imprimir_resumo_extracao(resultados: Sequence[ResultadoConsultaExtracao]) ->
         if resultado.ok:
             continue
         sucesso = False
-        rprint(f"[red]Falha em {resultado.consulta.caminho.name}:[/red] {resultado.erro}")
+        rprint(
+            f"[red]Falha em {resultado.consulta.caminho.name}:[/red] {resultado.erro}"
+        )
     return sucesso

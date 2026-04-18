@@ -1,4 +1,4 @@
-﻿"""
+"""
 c170_xml.py
 
 Objetivo:
@@ -102,9 +102,9 @@ def _desc_similarity(payload: dict) -> float:
     return inter / denom
 
 
-def _build_cst_xml(df: pl.DataFrame) -> pl.Expr:
-    has_cst = "icms_cst" in df.columns
-    has_csosn = "icms_csosn" in df.columns
+def _build_cst_xml(df: pl.DataFrame | pl.LazyFrame, columns: list[str]) -> pl.Expr:
+    has_cst = "icms_cst" in columns
+    has_csosn = "icms_csosn" in columns
     if has_cst and has_csosn:
         return (
             pl.when(pl.col("icms_cst").cast(pl.Utf8, strict=False).is_not_null())
@@ -147,11 +147,15 @@ def _build_cst_xml(df: pl.DataFrame) -> pl.Expr:
     return pl.lit(None, pl.Utf8).alias("cst_xml")
 
 
-def _prepare_xml_candidates(df: pl.DataFrame, fonte: str) -> pl.DataFrame:
-    optional = {c: c in df.columns for c in df.columns}
+def _prepare_xml_candidates(
+    df: pl.DataFrame | pl.LazyFrame, fonte: str
+) -> pl.DataFrame | pl.LazyFrame:
+    columns = (
+        df.collect_schema().names() if isinstance(df, pl.LazyFrame) else df.columns
+    )
 
     def col_or_null(name: str, dtype=pl.Utf8):
-        if name in df.columns:
+        if name in columns:
             return pl.col(name).cast(dtype, strict=False)
         return pl.lit(None, dtype=dtype)
 
@@ -159,7 +163,11 @@ def _prepare_xml_candidates(df: pl.DataFrame, fonte: str) -> pl.DataFrame:
         pl.lit(fonte).alias("fonte_xml"),
         col_or_null("nsu", pl.Int64).alias("nsu_xml"),
         col_or_null("chave_acesso").alias("Chv_nfe"),
-        _to_int_expr("prod_nitem", "Num_item_xml") if "prod_nitem" in df.columns else pl.lit(None, pl.Int64).alias("Num_item_xml"),
+        (
+            _to_int_expr("prod_nitem", "Num_item_xml")
+            if "prod_nitem" in columns
+            else pl.lit(None, pl.Int64).alias("Num_item_xml")
+        ),
         col_or_null("prod_cprod").alias("Cod_item_xml"),
         pl.coalesce(
             [
@@ -167,12 +175,24 @@ def _prepare_xml_candidates(df: pl.DataFrame, fonte: str) -> pl.DataFrame:
                 col_or_null("prod_cean"),
             ]
         ).alias("Cod_barra_xml"),
-        _clean_digits_expr("prod_ncm", "Ncm_xml") if "prod_ncm" in df.columns else pl.lit("", pl.Utf8).alias("Ncm_xml"),
-        _clean_digits_expr("prod_cest", "Cest_xml") if "prod_cest" in df.columns else pl.lit("", pl.Utf8).alias("Cest_xml"),
+        (
+            _clean_digits_expr("prod_ncm", "Ncm_xml")
+            if "prod_ncm" in columns
+            else pl.lit("", pl.Utf8).alias("Ncm_xml")
+        ),
+        (
+            _clean_digits_expr("prod_cest", "Cest_xml")
+            if "prod_cest" in columns
+            else pl.lit("", pl.Utf8).alias("Cest_xml")
+        ),
         col_or_null("prod_xprod").alias("Descr_item_xml"),
         col_or_null("co_cfop").alias("Cfop_xml"),
         col_or_null("prod_ucom").alias("Unid_xml"),
-        _to_float_expr("prod_qcom", "Qtd_xml") if "prod_qcom" in df.columns else pl.lit(None, pl.Float64).alias("Qtd_xml"),
+        (
+            _to_float_expr("prod_qcom", "Qtd_xml")
+            if "prod_qcom" in columns
+            else pl.lit(None, pl.Float64).alias("Qtd_xml")
+        ),
         (
             col_or_null("prod_vprod", pl.Float64).fill_null(0)
             + col_or_null("prod_vfrete", pl.Float64).fill_null(0)
@@ -192,11 +212,13 @@ def _prepare_xml_candidates(df: pl.DataFrame, fonte: str) -> pl.DataFrame:
         col_or_null("ide_serie").alias("Ser_xml"),
         col_or_null("nnf").alias("num_nfe_xml"),
         col_or_null("dhemi").alias("Dt_doc_xml"),
-        pl.coalesce([col_or_null("dhsaient"), col_or_null("dhemi")]).alias("Dt_e_s_xml"),
+        pl.coalesce([col_or_null("dhsaient"), col_or_null("dhemi")]).alias(
+            "Dt_e_s_xml"
+        ),
         col_or_null("co_uf_emit").alias("co_uf_emit_xml"),
         col_or_null("co_uf_dest").alias("co_uf_dest_xml"),
         col_or_null("co_finnfe").alias("finnfe_xml"),
-        _build_cst_xml(df),
+        _build_cst_xml(df, columns),
         col_or_null("id_agrupado").alias("id_agrupado_xml"),
         col_or_null("co_sefin_agr").alias("co_sefin_agr_xml"),
     ]
@@ -251,32 +273,38 @@ def gerar_c170_xml(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         rprint(f"[red]{exc}[/red]")
         return False
 
-    df_c170 = pl.read_parquet(arq_c170)
-    df_c170_agr = pl.read_parquet(arq_c170_agr)
-    df_nfe_agr = pl.read_parquet(arq_nfe_agr)
-    df_nfce_agr = pl.read_parquet(arq_nfce_agr)
+    # T01: Usar scan_parquet para processamento lazy
+    df_c170_lazy = pl.scan_parquet(arq_c170)
+    df_c170_agr_lazy = pl.scan_parquet(arq_c170_agr)
+    df_nfe_agr_lazy = pl.scan_parquet(arq_nfe_agr)
+    df_nfce_agr_lazy = pl.scan_parquet(arq_nfce_agr)
 
-    if df_c170.is_empty():
-        return salvar_para_parquet(pl.DataFrame(), pasta_brutos, f"c170_xml_{cnpj}.parquet")
+    if df_c170_lazy.select(pl.len()).collect().item() == 0:
+        return salvar_para_parquet(
+            pl.DataFrame(), pasta_brutos, f"c170_xml_{cnpj}.parquet"
+        )
 
     df_c170_base = (
-        df_c170
-        .with_row_index("__rowid__")
+        df_c170_lazy.with_row_index("__rowid__")
         .with_columns(
             [
                 _to_int_expr("num_item", "num_item"),
-                pl.col("cod_item").cast(pl.Utf8, strict=False).str.strip_chars().alias("cod_item"),
+                pl.col("cod_item")
+                .cast(pl.Utf8, strict=False)
+                .str.strip_chars()
+                .alias("cod_item"),
             ]
         )
         .join(
-            df_c170_agr
-            .with_columns(
+            df_c170_agr_lazy.with_columns(
                 [
                     _to_int_expr("num_item", "num_item"),
-                    pl.col("cod_item").cast(pl.Utf8, strict=False).str.strip_chars().alias("cod_item"),
+                    pl.col("cod_item")
+                    .cast(pl.Utf8, strict=False)
+                    .str.strip_chars()
+                    .alias("cod_item"),
                 ]
-            )
-            .select(
+            ).select(
                 [
                     "chv_nfe",
                     "num_item",
@@ -290,10 +318,15 @@ def gerar_c170_xml(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         )
         .with_columns(
             [
-                pl.col("ind_oper").cast(pl.Utf8, strict=False).alias("Tipo_operacao_c170"),
+                pl.col("ind_oper")
+                .cast(pl.Utf8, strict=False)
+                .alias("Tipo_operacao_c170"),
                 pl.lit(None, pl.Int64).alias("nsu_c170"),
                 pl.col("chv_nfe").cast(pl.Utf8, strict=False).alias("Chv_nfe"),
-                pl.col("chv_nfe").cast(pl.Utf8, strict=False).str.slice(20, 2).alias("mod_c170"),
+                pl.col("chv_nfe")
+                .cast(pl.Utf8, strict=False)
+                .str.slice(20, 2)
+                .alias("mod_c170"),
                 pl.col("ser").cast(pl.Utf8, strict=False).alias("Ser_c170"),
                 pl.col("num_doc").cast(pl.Utf8, strict=False).alias("num_nfe_c170"),
                 pl.col("dt_doc").alias("Dt_doc_c170"),
@@ -304,8 +337,12 @@ def gerar_c170_xml(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
                 _clean_digits_expr("cod_ncm", "Ncm_c170"),
                 _clean_digits_expr("cest", "Cest_c170"),
                 pl.col("tipo_item").cast(pl.Utf8, strict=False).alias("Tipo_item_c170"),
-                pl.col("descr_item").cast(pl.Utf8, strict=False).alias("Descr_item_c170"),
-                pl.col("descr_compl").cast(pl.Utf8, strict=False).alias("Descr_compl_c170"),
+                pl.col("descr_item")
+                .cast(pl.Utf8, strict=False)
+                .alias("Descr_item_c170"),
+                pl.col("descr_compl")
+                .cast(pl.Utf8, strict=False)
+                .alias("Descr_compl_c170"),
                 pl.col("cfop").cast(pl.Utf8, strict=False).alias("Cfop_c170"),
                 pl.col("cst_icms").cast(pl.Utf8, strict=False).alias("Cst_c170"),
                 _to_float_expr("qtd", "Qtd_c170"),
@@ -327,8 +364,8 @@ def gerar_c170_xml(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
 
     df_xml_candidatos = pl.concat(
         [
-            _prepare_xml_candidates(df_nfe_agr, "nfe"),
-            _prepare_xml_candidates(df_nfce_agr, "nfce"),
+            _prepare_xml_candidates(df_nfe_agr_lazy, "nfe"),
+            _prepare_xml_candidates(df_nfce_agr_lazy, "nfce"),
         ],
         how="vertical_relaxed",
     ).with_columns(
@@ -341,27 +378,34 @@ def gerar_c170_xml(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
     chaves_particao = ["__rowid__"]
 
     df_match = (
-        df_c170_base
-        .join(df_xml_candidatos, on="Chv_nfe", how="left")
+        df_c170_base.join(df_xml_candidatos, on="Chv_nfe", how="left")
         .with_columns(
             [
-                (pl.col("id_agrupado") == pl.col("id_agrupado_xml")).fill_null(False).alias("ind_match_id_agrupado"),
+                (pl.col("id_agrupado") == pl.col("id_agrupado_xml"))
+                .fill_null(False)
+                .alias("ind_match_id_agrupado"),
                 (
                     (pl.col("Ncm_c170") != "")
                     & (pl.col("Ncm_xml") != "")
                     & (pl.col("Ncm_c170") == pl.col("Ncm_xml"))
-                ).fill_null(False).alias("ind_match_ncm"),
+                )
+                .fill_null(False)
+                .alias("ind_match_ncm"),
                 (
                     (pl.col("Cest_c170") != "")
                     & (pl.col("Cest_xml") != "")
                     & (pl.col("Cest_c170") == pl.col("Cest_xml"))
-                ).fill_null(False).alias("ind_match_cest"),
+                )
+                .fill_null(False)
+                .alias("ind_match_cest"),
                 (
                     (pl.col("Cod_barra_c170") != "")
                     & (pl.col("Cod_barra_c170") != "SEMGTIN")
                     & (pl.col("Cod_barra_xml") != "")
                     & (pl.col("Cod_barra_c170") == pl.col("Cod_barra_xml"))
-                ).fill_null(False).alias("ind_match_gtin"),
+                )
+                .fill_null(False)
+                .alias("ind_match_gtin"),
                 (
                     pl.struct(
                         [
@@ -373,33 +417,60 @@ def gerar_c170_xml(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
                     .fill_null(0.0)
                 ).alias("desc_similarity"),
                 (pl.col("Qtd_c170") - pl.col("Qtd_xml")).abs().alias("diff_qtd"),
-                (pl.col("Vl_item_c170") - pl.col("Vl_item_xml")).abs().alias("diff_vl_total"),
+                (pl.col("Vl_item_c170") - pl.col("Vl_item_xml"))
+                .abs()
+                .alias("diff_vl_total"),
                 pl.when((pl.col("Qtd_c170") > 0) & (pl.col("Qtd_xml") > 0))
-                .then(((pl.col("Vl_item_c170") / pl.col("Qtd_c170")) - (pl.col("Vl_item_xml") / pl.col("Qtd_xml"))).abs())
+                .then(
+                    (
+                        (pl.col("Vl_item_c170") / pl.col("Qtd_c170"))
+                        - (pl.col("Vl_item_xml") / pl.col("Qtd_xml"))
+                    ).abs()
+                )
                 .otherwise(None)
                 .alias("diff_vl_unit"),
-                (pl.col("Num_item_c170") == pl.col("Num_item_xml")).fill_null(False).alias("ind_match_num_item"),
+                (pl.col("Num_item_c170") == pl.col("Num_item_xml"))
+                .fill_null(False)
+                .alias("ind_match_num_item"),
             ]
         )
         .with_columns(
             [
-                pl.col("ind_match_id_agrupado").max().over(chaves_particao).alias("existe_match_id_agrupado"),
+                pl.col("ind_match_id_agrupado")
+                .max()
+                .over(chaves_particao)
+                .alias("existe_match_id_agrupado"),
                 (
-                    pl.when(pl.col("ind_match_ncm")).then(pl.lit(300)).otherwise(pl.lit(0))
-                    + pl.when(pl.col("ind_match_cest")).then(pl.lit(250)).otherwise(pl.lit(0))
-                    + pl.when(pl.col("ind_match_gtin")).then(pl.lit(220)).otherwise(pl.lit(0))
-                    + pl.when(pl.col("desc_similarity") >= 0.98).then(pl.lit(200))
-                    .when(pl.col("desc_similarity") >= 0.75).then(pl.lit(140))
-                    .when(pl.col("desc_similarity") >= 0.50).then(pl.lit(80))
+                    pl.when(pl.col("ind_match_ncm"))
+                    .then(pl.lit(300))
                     .otherwise(pl.lit(0))
-                    + pl.when(pl.col("diff_qtd") <= 0.000001).then(pl.lit(150))
-                    .when(pl.col("diff_qtd") <= 1).then(pl.lit(50))
+                    + pl.when(pl.col("ind_match_cest"))
+                    .then(pl.lit(250))
                     .otherwise(pl.lit(0))
-                    + pl.when(pl.col("diff_vl_total") <= 0.01).then(pl.lit(150))
-                    .when(pl.col("diff_vl_unit") <= 0.01).then(pl.lit(100))
+                    + pl.when(pl.col("ind_match_gtin"))
+                    .then(pl.lit(220))
                     .otherwise(pl.lit(0))
-                    + pl.when(pl.col("ind_match_num_item")).then(pl.lit(80)).otherwise(pl.lit(0))
-                ).alias("score_vinculo_xml")
+                    + pl.when(pl.col("desc_similarity") >= 0.98)
+                    .then(pl.lit(200))
+                    .when(pl.col("desc_similarity") >= 0.75)
+                    .then(pl.lit(140))
+                    .when(pl.col("desc_similarity") >= 0.50)
+                    .then(pl.lit(80))
+                    .otherwise(pl.lit(0))
+                    + pl.when(pl.col("diff_qtd") <= 0.000001)
+                    .then(pl.lit(150))
+                    .when(pl.col("diff_qtd") <= 1)
+                    .then(pl.lit(50))
+                    .otherwise(pl.lit(0))
+                    + pl.when(pl.col("diff_vl_total") <= 0.01)
+                    .then(pl.lit(150))
+                    .when(pl.col("diff_vl_unit") <= 0.01)
+                    .then(pl.lit(100))
+                    .otherwise(pl.lit(0))
+                    + pl.when(pl.col("ind_match_num_item"))
+                    .then(pl.lit(80))
+                    .otherwise(pl.lit(0))
+                ).alias("score_vinculo_xml"),
             ]
         )
         .with_columns(
@@ -411,11 +482,21 @@ def gerar_c170_xml(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
             ]
         )
         .sort(
-            chaves_particao + ["__ordem_match", "score_vinculo_xml", "desc_similarity", "diff_qtd", "diff_vl_total", "Num_item_xml"],
+            chaves_particao
+            + [
+                "__ordem_match",
+                "score_vinculo_xml",
+                "desc_similarity",
+                "diff_qtd",
+                "diff_vl_total",
+                "Num_item_xml",
+            ],
             descending=[False, True, True, True, False, False, False],
             nulls_last=True,
         )
-        .with_columns(pl.int_range(0, pl.len()).over(chaves_particao).alias("__rank_match"))
+        .with_columns(
+            pl.int_range(0, pl.len()).over(chaves_particao).alias("__rank_match")
+        )
         .filter(pl.col("__rank_match") == 0)
         .with_columns(
             [
@@ -434,73 +515,100 @@ def gerar_c170_xml(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         )
     )
 
-    df_final = (
-        df_match
-        .select(
-            [
-                pl.coalesce([pl.col("Tipo_operacao_xml"), pl.col("Tipo_operacao_c170")]).alias("Tipo_operacao"),
-                pl.col("nsu_xml").alias("nsu"),
-                pl.col("Chv_nfe").alias("Chv_nfe"),
-                pl.coalesce([pl.col("mod_xml"), pl.col("mod_c170")]).alias("mod"),
-                pl.coalesce([pl.col("Ser_xml"), pl.col("Ser_c170")]).alias("Ser"),
-                pl.coalesce([pl.col("num_nfe_xml"), pl.col("num_nfe_c170")]).alias("num_nfe"),
-                pl.coalesce([pl.col("Dt_doc_xml"), pl.col("Dt_doc_c170")]).alias("Dt_doc"),
-                pl.coalesce([pl.col("Dt_e_s_xml"), pl.col("Dt_e_s_c170")]).alias("Dt_e_s"),
-                pl.coalesce([pl.col("Num_item_xml"), pl.col("Num_item_c170")]).alias("Num_item"),
-                pl.coalesce([pl.col("finnfe_xml"), pl.lit(None, pl.Utf8)]).alias("finnfe"),
-                pl.coalesce([pl.col("co_uf_emit_xml"), pl.col("Chv_nfe").str.slice(0, 2)]).alias("co_uf_emit"),
-                pl.col("co_uf_dest_xml").alias("co_uf_dest"),
-                pl.coalesce([pl.col("Cod_item_xml"), pl.col("Cod_item_c170")]).alias("Cod_item"),
-                pl.coalesce([pl.col("Cod_barra_xml"), pl.col("Cod_barra_c170")]).alias("Cod_barra"),
-                pl.coalesce([pl.col("Ncm_xml"), pl.col("Ncm_c170")]).alias("Ncm"),
-                pl.coalesce([pl.col("Cest_xml"), pl.col("Cest_c170")]).alias("Cest"),
-                pl.col("Tipo_item_c170").alias("Tipo_item"),
-                pl.coalesce([pl.col("Descr_item_xml"), pl.col("Descr_item_c170")]).alias("Descr_item"),
-                pl.col("Descr_compl_c170").alias("Descr_compl"),
-                pl.coalesce([pl.col("Cfop_xml"), pl.col("Cfop_c170")]).alias("Cfop"),
-                pl.coalesce([pl.col("cst_xml"), pl.col("Cst_c170")]).alias("Cst"),
-                pl.coalesce([pl.col("Qtd_xml"), pl.col("Qtd_c170")]).alias("Qtd"),
-                pl.coalesce([pl.col("Unid_xml"), pl.col("Unid_c170")]).alias("Unid"),
-                pl.coalesce([pl.col("Vl_item_xml"), pl.col("Vl_item_c170")]).alias("Vl_item"),
-                pl.col("vl_desc_c170").alias("vl_desc"),
-                pl.coalesce([pl.col("Aliq_icms_xml"), pl.col("Aliq_icms_c170")]).alias("Aliq_icms"),
-                pl.coalesce([pl.col("Vl_bc_icms_xml"), pl.col("Vl_bc_icms_c170")]).alias("Vl_bc_icms"),
-                pl.coalesce([pl.col("Vl_icms_xml"), pl.col("Vl_icms_c170")]).alias("Vl_icms"),
-                pl.coalesce([pl.col("vl_icms_st_xml"), pl.col("vl_icms_st_c170")]).alias("vl_icms_st"),
-                pl.coalesce([pl.col("vl_bc_icms_st_xml"), pl.col("vl_bc_icms_st_c170")]).alias("vl_bc_icms_st"),
-                pl.coalesce([pl.col("aliq_st_xml"), pl.col("aliq_st_c170")]).alias("aliq_st"),
-                pl.col("id_agrupado"),
-                pl.coalesce([pl.col("co_sefin_agr_xml"), pl.col("co_sefin_agr")]).alias("co_sefin_agr"),
-                pl.col("score_vinculo_xml"),
-                pl.col("desc_similarity"),
-                pl.col("diff_qtd"),
-                pl.col("diff_vl_total"),
-                pl.col("diff_vl_unit"),
-                pl.col("regra_vinculo_xml"),
-                pl.col("fonte_xml"),
-                pl.col("match_xml"),
-                pl.col("Cod_item_c170").alias("cod_item_c170_ref"),
-                pl.col("Cod_item_xml").alias("cod_item_xml_escolhido"),
-                pl.col("Num_item_c170").alias("num_item_c170_ref"),
-                pl.col("Num_item_xml").alias("num_item_xml_escolhido"),
-            ]
-        )
-        .with_columns(
-            [
-                pl.col("Ncm").alias("ncm_padrao"),
-                pl.col("Cest").alias("cest_padrao"),
-            ]
-        )
+    df_final = df_match.select(
+        [
+            pl.coalesce(
+                [pl.col("Tipo_operacao_xml"), pl.col("Tipo_operacao_c170")]
+            ).alias("Tipo_operacao"),
+            pl.col("nsu_xml").alias("nsu"),
+            pl.col("Chv_nfe").alias("Chv_nfe"),
+            pl.coalesce([pl.col("mod_xml"), pl.col("mod_c170")]).alias("mod"),
+            pl.coalesce([pl.col("Ser_xml"), pl.col("Ser_c170")]).alias("Ser"),
+            pl.coalesce([pl.col("num_nfe_xml"), pl.col("num_nfe_c170")]).alias(
+                "num_nfe"
+            ),
+            pl.coalesce([pl.col("Dt_doc_xml"), pl.col("Dt_doc_c170")]).alias("Dt_doc"),
+            pl.coalesce([pl.col("Dt_e_s_xml"), pl.col("Dt_e_s_c170")]).alias("Dt_e_s"),
+            pl.coalesce([pl.col("Num_item_xml"), pl.col("Num_item_c170")]).alias(
+                "Num_item"
+            ),
+            pl.coalesce([pl.col("finnfe_xml"), pl.lit(None, pl.Utf8)]).alias("finnfe"),
+            pl.coalesce(
+                [pl.col("co_uf_emit_xml"), pl.col("Chv_nfe").str.slice(0, 2)]
+            ).alias("co_uf_emit"),
+            pl.col("co_uf_dest_xml").alias("co_uf_dest"),
+            pl.coalesce([pl.col("Cod_item_xml"), pl.col("Cod_item_c170")]).alias(
+                "Cod_item"
+            ),
+            pl.coalesce([pl.col("Cod_barra_xml"), pl.col("Cod_barra_c170")]).alias(
+                "Cod_barra"
+            ),
+            pl.coalesce([pl.col("Ncm_xml"), pl.col("Ncm_c170")]).alias("Ncm"),
+            pl.coalesce([pl.col("Cest_xml"), pl.col("Cest_c170")]).alias("Cest"),
+            pl.col("Tipo_item_c170").alias("Tipo_item"),
+            pl.coalesce([pl.col("Descr_item_xml"), pl.col("Descr_item_c170")]).alias(
+                "Descr_item"
+            ),
+            pl.col("Descr_compl_c170").alias("Descr_compl"),
+            pl.coalesce([pl.col("Cfop_xml"), pl.col("Cfop_c170")]).alias("Cfop"),
+            pl.coalesce([pl.col("cst_xml"), pl.col("Cst_c170")]).alias("Cst"),
+            pl.coalesce([pl.col("Qtd_xml"), pl.col("Qtd_c170")]).alias("Qtd"),
+            pl.coalesce([pl.col("Unid_xml"), pl.col("Unid_c170")]).alias("Unid"),
+            pl.coalesce([pl.col("Vl_item_xml"), pl.col("Vl_item_c170")]).alias(
+                "Vl_item"
+            ),
+            pl.col("vl_desc_c170").alias("vl_desc"),
+            pl.coalesce([pl.col("Aliq_icms_xml"), pl.col("Aliq_icms_c170")]).alias(
+                "Aliq_icms"
+            ),
+            pl.coalesce([pl.col("Vl_bc_icms_xml"), pl.col("Vl_bc_icms_c170")]).alias(
+                "Vl_bc_icms"
+            ),
+            pl.coalesce([pl.col("Vl_icms_xml"), pl.col("Vl_icms_c170")]).alias(
+                "Vl_icms"
+            ),
+            pl.coalesce([pl.col("vl_icms_st_xml"), pl.col("vl_icms_st_c170")]).alias(
+                "vl_icms_st"
+            ),
+            pl.coalesce(
+                [pl.col("vl_bc_icms_st_xml"), pl.col("vl_bc_icms_st_c170")]
+            ).alias("vl_bc_icms_st"),
+            pl.coalesce([pl.col("aliq_st_xml"), pl.col("aliq_st_c170")]).alias(
+                "aliq_st"
+            ),
+            pl.col("id_agrupado"),
+            pl.coalesce([pl.col("co_sefin_agr_xml"), pl.col("co_sefin_agr")]).alias(
+                "co_sefin_agr"
+            ),
+            pl.col("score_vinculo_xml"),
+            pl.col("desc_similarity"),
+            pl.col("diff_qtd"),
+            pl.col("diff_vl_total"),
+            pl.col("diff_vl_unit"),
+            pl.col("regra_vinculo_xml"),
+            pl.col("fonte_xml"),
+            pl.col("match_xml"),
+            pl.col("Cod_item_c170").alias("cod_item_c170_ref"),
+            pl.col("Cod_item_xml").alias("cod_item_xml_escolhido"),
+            pl.col("Num_item_c170").alias("num_item_c170_ref"),
+            pl.col("Num_item_xml").alias("num_item_xml_escolhido"),
+        ]
+    ).with_columns(
+        [
+            pl.col("Ncm").alias("ncm_padrao"),
+            pl.col("Cest").alias("cest_padrao"),
+        ]
     )
 
     df_final = enriquecer_co_sefin_class(df_final, cnpj)
-    df_final = (
-        df_final
-        .drop(["ncm_padrao", "cest_padrao"], strict=False)
-        .sort(["Dt_doc", "Chv_nfe", "Num_item"], nulls_last=True)
+    df_final = df_final.drop(["ncm_padrao", "cest_padrao"], strict=False).sort(
+        ["Dt_doc", "Chv_nfe", "Num_item"], nulls_last=True
     )
 
-    return salvar_para_parquet(df_final, pasta_brutos, f"c170_xml_{cnpj}.parquet")
+    # T01: Finalizar computação Lazy e salvar resultados
+    return salvar_para_parquet(
+        df_final.collect(), pasta_brutos, f"c170_xml_{cnpj}.parquet"
+    )
 
 
 if __name__ == "__main__":
@@ -508,5 +616,3 @@ if __name__ == "__main__":
         gerar_c170_xml(sys.argv[1])
     else:
         gerar_c170_xml(input("CNPJ: "))
-
-

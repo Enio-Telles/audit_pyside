@@ -31,7 +31,9 @@ def _safe_value(v: Any) -> Any:
 
 @router.get("/files")
 def list_sql_files():
-    return [{"name": entry.path.name, "path": entry.sql_id} for entry in list_sql_entries()]
+    return [
+        {"name": entry.path.name, "path": entry.sql_id} for entry in list_sql_entries()
+    ]
 
 
 class SqlRequest(BaseModel):
@@ -67,7 +69,7 @@ def read_sql_file(path: str):
 
 
 class SqlFileCreate(BaseModel):
-    name: str   # só o nome, sem extensão e sem separadores de path
+    name: str  # só o nome, sem extensão e sem separadores de path
     folder: str  # subpasta relativa dentro de sql/ (vazio = raiz)
     content: str
 
@@ -94,7 +96,7 @@ def create_sql_file(req: SqlFileCreate):
         if folder_norm.is_absolute() or ".." in folder_norm.parts:
             raise HTTPException(400, "Pasta inválida.")
         dest_dir = (SQL_ROOT / folder_norm).resolve()
-        if not str(dest_dir).startswith(str(SQL_ROOT.resolve())):
+        if not dest_dir.is_relative_to(SQL_ROOT.resolve()):
             raise HTTPException(400, "Pasta fora do diretório permitido.")
     else:
         dest_dir = SQL_ROOT.resolve()
@@ -120,7 +122,9 @@ def delete_sql_file(path: str = Query(..., description="sql_id do arquivo a remo
         raise HTTPException(400, "Arquivo não encontrado no catálogo.")
 
     if sql_id.startswith(_PROTECTED_PREFIX):
-        raise HTTPException(403, "Arquivos atomizados não podem ser excluídos por esta API.")
+        raise HTTPException(
+            403, "Arquivos atomizados não podem ser excluídos por esta API."
+        )
 
     target = SQL_ROOT / sql_id
     if not target.exists():

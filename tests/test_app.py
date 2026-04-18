@@ -3,6 +3,7 @@ from unittest.mock import patch, MagicMock
 
 import app
 
+
 @patch("app.QApplication")
 @patch("app.MainWindow")
 def test_main(mock_main_window_class, mock_qapplication_class):
@@ -19,7 +20,9 @@ def test_main(mock_main_window_class, mock_qapplication_class):
 
     # Verify interactions
     mock_qapplication_class.assert_called_once_with(sys.argv)
-    mock_app_instance.setApplicationName.assert_called_once_with("Fiscal Parquet Analyzer (Refatorado)")
+    mock_app_instance.setApplicationName.assert_called_once_with(
+        "Fiscal Parquet Analyzer (Refatorado)"
+    )
 
     mock_main_window_class.assert_called_once()
     mock_window_instance.show.assert_called_once()
@@ -28,6 +31,7 @@ def test_main(mock_main_window_class, mock_qapplication_class):
 
     # Verify return value
     assert result == 0
+
 
 @patch("app.QApplication")
 @patch("app.MainWindow")
@@ -45,7 +49,9 @@ def test_main_error_code(mock_main_window_class, mock_qapplication_class):
 
     # Verify interactions
     mock_qapplication_class.assert_called_once_with(sys.argv)
-    mock_app_instance.setApplicationName.assert_called_once_with("Fiscal Parquet Analyzer (Refatorado)")
+    mock_app_instance.setApplicationName.assert_called_once_with(
+        "Fiscal Parquet Analyzer (Refatorado)"
+    )
 
     mock_main_window_class.assert_called_once()
     mock_window_instance.show.assert_called_once()

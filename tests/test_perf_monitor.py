@@ -1,11 +1,10 @@
 import json
-from datetime import datetime
 from pathlib import Path
 
 import pytest
 from pytest_mock import MockerFixture
 
-from src.utilitarios.perf_monitor import (
+from utilitarios.perf_monitor import (
     _root_dir,
     _serializar_valor,
     caminho_log_performance,
@@ -45,21 +44,17 @@ def test_serializar_valor():
     assert _serializar_valor(path_obj) == str(path_obj)
 
     # Collections
-    assert _serializar_valor([1, "two", Path("/three")]) == [1, "two", str(Path("/three"))]
+    assert _serializar_valor([1, "two", Path("/three")]) == [
+        1,
+        "two",
+        str(Path("/three")),
+    ]
     assert _serializar_valor((1, 2)) == [1, 2]
     assert _serializar_valor({1, 2}) in ([1, 2], [2, 1])
 
     # Dictionaries
-    nested_dict = {
-        "key1": "value",
-        2: Path("/test"),
-        "key3": [1, 2, {3: 4}]
-    }
-    expected_dict = {
-        "key1": "value",
-        "2": str(Path("/test")),
-        "key3": [1, 2, {"3": 4}]
-    }
+    nested_dict = {"key1": "value", 2: Path("/test"), "key3": [1, 2, {3: 4}]}
+    expected_dict = {"key1": "value", "2": str(Path("/test")), "key3": [1, 2, {"3": 4}]}
     assert _serializar_valor(nested_dict) == expected_dict
 
     # Custom object (fallback to str)
@@ -73,7 +68,9 @@ def test_serializar_valor():
 def test_registrar_evento_performance_basic(mocker: MockerFixture, tmp_path: Path):
     """Test writing a basic performance event to file."""
     log_file = tmp_path / "perf.jsonl"
-    mocker.patch("src.utilitarios.perf_monitor.caminho_log_performance", return_value=log_file)
+    mocker.patch(
+        "src.utilitarios.perf_monitor.caminho_log_performance", return_value=log_file
+    )
 
     # Fix datetime to check the timestamp
     mock_datetime = mocker.patch("src.utilitarios.perf_monitor.datetime")
@@ -95,14 +92,13 @@ def test_registrar_evento_performance_basic(mocker: MockerFixture, tmp_path: Pat
 def test_registrar_evento_performance_full(mocker: MockerFixture, tmp_path: Path):
     """Test writing a performance event with all optional fields."""
     log_file = tmp_path / "perf.jsonl"
-    mocker.patch("src.utilitarios.perf_monitor.caminho_log_performance", return_value=log_file)
+    mocker.patch(
+        "src.utilitarios.perf_monitor.caminho_log_performance", return_value=log_file
+    )
 
     context = {"user_id": 123, "path": Path("/test")}
     registrar_evento_performance(
-        evento="complex_event",
-        duracao_s=1.2345678,
-        contexto=context,
-        status="error"
+        evento="complex_event", duracao_s=1.2345678, contexto=context, status="error"
     )
 
     assert log_file.exists()
@@ -118,7 +114,10 @@ def test_registrar_evento_performance_full(mocker: MockerFixture, tmp_path: Path
 def test_registrar_evento_performance_exception_handling(mocker: MockerFixture):
     """Test that exceptions during logging are caught and ignored."""
     # Mock caminho_log_performance to raise an exception
-    mocker.patch("src.utilitarios.perf_monitor.caminho_log_performance", side_effect=PermissionError("Access denied"))
+    mocker.patch(
+        "src.utilitarios.perf_monitor.caminho_log_performance",
+        side_effect=PermissionError("Access denied"),
+    )
 
     # This should not raise an exception
     try:

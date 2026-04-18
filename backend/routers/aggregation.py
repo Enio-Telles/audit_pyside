@@ -1,51 +1,19 @@
 from __future__ import annotations
 
-import math
-import re
 from pathlib import Path
-from typing import Any
 
 import polars as pl
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from interface_grafica.config import CNPJ_ROOT
+from routers._common import sanitize_cnpj, df_to_response
 
 router = APIRouter()
 
 
-def _sanitize(cnpj: str) -> str:
-    return re.sub(r"\D", "", cnpj or "")
-
-
 def _pasta_produtos(cnpj: str) -> Path:
     return CNPJ_ROOT / cnpj / "analises" / "produtos"
-
-
-def _safe_value(v: Any) -> Any:
-    if v is None:
-        return None
-    if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
-        return None
-    if isinstance(v, list):
-        return [_safe_value(x) for x in v]
-    return v
-
-
-def _df_to_response(df: pl.DataFrame, page: int = 1, page_size: int = 300) -> dict:
-    total = df.height
-    df_page = df.slice((page - 1) * page_size, page_size)
-    rows = [
-        {col: _safe_value(row[col]) for col in df_page.columns}
-        for row in df_page.to_dicts()
-    ]
-    return {
-        "total_rows": total,
-        "page": page,
-        "total_pages": max(1, math.ceil(total / page_size)),
-        "columns": df_page.columns,
-        "rows": rows,
-    }
 
 
 def _enriquecer_lista_descr_compl(df: pl.DataFrame, cnpj: str) -> pl.DataFrame:
@@ -54,10 +22,11 @@ def _enriquecer_lista_descr_compl(df: pl.DataFrame, cnpj: str) -> pl.DataFrame:
     if not arq_c170.exists() or "id_agrupado" not in df.columns:
         return df
     try:
-        df_c170 = pl.scan_parquet(arq_c170).select(["id_agrupado", "Descr_compl"]).collect()
+        df_c170 = (
+            pl.scan_parquet(arq_c170).select(["id_agrupado", "Descr_compl"]).collect()
+        )
         df_agg = (
-            df_c170
-            .filter(
+            df_c170.filter(
                 pl.col("Descr_compl").is_not_null()
                 & (pl.col("Descr_compl").str.strip_chars() != "")
             )
@@ -75,7 +44,7 @@ def _enriquecer_lista_descr_compl(df: pl.DataFrame, cnpj: str) -> pl.DataFrame:
 
 @router.get("/{cnpj}/tabela_agrupada")
 def get_tabela_agrupada(cnpj: str, page: int = 1, page_size: int = 300):
-    cnpj = _sanitize(cnpj)
+    cnpj = sanitize_cnpj(cnpj)
     pasta = _pasta_produtos(cnpj)
     candidates = [
         pasta / f"produtos_agrupados_{cnpj}.parquet",
@@ -86,7 +55,7 @@ def get_tabela_agrupada(cnpj: str, page: int = 1, page_size: int = 300):
         raise HTTPException(404, "Tabela agrupada não encontrada")
     df = pl.read_parquet(path)
     df = _enriquecer_lista_descr_compl(df, cnpj)
-    return _df_to_response(df, page, page_size)
+    return df_to_response(df, page, page_size)
 
 
 class AggregateRequest(BaseModel):
@@ -97,17 +66,68 @@ class AggregateRequest(BaseModel):
 
 @router.post("/merge")
 def merge_agrupados(req: AggregateRequest):
-    cnpj = _sanitize(req.cnpj)
+    cnpj = sanitize_cnpj(req.cnpj)
     try:
         from interface_grafica.services.aggregation_service import ServicoAgregacao
+
         svc = ServicoAgregacao()
         # O primeiro elemento da lista é o id canônico (destino); os demais são as origens.
         ids_ordenados = [req.id_agrupado_destino] + [
             i for i in req.ids_origem if i != req.id_agrupado_destino
         ]
-        resultado = svc.agregar_linhas(cnpj=cnpj, ids_agrupados_selecionados=ids_ordenados)
+        resultado = svc.agregar_linhas(
+            cnpj=cnpj, ids_agrupados_selecionados=ids_ordenados
+        )
         return {"ok": True, "resultado": resultado}
     except ValueError as exc:
         raise HTTPException(400, "Parâmetros inválidos para agregação.") from exc
     except Exception as exc:
         raise HTTPException(500, "Erro interno ao processar agregação.") from exc
+
+
+class UnmergeRequest(BaseModel):
+    cnpj: str
+    id_agrupado: str
+
+
+@router.post("/unmerge")
+def unmerge_agrupados(req: UnmergeRequest):
+    """
+    Reverte o ultimo merge manual de um grupo de produtos.
+
+    Restaura os grupos originais a partir do historico de agregacoes
+    (log_agregacoes_{cnpj}.json) e recalcula a cascata de tabelas derivadas.
+    """
+    cnpj = sanitize_cnpj(req.cnpj)
+    try:
+        from interface_grafica.services.aggregation_service import ServicoAgregacao
+
+        svc = ServicoAgregacao()
+        resultado = svc.reverter_agrupamento(cnpj=cnpj, id_agrupado=req.id_agrupado)
+        return {"ok": True, "resultado": resultado}
+    except ValueError as exc:
+        raise HTTPException(400, "Não foi possível reverter: " + str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(500, "Erro interno ao processar desagregação.") from exc
+
+
+@router.get("/{cnpj}/historico_agregacoes")
+def get_historico_agregacoes(cnpj: str):
+    """
+    Retorna o historico completo de merges e reversoes de agregacoes.
+
+    Le log_agregacoes_{cnpj}.json e retorna como lista de eventos.
+    """
+    cnpj = sanitize_cnpj(cnpj)
+    log_path = _pasta_produtos(cnpj) / f"log_agregacoes_{cnpj}.json"
+    if not log_path.exists():
+        return {"eventos": []}
+
+    try:
+        import json
+
+        with open(log_path, "r", encoding="utf-8") as f:
+            eventos = json.load(f)
+        return {"eventos": eventos}
+    except Exception as exc:
+        raise HTTPException(500, "Erro ao ler historico de agregações.") from exc

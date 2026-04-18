@@ -25,48 +25,35 @@ CNPJ_ROOT = DADOS_DIR / "CNPJ"
 
 try:
     from utilitarios.salvar_para_parquet import salvar_para_parquet
-    from utilitarios.text import remove_accents
+    from utilitarios.text import expr_normalizar_descricao
 except ImportError as e:
     rprint(f"[red]Erro ao importar modulos utilitarios:[/red] {e}")
     sys.exit(1)
 
 
 def _expr_normalizar_descricao(coluna: str) -> pl.Expr:
-    return (
-        pl.when(pl.col(coluna).is_null())
-        .then(pl.lit(""))
-        .otherwise(
-            pl.col(coluna)
-            .cast(pl.Utf8, strict=False)
-            .str.replace_all(r"[áàãâäÁÀÃÂÄ]", "A")
-            .str.replace_all(r"[éèêëÉÈÊË]", "E")
-            .str.replace_all(r"[íìîïÍÌÎÏ]", "I")
-            .str.replace_all(r"[óòõôöÓÒÕÔÖ]", "O")
-            .str.replace_all(r"[úùûüÚÙÛÜ]", "U")
-            .str.replace_all(r"[çÇ]", "C")
-            .str.to_uppercase()
-            .str.strip_chars()
-            .str.replace_all(r"\s+", " ")
-        )
-    )
+    return expr_normalizar_descricao(coluna)
 
 
 def _primeira_descricao_valida(df: pl.DataFrame) -> str | None:
     if "descricao" not in df.columns:
         return None
-    vals = (
+
+    first_val = (
         df.select(
             pl.col("descricao")
             .cast(pl.Utf8, strict=False)
             .fill_null("")
             .str.strip_chars()
-            .alias("descricao")
         )
         .filter(pl.col("descricao") != "")
-        .get_column("descricao")
-        .to_list()
+        .limit(1)
     )
-    return vals[0] if vals else None
+
+    if first_val.is_empty():
+        return None
+
+    return first_val.item()
 
 
 def _gerar_id_agrupado(seq: int) -> str:
@@ -87,15 +74,32 @@ def calcular_atributos_padrao(df_itens_base: pl.DataFrame) -> dict:
 
     res: dict[str, str | None] = {}
     for col in ["ncm", "cest", "gtin", "co_sefin_item"]:
-        vals = [str(v) for v in df_itens_base[col].drop_nulls().to_list() if str(v).strip()]
-        res[f"{col}_padrao"] = Counter(vals).most_common(1)[0][0] if vals else None
+        if col not in df_itens_base.columns:
+            continue
+
+        counts = (
+            df_itens_base.select(
+                pl.col(col).cast(pl.Utf8, strict=False).fill_null("").str.strip_chars()
+            )
+            .filter(pl.col(col) != "")
+            .get_column(col)
+            .value_counts()
+            .sort("count", descending=True)
+        )
+
+        if not counts.is_empty():
+            res[f"{col}_padrao"] = counts[col][0]
+        else:
+            res[f"{col}_padrao"] = None
 
     if "co_sefin_item_padrao" in res:
         res["co_sefin_padrao"] = res.pop("co_sefin_item_padrao")
 
+    if "descricao" not in df_itens_base.columns:
+        return res
+
     descs = (
-        df_itens_base
-        .with_columns(
+        df_itens_base.with_columns(
             pl.col("descricao")
             .cast(pl.Utf8, strict=False)
             .fill_null("")
@@ -107,13 +111,23 @@ def calcular_atributos_padrao(df_itens_base: pl.DataFrame) -> dict:
         .agg(pl.len().alias("count"))
     )
 
-    def _calc_score(row: dict) -> tuple[int, int, int]:
-        filled = sum(1 for c in ["ncm", "cest", "gtin"] if row.get(c) and str(row.get(c)).strip())
-        len_desc = len(str(row.get("descricao", "")))
-        return (int(row.get("count", 0)), filled, len_desc)
+    if descs.is_empty():
+        res["descr_padrao"] = _primeira_descricao_valida(df_itens_base)
+        return res
 
-    sorted_descs = sorted(descs.to_dicts(), key=_calc_score, reverse=True)
-    res["descr_padrao"] = sorted_descs[0]["descricao"] if sorted_descs else _primeira_descricao_valida(df_itens_base)
+    descs = descs.with_columns(
+        filled=(
+            pl.when(pl.col("ncm").is_not_null() & (pl.col("ncm") != "")).then(1).otherwise(0) +
+            pl.when(pl.col("cest").is_not_null() & (pl.col("cest") != "")).then(1).otherwise(0) +
+            pl.when(pl.col("gtin").is_not_null() & (pl.col("gtin") != "")).then(1).otherwise(0)
+        ),
+        len_desc=pl.col("descricao").str.len_chars()
+    ).sort(["count", "filled", "len_desc"], descending=True)
+
+    if not descs.is_empty():
+        res["descr_padrao"] = descs["descricao"][0]
+    else:
+        res["descr_padrao"] = _primeira_descricao_valida(df_itens_base)
 
     return res
 
@@ -137,30 +151,56 @@ def inicializar_produtos_agrupados(cnpj: str, pasta_cnpj: Path | None = None) ->
     df_prod = pl.read_parquet(arq_produtos)
     df_base = pl.read_parquet(arq_base)
 
-    grupos = []
-    
-    def fits(row, g_rows):
-        for r in g_rows:
-            if row.get("lista_gtin") and r.get("lista_gtin"):
-                if set(row["lista_gtin"]) & set(r["lista_gtin"]):
-                    return True
-            if row.get("descricao_normalizada") == r.get("descricao_normalizada"):
-                if row.get("lista_ncm") and r.get("lista_ncm"):
-                    if set(row["lista_ncm"]) & set(r["lista_ncm"]):
-                        return True
-                elif not row.get("lista_ncm") and not r.get("lista_ncm"):
-                    return True
-        return False
+    # Otimizacao: Agrupamento em tempo linear usando Union-Find/Mapeamento
+    # Em vez de O(N^2) no fits(), usamos tabelas de hash para GTIN e Descricao+NCM
 
-    for row in df_prod.to_dicts():
-        found = False
-        for g in grupos:
-            if fits(row, g):
-                g.append(row)
-                found = True
-                break
-        if not found:
-            grupos.append([row])
+    rows = df_prod.to_dicts()
+    parent = list(range(len(rows)))
+
+    def find(i):
+        if parent[i] == i:
+            return i
+        parent[i] = find(parent[i])
+        return parent[i]
+
+    def union(i, j):
+        root_i = find(i)
+        root_j = find(j)
+        if root_i != root_j:
+            parent[root_i] = root_j
+
+    gtin_to_idx = {}
+    desc_ncm_to_idx = {}
+
+    for idx, row in enumerate(rows):
+        # 1. Agrupar por GTIN
+        list_gtin = row.get("lista_gtin") or []
+        for gtin in list_gtin:
+            if gtin in gtin_to_idx:
+                union(idx, gtin_to_idx[gtin])
+            else:
+                gtin_to_idx[gtin] = idx
+
+        # 2. Agrupar por Descricao + NCM
+        desc_norm = row.get("descricao_normalizada")
+        if desc_norm:
+            list_ncm = row.get("lista_ncm") or [None]
+            for ncm in list_ncm:
+                key = (desc_norm, ncm)
+                if key in desc_ncm_to_idx:
+                    union(idx, desc_ncm_to_idx[key])
+                else:
+                    desc_ncm_to_idx[key] = idx
+
+    # Coletar grupos
+    grupos_indices = {}
+    for i in range(len(rows)):
+        root = find(i)
+        if root not in grupos_indices:
+            grupos_indices[root] = []
+        grupos_indices[root].append(rows[i])
+
+    grupos = list(grupos_indices.values())
 
     # Bolt: Pre-calculate normalization outside the loop to avoid redundant operations for each group
     # Optimized: Using native implementation of _expr_normalizar_descricao to ensure vectorization
@@ -171,14 +211,16 @@ def inicializar_produtos_agrupados(cnpj: str, pasta_cnpj: Path | None = None) ->
 
     registros_mestra = []
     registros_ponte = []
-    
+
     seq = 1
     for g in grupos:
         id_grp = _gerar_id_agrupado(seq)
         seq += 1
-        
-        desc_norms = [r.get("descricao_normalizada") for r in g if r.get("descricao_normalizada")]
-        
+
+        desc_norms = [
+            r.get("descricao_normalizada") for r in g if r.get("descricao_normalizada")
+        ]
+
         if desc_norms:
             group_dfs = []
             for d in set(desc_norms):
@@ -198,13 +240,25 @@ def inicializar_produtos_agrupados(cnpj: str, pasta_cnpj: Path | None = None) ->
 
         padrao = calcular_atributos_padrao(df_base_filtered)
 
-        lista_sefin = list(set([item for r in g for item in (r.get("lista_co_sefin") or [])]))
-        lista_unidades = list(set([item for r in g for item in (r.get("lista_unid") or [])]))
-        lista_ncm = sorted(set([item for r in g for item in (r.get("lista_ncm") or []) if item]))
-        lista_cest = sorted(set([item for r in g for item in (r.get("lista_cest") or []) if item]))
-        lista_gtin = sorted(set([item for r in g for item in (r.get("lista_gtin") or []) if item]))
+        lista_sefin = list(
+            set([item for r in g for item in (r.get("lista_co_sefin") or [])])
+        )
+        lista_unidades = list(
+            set([item for r in g for item in (r.get("lista_unid") or [])])
+        )
+        lista_ncm = sorted(
+            set([item for r in g for item in (r.get("lista_ncm") or []) if item])
+        )
+        lista_cest = sorted(
+            set([item for r in g for item in (r.get("lista_cest") or []) if item])
+        )
+        lista_gtin = sorted(
+            set([item for r in g for item in (r.get("lista_gtin") or []) if item])
+        )
         # A lista principal deve conter apenas descricoes-base do grupo.
-        lista_descricoes = sorted(set([r.get("descricao") for r in g if r.get("descricao")]))
+        lista_descricoes = sorted(
+            set([r.get("descricao") for r in g if r.get("descricao")])
+        )
         # Complementos permanecem auditaveis em coluna propria.
         lista_desc_compl = sorted(
             set([item for r in g for item in (r.get("lista_desc_compl") or []) if item])
@@ -230,23 +284,24 @@ def inicializar_produtos_agrupados(cnpj: str, pasta_cnpj: Path | None = None) ->
                 "co_sefin_divergentes": divergentes,
             }
         )
-        
+
         for r in g:
             chave = r.get("chave_produto") or r.get("chave_item")
             if chave:
-                registros_ponte.append({
-                    "chave_produto": chave,
-                    "id_agrupado": id_grp
-                })
+                registros_ponte.append({"chave_produto": chave, "id_agrupado": id_grp})
 
     if not registros_mestra:
         return False
 
     df_mestra = pl.DataFrame(registros_mestra)
     df_ponte = pl.DataFrame(registros_ponte)
-    
-    ok1 = salvar_para_parquet(df_mestra, pasta_analises, f"produtos_agrupados_{cnpj}.parquet")
-    ok2 = salvar_para_parquet(df_ponte, pasta_analises, f"map_produto_agrupado_{cnpj}.parquet")
+
+    ok1 = salvar_para_parquet(
+        df_mestra, pasta_analises, f"produtos_agrupados_{cnpj}.parquet"
+    )
+    ok2 = salvar_para_parquet(
+        df_ponte, pasta_analises, f"map_produto_agrupado_{cnpj}.parquet"
+    )
     return ok1 and ok2
 
 

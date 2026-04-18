@@ -28,7 +28,9 @@ def _salvar_produtos_agrupados(dados_dir: Path, cnpj: str, rows: list[dict]):
     pl.DataFrame(rows).write_parquet(pasta / f"produtos_agrupados_{cnpj}.parquet")
 
 
-def test_enriquecer_co_sefin_class_prioriza_padrao_e_aceita_da_final_nula(tmp_path, monkeypatch):
+def test_enriquecer_co_sefin_class_prioriza_padrao_e_aceita_da_final_nula(
+    tmp_path, monkeypatch
+):
     dados_dir, sefin_dir = _configurar_ambiente_tmp(tmp_path, monkeypatch)
     cnpj = "12345678000199"
 
@@ -72,7 +74,9 @@ def test_enriquecer_co_sefin_class_prioriza_padrao_e_aceita_da_final_nula(tmp_pa
     assert resultado["it_pc_interna"][0] == 17.0
 
 
-def test_enriquecer_co_sefin_class_faz_fallback_para_lookup_legado_por_linha(tmp_path, monkeypatch):
+def test_enriquecer_co_sefin_class_faz_fallback_para_lookup_legado_por_linha(
+    tmp_path, monkeypatch
+):
     dados_dir, sefin_dir = _configurar_ambiente_tmp(tmp_path, monkeypatch)
     cnpj = "12345678000199"
 
@@ -116,7 +120,9 @@ def test_enriquecer_co_sefin_class_faz_fallback_para_lookup_legado_por_linha(tmp
     assert resultado["it_pc_interna"][0] == 9.5
 
 
-def test_enriquecer_co_sefin_class_nao_preenche_it_pc_interna_sem_vigencia_compativel(tmp_path, monkeypatch):
+def test_enriquecer_co_sefin_class_nao_preenche_it_pc_interna_sem_vigencia_compativel(
+    tmp_path, monkeypatch
+):
     dados_dir, sefin_dir = _configurar_ambiente_tmp(tmp_path, monkeypatch)
     cnpj = "12345678000199"
 

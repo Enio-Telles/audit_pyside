@@ -1,0 +1,3 @@
+## 2026-04-15 - Add ARIA Labels to Interactive Elements
+**Learning:** Icon-only buttons and buttons relying solely on `title` attributes often fail to provide sufficient context to screen reader users, especially in complex components like data tables and layout panels where context isn't immediately obvious.
+**Action:** Always ensure that any button without visible, descriptive text (such as those using icons like '+', '-', '↑', '↓', '⚙') or whose primary purpose is to toggle/manage state is explicitly equipped with an `aria-label` describing its action and the specific item it affects (e.g., `Gerenciar dados do CNPJ ${r.cnpj}`).

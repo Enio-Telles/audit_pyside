@@ -1,0 +1,860 @@
+diff --git a/src/transformacao/rastreabilidade_produtos/fatores_conversao.py b/src/transformacao/rastreabilidade_produtos/fatores_conversao.py
+--- a/src/transformacao/rastreabilidade_produtos/fatores_conversao.py
++++ b/src/transformacao/rastreabilidade_produtos/fatores_conversao.py
+@@
+ def _df_vazio_agrupamento_canonico() -> pl.DataFrame:
+     return pl.DataFrame(
+         schema={
+             "id_agrupado": pl.Utf8,
+             "descr_padrao_canonico": pl.Utf8,
+             "lista_descricoes": pl.List(pl.Utf8),
+             "lista_desc_compl": pl.List(pl.Utf8),
+         }
+     )
++
++
++def _df_vazio_vinculo_produto() -> pl.DataFrame:
++    return pl.DataFrame(
++        schema={
++            "descricao_normalizada": pl.Utf8,
++            "id_agrupado": pl.Utf8,
++            "descr_padrao_vinculo": pl.Utf8,
++            "origem_vinculo_produto": pl.Utf8,
++        }
++    )
++
++
++def _salvar_log_vinculo_produto(resumo: dict, pasta_analises: Path, cnpj: str) -> None:
++    with open(pasta_analises / f"log_vinculo_produto_fatores_{cnpj}.json", "w", encoding="utf-8") as f:
++        json.dump(resumo, f, ensure_ascii=False, indent=2)
++
++
++def _construir_vinculo_unico_por_descricao(
++    df: pl.DataFrame,
++    col_descr_padrao: str,
++    origem: str,
++) -> tuple[pl.DataFrame, dict]:
++    if df.is_empty():
++        return _df_vazio_vinculo_produto(), {
++            "origem": origem,
++            "qtd_descricoes_unicas": 0,
++            "qtd_descricoes_ambiguas": 0,
++        }
++
++    df_base = (
++        df
++        .select(
++            [
++                pl.col("descricao_normalizada").cast(pl.Utf8, strict=False).fill_null("").alias("descricao_normalizada"),
++                pl.col("id_agrupado").cast(pl.Utf8, strict=False).alias("id_agrupado"),
++                pl.col(col_descr_padrao).cast(pl.Utf8, strict=False).alias("descr_padrao_vinculo"),
++            ]
++        )
++        .filter(pl.col("descricao_normalizada") != "")
++        .drop_nulls(["descricao_normalizada", "id_agrupado"])
++    )
++
++    if df_base.is_empty():
++        return _df_vazio_vinculo_produto(), {
++            "origem": origem,
++            "qtd_descricoes_unicas": 0,
++            "qtd_descricoes_ambiguas": 0,
++        }
++
++    df_grouped = (
++        df_base
++        .group_by("descricao_normalizada")
++        .agg(
++            [
++                pl.col("id_agrupado").n_unique().alias("__qtd_ids__"),
++                pl.col("id_agrupado").first().alias("id_agrupado"),
++                pl.col("descr_padrao_vinculo").drop_nulls().first().alias("descr_padrao_vinculo"),
++            ]
++        )
++    )
++    resumo = {
++        "origem": origem,
++        "qtd_descricoes_unicas": int(df_grouped.filter(pl.col("__qtd_ids__") == 1).height),
++        "qtd_descricoes_ambiguas": int(df_grouped.filter(pl.col("__qtd_ids__") > 1).height),
++    }
++    return (
++        df_grouped
++        .filter(pl.col("__qtd_ids__") == 1)
++        .drop("__qtd_ids__")
++        .with_columns(pl.lit(origem).alias("origem_vinculo_produto")),
++        resumo,
++    )
++
++
++def _carregar_vinculo_produto_canonico(
++    pasta_analises: Path,
++    cnpj: str,
++    df_final: pl.DataFrame,
++) -> pl.DataFrame:
++    bases: list[pl.DataFrame] = []
++    resumo: dict[str, dict] = {}
++
++    arq_pont = pasta_analises / f"map_produto_agrupado_{cnpj}.parquet"
++    if arq_pont.exists():
++        schema_cols = set(pl.read_parquet_schema(arq_pont).names())
++        if {"descricao_normalizada", "id_agrupado"}.issubset(schema_cols):
++            df_map_raw = (
++                pl.scan_parquet(arq_pont)
++                .select(
++                    [
++                        pl.col("descricao_normalizada").cast(pl.Utf8, strict=False),
++                        pl.col("id_agrupado").cast(pl.Utf8, strict=False),
++                    ]
++                )
++                .collect()
++                .join(
++                    df_final
++                    .select(["id_agrupado", "descr_padrao_calc"])
++                    .unique(subset=["id_agrupado"], keep="first"),
++                    on="id_agrupado",
++                    how="left",
++                )
++            )
++            df_map, resumo_map = _construir_vinculo_unico_por_descricao(
++                df_map_raw,
++                "descr_padrao_calc",
++                "map_produto_agrupado",
++            )
++            resumo["map_produto_agrupado"] = resumo_map
++            if not df_map.is_empty():
++                bases.append(df_map.with_columns(pl.lit(0).alias("__ordem_vinculo__")))
++
++    df_final_base, resumo_final = _construir_vinculo_unico_por_descricao(
++        df_final.select(["descricao_normalizada", "id_agrupado", "descr_padrao_calc"]),
++        "descr_padrao_calc",
++        "produtos_final",
++    )
++    resumo["produtos_final"] = resumo_final
++    if not df_final_base.is_empty():
++        bases.append(df_final_base.with_columns(pl.lit(1).alias("__ordem_vinculo__")))
++
++    if not bases:
++        _salvar_log_vinculo_produto(
++            {
++                **resumo,
++                "resultado": {
++                    "qtd_descricoes_vinculadas": 0,
++                },
++            },
++            pasta_analises,
++            cnpj,
++        )
++        return _df_vazio_vinculo_produto()
++
++    df_vinculo = (
++        pl.concat(bases, how="vertical_relaxed")
++        .sort(["descricao_normalizada", "__ordem_vinculo__"])
++        .unique(subset=["descricao_normalizada"], keep="first")
++        .drop("__ordem_vinculo__")
++    )
++    _salvar_log_vinculo_produto(
++        {
++            **resumo,
++            "resultado": {
++                "qtd_descricoes_vinculadas": int(df_vinculo.height),
++            },
++        },
++        pasta_analises,
++        cnpj,
++    )
++    return df_vinculo
+@@
+     df_unid = df_unid.with_columns(_normalizar_descricao_expr("descricao"))
+     df_final = df_final.with_columns(
+         [
+             pl.col("id_agrupado").cast(pl.Utf8, strict=False).alias("id_agrupado"),
+             pl.col("descricao_normalizada").cast(pl.Utf8, strict=False).fill_null("").alias("descricao_normalizada"),
+             pl.coalesce([pl.col("descr_padrao"), pl.col("descricao_final")]).alias("descr_padrao_calc"),
+         ]
+     )
++    df_ref_final = (
++        df_final
++        .select(["id_agrupado", "descr_padrao_calc", "unid_ref_sugerida"])
++        .with_columns(
++            [
++                pl.col("id_agrupado").cast(pl.Utf8, strict=False),
++                pl.col("descr_padrao_calc").cast(pl.Utf8, strict=False),
++                pl.col("unid_ref_sugerida").cast(pl.Utf8, strict=False),
++            ]
++        )
++        .unique(subset=["id_agrupado"], keep="first")
++    )
++    df_vinculo_produto = _carregar_vinculo_produto_canonico(pasta_analises, cnpj, df_final)
+     df_agrupamento_canonico = _carregar_agrupamento_canonico(pasta_analises, cnpj)
+     df_fatores_existente = _reconciliar_fatores_existentes_com_agrupamento_atual(
+         df_fatores_existente,
+         df_agrupamento_canonico,
+         pasta_analises,
+@@
+     df_link = (
+         df_unid
+-        .join(
+-            df_final.select(["id_agrupado", "descricao_normalizada", "descr_padrao_calc", "unid_ref_sugerida"]).unique(subset=["id_agrupado", "descricao_normalizada"]),
+-            on="descricao_normalizada",
+-            how="left",
+-        )
++        .join(df_vinculo_produto, on="descricao_normalizada", how="left")
++        .join(df_ref_final, on="id_agrupado", how="left")
++        .with_columns(
++            pl.coalesce([pl.col("descr_padrao_vinculo"), pl.col("descr_padrao_calc")]).alias("descr_padrao_calc")
++        )
+         .filter(pl.col("id_agrupado").is_not_null() & pl.col("unid").is_not_null())
+     )
+diff --git a/src/transformacao/movimentacao_estoque_pkg/movimentacao_estoque.py b/src/transformacao/movimentacao_estoque_pkg/movimentacao_estoque.py
+--- a/src/transformacao/movimentacao_estoque_pkg/movimentacao_estoque.py
++++ b/src/transformacao/movimentacao_estoque_pkg/movimentacao_estoque.py
+@@
+ def filtrar_movimentacoes_por_fonte(df: pl.DataFrame) -> pl.DataFrame:
+     """Aplica a regra fiscal de direcao por origem na mov_estoque."""
+     if df.is_empty() or "fonte" not in df.columns or "Tipo_operacao" not in df.columns:
+         return df
+@@
+     )
+     return df.filter(filtro_expr)
++
++
++def _df_vazio_vinculo_produto() -> pl.DataFrame:
++    return pl.DataFrame(
++        schema={
++            "descricao_normalizada": pl.Utf8,
++            "id_agrupado": pl.Utf8,
++            "descr_padrao": pl.Utf8,
++            "ncm_padrao": pl.Utf8,
++            "cest_padrao": pl.Utf8,
++            "descricao_final": pl.Utf8,
++            "co_sefin_final": pl.Utf8,
++            "unid_ref_sugerida": pl.Utf8,
++            "origem_vinculo_produto": pl.Utf8,
++        }
++    )
++
++
++def _salvar_log_vinculo_produto(resumo: dict, pasta_analises: Path, cnpj: str) -> None:
++    import json
++    with open(pasta_analises / f"log_vinculo_produto_mov_estoque_{cnpj}.json", "w", encoding="utf-8") as f:
++        json.dump(resumo, f, ensure_ascii=False, indent=2)
++
++
++def _construir_vinculo_unico_por_descricao(df: pl.DataFrame, origem: str) -> tuple[pl.DataFrame, dict]:
++    if df.is_empty():
++        return _df_vazio_vinculo_produto(), {
++            "origem": origem,
++            "qtd_descricoes_unicas": 0,
++            "qtd_descricoes_ambiguas": 0,
++        }
++
++    df_base = (
++        df
++        .select(
++            [
++                pl.col("descricao_normalizada").cast(pl.Utf8, strict=False).fill_null("").alias("descricao_normalizada"),
++                pl.col("id_agrupado").cast(pl.Utf8, strict=False).alias("id_agrupado"),
++                pl.col("descr_padrao").cast(pl.Utf8, strict=False).alias("descr_padrao"),
++                pl.col("ncm_padrao").cast(pl.Utf8, strict=False).alias("ncm_padrao"),
++                pl.col("cest_padrao").cast(pl.Utf8, strict=False).alias("cest_padrao"),
++                pl.col("descricao_final").cast(pl.Utf8, strict=False).alias("descricao_final"),
++                pl.col("co_sefin_final").cast(pl.Utf8, strict=False).alias("co_sefin_final"),
++                pl.col("unid_ref_sugerida").cast(pl.Utf8, strict=False).alias("unid_ref_sugerida"),
++            ]
++        )
++        .filter(pl.col("descricao_normalizada") != "")
++        .drop_nulls(["descricao_normalizada", "id_agrupado"])
++    )
++    if df_base.is_empty():
++        return _df_vazio_vinculo_produto(), {
++            "origem": origem,
++            "qtd_descricoes_unicas": 0,
++            "qtd_descricoes_ambiguas": 0,
++        }
++
++    df_grouped = (
++        df_base
++        .group_by("descricao_normalizada")
++        .agg(
++            [
++                pl.col("id_agrupado").n_unique().alias("__qtd_ids__"),
++                pl.col("id_agrupado").first().alias("id_agrupado"),
++                pl.col("descr_padrao").drop_nulls().first().alias("descr_padrao"),
++                pl.col("ncm_padrao").drop_nulls().first().alias("ncm_padrao"),
++                pl.col("cest_padrao").drop_nulls().first().alias("cest_padrao"),
++                pl.col("descricao_final").drop_nulls().first().alias("descricao_final"),
++                pl.col("co_sefin_final").drop_nulls().first().alias("co_sefin_final"),
++                pl.col("unid_ref_sugerida").drop_nulls().first().alias("unid_ref_sugerida"),
++            ]
++        )
++    )
++    resumo = {
++        "origem": origem,
++        "qtd_descricoes_unicas": int(df_grouped.filter(pl.col("__qtd_ids__") == 1).height),
++        "qtd_descricoes_ambiguas": int(df_grouped.filter(pl.col("__qtd_ids__") > 1).height),
++    }
++    return (
++        df_grouped
++        .filter(pl.col("__qtd_ids__") == 1)
++        .drop("__qtd_ids__")
++        .with_columns(pl.lit(origem).alias("origem_vinculo_produto")),
++        resumo,
++    )
++
++
++def _carregar_vinculo_produto_canonico(
++    pasta_analises: Path,
++    cnpj: str,
++    df_prod_final: pl.DataFrame,
++) -> pl.DataFrame:
++    bases: list[pl.DataFrame] = []
++    resumo: dict[str, dict] = {}
++
++    arq_pont = pasta_analises / f"map_produto_agrupado_{cnpj}.parquet"
++    if arq_pont.exists():
++        schema_cols = set(pl.read_parquet_schema(arq_pont).names())
++        if {"descricao_normalizada", "id_agrupado"}.issubset(schema_cols):
++            df_map_raw = (
++                pl.scan_parquet(arq_pont)
++                .select(
++                    [
++                        pl.col("descricao_normalizada").cast(pl.Utf8, strict=False),
++                        pl.col("id_agrupado").cast(pl.Utf8, strict=False),
++                    ]
++                )
++                .collect()
++                .join(
++                    df_prod_final
++                    .select(
++                        [
++                            "id_agrupado",
++                            "descr_padrao",
++                            "ncm_padrao",
++                            "cest_padrao",
++                            "descricao_final",
++                            "co_sefin_final",
++                            "unid_ref_sugerida",
++                        ]
++                    )
++                    .unique(subset=["id_agrupado"], keep="first"),
++                    on="id_agrupado",
++                    how="left",
++                )
++            )
++            df_map, resumo_map = _construir_vinculo_unico_por_descricao(df_map_raw, "map_produto_agrupado")
++            resumo["map_produto_agrupado"] = resumo_map
++            if not df_map.is_empty():
++                bases.append(df_map.with_columns(pl.lit(0).alias("__ordem_vinculo__")))
++
++    df_final_base, resumo_final = _construir_vinculo_unico_por_descricao(df_prod_final, "produtos_final")
++    resumo["produtos_final"] = resumo_final
++    if not df_final_base.is_empty():
++        bases.append(df_final_base.with_columns(pl.lit(1).alias("__ordem_vinculo__")))
++
++    if not bases:
++        _salvar_log_vinculo_produto(
++            {**resumo, "resultado": {"qtd_descricoes_vinculadas": 0}},
++            pasta_analises,
++            cnpj,
++        )
++        return _df_vazio_vinculo_produto()
++
++    df_vinculo = (
++        pl.concat(bases, how="vertical_relaxed")
++        .sort(["descricao_normalizada", "__ordem_vinculo__"])
++        .unique(subset=["descricao_normalizada"], keep="first")
++        .drop("__ordem_vinculo__")
++    )
++    _salvar_log_vinculo_produto(
++        {**resumo, "resultado": {"qtd_descricoes_vinculadas": int(df_vinculo.height)}},
++        pasta_analises,
++        cnpj,
++    )
++    return df_vinculo
+@@
+-    df_prod_final = (
+-        pl.read_parquet(arq_prod_final)
+-        .select(
+-            [
+-                "id_agrupado",
+-                "descricao_normalizada",
+-                "descr_padrao",
+-                "ncm_padrao",
+-                "cest_padrao",
+-                "descricao_final",
+-                "co_sefin_final",
+-                "unid_ref_sugerida",
+-            ]
+-        )
+-        .unique(subset=["descricao_normalizada"])
+-    )
++    df_prod_final = (
++        pl.read_parquet(arq_prod_final)
++        .select(
++            [
++                "id_agrupado",
++                "descricao_normalizada",
++                "descr_padrao",
++                "ncm_padrao",
++                "cest_padrao",
++                "descricao_final",
++                "co_sefin_final",
++                "unid_ref_sugerida",
++            ]
++        )
++    )
++    df_vinculo_produto = _carregar_vinculo_produto_canonico(pasta_analises, cnpj, df_prod_final)
+@@
+         if col_desc and "id_agrupado" not in df_raw.columns:
+             df_raw = (
+                 df_raw
+                 .with_columns(_normalizar_descricao_expr(col_desc))
+                 .join(
+-                    df_prod_final.rename({"descricao_normalizada": "__descricao_normalizada__"}),
++                    df_vinculo_produto.rename({"descricao_normalizada": "__descricao_normalizada__"}),
+                     on="__descricao_normalizada__",
+                     how="left",
+                 )
+                 .drop("__descricao_normalizada__")
+             )
+@@
+-        cols_extras_manter = ["id_agrupado", "ncm_padrao", "cest_padrao", "descr_padrao", "co_sefin_agr", "unid_ref", "fator"]
++        cols_extras_manter = ["id_agrupado", "ncm_padrao", "cest_padrao", "descr_padrao", "co_sefin_agr", "unid_ref", "fator", "origem_vinculo_produto"]
+         for c in cols_extras_manter:
+             if c in df_raw.columns:
+                 df_selecionado = df_selecionado.with_columns(df_raw[c])
+             else:
+                 df_selecionado = df_selecionado.with_columns(pl.lit(None).alias(c))
+@@
+                 .when(
+                     pl.col("Tipo_operacao").cast(pl.Utf8, strict=False).str.starts_with("3 - ESTOQUE FINAL")
+                 )
+                 .then(q_conv_valido_expr)
+                 .otherwise(pl.lit(0.0))
+                 .alias("__qtd_decl_final_audit__"),
+-                # q_conv: estoque inicial, entradas, saidas e final capturados independente da data
+-                # para permitir auditoria anual completa
+-                # Nota: estoque final tem q_conv populado, mas nao afeta o saldo sequencial
+-                pl.when(
+-                    pl.col("Tipo_operacao").cast(pl.Utf8, strict=False).str.starts_with("0 - ESTOQUE INICIAL")
+-                )
+-                .then(q_conv_valido_expr)
+-                .when(pl.col("Tipo_operacao") == "1 - ENTRADA")
+-                .then(q_conv_valido_expr)
+-                .when(pl.col("Tipo_operacao") == "2 - SAIDAS")
+-                .then(q_conv_valido_expr)
+-                .when(
+-                    pl.col("Tipo_operacao").cast(pl.Utf8, strict=False).str.starts_with("3 - ESTOQUE FINAL")
+-                )
+-                .then(q_conv_valido_expr)
+-                .otherwise(pl.lit(0.0))
+-                .alias("q_conv"),
++                # q_conv: quantidade convertida observada na linha, inclusive em estoque final.
++                q_conv_valido_expr.alias("q_conv"),
++                # q_conv_fisica: quantidade convertida que representa movimento fisico.
++                pl.when(
++                    pl.col("Tipo_operacao").cast(pl.Utf8, strict=False).str.starts_with("0 - ESTOQUE INICIAL")
++                )
++                .then(q_conv_valido_expr)
++                .when(pl.col("Tipo_operacao") == "1 - ENTRADA")
++                .then(q_conv_valido_expr)
++                .when(pl.col("Tipo_operacao") == "2 - SAIDAS")
++                .then(q_conv_valido_expr)
++                .otherwise(pl.lit(0.0))
++                .alias("q_conv_fisica"),
+                 # __q_conv_sinal__: usado no calculo sequencial de saldo
+                 # estoque final nao entra aqui para nao afetar o saldo acumulado
+                 pl.when(
+                     pl.col("Tipo_operacao").cast(pl.Utf8, strict=False).str.starts_with("0 - ESTOQUE INICIAL")
+                 )
+@@
+-    for coluna, referencia in [("q_conv", "Qtd"), ("preco_unit", "preco_item")]:
++    for coluna, referencia in [("q_conv", "Qtd"), ("q_conv_fisica", "q_conv"), ("preco_unit", "preco_item")]:
+         cols = list(df_final.columns)
+         if coluna in cols and referencia in cols:
+             cols.remove(coluna)
+             idx_ref = cols.index(referencia)
+             cols.insert(idx_ref + 1, coluna)
+diff --git a/src/transformacao/calculos_anuais_pkg/calculos_anuais.py b/src/transformacao/calculos_anuais_pkg/calculos_anuais.py
+--- a/src/transformacao/calculos_anuais_pkg/calculos_anuais.py
++++ b/src/transformacao/calculos_anuais_pkg/calculos_anuais.py
+@@
+     expected_cols = [
+         "dev_simples",
+         "excluir_estoque",
+         "it_pc_interna",
+         "Vl_item",
+         "preco_item",
+         "entr_desac_anual",
+         "q_conv",
++        "q_conv_fisica",
+         "__qtd_decl_final_audit__",
+         "co_sefin_agr",
+         "saldo_estoque_anual",
+         "ordem_operacoes",
+         "Tipo_operacao",
+@@
+-            elif c in {"Vl_item", "preco_item", "entr_desac_anual", "q_conv", "__qtd_decl_final_audit__", "it_pc_interna", "saldo_estoque_anual"}:
++            elif c in {"Vl_item", "preco_item", "entr_desac_anual", "q_conv", "q_conv_fisica", "__qtd_decl_final_audit__", "it_pc_interna", "saldo_estoque_anual"}:
+                 df = df.with_columns(pl.lit(0.0).alias(c))
+             else:
+                 df = df.with_columns(pl.lit(None).alias(c))
++
++    if "q_conv_fisica" not in df.columns:
++        df = df.with_columns(
++            pl.when(pl.col("Tipo_operacao").cast(pl.Utf8, strict=False).str.starts_with("3 - ESTOQUE FINAL"))
++            .then(pl.lit(0.0))
++            .otherwise(pl.col("q_conv").cast(pl.Float64, strict=False).fill_null(0.0))
++            .alias("q_conv_fisica")
++        )
+@@
+-    q_conv_positiva_expr = pl.col("q_conv").cast(pl.Float64, strict=False).fill_null(0.0) > 0
++    q_conv_positiva_expr = pl.col("q_conv_fisica").cast(pl.Float64, strict=False).fill_null(0.0) > 0
+@@
+                 pl.col("descr_padrao").drop_nulls().last().alias("descr_padrao"),
+                 pl.col("unid_ref").cast(pl.Utf8, strict=False).drop_nulls().last().alias("unid_ref"),
+                 pl.col("co_sefin_agr").cast(pl.Utf8, strict=False).drop_nulls().last().alias("co_sefin_agr"),
+-                pl.when(pl.col("Tipo_operacao").str.starts_with("0 - ESTOQUE INICIAL")).then(pl.col("q_conv")).otherwise(0.0).sum().alias("estoque_inicial"),
+-                pl.when(pl.col("Tipo_operacao").str.starts_with("1 - ENTRADA")).then(pl.col("q_conv")).otherwise(0.0).sum().alias("entradas"),
+-                pl.when(pl.col("Tipo_operacao").str.starts_with("2 - SAIDA")).then(pl.col("q_conv")).otherwise(0.0).sum().alias("saidas"),
++                pl.when(pl.col("Tipo_operacao").str.starts_with("0 - ESTOQUE INICIAL")).then(pl.col("q_conv_fisica")).otherwise(0.0).sum().alias("estoque_inicial"),
++                pl.when(pl.col("Tipo_operacao").str.starts_with("1 - ENTRADA")).then(pl.col("q_conv_fisica")).otherwise(0.0).sum().alias("entradas"),
++                pl.when(pl.col("Tipo_operacao").str.starts_with("2 - SAIDA")).then(pl.col("q_conv_fisica")).otherwise(0.0).sum().alias("saidas"),
+                 pl.when(pl.col("Tipo_operacao").str.starts_with("3 - ESTOQUE FINAL"))
+                 .then(pl.col("__qtd_decl_final_audit__").cast(pl.Float64, strict=False).fill_null(0.0))
+                 .otherwise(0.0)
+                 .sum()
+                 .alias("estoque_final"),
+                 pl.when(entrada_valida_media_expr).then(valor_item_expr).otherwise(0.0).sum().alias("soma_valor_entradas"),
+-                pl.when(entrada_valida_media_expr).then(pl.col("q_conv")).otherwise(0.0).sum().alias("soma_qtd_entradas"),
++                pl.when(entrada_valida_media_expr).then(pl.col("q_conv_fisica")).otherwise(0.0).sum().alias("soma_qtd_entradas"),
+                 pl.when(saida_valida_media_expr).then(valor_item_expr).otherwise(0.0).sum().alias("soma_valor_saidas"),
+-                pl.when(saida_valida_media_expr).then(pl.col("q_conv")).otherwise(0.0).sum().alias("soma_qtd_saidas"),
++                pl.when(saida_valida_media_expr).then(pl.col("q_conv_fisica")).otherwise(0.0).sum().alias("soma_qtd_saidas"),
+                 pl.col("entr_desac_anual").sum().alias("entradas_desacob"),
+                 pl.col("saldo_estoque_anual").sort_by("ordem_operacoes").last().alias("saldo_final"),
+                 pl.col("it_pc_interna").cast(pl.Float64, strict=False).drop_nulls().last().alias("aliq_interna_mov"),
+             ]
+         )
+diff --git a/docs/mov_estoque.md b/docs/mov_estoque.md
+--- a/docs/mov_estoque.md
++++ b/docs/mov_estoque.md
+@@
+-| `q_conv`     | `float` | Quantidade convertida observada na linha, inclusive em estoque final |
+-| `q_conv_fisica` | `float` | Quantidade convertida que representa movimento físico de estoque |
++| `q_conv`     | `float` | Quantidade convertida observada na linha, inclusive em estoque final |
++| `q_conv_fisica` | `float` | Quantidade convertida que representa movimento físico de estoque |
+ | `preco_unit` | `float` | Preço unitário calculado:`preco_item / q_conv`                |
+@@
+-| `__qtd_decl_final_audit__` | `float` | Quantidade declarada em estoque final (auditoria anual)          |
+-| `__q_conv_sinal__`         | `float` | Quantidade sinalizada para cálculo sequencial (+entrada, -saida) |
++| `__qtd_decl_final_audit__` | `float` | Quantidade declarada em estoque final (auditoria anual)          |
++| `__q_conv_sinal__`         | `float` | Quantidade física sinalizada para cálculo sequencial (+entrada, -saida) |
+ | `ordem_operacoes`          | `int`   | Ordem cronológica das operações (1-based)                        |
++| `origem_vinculo_produto`   | `str`   | Origem do vínculo do item com o agrupamento (`map_produto_agrupado` ou `produtos_final`) |
+@@
+-## Estoque final auditado
+-
+-`3 - ESTOQUE FINAL` não altera o saldo físico:
+-
+-- `q_conv` permanece `0` (não impacta saldo);
+-- a quantidade declarada fica em `__qtd_decl_final_audit__` (para auditoria na tabela anual);
+-- `saldo_estoque_anual` não muda;
+-- `custo_medio_anual` não muda;
+-- `entr_desac_anual` permanece `0`.
+-
+-Essa linha existe para auditoria de inventário, não para recomposição física do saldo.
++## Estoque final auditado
++
++`3 - ESTOQUE FINAL` não altera o saldo físico:
++
++- `q_conv` pode permanecer preenchido como quantidade convertida observada da linha;
++- `q_conv_fisica = 0` em estoque final;
++- `__q_conv_sinal__ = 0`, portanto o saldo sequencial não muda;
++- a quantidade declarada fica em `__qtd_decl_final_audit__` (para auditoria na tabela anual);
++- `saldo_estoque_anual` não muda;
++- `custo_medio_anual` não muda;
++- `entr_desac_anual` permanece `0`.
++
++Essa linha existe para auditoria de inventário, não para recomposição física do saldo.
+diff --git a/docs/tabelas/movimentacao_estoque.md b/docs/tabelas/movimentacao_estoque.md
+--- a/docs/tabelas/movimentacao_estoque.md
++++ b/docs/tabelas/movimentacao_estoque.md
+@@
+-| `q_conv` | float | Quantidade convertida para `unid_ref` |
++| `q_conv` | float | Quantidade convertida observada na linha |
++| `q_conv_fisica` | float | Quantidade convertida que representa movimento físico |
+ | `preco_item` | float | Valor total da linha |
+ | `Vl_item` | float | Valor unitário da linha |
+@@
+-| `__qtd_decl_final_audit__` | float | Quantidade declarada para auditoria (estoque final) |
++| `__qtd_decl_final_audit__` | float | Quantidade declarada para auditoria (estoque final) |
++| `origem_vinculo_produto` | str | Origem do vínculo do item com o agrupamento |
+@@
+-### Quantidade Convertida
++### Quantidade Convertida Observada e Física
+
+ ```text
+ q_conv = abs(Qtd) * abs(fator)
+ ```
+
+-**Neutralizações** (`q_conv = 0`):
++```text
++q_conv_fisica =
++  abs(Qtd) * abs(fator)   para ESTOQUE INICIAL / ENTRADA / SAÍDA
++  0                       para ESTOQUE FINAL
++```
++
++**Neutralizações** (`q_conv = 0` e `q_conv_fisica = 0`):
+@@
+-### Estoque Final Auditado
++### Estoque Final Auditado
+
+ Para linhas `3 - ESTOQUE FINAL`:
+
+-- `q_conv` permanece `0` (não impacta saldo)
+-- Quantidade declarada fica em `__qtd_decl_final_audit__`
++- `q_conv` pode permanecer preenchido como quantidade observada da linha
++- `q_conv_fisica = 0`
++- `__q_conv_sinal__ = 0`
++- Quantidade declarada fica em `__qtd_decl_final_audit__`
+ - `saldo_estoque_anual` não muda
+ - `custo_medio_anual` não muda
+ - `entr_desac_anual` permanece `0`
+@@
+-**Estoque final:**
+-- Não altera saldo financeiro
+-- Não recalcula custo médio
++**Estoque final:**
++- Não altera saldo financeiro
++- Não recalcula custo médio
++- Mantém apenas a dimensão declaratória/auditável do inventário
++
++### Vínculo Canônico de Produto
++
++Quando a origem ainda não traz `id_agrupado`, a implementação deve preferir o vínculo
++materializado em `map_produto_agrupado_<cnpj>.parquet`. O `produtos_final` permanece
++como fallback para descrições únicas e não ambíguas. Descrições com cardinalidade ambígua
++devem ser excluídas do vínculo automático e registradas em log.
+diff --git a/docs/abordagem_vinculo_canonico_e_qconv_fisica.md b/docs/abordagem_vinculo_canonico_e_qconv_fisica.md
+--- /dev/null
++++ b/docs/abordagem_vinculo_canonico_e_qconv_fisica.md
+@@
++# Abordagem de vínculo canônico e semântica de `q_conv`
++
++Este documento consolida duas decisões de arquitetura do pipeline:
++
++1. `id_agrupado` é a identidade analítica canônica do produto;
++2. a `mov_estoque` separa quantidade observada da linha, quantidade física e quantidade declarada para auditoria.
++
++## 1. Vínculo canônico de produto
++
++O vínculo preferencial entre item e agrupamento deve seguir esta precedência:
++
++1. `map_produto_agrupado_<cnpj>.parquet`
++2. `produtos_final_<cnpj>.parquet` apenas como fallback para descrições únicas
++
++`descricao_normalizada` continua existindo como apoio operacional, mas não deve ser a
++fonte primária de identidade quando já houver uma ponte materializada item → grupo.
++
++### Regra de segurança
++
++Sempre que uma `descricao_normalizada` apontar para mais de um `id_agrupado`, o vínculo
++automático deve ser considerado ambíguo e excluído da resolução automática. O processo
++deve registrar log com:
++
++- quantidade de descrições únicas;
++- quantidade de descrições ambíguas;
++- origem do vínculo efetivamente usada.
++
++## 2. Semântica das quantidades em `mov_estoque`
++
++As colunas passam a ter papéis distintos:
++
++- `q_conv`: quantidade convertida observada na linha;
++- `q_conv_fisica`: quantidade convertida que representa movimento físico;
++- `__q_conv_sinal__`: quantidade física com sinal usada no saldo sequencial;
++- `__qtd_decl_final_audit__`: quantidade declarada do estoque final para auditoria.
++
++### Estoque final
++
++Para `3 - ESTOQUE FINAL`:
++
++- `q_conv` pode permanecer preenchido para auditoria row-level;
++- `q_conv_fisica = 0`;
++- `__q_conv_sinal__ = 0`;
++- `__qtd_decl_final_audit__` recebe a quantidade declarada.
++
++Isso permite:
++
++- preservar a informação observada da linha;
++- impedir contaminação do saldo físico;
++- auditar inventário declarado sem ambiguidade.
++
++## 3. Compatibilidade com parquets legados
++
++Camadas consumidoras (`calculos_mensais`, `calculos_anuais`) devem aceitar bases legadas
++sem `q_conv_fisica`. Nesse caso:
++
++- derivar `q_conv_fisica` a partir de `q_conv`;
++- zerar `q_conv_fisica` em `3 - ESTOQUE FINAL`.
++
++Essa compatibilidade evita quebra de schema durante a migração.
+diff --git a/tests/test_estoque_inicial_final_anual.py b/tests/test_estoque_inicial_final_anual.py
+--- a/tests/test_estoque_inicial_final_anual.py
++++ b/tests/test_estoque_inicial_final_anual.py
+@@
+-        "q_conv": [100.0, 50.0, 30.0, 0.0, 0.0, 0.0],  # ESTOQUE FINAL tem q_conv = 0
++        "q_conv": [100.0, 50.0, 30.0, 50.0, 30.0, 20.0],
++        "q_conv_fisica": [100.0, 50.0, 30.0, 0.0, 0.0, 0.0],
+         "__qtd_decl_final_audit__": [0.0, 0.0, 0.0, 50.0, 30.0, 20.0],  # Valores declarados
+@@
+-        "q_conv": [250.0],  # Deve ser capturado
++        "q_conv": [250.0],
++        "q_conv_fisica": [250.0],
+         "__qtd_decl_final_audit__": [0.0],
+@@
+-        "q_conv": [0.0],
++        "q_conv": [180.0],
++        "q_conv_fisica": [0.0],
+         "__qtd_decl_final_audit__": [180.0],  # Deve ser capturado
+diff --git a/tests/test_q_conv_semantica_estoque.py b/tests/test_q_conv_semantica_estoque.py
+--- /dev/null
++++ b/tests/test_q_conv_semantica_estoque.py
+@@
++from datetime import date
++from pathlib import Path
++import sys
++
++import polars as pl
++
++sys.path.insert(0, str(Path("src").resolve()))
++
++from transformacao.calculos_anuais_pkg.calculos_anuais import calcular_aba_anual_dataframe
++from transformacao.calculos_mensais_pkg.calculos_mensais import calcular_aba_mensal_dataframe
++from transformacao.fatores_conversao import calcular_fatores_conversao
++
++
++def test_calculos_anuais_separam_fluxo_fisico_de_auditoria_final():
++    df = pl.DataFrame(
++        {
++            "id_agrupado": ["prod_1"] * 4,
++            "Tipo_operacao": [
++                "0 - ESTOQUE INICIAL",
++                "1 - ENTRADA",
++                "2 - SAIDAS",
++                "3 - ESTOQUE FINAL",
++            ],
++            "Dt_doc": [date(2024, 1, 1), date(2024, 1, 10), date(2024, 1, 20), date(2024, 12, 31)],
++            "Dt_e_s": [date(2024, 1, 1), date(2024, 1, 10), date(2024, 1, 20), date(2024, 12, 31)],
++            "q_conv": [100.0, 20.0, 10.0, 90.0],
++            "q_conv_fisica": [100.0, 20.0, 10.0, 0.0],
++            "__qtd_decl_final_audit__": [0.0, 0.0, 0.0, 90.0],
++            "entr_desac_anual": [0.0, 0.0, 0.0, 0.0],
++            "saldo_estoque_anual": [100.0, 120.0, 110.0, 110.0],
++            "ordem_operacoes": [1, 2, 3, 4],
++            "descr_padrao": ["Produto 1"] * 4,
++            "unid_ref": ["UN"] * 4,
++            "co_sefin_agr": ["COD"] * 4,
++            "it_pc_interna": [18.0] * 4,
++            "preco_item": [1000.0, 200.0, 100.0, 0.0],
++            "Vl_item": [1000.0, 200.0, 100.0, 0.0],
++            "dev_simples": [False] * 4,
++            "excluir_estoque": [False] * 4,
++        }
++    )
++
++    df_anual = calcular_aba_anual_dataframe(df)
++    row = df_anual.row(0, named=True)
++
++    assert row["estoque_inicial"] == 100.0
++    assert row["entradas"] == 20.0
++    assert row["saidas"] == 10.0
++    assert row["estoque_final"] == 90.0
++    assert row["saldo_final"] == 110.0
++
++
++def test_calculos_mensais_ignoram_qconv_observacional_em_estoque_final():
++    df = pl.DataFrame(
++        {
++            "id_agrupado": ["prod_1"] * 3,
++            "Tipo_operacao": ["1 - ENTRADA", "2 - SAIDAS", "3 - ESTOQUE FINAL"],
++            "Dt_doc": [date(2024, 6, 1), date(2024, 6, 10), date(2024, 6, 30)],
++            "Dt_e_s": [date(2024, 6, 1), date(2024, 6, 10), date(2024, 6, 30)],
++            "q_conv": [20.0, 5.0, 90.0],
++            "q_conv_fisica": [20.0, 5.0, 0.0],
++            "__qtd_decl_final_audit__": [0.0, 0.0, 90.0],
++            "entr_desac_anual": [0.0, 0.0, 0.0],
++            "saldo_estoque_anual": [20.0, 15.0, 15.0],
++            "custo_medio_anual": [10.0, 10.0, 10.0],
++            "entr_desac_periodo": [0.0, 0.0, 0.0],
++            "saldo_estoque_periodo": [20.0, 15.0, 15.0],
++            "custo_medio_periodo": [10.0, 10.0, 10.0],
++            "ordem_operacoes": [1, 2, 3],
++            "descr_padrao": ["Produto 1"] * 3,
++            "Unid": ["UN"] * 3,
++            "unid_ref": ["UN"] * 3,
++            "co_sefin_agr": ["COD"] * 3,
++            "preco_item": [200.0, 50.0, 0.0],
++            "Vl_item": [200.0, 50.0, 0.0],
++            "Aliq_icms": [12.0] * 3,
++            "it_pc_interna": [18.0] * 3,
++            "it_pc_mva": [0.0] * 3,
++            "it_in_st": ["N"] * 3,
++            "it_in_mva_ajustado": ["N"] * 3,
++            "dev_simples": [False] * 3,
++            "dev_venda": [False] * 3,
++            "dev_compra": [False] * 3,
++            "dev_ent_simples": [False] * 3,
++            "excluir_estoque": [False] * 3,
++        }
++    )
++
++    df_mensal = calcular_aba_mensal_dataframe(df)
++    row = df_mensal.row(0, named=True)
++
++    assert row["qtd_entradas"] == 20.0
++    assert row["qtd_saidas"] == 5.0
++    assert row["saldo_mes"] == 15.0
++
++
++def test_fatores_conversao_prioriza_map_produto_agrupado_no_vinculo(tmp_path: Path):
++    cnpj = "55555555000155"
++    pasta_cnpj = tmp_path / cnpj
++    pasta_prod = pasta_cnpj / "analises" / "produtos"
++    pasta_prod.mkdir(parents=True, exist_ok=True)
++
++    pl.DataFrame(
++        {
++            "descricao": ["PROD CANON", "PROD CANON"],
++            "unid": ["UN", "CX"],
++            "compras": [10.0, 120.0],
++            "vendas": [0.0, 0.0],
++            "qtd_compras": [1.0, 1.0],
++            "qtd_vendas": [0.0, 0.0],
++        }
++    ).write_parquet(pasta_prod / f"item_unidades_{cnpj}.parquet")
++
++    pl.DataFrame(
++        {
++            "id_agrupado": ["id_certo", "id_errado"],
++            "descricao_normalizada": ["PROD CANON", "PROD CANON"],
++            "descricao_final": ["PROD CANON", "PROD CANON"],
++            "descr_padrao": ["PROD CANON CERTO", "PROD CANON ERRADO"],
++            "unid_ref_sugerida": ["UN", "UN"],
++        }
++    ).write_parquet(pasta_prod / f"produtos_final_{cnpj}.parquet")
++
++    pl.DataFrame(
++        {
++            "chave_produto": ["item_1"],
++            "id_agrupado": ["id_certo"],
++            "codigo_fonte": ["teste"],
++            "descricao_normalizada": ["PROD CANON"],
++        }
++    ).write_parquet(pasta_prod / f"map_produto_agrupado_{cnpj}.parquet")
++
++    assert calcular_fatores_conversao(cnpj, pasta_cnpj=pasta_cnpj) is True
++
++    df_resultado = pl.read_parquet(pasta_prod / f"fatores_conversao_{cnpj}.parquet")
++    assert df_resultado.get_column("id_agrupado").unique().to_list() == ["id_certo"]

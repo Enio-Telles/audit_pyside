@@ -16,7 +16,9 @@ from utilitarios.project_paths import PROJECT_ROOT
 import polars as pl
 from rich import print as rprint
 
-from transformacao.movimentacao_estoque_pkg.mapeamento_fontes import normalizar_descricao_expr
+from transformacao.movimentacao_estoque_pkg.mapeamento_fontes import (
+    normalizar_descricao_expr,
+)
 
 ROOT_DIR = PROJECT_ROOT
 SRC_DIR = ROOT_DIR / "src"
@@ -26,11 +28,9 @@ CNPJ_ROOT = DADOS_DIR / "CNPJ"
 
 try:
     from utilitarios.salvar_para_parquet import salvar_para_parquet
-    from utilitarios.text import remove_accents
 except ImportError as e:
     rprint(f"[red]Erro ao importar modulos utilitarios:[/red] {e}")
     sys.exit(1)
-
 
 
 def calcular_precos_medios_produtos_final(
@@ -57,10 +57,8 @@ def calcular_precos_medios_produtos_final(
 
     if "codigo_fonte" in df_unid.columns and arq_map.exists():
         df_map = pl.read_parquet(arq_map).rename({"chave_produto": "codigo_fonte"})
-        df_link = (
-            df_unid
-            .join(df_map, on="codigo_fonte", how="left")
-            .join(df_agrup, on="id_agrupado", how="left")
+        df_link = df_unid.join(df_map, on="codigo_fonte", how="left").join(
+            df_agrup, on="id_agrupado", how="left"
         )
     else:
         if not arq_final.exists():
@@ -70,7 +68,9 @@ def calcular_precos_medios_produtos_final(
             .select(["descricao_normalizada", "id_agrupado", "descr_padrao"])
             .with_columns(
                 [
-                    pl.col("descricao_normalizada").cast(pl.Utf8, strict=False).fill_null(""),
+                    pl.col("descricao_normalizada")
+                    .cast(pl.Utf8, strict=False)
+                    .fill_null(""),
                     pl.col("id_agrupado").cast(pl.Utf8, strict=False),
                     pl.col("descr_padrao").cast(pl.Utf8, strict=False),
                 ]
@@ -79,8 +79,7 @@ def calcular_precos_medios_produtos_final(
             .unique(subset=["descricao_normalizada", "id_agrupado"])
         )
         df_link = (
-            df_unid
-            .with_columns(
+            df_unid.with_columns(
                 normalizar_descricao_expr("descricao").alias("descricao_normalizada")
             )
             .join(df_final, on="descricao_normalizada", how="left")
@@ -89,8 +88,9 @@ def calcular_precos_medios_produtos_final(
         )
 
     df_precos = (
-        df_link
-        .filter(pl.col("id_agrupado").is_not_null() & pl.col("unid").is_not_null())
+        df_link.filter(
+            pl.col("id_agrupado").is_not_null() & pl.col("unid").is_not_null()
+        )
         .group_by(["id_agrupado", "descr_padrao", "unid"])
         .agg(
             [
@@ -98,7 +98,9 @@ def calcular_precos_medios_produtos_final(
                 pl.col("qtd_compras").sum().alias("qtd_compras_total"),
                 pl.col("vendas").sum().alias("vendas_total"),
                 pl.col("qtd_vendas").sum().alias("qtd_vendas_total"),
-                (pl.col("qtd_compras").sum() + pl.col("qtd_vendas").sum()).alias("qtd_mov_total"),
+                (pl.col("qtd_compras").sum() + pl.col("qtd_vendas").sum()).alias(
+                    "qtd_mov_total"
+                ),
             ]
         )
         .with_columns(
@@ -115,7 +117,9 @@ def calcular_precos_medios_produtos_final(
         )
         .with_columns(
             [
-                pl.coalesce([pl.col("preco_medio_compra"), pl.col("preco_medio_venda")]).alias("preco_medio_base"),
+                pl.coalesce(
+                    [pl.col("preco_medio_compra"), pl.col("preco_medio_venda")]
+                ).alias("preco_medio_base"),
                 pl.when(pl.col("preco_medio_compra").is_not_null())
                 .then(pl.lit("COMPRA"))
                 .when(pl.col("preco_medio_venda").is_not_null())
@@ -128,8 +132,7 @@ def calcular_precos_medios_produtos_final(
     )
 
     df_sem_compra = (
-        df_precos
-        .filter(pl.col("preco_medio_compra").is_null())
+        df_precos.filter(pl.col("preco_medio_compra").is_null())
         .with_columns(
             [
                 pl.col("preco_medio_venda").is_not_null().alias("tem_preco_venda"),
@@ -155,14 +158,24 @@ def calcular_precos_medios_produtos_final(
     )
 
     if salvar_logs:
-        salvar_para_parquet(df_sem_compra, pasta_analises, f"log_sem_preco_medio_compra_{cnpj}.parquet")
+        salvar_para_parquet(
+            df_sem_compra, pasta_analises, f"log_sem_preco_medio_compra_{cnpj}.parquet"
+        )
         resumo = {
             "cnpj": cnpj,
             "qtd_itens_sem_preco_compra": int(df_sem_compra.height),
-            "qtd_itens_com_fallback_venda": int(df_sem_compra.filter(pl.col("tem_preco_venda")).height),
-            "qtd_itens_sem_preco_algum": int(df_sem_compra.filter(~pl.col("tem_preco_venda")).height),
+            "qtd_itens_com_fallback_venda": int(
+                df_sem_compra.filter(pl.col("tem_preco_venda")).height
+            ),
+            "qtd_itens_sem_preco_algum": int(
+                df_sem_compra.filter(~pl.col("tem_preco_venda")).height
+            ),
         }
-        with open(pasta_analises / f"log_sem_preco_medio_compra_{cnpj}.json", "w", encoding="utf-8") as f:
+        with open(
+            pasta_analises / f"log_sem_preco_medio_compra_{cnpj}.json",
+            "w",
+            encoding="utf-8",
+        ) as f:
             json.dump(resumo, f, ensure_ascii=False, indent=2)
 
     return df_precos, df_sem_compra
@@ -176,5 +189,3 @@ if __name__ == "__main__":
         c = input("CNPJ: ")
         d1, d2 = calcular_precos_medios_produtos_final(c)
         rprint(f"[green]OK[/green] precos_medios={d1.height}, sem_compra={d2.height}")
-
-

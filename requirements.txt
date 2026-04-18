@@ -4,10 +4,11 @@ polars
 rich
 pyarrow
 numpy
-pandas
 xlsxwriter
 oracledb
 python-dotenv
 PySide6
 python-docx
 pymupdf>=1.22.0
+
+filelock

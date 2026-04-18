@@ -1,15 +1,17 @@
-﻿import sys
+import json
+import sys
 import re
 from pathlib import Path
-from utilitarios.project_paths import PROJECT_ROOT, TRACEBACK_PATH
+
 import polars as pl
 from rich import print as rprint
+
+from utilitarios.project_paths import PROJECT_ROOT, TRACEBACK_PATH
 
 ROOT_DIR = PROJECT_ROOT
 SRC_DIR = ROOT_DIR / "src"
 DADOS_DIR = ROOT_DIR / "dados"
 CNPJ_ROOT = DADOS_DIR / "CNPJ"
-
 
 try:
     from utilitarios.codigo_fonte import (
@@ -71,6 +73,20 @@ def marcar_mov_rep_por_chave_item(df: pl.DataFrame) -> pl.DataFrame:
 
     item_expr = pl.col("Num_item").cast(pl.Utf8, strict=False).fill_null("").str.strip_chars()
     df = df.with_columns(pl.coalesce(candidatos).fill_null("").alias("__chave_doc__"))
+    if df.is_empty() or "Num_item" not in df.columns:
+        return df
+
+    # Chave de documento com fallback multinível para capturar C170 sem NF-e vinculada
+    _colunas_chave = [c for c in ["Chv_nfe", "num_doc", "id_linha_origem"] if c in df.columns]
+    if not _colunas_chave:
+        return df
+
+    id_doc_expr = pl.coalesce(
+        [pl.col(c).cast(pl.Utf8, strict=False).str.strip_chars() for c in _colunas_chave]
+    ).fill_null("")
+    item_expr = pl.col("Num_item").cast(pl.Utf8, strict=False).fill_null("").str.strip_chars()
+
+    df = df.with_columns(id_doc_expr.alias("__chave_doc__"))
     repetido_expr = (
         (pl.col("__chave_doc__") != "")
         & (item_expr != "")
@@ -81,11 +97,16 @@ def marcar_mov_rep_por_chave_item(df: pl.DataFrame) -> pl.DataFrame:
         df = df.with_columns((repetido_expr | _boolish_expr("mov_rep").fill_null(False)).alias("mov_rep"))
     else:
         df = df.with_columns(repetido_expr.alias("mov_rep"))
+        df = df.with_columns(
+            (repetido_expr | _boolish_expr("mov_rep").fill_null(False)).alias("mov_rep")
+        )
+    else:
+        df = df.with_columns(repetido_expr.alias("mov_rep"))
+
     return df.drop("__chave_doc__")
 
 
 def filtrar_movimentacoes_por_fonte(df: pl.DataFrame) -> pl.DataFrame:
-    """Aplica a regra fiscal de direcao por origem na mov_estoque."""
     if df.is_empty() or "fonte" not in df.columns or "Tipo_operacao" not in df.columns:
         return df
 
@@ -167,6 +188,164 @@ def _construir_vinculos_produto(arq_prod_final: Path, arq_mapa: Path):
         )
 
     return df_codigo, df_desc
+def _salvar_log_vinculo_produto(resumo: dict, pasta_analises: Path, cnpj: str) -> None:
+    """Persiste resumo do vínculo de produto para rastreabilidade."""
+    caminho = pasta_analises / f"log_vinculo_produto_estoque_{cnpj}.json"
+    try:
+        with open(caminho, "w", encoding="utf-8") as f:
+            json.dump(resumo, f, ensure_ascii=False, indent=2)
+    except Exception as exc:
+        rprint(f"[yellow]Aviso: falha ao salvar log de vínculo: {exc}[/yellow]")
+
+
+def _df_vazio_vinculo_produto() -> pl.DataFrame:
+    return pl.DataFrame(
+        schema={
+            "descricao_normalizada": pl.Utf8,
+            "id_agrupado": pl.Utf8,
+            "descr_padrao": pl.Utf8,
+            "ncm_padrao": pl.Utf8,
+            "cest_padrao": pl.Utf8,
+            "descricao_final": pl.Utf8,
+            "co_sefin_final": pl.Utf8,
+            "unid_ref_sugerida": pl.Utf8,
+            "origem_vinculo_produto": pl.Utf8,
+            }
+        )
+
+
+def _construir_vinculo_unico_por_descricao(df: pl.DataFrame, origem: str) -> tuple[pl.DataFrame, dict]:
+    if df.is_empty():
+        return _df_vazio_vinculo_produto(), {
+            "origem": origem,
+            "qtd_descricoes_unicas": 0,
+            "qtd_descricoes_ambiguas": 0,
+        }
+
+    df_base = (
+        df
+        .select(
+            [
+                pl.col("descricao_normalizada").cast(pl.Utf8, strict=False).fill_null("").alias("descricao_normalizada"),
+                pl.col("id_agrupado").cast(pl.Utf8, strict=False).alias("id_agrupado"),
+                pl.col("descr_padrao").cast(pl.Utf8, strict=False).alias("descr_padrao"),
+                pl.col("ncm_padrao").cast(pl.Utf8, strict=False).alias("ncm_padrao"),
+                pl.col("cest_padrao").cast(pl.Utf8, strict=False).alias("cest_padrao"),
+                pl.col("descricao_final").cast(pl.Utf8, strict=False).alias("descricao_final"),
+                pl.col("co_sefin_final").cast(pl.Utf8, strict=False).alias("co_sefin_final"),
+                pl.col("unid_ref_sugerida").cast(pl.Utf8, strict=False).alias("unid_ref_sugerida"),
+            ]
+        )
+        .filter(pl.col("descricao_normalizada") != "")
+        .drop_nulls(["descricao_normalizada", "id_agrupado"])
+    )
+    if df_base.is_empty():
+        return _df_vazio_vinculo_produto(), {
+            "origem": origem,
+            "qtd_descricoes_unicas": 0,
+            "qtd_descricoes_ambiguas": 0,
+        }
+
+    df_grouped = (
+        df_base
+        .group_by("descricao_normalizada")
+        .agg(
+            [
+                pl.col("id_agrupado").n_unique().alias("__qtd_ids__"),
+                pl.col("id_agrupado").first().alias("id_agrupado"),
+                pl.col("descr_padrao").drop_nulls().first().alias("descr_padrao"),
+                pl.col("ncm_padrao").drop_nulls().first().alias("ncm_padrao"),
+                pl.col("cest_padrao").drop_nulls().first().alias("cest_padrao"),
+                pl.col("descricao_final").drop_nulls().first().alias("descricao_final"),
+                pl.col("co_sefin_final").drop_nulls().first().alias("co_sefin_final"),
+                pl.col("unid_ref_sugerida").drop_nulls().first().alias("unid_ref_sugerida"),
+            ]
+        )
+    )
+    resumo = {
+        "origem": origem,
+        "qtd_descricoes_unicas": int(df_grouped.filter(pl.col("__qtd_ids__") == 1).height),
+        "qtd_descricoes_ambiguas": int(df_grouped.filter(pl.col("__qtd_ids__") > 1).height),
+    }
+    return (
+        df_grouped
+        .filter(pl.col("__qtd_ids__") == 1)
+        .drop("__qtd_ids__")
+        .with_columns(pl.lit(origem).alias("origem_vinculo_produto")),
+        resumo,
+    )
+
+
+def _carregar_vinculo_produto_canonico(
+    pasta_analises: Path,
+    cnpj: str,
+    df_prod_final: pl.DataFrame,
+) -> pl.DataFrame:
+    bases: list[pl.DataFrame] = []
+    resumo: dict[str, dict] = {}
+
+    arq_pont = pasta_analises / f"map_produto_agrupado_{cnpj}.parquet"
+    if arq_pont.exists():
+        schema_cols = set(pl.read_parquet_schema(arq_pont).names())
+        if {"descricao_normalizada", "id_agrupado"}.issubset(schema_cols):
+            df_map_raw = (
+                pl.scan_parquet(arq_pont)
+                .select(
+                    [
+                        pl.col("descricao_normalizada").cast(pl.Utf8, strict=False),
+                        pl.col("id_agrupado").cast(pl.Utf8, strict=False),
+                    ]
+                )
+                .collect()
+                .join(
+                    df_prod_final
+                    .select(
+                        [
+                            "id_agrupado",
+                            "descr_padrao",
+                            "ncm_padrao",
+                            "cest_padrao",
+                            "descricao_final",
+                            "co_sefin_final",
+                            "unid_ref_sugerida",
+                        ]
+                    )
+                    .unique(subset=["id_agrupado"], keep="first"),
+                    on="id_agrupado",
+                    how="left",
+                )
+            )
+            df_map, resumo_map = _construir_vinculo_unico_por_descricao(df_map_raw, "map_produto_agrupado")
+            resumo["map_produto_agrupado"] = resumo_map
+            if not df_map.is_empty():
+                bases.append(df_map.with_columns(pl.lit(0).alias("__ordem_vinculo__")))
+
+    df_final_base, resumo_final = _construir_vinculo_unico_por_descricao(df_prod_final, "produtos_final")
+    resumo["produtos_final"] = resumo_final
+    if not df_final_base.is_empty():
+        bases.append(df_final_base.with_columns(pl.lit(1).alias("__ordem_vinculo__")))
+
+    if not bases:
+        _salvar_log_vinculo_produto(
+            {**resumo, "resultado": {"qtd_descricoes_vinculadas": 0}},
+            pasta_analises,
+            cnpj,
+        )
+        return _df_vazio_vinculo_produto()
+
+    df_vinculo = (
+        pl.concat(bases, how="vertical_relaxed")
+        .sort(["descricao_normalizada", "__ordem_vinculo__"])
+        .unique(subset=["descricao_normalizada"], keep="first")
+        .drop("__ordem_vinculo__")
+    )
+    _salvar_log_vinculo_produto({**resumo, "resultado": {"qtd_descricoes_vinculadas": int(df_vinculo.height)}}, pasta_analises, cnpj)
+    return df_vinculo
+
+
+# ===========================================================================
+# Funcoes de calculo de saldo para map_groups
+# ===========================================================================
 
 
 def gerar_movimentacao_estoque(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
@@ -223,6 +402,25 @@ def gerar_movimentacao_estoque(cnpj: str, pasta_cnpj: Path | None = None) -> boo
     except SchemaValidacaoError as exc:
         rprint(f"[red]{exc}[/red]")
         return False
+
+    df_prod_final = (
+        pl.read_parquet(arq_prod_final)
+        .select(
+            [
+                "id_agrupado",
+                "descricao_normalizada",
+                "descr_padrao",
+                "ncm_padrao",
+                "cest_padrao",
+                "descricao_final",
+                "co_sefin_final",
+                "unid_ref_sugerida",
+            ]
+        )
+    )
+
+    # Construir vinculo canonico: prioriza map_produto_agrupado_<cnpj>.parquet
+    df_vinculo_produto = _carregar_vinculo_produto_canonico(pasta_analises, cnpj, df_prod_final)
 
     df_fatores = (
         pl.read_parquet(arq_fatores)
@@ -283,6 +481,17 @@ def gerar_movimentacao_estoque(cnpj: str, pasta_cnpj: Path | None = None) -> boo
                     df_raw = pl.concat([com_match, sem_match], how="diagonal_relaxed")
                 if "__descricao_normalizada__" in df_raw.columns:
                     df_raw = df_raw.drop("__descricao_normalizada__", strict=False)
+        if col_desc and "id_agrupado" not in df_raw.columns:
+            df_raw = (
+                df_raw
+                .with_columns(_normalizar_descricao_expr(col_desc))
+                .join(
+                    df_vinculo_produto.rename({"descricao_normalizada": "__descricao_normalizada__"}),
+                    on="__descricao_normalizada__",
+                    how="left",
+                )
+                .drop("__descricao_normalizada__")
+            )
 
         if col_unid and ("fator" not in df_raw.columns or "unid_ref" not in df_raw.columns):
             df_raw = (
@@ -308,6 +517,15 @@ def gerar_movimentacao_estoque(cnpj: str, pasta_cnpj: Path | None = None) -> boo
                 exprs.append(pl.lit(None).alias(target))
             v = str(orig)
             if v and v not in ["(vazio)", "correspondência com chave NF", "icms_orig & icms_cst ou icms_csosn", "prod_ceantrib ou caso for nulo -> prod_cean", "vl_item-vl_desc", "prod_vprod+prod_vfrete+prod_vseg+prod_voutro-prod_vdesc", "\"gerado\" ou \"registro\" (se está no bloco_h)"] and not v.startswith('"'):
+            if v and v not in [
+                "(vazio)",
+                "correspondência com chave NF",
+                "icms_orig & icms_cst ou icms_csosn",
+                "prod_ceantrib ou caso for nulo -> prod_cean",
+                "vl_item-vl_desc",
+                "prod_vprod+prod_vfrete+prod_vseg+prod_voutro-prod_vdesc",
+                "\"gerado\" ou \"registro\" (se está no bloco_h)",
+            ] and not v.startswith('"'):
                 cols_required.add(v)
 
         cols_required.update(["vl_item", "vl_desc", "prod_vprod", "prod_vfrete", "prod_vseg", "prod_voutro", "prod_vdesc", "icms_cst", "icms_orig", "icms_csosn", "prod_cean", "prod_ceantrib", "chv_nfe"])
@@ -317,9 +535,15 @@ def gerar_movimentacao_estoque(cnpj: str, pasta_cnpj: Path | None = None) -> boo
 
         df_selecionado = df_raw.select(exprs)
         cols_extras_manter = ["id_agrupado", "ncm_padrao", "cest_padrao", "descr_padrao", "co_sefin_agr", "unid_ref", "fator", "origem_vinculo_produto"]
+
+        cols_extras_manter = ["id_agrupado", "ncm_padrao", "cest_padrao", "descr_padrao", "co_sefin_agr", "unid_ref", "fator", "origem_vinculo_produto", "origem_evento_estoque", "evento_sintetico"]
         for c in cols_extras_manter:
             if c in df_raw.columns:
                 df_selecionado = df_selecionado.with_columns(df_raw[c])
+            elif c == "origem_evento_estoque":
+                df_selecionado = df_selecionado.with_columns(pl.lit("registro").alias(c))
+            elif c == "evento_sintetico":
+                df_selecionado = df_selecionado.with_columns(pl.lit(False).alias(c))
             else:
                 df_selecionado = df_selecionado.with_columns(pl.lit(None).alias(c))
 
@@ -352,10 +576,25 @@ def gerar_movimentacao_estoque(cnpj: str, pasta_cnpj: Path | None = None) -> boo
             .with_columns(pl.col("Cfop").cast(pl.Utf8, strict=False).str.replace_all(r"\D", "").alias("Cfop"))
             .join(df_flags_cfop, on="Cfop", how="left")
         )
+
+    if "origem_evento_estoque" not in df_final.columns:
+        df_final = df_final.with_columns(pl.lit("registro").alias("origem_evento_estoque"))
+    if "evento_sintetico" not in df_final.columns:
+        df_final = df_final.with_columns(pl.lit(False).alias("evento_sintetico"))
+
     for col in ["mov_rep", "excluir_estoque", "dev_simples", "dev_venda", "dev_compra", "dev_ent_simples"]:
         if col not in df_final.columns:
             df_final = df_final.with_columns(pl.lit(None).alias(col))
     df_final = marcar_mov_rep_por_chave_item(df_final)
+
+    if "mov_rep" in df_final.columns:
+        df_neutralizadas = df_final.filter(_boolish_expr("mov_rep").fill_null(False))
+        if df_neutralizadas.height > 0:
+            salvar_para_parquet(
+                df_neutralizadas,
+                pasta_analises,
+                f"linhas_neutralizadas_duplicidade_{cnpj}.parquet",
+            )
 
     df_final = (
         df_final
@@ -387,6 +626,12 @@ def gerar_movimentacao_estoque(cnpj: str, pasta_cnpj: Path | None = None) -> boo
         pl.col("Dt_e_s").cast(pl.Date, strict=False),
         pl.col("Dt_doc").cast(pl.Date, strict=False),
     ])
+    data_ref_expr = pl.coalesce(
+        [
+            pl.col("Dt_e_s").cast(pl.Date, strict=False),
+            pl.col("Dt_doc").cast(pl.Date, strict=False),
+        ]
+    )
     qtd_bruta_expr = pl.col("Qtd").cast(pl.Float64, strict=False).fill_null(0.0).abs()
     fator_expr = pl.col("fator").cast(pl.Float64, strict=False).fill_null(1.0).abs()
     q_conv_base_expr = (qtd_bruta_expr * fator_expr)
@@ -444,6 +689,50 @@ def gerar_movimentacao_estoque(cnpj: str, pasta_cnpj: Path | None = None) -> boo
             .alias("__q_conv_sinal__"),
         ])
         .with_columns(
+            [
+                pl.when(
+                    pl.col("Tipo_operacao").cast(pl.Utf8, strict=False).str.starts_with("3 - ESTOQUE FINAL")
+                )
+                .then(q_conv_valido_expr)
+                .otherwise(pl.lit(0.0))
+                .alias("__qtd_decl_final_audit__"),
+                pl.when(
+                    pl.col("Tipo_operacao").cast(pl.Utf8, strict=False).str.starts_with("0 - ESTOQUE INICIAL")
+                )
+                .then(q_conv_valido_expr)
+                .when(pl.col("Tipo_operacao") == "1 - ENTRADA")
+                .then(q_conv_valido_expr)
+                .when(pl.col("Tipo_operacao") == "2 - SAIDAS")
+                .then(q_conv_valido_expr)
+                .when(
+                    pl.col("Tipo_operacao").cast(pl.Utf8, strict=False).str.starts_with("3 - ESTOQUE FINAL")
+                )
+                .then(q_conv_valido_expr)
+                .otherwise(pl.lit(0.0))
+                .alias("q_conv"),
+                pl.when(
+                    pl.col("Tipo_operacao").cast(pl.Utf8, strict=False).str.starts_with("0 - ESTOQUE INICIAL")
+                )
+                .then(q_conv_valido_expr)
+                .when(pl.col("Tipo_operacao") == "1 - ENTRADA")
+                .then(q_conv_valido_expr)
+                .when(pl.col("Tipo_operacao") == "2 - SAIDAS")
+                .then(q_conv_valido_expr)
+                .otherwise(pl.lit(0.0))
+                .alias("q_conv_fisica"),
+                pl.when(
+                    pl.col("Tipo_operacao").cast(pl.Utf8, strict=False).str.starts_with("0 - ESTOQUE INICIAL")
+                )
+                .then(q_conv_valido_expr)
+                .when(pl.col("Tipo_operacao") == "1 - ENTRADA")
+                .then(q_conv_valido_expr)
+                .when(pl.col("Tipo_operacao") == "2 - SAIDAS")
+                .then(-q_conv_valido_expr)
+                .otherwise(pl.lit(0.0))
+                .alias("__q_conv_sinal__"),
+            ]
+        )
+        .with_columns(
             pl.when(pl.col("q_conv") > 0)
             .then(pl.col("preco_item").cast(pl.Float64, strict=False).fill_null(0.0) / pl.col("q_conv"))
             .otherwise(pl.lit(0.0))
@@ -472,6 +761,7 @@ def gerar_movimentacao_estoque(cnpj: str, pasta_cnpj: Path | None = None) -> boo
         rprint(f"[green]Sucesso! {df_final.height} registros salvos.[/green]")
 
     return ok
+
 
 if __name__ == "__main__":
     try:

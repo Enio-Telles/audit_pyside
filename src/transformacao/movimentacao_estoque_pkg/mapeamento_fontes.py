@@ -1,4 +1,4 @@
-﻿"""
+"""
 mapeamento_fontes.py
 
 Funcoes de mapeamento de dados brutos para o schema padrao de mov_estoque:
@@ -12,12 +12,9 @@ Extraido de movimentacao_estoque.py para melhorar modularidade.
 
 from __future__ import annotations
 
-import re
-from pathlib import Path
 from utilitarios.project_paths import PROJECT_ROOT
 
 import polars as pl
-from utilitarios.text import remove_accents
 
 ROOT_DIR = PROJECT_ROOT
 DADOS_DIR = ROOT_DIR / "dados"
@@ -82,14 +79,22 @@ def parse_expression(expr_str: str, col_alias: str) -> pl.Expr:
 
     # NCM/CEST cleanup
     if expr_str in ["cod_ncm", "prod_ncm", "cest", "prod_cest"]:
-        return pl.col(expr_str).cast(pl.String).str.replace_all(r"\D", "").alias(col_alias)
+        return (
+            pl.col(expr_str).cast(pl.String).str.replace_all(r"\D", "").alias(col_alias)
+        )
 
     # Complex: Cst
     if expr_str == "icms_orig & icms_cst ou icms_csosn":
-        return pl.when(pl.col("icms_cst").is_not_null())\
-                 .then(pl.concat_str([pl.col("icms_orig"), pl.col("icms_cst")], separator=""))\
-                 .otherwise(pl.concat_str([pl.col("icms_orig"), pl.col("icms_csosn")], separator=""))\
-                 .alias(col_alias)
+        return (
+            pl.when(pl.col("icms_cst").is_not_null())
+            .then(
+                pl.concat_str([pl.col("icms_orig"), pl.col("icms_cst")], separator="")
+            )
+            .otherwise(
+                pl.concat_str([pl.col("icms_orig"), pl.col("icms_csosn")], separator="")
+            )
+            .alias(col_alias)
+        )
 
     # Complex: Cod_barra
     if expr_str == "prod_ceantrib ou caso for nulo -> prod_cean":
@@ -97,19 +102,22 @@ def parse_expression(expr_str: str, col_alias: str) -> pl.Expr:
 
     # Complex: Valores matemÃ¡ticos (Vl_item em C170 ou Nfe)
     if expr_str == "vl_item-vl_desc":
-        return (pl.col("vl_item").cast(pl.Float64) - pl.col("vl_desc").cast(pl.Float64).fill_null(0)).alias(col_alias)
+        return (
+            pl.col("vl_item").cast(pl.Float64)
+            - pl.col("vl_desc").cast(pl.Float64).fill_null(0)
+        ).alias(col_alias)
 
     if expr_str == "prod_vprod+prod_vfrete+prod_vseg+prod_voutro-prod_vdesc":
         return (
-            pl.col("prod_vprod").cast(pl.Float64).fill_null(0) +
-            pl.col("prod_vfrete").cast(pl.Float64).fill_null(0) +
-            pl.col("prod_vseg").cast(pl.Float64).fill_null(0) +
-            pl.col("prod_voutro").cast(pl.Float64).fill_null(0) -
-            pl.col("prod_vdesc").cast(pl.Float64).fill_null(0)
+            pl.col("prod_vprod").cast(pl.Float64).fill_null(0)
+            + pl.col("prod_vfrete").cast(pl.Float64).fill_null(0)
+            + pl.col("prod_vseg").cast(pl.Float64).fill_null(0)
+            + pl.col("prod_voutro").cast(pl.Float64).fill_null(0)
+            - pl.col("prod_vdesc").cast(pl.Float64).fill_null(0)
         ).alias(col_alias)
 
-    # ExtraÃ§Ã£o via Chave
-    if expr_str == "correspondÃªncia com chave NF":
+    # Extração via Chave
+    if expr_str == "correspondência com chave NF":
         if col_alias == "mod":
             return pl.col("chv_nfe").str.slice(20, 2).alias(col_alias)
         elif col_alias == "co_uf_emit":
@@ -134,7 +142,10 @@ def carregar_flags_cfop() -> pl.DataFrame:
     if arq_cfop.exists():
         df_cfop_raw = pl.read_parquet(arq_cfop)
         exprs = [
-            pl.col("co_cfop").cast(pl.Utf8, strict=False).str.replace_all(r"\D", "").alias("Cfop"),
+            pl.col("co_cfop")
+            .cast(pl.Utf8, strict=False)
+            .str.replace_all(r"\D", "")
+            .alias("Cfop"),
         ]
         for col in ["excluir_estoque", "dev_simples"]:
             if col in df_cfop_raw.columns:
@@ -142,8 +153,7 @@ def carregar_flags_cfop() -> pl.DataFrame:
             else:
                 exprs.append(pl.lit(None).alias(col))
         df_cfop = (
-            df_cfop_raw
-            .select(exprs)
+            df_cfop_raw.select(exprs)
             .filter(pl.col("Cfop").is_not_null() & (pl.col("Cfop") != ""))
             .unique(subset=["Cfop"], keep="first")
         )
@@ -152,7 +162,10 @@ def carregar_flags_cfop() -> pl.DataFrame:
     if arq_cfop_bi.exists():
         df_cfop_bi_raw = pl.read_parquet(arq_cfop_bi)
         exprs = [
-            pl.col("co_cfop").cast(pl.Utf8, strict=False).str.replace_all(r"\D", "").alias("Cfop"),
+            pl.col("co_cfop")
+            .cast(pl.Utf8, strict=False)
+            .str.replace_all(r"\D", "")
+            .alias("Cfop"),
         ]
         for col in ["dev_venda", "dev_compra", "dev_ent_simples"]:
             if col in df_cfop_bi_raw.columns:
@@ -160,8 +173,7 @@ def carregar_flags_cfop() -> pl.DataFrame:
             else:
                 exprs.append(pl.lit(None).alias(col))
         df_cfop_bi = (
-            df_cfop_bi_raw
-            .select(exprs)
+            df_cfop_bi_raw.select(exprs)
             .filter(pl.col("Cfop").is_not_null() & (pl.col("Cfop") != ""))
             .unique(subset=["Cfop"], keep="first")
         )
@@ -183,5 +195,3 @@ def carregar_flags_cfop() -> pl.DataFrame:
     if df_cfop_bi.is_empty():
         return df_cfop
     return df_cfop.join(df_cfop_bi, on="Cfop", how="full", coalesce=True)
-
-
