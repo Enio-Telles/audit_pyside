@@ -156,6 +156,7 @@ class SqlService:
                 rows = cursor.fetchall()
             if not rows:
                 return []
-            return [dict(zip(columns, row)) for row in rows]
+            # Optimization: dict comprehension is faster than dict(zip())
+            return [{k: v for k, v in zip(columns, row)} for row in rows]
         finally:
             conn.close()
