@@ -127,14 +127,14 @@ def _calcular_atributos_padrao(df_base: pl.DataFrame) -> dict[str, str | None]:
 
     def _score(row: dict) -> tuple[int, int, int]:
         preenchidos = (
-            int(row.get("has_ncm", 0))
-            + int(row.get("has_cest", 0))
-            + int(row.get("has_gtin", 0))
+            int(row.get("has_ncm") or 0)
+            + int(row.get("has_cest") or 0)
+            + int(row.get("has_gtin") or 0)
         )
         return (
-            int(row.get("count", 0)),
+            int(row.get("count") or 0),
             preenchidos,
-            len(str(row.get("descricao", ""))),
+            len(str(row.get("descricao") or "")),
         )
 
     candidatos.sort(key=_score, reverse=True)
@@ -272,14 +272,14 @@ def produtos_agrupados(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
 
     def _score_cand(cand: dict) -> tuple[int, int, int]:
         preenchidos = (
-            int(cand.get("has_ncm", 0))
-            + int(cand.get("has_cest", 0))
-            + int(cand.get("has_gtin", 0))
+            int(cand.get("has_ncm") or 0)
+            + int(cand.get("has_cest") or 0)
+            + int(cand.get("has_gtin") or 0)
         )
         return (
-            int(cand.get("count", 0)),
+            int(cand.get("count") or 0),
             preenchidos,
-            len(str(cand.get("descricao", ""))),
+            len(str(cand.get("descricao") or "")),
         )
 
     for seq, row in enumerate(df_join.to_dicts(), start=1):
