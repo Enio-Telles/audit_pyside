@@ -61,8 +61,13 @@ class ExtratorOracle:
         self.usuario = os.getenv("DB_USER")
         self.senha = os.getenv("DB_PASSWORD")
         self.host = os.getenv("ORACLE_HOST")
-        self.porta = int(os.getenv("ORACLE_PORT", 1521))
+        porta_str = os.getenv("ORACLE_PORT")
+        self.porta = int(porta_str) if porta_str else 0
         self.servico = os.getenv("ORACLE_SERVICE")
+
+        if not all([self.host, porta_str, self.servico, self.usuario, self.senha]):
+            raise RuntimeError("Configuracao Oracle incompleta. Verifique as variaveis ORACLE_HOST, ORACLE_PORT, ORACLE_SERVICE, DB_USER e DB_PASSWORD no .env")
+
         self.dsn = oracledb.makedsn(self.host, self.porta, service_name=self.servico)
         self.pasta_dados = ROOT_DIR / "dados" / "fisconforme" / "data_parquet"
         self.pasta_dados.mkdir(parents=True, exist_ok=True)

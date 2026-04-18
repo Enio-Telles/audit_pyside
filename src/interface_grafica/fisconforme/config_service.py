@@ -27,9 +27,9 @@ def carregar_config_db() -> Dict[str, str]:
         env_path = get_env_path()
 
         padroes: Dict[str, str] = {
-            "ORACLE_HOST": "exa01-scan.sefin.ro.gov.br",
-            "ORACLE_PORT": "1521",
-            "ORACLE_SERVICE": "sefindw",
+            "ORACLE_HOST": "",
+            "ORACLE_PORT": "",
+            "ORACLE_SERVICE": "",
             "DB_USER": "",
             "DB_PASSWORD": "",
         }

@@ -112,9 +112,9 @@ class DatabaseConfigPage(BaseWizardPage):
         self.inputs: Dict[str, QLineEdit] = {}
         self.field_grid = AdaptiveFieldGrid()
         campos = [
-            ("ORACLE_HOST", "Host (Servidor)", "exa01-scan.sefin.ro.gov.br"),
-            ("ORACLE_PORT", "Porta", "1521"),
-            ("ORACLE_SERVICE", "Serviço", "sefindw"),
+            ("ORACLE_HOST", "Host (Servidor)", ""),
+            ("ORACLE_PORT", "Porta", ""),
+            ("ORACLE_SERVICE", "Serviço", ""),
             ("DB_USER", "Usuário", "SEU_LOGIN"),
             ("DB_PASSWORD", "Senha", "Senha do banco"),
         ]
