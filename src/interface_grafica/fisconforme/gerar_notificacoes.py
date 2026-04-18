@@ -1178,9 +1178,9 @@ def carregar_config_db() -> Dict[str, str]:
 
         # Padrões SEFIN
         padroes = {
-            "ORACLE_HOST": "exa01-scan.sefin.ro.gov.br",
-            "ORACLE_PORT": "1521",
-            "ORACLE_SERVICE": "sefindw",
+            "ORACLE_HOST": "",
+            "ORACLE_PORT": "",
+            "ORACLE_SERVICE": "",
             "DB_USER": "",
             "DB_PASSWORD": "",
         }

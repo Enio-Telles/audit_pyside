@@ -81,13 +81,14 @@ def conectar_oracle_simples():
             load_dotenv(dotenv_path=env_path, encoding="latin-1", override=True)
 
         host = os.getenv("ORACLE_HOST", "").strip()
-        porta = int(os.getenv("ORACLE_PORT", "1521").strip())
+        porta_str = os.getenv("ORACLE_PORT", "").strip()
+        porta = int(porta_str) if porta_str else 0
         servico = os.getenv("ORACLE_SERVICE", "").strip()
         usuario = os.getenv("DB_USER", "").strip()
         senha = os.getenv("DB_PASSWORD", "").strip()
 
-        if not all([host, usuario, senha]):
-            logger.error("Credenciais Oracle incompletas no .env")
+        if not all([host, porta_str, servico, usuario, senha]):
+            logger.error("Configuracao Oracle incompleta. Verifique as variaveis ORACLE_HOST, ORACLE_PORT, ORACLE_SERVICE, DB_USER e DB_PASSWORD no .env")
             return None
 
         dsn = oracledb.makedsn(host, porta, service_name=servico)
@@ -152,7 +153,8 @@ def extrair_dados_cadastrais_oracle(cnpj: str) -> Optional[Dict[str, Any]]:
         return None
 
     finally:
-        try:
+        if conexao:
+            try:
                 conexao.close()
             except Exception:
                 pass

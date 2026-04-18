@@ -180,16 +180,17 @@ def conectar_oracle() -> Optional[Any]:
             load_dotenv(dotenv_path=env_path, encoding="latin-1", override=True)
 
         # ObtÃ©m credenciais das variÃ¡veis de ambiente
-        host = os.getenv("ORACLE_HOST", "exa01-scan.sefin.ro.gov.br").strip()
-        porta = int(os.getenv("ORACLE_PORT", "1521").strip())
-        servico = os.getenv("ORACLE_SERVICE", "sefindw").strip()
+        host = os.getenv("ORACLE_HOST", "").strip()
+        porta_str = os.getenv("ORACLE_PORT", "").strip()
+        porta = int(porta_str) if porta_str else 0
+        servico = os.getenv("ORACLE_SERVICE", "").strip()
         usuario = os.getenv("DB_USER")
         senha = os.getenv("DB_PASSWORD")
 
         # Valida credenciais obrigatÃ³rias
-        if not usuario or not senha:
+        if not all([host, porta_str, servico, usuario, senha]):
             logger.error(
-                "Credenciais do banco (DB_USER/DB_PASSWORD) nÃ£o encontradas no .env"
+                "Configuracao Oracle incompleta. Verifique as variaveis ORACLE_HOST, ORACLE_PORT, ORACLE_SERVICE, DB_USER e DB_PASSWORD no .env"
             )
             return None
 
