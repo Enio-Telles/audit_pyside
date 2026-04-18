@@ -40,23 +40,34 @@ except ImportError as e:
 
 
 def marcar_mov_rep_por_chave_item(df: pl.DataFrame) -> pl.DataFrame:
-    if df.is_empty() or "Chv_nfe" not in df.columns or "Num_item" not in df.columns:
+    if df.is_empty() or "Num_item" not in df.columns:
         return df
 
-    chave_expr = pl.col("Chv_nfe").cast(pl.Utf8, strict=False).fill_null("").str.strip_chars()
+    # Chave de documento com fallback multinível para capturar C170 sem NF-e vinculada
+    _colunas_chave = [c for c in ["Chv_nfe", "num_doc", "id_linha_origem"] if c in df.columns]
+    if not _colunas_chave:
+        return df
+
+    id_doc_expr = pl.coalesce(
+        [pl.col(c).cast(pl.Utf8, strict=False).str.strip_chars() for c in _colunas_chave]
+    ).fill_null("")
     item_expr = pl.col("Num_item").cast(pl.Utf8, strict=False).fill_null("").str.strip_chars()
+
+    df = df.with_columns(id_doc_expr.alias("__chave_doc__"))
     repetido_expr = (
-        (chave_expr != "")
+        (pl.col("__chave_doc__") != "")
         & (item_expr != "")
-        & (pl.len().over(["Chv_nfe", "Num_item"]) > 1)
+        & (pl.len().over(["__chave_doc__", "Num_item"]) > 1)
     )
 
     if "mov_rep" in df.columns:
-        return df.with_columns(
+        df = df.with_columns(
             (repetido_expr | _boolish_expr("mov_rep").fill_null(False)).alias("mov_rep")
         )
+    else:
+        df = df.with_columns(repetido_expr.alias("mov_rep"))
 
-    return df.with_columns(repetido_expr.alias("mov_rep"))
+    return df.drop("__chave_doc__")
 
 
 def filtrar_movimentacoes_por_fonte(df: pl.DataFrame) -> pl.DataFrame:
@@ -445,6 +456,15 @@ def gerar_movimentacao_estoque(cnpj: str, pasta_cnpj: Path | None = None) -> boo
         if col not in df_final.columns:
             df_final = df_final.with_columns(pl.lit(None).alias(col))
     df_final = marcar_mov_rep_por_chave_item(df_final)
+
+    if "mov_rep" in df_final.columns:
+        df_neutralizadas = df_final.filter(_boolish_expr("mov_rep").fill_null(False))
+        if df_neutralizadas.height > 0:
+            salvar_para_parquet(
+                df_neutralizadas,
+                pasta_analises,
+                f"linhas_neutralizadas_duplicidade_{cnpj}.parquet",
+            )
 
     df_final = (
         df_final

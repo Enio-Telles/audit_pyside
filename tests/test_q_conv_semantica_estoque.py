@@ -60,6 +60,7 @@ def test_calculos_mensais_ignoram_qconv_observacional_em_estoque_final():
             "Tipo_operacao": ["1 - ENTRADA", "2 - SAIDAS", "3 - ESTOQUE FINAL"],
             "Dt_doc": [date(2024, 6, 1), date(2024, 6, 10), date(2024, 6, 30)],
             "Dt_e_s": [date(2024, 6, 1), date(2024, 6, 10), date(2024, 6, 30)],
+            "finnfe": ["1"] * 3,
             "q_conv": [20.0, 5.0, 90.0],
             "q_conv_fisica": [20.0, 5.0, 0.0],
             "__qtd_decl_final_audit__": [0.0, 0.0, 90.0],

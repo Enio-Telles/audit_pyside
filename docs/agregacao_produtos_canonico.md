@@ -18,6 +18,13 @@ O "fio de ouro" do projeto é:
 linha original -> id_linha_origem -> codigo_fonte -> id_agrupado -> tabelas analíticas
 ```
 
+> **⚠ REGRA DE FOGO:** É terminantemente proibido realizar joins por `descricao_normalizada`
+> (ou qualquer outra heurística textual) após a etapa 02 do pipeline. Todo enriquecimento
+> posterior à geração de `descricao_produtos` deve usar exclusivamente `codigo_fonte`,
+> `id_descricao` ou `id_agrupado` como chaves de vínculo.
+> Joins por descrição são aceitos **apenas** como fallback explícito e logado quando a
+> chave física não estiver disponível na entrada.
+
 ## Chaves centrais
 
 ### `id_linha_origem`

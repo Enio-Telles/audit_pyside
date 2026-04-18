@@ -120,7 +120,7 @@ def test_fator_origem_fallback_sem_preco(tmp_path: Path):
 
     df_resultado = pl.read_parquet(pasta_prod / f"fatores_conversao_{cnpj}.parquet")
     assert not df_resultado.is_empty()
-    assert df_resultado.row(0, named=True)["fator_origem"] == "fallback"
+    assert df_resultado.row(0, named=True)["fator_origem"] == "fallback_sem_preco"
 
 
 def test_fator_origem_preco_calculado(tmp_path: Path):

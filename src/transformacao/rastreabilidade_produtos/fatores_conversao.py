@@ -498,16 +498,13 @@ def _reconciliar_fatores_existentes_com_agrupamento_atual(
             [
                 (pl.col("fator_manual") | pl.col("unid_ref_manual")).alias("__eh_manual__"),
                 normalizar_descricao_expr("descr_padrao").alias("__descr_padrao_norm__"),
-                normalizar_descricao_expr("descr_padrao_canonico").alias("__descr_padrao_canonico_norm__"),
             ]
         )
+        # Incoerente apenas quando o id_agrupado sumiu do canonico (não por divergência textual)
         .with_columns(
             (
                 pl.col("__eh_manual__")
-                & (
-                    (pl.col("__descr_padrao_canonico_norm__") == "")
-                    | (pl.col("__descr_padrao_norm__") != pl.col("__descr_padrao_canonico_norm__"))
-                )
+                & pl.col("descr_padrao_canonico").is_null()
             ).alias("__manual_incoerente__")
         )
     )
@@ -537,10 +534,12 @@ def _reconciliar_fatores_existentes_com_agrupamento_atual(
         )
     )
 
-    df_descartados = df_manuais_incoerentes.filter(pl.col("id_agrupado_destino").is_null())
+    # Órfãos: id_agrupado sumiu do canonico E sem match textual — preservar como backup
+    df_orfaos = df_manuais_incoerentes.filter(pl.col("id_agrupado_destino").is_null())
 
-    df_log = pl.concat(
-        [
+    partes_log = []
+    if df_remapeados.height > 0:
+        partes_log.append(
             df_remapeados.select(
                 [
                     pl.lit("remapeado").alias("acao"),
@@ -552,26 +551,31 @@ def _reconciliar_fatores_existentes_com_agrupamento_atual(
                     pl.col("unid_ref"),
                     pl.lit("Override manual realocado para o agrupamento canonico atual.").alias("motivo"),
                 ]
-            ),
-            df_descartados.select(
+            )
+        )
+    if df_orfaos.height > 0:
+        partes_log.append(
+            df_orfaos.select(
                 [
-                    pl.lit("descartado").alias("acao"),
+                    pl.lit("orfao_preservado").alias("acao"),
                     pl.col("id_agrupado").alias("id_agrupado_original"),
                     pl.lit(None, dtype=pl.Utf8).alias("id_agrupado_destino"),
                     pl.lit(None, dtype=pl.Utf8).alias("descr_padrao_destino"),
                     pl.col("descr_padrao_canonico"),
                     pl.col("unid"),
                     pl.col("unid_ref"),
-                    pl.lit("Override manual descartado por nao haver correspondencia unica no agrupamento atual.").alias("motivo"),
+                    pl.lit("Override manual preservado como orfao: id_agrupado ausente do canonico atual.").alias("motivo"),
                 ]
-            ),
-        ],
-        how="vertical_relaxed",
-    )
-    _salvar_log_reconciliacao_overrides(df_log, pasta_analises, cnpj)
+            )
+        )
+    if partes_log:
+        _salvar_log_reconciliacao_overrides(
+            pl.concat(partes_log, how="vertical_relaxed"), pasta_analises, cnpj
+        )
 
+    # Remover apenas os que foram efetivamente remapeados; orfaos permanecem
     df_base_preservada = df_existente.join(
-        df_manuais_incoerentes.select("__idx_override__").unique(),
+        df_remapeados.select("__idx_override__").unique(),
         on="__idx_override__",
         how="anti",
     )
@@ -672,6 +676,60 @@ def _extrair_overrides_existentes(df_existente: pl.DataFrame, df_final: pl.DataF
     if df_fator_override.is_empty():
         df_fator_override = _df_vazio_override_fator()
     return df_unid_override, df_fator_override
+
+
+def _carregar_vinculo_por_id_item_unid(pasta_analises: Path, cnpj: str) -> pl.DataFrame:
+    """Vincula id_item_unid -> id_agrupado usando apenas chaves físicas.
+
+    Cadeia: item_unidades.id_item_unid
+            -> descricao_produtos.lista_id_item_unid (explode)
+            -> id_descricao
+            -> map_produto_agrupado.chave_produto
+            -> id_agrupado
+    """
+    arq_descricoes = pasta_analises / f"descricao_produtos_{cnpj}.parquet"
+    arq_mapa = pasta_analises / f"map_produto_agrupado_{cnpj}.parquet"
+    vazio = pl.DataFrame(schema={"id_item_unid": pl.Utf8, "id_agrupado": pl.Utf8})
+
+    if not arq_descricoes.exists() or not arq_mapa.exists():
+        return vazio
+
+    schema_desc = set(pl.read_parquet_schema(arq_descricoes).names())
+    if "lista_id_item_unid" not in schema_desc or "id_descricao" not in schema_desc:
+        return vazio
+
+    df_id_item = (
+        pl.scan_parquet(arq_descricoes)
+        .select(["id_descricao", "lista_id_item_unid"])
+        .collect()
+        .explode("lista_id_item_unid")
+        .rename({"lista_id_item_unid": "id_item_unid"})
+        .filter(pl.col("id_item_unid").is_not_null() & (pl.col("id_item_unid").cast(pl.Utf8, strict=False) != ""))
+        .with_columns(
+            pl.col("id_item_unid").cast(pl.Utf8, strict=False),
+            pl.col("id_descricao").cast(pl.Utf8, strict=False),
+        )
+        .unique(subset=["id_item_unid"], keep="first")
+    )
+
+    df_mapa = (
+        pl.read_parquet(arq_mapa)
+        .select([pl.col("chave_produto").alias("id_descricao"), "id_agrupado"])
+        .with_columns(
+            pl.col("id_descricao").cast(pl.Utf8, strict=False),
+            pl.col("id_agrupado").cast(pl.Utf8, strict=False),
+        )
+        .unique(subset=["id_descricao"], keep="first")
+    )
+
+    result = (
+        df_id_item
+        .join(df_mapa, on="id_descricao", how="left")
+        .filter(pl.col("id_agrupado").is_not_null())
+        .select(["id_item_unid", "id_agrupado"])
+        .unique(subset=["id_item_unid"], keep="first")
+    )
+    return result if not result.is_empty() else vazio
 
 
 def _carregar_vinculo_id_agrupado(pasta_analises: Path, cnpj: str, df_final: pl.DataFrame) -> pl.DataFrame:
@@ -843,16 +901,49 @@ def calcular_fatores_conversao(cnpj: str, pasta_cnpj: Path | None = None) -> boo
     )
     df_unid_override, df_fator_override = _extrair_overrides_existentes(df_fatores_existente, df_final)
     df_vinculo = _carregar_vinculo_id_agrupado(pasta_analises, cnpj, df_final)
+    df_vinculo_chave = _carregar_vinculo_por_id_item_unid(pasta_analises, cnpj)
 
-    df_link = (
-        df_unid
-        .join(df_vinculo_produto, on="descricao_normalizada", how="left")
-        .join(df_ref_final, on="id_agrupado", how="left")
-        .with_columns(
-            pl.coalesce([pl.col("descr_padrao_vinculo"), pl.col("descr_padrao_calc")]).alias("descr_padrao_calc")
-        )
-        .filter(pl.col("id_agrupado").is_not_null() & pl.col("unid").is_not_null())
+    usar_chave_fisica = (
+        not df_vinculo_chave.is_empty()
+        and "id_item_unid" in df_unid.columns
     )
+
+    if usar_chave_fisica:
+        # Fio de ouro: vincula por chave física (id_item_unid -> id_agrupado)
+        df_link_base = (
+            df_unid
+            .join(df_vinculo_chave, on="id_item_unid", how="left")
+        )
+        # Fallback por descricao_normalizada para linhas sem match físico
+        sem_vinculo = df_link_base.filter(pl.col("id_agrupado").is_null())
+        if not sem_vinculo.is_empty():
+            sem_vinculo = (
+                sem_vinculo
+                .drop("id_agrupado")
+                .join(df_vinculo_produto, on="descricao_normalizada", how="left")
+                .with_columns(
+                    pl.lit("descricao_normalizada_fallback").alias("origem_vinculo_produto")
+                )
+            )
+            df_link_base = pl.concat(
+                [df_link_base.filter(pl.col("id_agrupado").is_not_null()), sem_vinculo],
+                how="diagonal_relaxed",
+            )
+    else:
+        df_link_base = (
+            df_unid
+            .join(df_vinculo_produto, on="descricao_normalizada", how="left")
+        )
+
+    df_link_joined = df_link_base.join(df_ref_final, on="id_agrupado", how="left")
+    if "descr_padrao_vinculo" in df_link_joined.columns:
+        df_link_joined = df_link_joined.with_columns(
+            pl.coalesce(["descr_padrao_vinculo", "descr_padrao_calc"]).alias("descr_padrao_calc")
+        )
+    elif "descr_padrao_calc" not in df_link_joined.columns:
+        df_link_joined = df_link_joined.with_columns(pl.lit(None, dtype=pl.Utf8).alias("descr_padrao_calc"))
+
+    df_link = df_link_joined.filter(pl.col("id_agrupado").is_not_null() & pl.col("unid").is_not_null())
 
     if df_link.is_empty():
         rprint("[yellow]Aviso: sem vinculacao entre item_unidades e camada canonica de agrupamento.[/yellow]")
