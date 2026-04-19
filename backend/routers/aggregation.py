@@ -106,7 +106,7 @@ def unmerge_agrupados(req: UnmergeRequest):
         resultado = svc.reverter_agrupamento(cnpj=cnpj, id_agrupado=req.id_agrupado)
         return {"ok": True, "resultado": resultado}
     except ValueError as exc:
-        raise HTTPException(400, "Não foi possível reverter: " + str(exc)) from exc
+        raise HTTPException(400, "Não foi possível reverter o agrupamento devido a um erro de validação.") from exc
     except Exception as exc:
         raise HTTPException(500, "Erro interno ao processar desagregação.") from exc
 
