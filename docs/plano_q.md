@@ -1056,6 +1056,16 @@ backend/
 - [backend/routers/cnpj.py](../../backend/routers/cnpj.py) — Router CNPJ
  - [Referências Parquet](referencias/parquet_referencias.md) — Listagem gerada de arquivos Parquet (metadados + amostras até 3 linhas)
 
+ - **Metodologia MDS:** documentos que descrevem a metodologia aplicada no pipeline
+   - [01 — Abordagem de Quantidades](../metodologia_mds/01_abordagem_quantidades.md)
+   - [02 — Agregação de Produtos](../metodologia_mds/02_agregacao_produtos.md)
+   - [03 — Conversão de Unidades](../metodologia_mds/03_conversao_unidades.md)
+   - [04 — Movimentação de Estoque](../metodologia_mds/04_movimentacao_estoque.md)
+   - [05 — Tabela de Períodos](../metodologia_mds/05_tabela_periodos.md)
+   - [06 — Tabela Mensal](../metodologia_mds/06_tabela_mensal.md)
+   - [07 — Tabela Anual](../metodologia_mds/07_tabela_anual.md)
+
+
 
 ---
 
