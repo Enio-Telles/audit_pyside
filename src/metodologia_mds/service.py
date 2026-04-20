@@ -65,6 +65,53 @@ class MovimentacaoService:
             .alias("estoque_final_declarado")
         )
 
+        # Compatibilidade: garantir colunas usadas pelo restante do pipeline
+        cols = set(df.columns)
+
+        # `q_conv` é a coluna histórica de quantidade convertida usada por vários cálculos
+        if "q_conv" not in cols:
+            df = df.with_columns(
+                pl.col("quantidade_convertida").cast(pl.Float64).fill_null(0.0).alias("q_conv")
+            )
+
+        # `q_conv_fisica` deve representar a quantidade física (zero para estoques finais)
+        if "q_conv_fisica" not in cols:
+            df = df.with_columns(
+                pl.when(is_estoque_final)
+                .then(pl.lit(0.0))
+                .otherwise(pl.col("q_conv").cast(pl.Float64, strict=False).fill_null(0.0))
+                .alias("q_conv_fisica")
+            )
+
+        # Sinal da quantidade para cálculos de saldo sequencial
+        if "__q_conv_sinal__" not in cols:
+            df = df.with_columns(
+                pl.when(pl.col("tipo_operacao").cast(pl.Utf8, strict=False).str.starts_with("0 - ESTOQUE INICIAL"))
+                .then(pl.col("q_conv_fisica"))
+                .when(pl.col("tipo_operacao") == "1 - ENTRADA")
+                .then(pl.col("q_conv_fisica"))
+                .when(pl.col("tipo_operacao") == "2 - SAIDAS")
+                .then(-pl.col("q_conv_fisica"))
+                .otherwise(pl.lit(0.0))
+                .alias("__q_conv_sinal__")
+            )
+
+        # Preço unitário derivado quando houver valor agregado (evita divisão por zero)
+        if "preco_unit" not in cols:
+            preco_expr = None
+            if "preco_item" in cols:
+                preco_expr = pl.col("preco_item").cast(pl.Float64, strict=False).fill_null(0.0)
+            elif "Vl_item" in cols:
+                preco_expr = pl.col("Vl_item").cast(pl.Float64, strict=False).fill_null(0.0)
+
+            if preco_expr is not None:
+                df = df.with_columns(
+                    pl.when(pl.col("q_conv").cast(pl.Float64, strict=False).fill_null(0.0) > 0)
+                    .then(preco_expr / pl.col("q_conv"))
+                    .otherwise(pl.lit(0.0))
+                    .alias("preco_unit")
+                )
+
         return df
 
     @staticmethod
