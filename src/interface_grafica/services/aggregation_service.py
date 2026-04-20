@@ -8,6 +8,8 @@ import json
 import re
 from pathlib import Path
 from time import perf_counter
+import shutil
+from datetime import datetime
 
 import polars as pl
 from utilitarios.perf_monitor import registrar_evento_performance
@@ -99,6 +101,11 @@ try:
     from transformacao.produtos_selecionados import gerar_aba_produtos_selecionados
 except ImportError:
     gerar_aba_produtos_selecionados = None
+
+try:
+    from utilitarios.salvar_para_parquet import salvar_para_parquet
+except ImportError:
+    salvar_para_parquet = None
 
 
 class ServicoAgregacao:
@@ -792,6 +799,216 @@ class ServicoAgregacao:
             )
             df_map.write_parquet(arq_pont)
 
+    def salvar_mapa_manual(
+        self, cnpj: str, df_manual: pl.DataFrame, reprocessar: bool = True, progresso=None
+    ) -> bool:
+        """
+        Persiste o mapa manual oficial `mapa_agrupamento_manual_<cnpj>.parquet`.
+
+        Regras:
+        - aceita colunas `id_descricao` e/ou `descricao_normalizada` e requer `id_agrupado`.
+        - grava arquivo canônico em `analises/produtos` e salva auditoria de linhas sem match.
+        - opcionalmente reprocessa `produtos_final` e triggers de referencia.
+        """
+        cnpj = self._sanitizar_cnpj(cnpj)
+        pasta_analises = CNPJ_ROOT / cnpj / "analises" / "produtos"
+        caminho_manual = pasta_analises / f"mapa_agrupamento_manual_{cnpj}.parquet"
+
+        if df_manual is None:
+            raise ValueError("df_manual is required")
+
+        if not isinstance(df_manual, pl.DataFrame):
+            try:
+                df_manual = pl.DataFrame(df_manual)
+            except Exception as e:
+                raise ValueError(f"Cannot convert df_manual to DataFrame: {e}")
+
+        # Keep only relevant columns
+        colunas_validas = [c for c in ["id_descricao", "descricao_normalizada", "id_agrupado"] if c in df_manual.columns]
+        if "id_agrupado" not in df_manual.columns:
+            raise ValueError("Mapa manual deve conter a coluna 'id_agrupado'.")
+
+        df_out = df_manual.select(colunas_validas).with_columns(
+            pl.col("id_agrupado").cast(pl.Utf8, strict=False).alias("id_agrupado")
+        )
+
+        # Ensure directory exists and save with helper if available
+        ok = False
+        # Snapshot existing manual map before overwriting
+        try:
+            self._snapshot_manual_map(cnpj, caminho_manual)
+        except Exception:
+            # Snapshot failure should not block saving
+            pass
+
+        if salvar_para_parquet:
+            ok = salvar_para_parquet(df_out, pasta_analises, f"mapa_agrupamento_manual_{cnpj}.parquet")
+        else:
+            pasta_analises.mkdir(parents=True, exist_ok=True)
+            df_out.write_parquet(caminho_manual)
+            ok = True
+
+        # Auditoria: registrar linhas do mapa manual que nao correspondem a descricao_produtos
+        unmatched_count = 0
+        try:
+            path_base = self.caminho_tabela_base(cnpj)
+            if path_base.exists():
+                df_base = pl.read_parquet(path_base)
+                df_existentes = df_base.select([c for c in ["id_descricao", "descricao_normalizada"] if c in df_base.columns]).unique()
+                cols_join = [c for c in ["id_descricao", "descricao_normalizada"] if c in df_out.columns]
+                if cols_join:
+                    df_auditoria = df_out.join(df_existentes, on=cols_join, how="anti")
+                    if not df_auditoria.is_empty():
+                        if salvar_para_parquet:
+                            salvar_para_parquet(df_auditoria, pasta_analises, f"auditoria_mapa_agrupamento_manual_sem_match_{cnpj}.parquet")
+                        else:
+                            df_auditoria.write_parquet(pasta_analises / f"auditoria_mapa_agrupamento_manual_sem_match_{cnpj}.parquet")
+                        unmatched_count = df_auditoria.height
+        except Exception:
+            # Auditoria eh recomendada, mas nao deve impedir a persistencia do mapa manual
+            unmatched_count = 0
+
+        # Registrar historico de atualizacao do mapa manual
+        try:
+            self._registrar_log(
+                cnpj,
+                {
+                    "tipo": "mapa_manual_atualizado",
+                    "qtd": int(df_out.height),
+                    "qtd_unmatched": int(unmatched_count),
+                },
+            )
+        except Exception:
+            pass
+
+        # Opcional: reprocessar derivacoes mais proximas
+        if reprocessar:
+            try:
+                # Recalcula produtos_final que consome o mapa manual
+                self.recalcular_produtos_final(cnpj)
+            except Exception:
+                pass
+
+        return ok
+
+    def _snapshot_manual_map(self, cnpj: str, caminho_manual: Path) -> Path | None:
+        """
+        Cria um snapshot (copia) do arquivo `mapa_agrupamento_manual_<cnpj>.parquet`
+        antes de ser sobrescrito. Retorna o Path do snapshot ou None se
+        não havia arquivo anterior.
+        """
+        cnpj = self._sanitizar_cnpj(cnpj)
+        if not caminho_manual.exists():
+            return None
+        pasta_analises = CNPJ_ROOT / cnpj / "analises" / "produtos"
+        snapshots_dir = pasta_analises / "snapshots"
+        snapshots_dir.mkdir(parents=True, exist_ok=True)
+        ts = datetime.now().strftime("%Y%m%dT%H%M%S")
+        snap_name = f"mapa_agrupamento_manual_{cnpj}_{ts}.parquet"
+        snap_path = snapshots_dir / snap_name
+        try:
+            shutil.copyfile(caminho_manual, snap_path)
+            try:
+                self._registrar_log(
+                    cnpj,
+                    {"tipo": "mapa_manual_snapshot", "snapshot": snap_path.name},
+                )
+            except Exception:
+                pass
+            return snap_path
+        except Exception:
+            return None
+
+    def limpar_snapshots_mapa_manual(
+        self, cnpj: str, keep_last: int = 10, keep_days: int = 180
+    ) -> int:
+        """
+        Limpa snapshots antigos gerados para `mapa_agrupamento_manual_<cnpj>_*.parquet`.
+
+        - `keep_last`: número mínimo de snapshots a manter (mais recentes)
+        - `keep_days`: número de dias de retenção mínima (snapshots mais velhos que
+          esse período podem ser removidos)
+
+        Retorna a quantidade de arquivos removidos.
+        """
+        from datetime import datetime, timedelta
+
+        cnpj = self._sanitizar_cnpj(cnpj)
+        pasta_analises = CNPJ_ROOT / cnpj / "analises" / "produtos"
+        snapshots_dir = pasta_analises / "snapshots"
+        if not snapshots_dir.exists():
+            return 0
+
+        # Collect snapshot files matching pattern and sort by modification time (newest first)
+        snaps = sorted(
+            list(snapshots_dir.glob(f"mapa_agrupamento_manual_{cnpj}_*.parquet")),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )
+
+        removed = 0
+        threshold = datetime.now() - timedelta(days=keep_days)
+
+        for idx, path in enumerate(snaps):
+            # Keep the most recent `keep_last` snapshots
+            if idx < keep_last:
+                continue
+            try:
+                mtime = datetime.fromtimestamp(path.stat().st_mtime)
+                # Remove if older than threshold or simply beyond keep_last
+                if mtime < threshold or True:
+                    path.unlink()
+                    removed += 1
+            except Exception:
+                # Ignore individual failures
+                continue
+
+        if removed:
+            try:
+                self._registrar_log(cnpj, {"tipo": "limpeza_snapshots", "removed": int(removed)})
+            except Exception:
+                pass
+
+        return int(removed)
+
+    def listar_snapshots_mapa_manual(self, cnpj: str) -> list[Path]:
+        pasta_analises = CNPJ_ROOT / self._sanitizar_cnpj(cnpj) / "analises" / "produtos"
+        snapshots_dir = pasta_analises / "snapshots"
+        if not snapshots_dir.exists():
+            return []
+        snaps = [p for p in snapshots_dir.iterdir() if p.is_file()]
+        return sorted(snaps, key=lambda p: p.stat().st_mtime, reverse=True)
+
+    def reverter_mapa_manual(self, cnpj: str, snapshot_name: str | None = None) -> bool:
+        """
+        Restaura o mapa manual a partir do snapshot especificado ou do mais
+        recente se nenhum for informado.
+        """
+        cnpj = self._sanitizar_cnpj(cnpj)
+        pasta_analises = CNPJ_ROOT / cnpj / "analises" / "produtos"
+        caminho_manual = pasta_analises / f"mapa_agrupamento_manual_{cnpj}.parquet"
+        snapshots_dir = pasta_analises / "snapshots"
+        if not snapshots_dir.exists():
+            return False
+        if snapshot_name:
+            snap_path = snapshots_dir / snapshot_name
+            if not snap_path.exists():
+                raise FileNotFoundError(f"Snapshot nao encontrado: {snapshot_name}")
+        else:
+            snaps = self.listar_snapshots_mapa_manual(cnpj)
+            if not snaps:
+                return False
+            snap_path = snaps[0]
+        try:
+            shutil.copyfile(snap_path, caminho_manual)
+            try:
+                self._registrar_log(cnpj, {"tipo": "mapa_manual_revertido", "snapshot": snap_path.name})
+            except Exception:
+                pass
+            return True
+        except Exception:
+            return False
+
     def _regenerar_tabela_agregadas_legada(self, cnpj: str) -> bool:
         """
         Recria a camada de agregacao quando o parquet legado nao possui
@@ -1106,6 +1323,39 @@ class ServicoAgregacao:
         df_resultado = pl.concat([df_nova, df_restante])
         grupos_origem = df_para_unir.to_dicts()
         self._salvar_tabela_agregada_e_mapa(cnpj, df_resultado)
+
+        # Persistir mapa manual derivado da agregacao para permitir rastreabilidade
+        try:
+            # df_prod_sel contem as descricoes/ids relacionadas aos itens agrupados
+            if "df_prod_sel" in locals() and not df_prod_sel.is_empty():
+                df_manual = (
+                    df_prod_sel.select(
+                        [
+                            c
+                            for c in ["id_descricao", "descricao_normalizada"]
+                            if c in df_prod_sel.columns
+                        ]
+                    )
+                    .unique()
+                    .with_columns(pl.lit(id_destino).cast(pl.Utf8).alias("id_agrupado"))
+                )
+                try:
+                    # Nao reprocessar aqui; a agregacao ja fara os recalculos sequenciais.
+                    self.salvar_mapa_manual(cnpj, df_manual, reprocessar=False)
+                except Exception as _e:
+                    try:
+                        self._registrar_log(
+                            cnpj,
+                            {
+                                "tipo": "mapa_manual_persist_failed",
+                                "erro": str(_e),
+                            },
+                        )
+                    except Exception:
+                        pass
+        except Exception:
+            # Não deve impedir a conclusão da agregação
+            pass
 
         if not self.recalcular_valores_totais(
             cnpj, reprocessar_referencias=False, reset_timings=False

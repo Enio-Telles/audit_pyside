@@ -1,86 +1,247 @@
-# Agregação de produtos
+# Agregacao de produtos: regra consolidada e estado real
 <a id="mds-02-agregacao-produtos"></a>
 
-Este documento define a regra canônica de rastreabilidade, agrupamento e enriquecimento de produtos consumindo as buscas SQL (Bloco H, C170, NF‑e, NFC‑e). As nomenclaturas foram atualizadas para reforçar a ligação com os dados de origem e eliminar ambiguidades identificadas na versão anterior.
+Este documento consolida a regra metodologica desejada com o estado real do runtime no `audit_pyside`.
+
+Sempre que houver conflito, separar explicitamente:
+
+- regra desejada simples;
+- comportamento implementado hoje;
+- gap remanescente.
 
 ## Objetivo
 
-Agrupar itens fiscalmente idênticos (mesmo NCM/CEST, mesma unidade de medida e mesmo código de origem) em um **produto agregado** para fins de auditoria e cálculo de estoque, mantendo a possibilidade de desagregação até a linha original. O agrupamento deve ser determinístico, auditável e coerente com as regras de classificação fiscal.
+Formar grupos-base auditaveis por descricao principal e apoiar agregacao manual posterior, preservando rastreabilidade entre:
 
-## Cadeia de rastreabilidade
+- linha original;
+- descricao principal normalizada;
+- descricoes complementares listadas;
+- demais caracteristicas listadas;
+- artefatos finais consumidos pelo pipeline.
 
-O pipeline garante que qualquer linha original possa ser rastreada até o produto agregado e vice‑versa. A cadeia de chaves recomendada é:
+## Regra metodologica consolidada
+
+### 1. Pre-agrupamento automatico minimo
+
+A unica uniao automatica permitida e por igualdade estrita da descricao principal apos normalizacao.
+
+Em termos praticos:
+
+- a chave automatica nasce somente da coluna `descricao`;
+- duas linhas entram no mesmo grupo-base apenas se a `descricao` principal normalizada for igual;
+- isso deve ser entendido como pre-agrupamento, nao como equivalencia semantica final.
+
+### 2. Normalizacao da descricao principal
+
+A normalizacao desejada e exatamente esta:
+
+1. converter para maiusculas;
+2. remover espacos excedentes do inicio e do fim;
+3. retirar acentos;
+4. colapsar espacos internos duplicados para um unico espaco.
+
+### 3. O que nao entra na chave automatica
+
+Os campos abaixo nao devem compor a chave automatica do grupo-base:
+
+- descricao complementar;
+- NCM;
+- CEST;
+- GTIN;
+- CO_SEFIN;
+- unidade;
+- codigo de origem;
+- qualquer outra caracteristica fiscal ou comercial auxiliar.
+
+### 4. O que deve ser listado para decisao manual
+
+Para cada grupo-base, o sistema deve expor explicitamente:
+
+- `lista_desc_compl`;
+- `lista_ncm`;
+- `lista_cest`;
+- `lista_gtin`;
+- `lista_co_sefin`;
+- `lista_unid`;
+- `lista_codigos`;
+- `fontes`;
+- `lista_codigo_fonte`, quando existir.
+
+Essas listas existem para auditoria e para decisao manual. Elas nao autorizam uniao automatica.
+
+### 5. Agregacao final
+
+Qualquer agregacao alem da igualdade estrita da descricao principal normalizada e manual.
+
+Isso inclui:
+
+- unir grupos-base diferentes;
+- manter grupos-base separados mesmo quando parecem semelhantes;
+- desagregar unioes anteriores;
+- decidir o `id_agrupado` final quando houver criterio de negocio.
+
+## Nomes reais hoje
+
+| Conceito | Nome real hoje | Como interpretar |
+| --- | --- | --- |
+| grupo-base / agrupamento vigente no pipeline | `id_agrupado` | chave ativa do pipeline |
+| alias de apresentacao nas abas finais | `id_agregado` | apenas apresentacao |
+| chave automatica da descricao principal normalizada | `id_agrupado_base` | grupo-base automatico |
+| chave da descricao listada | `id_descricao` / `chave_produto` | bucket detalhado por descricao principal normalizada |
+| chave vinda da origem | `codigo_fonte` | fio de ouro preferencial quando existe |
+
+`id_produto_agrupado` e `id_produto_origem` continuam uteis como nomes conceituais, mas nao sao as colunas canonicas do runtime atual.
+
+## Cadeia de rastreabilidade correta
+
+A cadeia mais fiel ao codigo atual, com a regra consolidada acima, e:
 
 ```text
-linha original (SQL) -> id_linha_origem -> id_produto_origem -> id_produto_agrupado_base -> id_produto_agrupado -> tabelas analíticas
+linha SQL -> id_linha_origem -> codigo_fonte -> descricao principal normalizada
+-> id_descricao -> id_agrupado_base -> id_agrupado -> id_agregado
 ```
 
-### Chaves principais
+Observacoes importantes:
 
-| Campo                   | Descrição |
-|------------------------|-----------|
-| `id_linha_origem`      | Identificador físico da linha na fonte (ID da tabela no banco de origem: C170, NF‑e, NFC‑e ou Bloco H). |
-| `id_produto_origem`    | Chave de produto antes do agrupamento. Recomenda‑se formar esta chave concatenando o CNPJ do emitente com o código do item da origem, conforme implementado nas buscas SQL (`co_emitente || '|' || cod_item` ou `co_emitente || '|' || prod_cprod`). |
-| `id_produto_agrupado_base` | Chave gerada automaticamente e de forma determinística a partir da descrição normalizada (ver seção de agregação automática). Preservada para auditoria. |
-| `id_produto_agrupado`  | Chave mestra que representa o produto consolidado no pipeline. Pode ser alterada manualmente via mapa de agregação. |
-| `versao_agrupamento`   | Inteiro sequencial incrementado sempre que há alteração manual nos grupos. |
+- `codigo_fonte` tem prioridade no vinculo das fontes quando existe;
+- `descricao_normalizada` e a normalizacao da descricao principal;
+- `descricao complementar` nao participa da chave automatica;
+- `id_agregado` aparece nas abas finais apenas como alias de apresentacao.
 
-### Recomendações de nomenclatura
+## O que o runtime atual ja faz
 
-- Substitua `codigo_fonte` por **`id_produto_origem`** para tornar explícita a ligação com a linha de origem.
-- Substitua `id_agrupado` por **`id_produto_agrupado`** e `id_agrupado_base` por **`id_produto_agrupado_base`**.
-- Não utilize `descricao_normalizada` ou outras heurísticas textuais como chave após a geração de `id_produto_agrupado_base`.
+### `03_descricao_produtos.py`
 
-## Critérios de agrupamento
+O runtime ja implementa a parte central da regra simples:
 
-1. **NCM e CEST coincidentes**: somente itens que compartilham o mesmo NCM (8 dígitos) e o mesmo CEST podem pertencer ao mesmo grupo. Divergências nesses códigos indicam tratamentos tributários distintos.
-2. **Unidade de medida compatível**: itens com unidade de medida diferente (p.ex. kg vs. litro) somente podem ser agrupados se existir fator de conversão físico claro e unívoco. Caso contrário, o agrupamento deve ser impedido ou demandar intervenção manual.
-3. **Descrição normalizada**: usada apenas para gerar `id_produto_agrupado_base` de forma determinística (passo automático). Após a geração, não deve ser usada para joinear ou enriquecer dados.
-4. **Agregação automática**: items com a mesma `descricao_normalizada`, NCM/CEST e unidade compatível recebem o mesmo `id_produto_agrupado_base`. Esse identificador é independente de CNPJ e serve como agrupamento inicial.
-5. **Agregação manual**: discrepâncias ou agrupamentos específicos podem ser corrigidos via `mapa_agrupamento_manual_<cnpj>.parquet`. As regras de precedência são:
-   1. manual por `id_linha_origem`;
-   2. manual por `descricao_normalizada` (quando unívoca);
-   3. automático por `id_produto_agrupado_base`.
+- normaliza apenas a `descricao` principal em `descricao_normalizada`;
+- agrupa `item_unidades` por `descricao_normalizada`;
+- preserva `lista_desc_compl`;
+- preserva `lista_ncm`, `lista_cest`, `lista_gtin`, `lista_co_sefin`, `lista_unid`, `lista_codigos`, `fontes` e `lista_codigo_fonte`.
 
-## Estruturas principais
+Ou seja: a descricao complementar ja entra como lista de apoio, nao como chave.
 
-### Tabela mestre de produtos agregados
+### `_produtos_final_impl.py`
 
-Esta tabela consolida atributos padrão de cada `id_produto_agrupado`. Deve incluir, no mínimo:
+Na camada final de agrupamento:
 
-* `id_produto_agrupado`
-* `descricao_padrao` (string padronizada do grupo)
-* `ncm` e `cest`
-* `unidade_referencia` (sugerida pela conversão de unidades)
-* `criterio_agrupamento` (automático vs. manual)
-* `origem_agrupamento` (base, manual por id, manual por descrição)
-* `qtd_descricoes_grupo` (número de descrições distintas agrupadas)
+1. `id_agrupado_base` e gerado deterministicamente a partir de `descricao_normalizada`;
+2. `id_agrupado` nasce igual ao grupo-base;
+3. `mapa_agrupamento_manual_<cnpj>.parquet` pode redefinir o `id_agrupado` final.
 
-### Tabela ponte de mapeamento
+Interpretacao correta:
 
-O arquivo `map_produto_agrupado_<cnpj>.parquet` vincula cada `id_produto_origem` ao `id_produto_agrupado`. A tabela deve conter:
+- a automacao atual forma grupos-base por descricao principal normalizada;
+- a agregacao final entre grupos-base deve ser tratada como manual.
 
-* `id_produto_origem`
-* `id_produto_agrupado`
-* `id_produto_agrupado_base`
-* `descricao_normalizada`
+## Como interpretar `id_descricao`, `id_agrupado_base` e `id_agrupado`
 
-Entradas que não encontrarem correspondência devem ser exportadas para auditoria com motivo explícito (`id_produto_origem_sem_mapeamento`, `descricao_normalizada_ambigua`, etc.).
+- `id_descricao`: identifica a descricao principal normalizada listada na camada detalhada;
+- `id_agrupado_base`: identifica o grupo-base automatico minimo;
+- `id_agrupado`: identifica o agrupamento vigente do pipeline;
+- sem decisao manual, `id_agrupado` coincide com `id_agrupado_base`;
+- com decisao manual, `id_agrupado` passa a refletir o agrupamento final escolhido.
 
-## Auditoria e integridade
+## Agrupamento manual
 
-Para garantir a integridade:
+O arquivo `mapa_agrupamento_manual_<cnpj>.parquet` aceita hoje:
 
-* **Jamais quebre o vínculo** entre a linha original (`id_linha_origem`) e o `id_produto_agrupado`. Todos os enriquecimentos devem percorrer a cadeia descrita no início.
-* **Nunca resolva ambiguidades silenciosamente**. Se um `id_produto_origem` corresponder a múltiplas descrições ou vice‑versa, registre o caso para auditoria e exija intervenção manual.
-* **Documente as justificativas** de agrupamentos manuais. O campo `versao_agrupamento` existe justamente para rastrear alterações e permitir replicabilidade.
+- `id_descricao` + `id_agrupado`;
+- `descricao_normalizada` + `id_agrupado`;
+- ou ambos.
 
-## Conexão com as buscas SQL
+Precedencia real:
 
-As buscas SQL (C170, NF‑e, NFC‑e e Bloco H) devem preencher os campos necessários para o agrupamento:
+1. manual por `id_descricao`;
+2. manual por `descricao_normalizada`;
+3. grupo-base automatico por `id_agrupado_base`.
 
-* A coluna **`id_produto_origem`** deve ser criada na consulta SQL concatenando o CNPJ do emitente (ou do participante de inventário) ao código do produto da linha. É a chave física do item.
-* O **NCM, CEST, unidade de medida e descrição do produto** devem ser extraídos diretamente dos registros 0200 (Sped) ou do bloco de produto das NF‑e/NFC‑e.
-* Em linhas de inventário, o campo `quantidade` e a unidade de medida devem ser preservados para permitir cálculo de estoque final.
+Leitura recomendada:
 
-Ao cumprir estes requisitos e seguir as nomenclaturas propostas, o processo de agregação torna‑se determinístico, auditável e alinhado à legislação fiscal.
+- `id_descricao` e a forma mais precisa de decisao manual;
+- `descricao_normalizada` e aceitavel quando a decisao vale para todo o grupo-base;
+- a etapa automatica nao deve ser descrita como agregacao semantica final.
+
+## Artefatos principais e papel de cada um
+
+### `descricao_produtos_<cnpj>.parquet`
+
+Camada detalhada por descricao principal normalizada, onde ficam:
+
+- `descricao_normalizada`;
+- `descricao`;
+- `lista_desc_compl`;
+- `lista_ncm`;
+- `lista_cest`;
+- `lista_gtin`;
+- `lista_co_sefin`;
+- `lista_unid`;
+- `lista_codigos`;
+- `lista_codigo_fonte`;
+- `fontes`.
+
+### `produtos_agrupados_<cnpj>.parquet`
+
+Tabela mestre do agrupamento vigente, com destaque para:
+
+- `id_agrupado`;
+- `descr_padrao`;
+- `lista_descricoes`;
+- `lista_desc_compl`;
+- `lista_ncm`;
+- `lista_cest`;
+- `lista_gtin`;
+- `lista_co_sefin`;
+- `lista_unidades`;
+- `fontes`;
+- `ids_origem_agrupamento`;
+- `criterio_agrupamento`;
+- `origem_agrupamento`;
+- `qtd_descricoes_grupo`;
+- `versao_agrupamento`.
+
+### `produtos_final_<cnpj>.parquet`
+
+Tabela detalhada por descricao, com destaque para:
+
+- `id_descricao`;
+- `id_agrupado`;
+- `id_agrupado_base`;
+- `descricao_normalizada`;
+- `descricao_final`;
+- `descr_padrao`;
+- `ncm_final`;
+- `cest_final`;
+- `gtin_final`;
+- `co_sefin_final`;
+- `unid_ref_sugerida`.
+
+### `map_produto_agrupado_<cnpj>.parquet`
+
+Tabela ponte de vinculo, hoje com:
+
+- `chave_produto`;
+- `id_agrupado`;
+- `codigo_fonte`;
+- `descricao_normalizada`.
+
+## Regra de auditoria
+
+Casos ambiguos nao devem ser resolvidos silenciosamente.
+
+Na implementacao atual:
+
+- o mapa manual sem match gera auditoria dedicada;
+- colisoes de descricao ou codigo de fonte sao tratadas com logs e artefatos de auditoria;
+- `codigo_fonte` continua sendo o fio de ouro preferencial quando disponivel.
+
+## Regra pratica de documentacao
+
+Ao descrever esta metodologia, use:
+
+- `id_agrupado` como chave real do pipeline;
+- `id_agregado` apenas para apresentacao;
+- `descricao_normalizada` como normalizacao da descricao principal;
+- `id_agrupado_base` como grupo-base automatico minimo;
+- `lista_desc_compl` e demais listas como insumo de decisao manual;
+- `agregacao manual` como a etapa que decide unioes alem da igualdade estrita da descricao principal normalizada.

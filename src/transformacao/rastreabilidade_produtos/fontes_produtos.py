@@ -309,22 +309,6 @@ def gerar_fontes_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
     )
     df_codigo_unico, df_desc_unico, df_desc_ambiguo = _construir_mapas(df_mapa)
 
-    df_prod_final = (
-        pl.read_parquet(arq_prod_final)
-        .select(
-            [
-                "id_agrupado",
-                "descr_padrao",
-                "ncm_padrao",
-                "cest_padrao",
-                "co_sefin_final",
-                "unid_ref_sugerida",
-            ]
-        )
-        .select(["id_agrupado", "codigo_fonte", "descricao_normalizada"])
-        .unique()
-    )
-
     df_prod_final = pl.read_parquet(arq_prod_final)
     cols_attrs = [
         "id_agrupado",

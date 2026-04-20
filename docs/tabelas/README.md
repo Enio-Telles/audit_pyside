@@ -1,119 +1,117 @@
 # Tabelas do Fiscal Parquet Analyzer
 
-Este diretório contém a documentação de todas as tabelas geradas pelo pipeline de processamento fiscal.
+Este diretorio contem a documentacao das principais tabelas geradas pelo pipeline fiscal.
 
-## Visão Geral do Pipeline
+## Visao Geral do Pipeline
 
-O pipeline segue uma ordem topológica definida em `src/orquestrador_pipeline.py`:
+O pipeline segue a ordem topologica definida em `src/orquestrador_pipeline.py`:
 
-```
+```text
 tb_documentos
-    ↓
+    ->
 item_unidades
-    ↓
+    ->
 itens
-    ↓
+    ->
 descricao_produtos
-    ↓
+    ->
 produtos_final
-    ↓
+    ->
 fontes_produtos
-    ↓
+    ->
 fatores_conversao
-    ↓
-    ├─→ c170_xml ──┐
-    └─→ c176_xml ──┤
-                   ↓
-        movimentacao_estoque
-              ↓
-        ┌─────┴─────┐
-        ↓           ↓
-calculos_mensais  calculos_anuais
+    ->
+    |-> c170_xml --|
+    |-> c176_xml --|
+               ->
+      movimentacao_estoque
+               ->
+      calculos_mensais / calculos_anuais / calculos_periodos
 ```
 
 ## Tabelas de Base
 
-| Tabela | Descrição | Dependências |
+| Tabela | Descricao | Dependencias |
 |--------|-----------|--------------|
-| [tb_documentos](tb_documentos.md) | Consolida documentos fiscais extraídos | Nenhuma |
+| [tb_documentos](tb_documentos.md) | Consolida documentos fiscais extraidos | Nenhuma |
 | [item_unidades](item_unidades.md) | Detalha itens por unidade de medida | `tb_documentos` |
-| [itens](itens.md) | Detalha itens com informações enriquecidas | `item_unidades` |
-| [descricao_produtos](descricao_produtos.md) | Padroniza descrições de produtos | `itens` |
+| [itens](itens.md) | Detalha itens com informacoes enriquecidas | `item_unidades` |
+| [descricao_produtos](descricao_produtos.md) | Padroniza descricoes de produtos | `item_unidades`, `itens` |
 
-## Tabelas de Agrupamento (MDM)
+## Tabelas de Agrupamento
 
-| Tabela | Descrição | Dependências |
+| Tabela | Descricao | Dependencias |
 |--------|-----------|--------------|
-| [produtos_final](produtos_final.md) | Agrupamento mestre de produtos (MDM) | `descricao_produtos` |
-| [fontes_produtos](fontes_produtos.md) | Tabela ponte: fonte → produto agrupado | `produtos_final` |
-| [fatores_conversao](fatores_conversao.md) | Fatores de conversão entre unidades | `fontes_produtos`, `item_unidades` |
+| [produtos_final](produtos_final.md) | Agrupamento mestre de produtos | `descricao_produtos`, `item_unidades` |
+| [fontes_produtos](fontes_produtos.md) | Enriquecimento das fontes com `id_agrupado` e atributos do grupo | `produtos_final`, `map_produto_agrupado` |
+| [fatores_conversao](fatores_conversao.md) | Fatores de conversao entre unidades | `item_unidades`, `produtos_final` |
 
 ## Tabelas de Enriquecimento
 
-| Tabela | Descrição | Dependências |
+| Tabela | Descricao | Dependencias |
 |--------|-----------|--------------|
 | [c170_xml](c170_xml.md) | C170 enriquecido com XMLs e fatores | `fatores_conversao` |
 | [c176_xml](c176_xml.md) | C176 enriquecido com XMLs e fatores | `fatores_conversao` |
-| [movimentacao_estoque](movimentacao_estoque.md) | Fluxo cronológico de estoque | `c170_xml`, `c176_xml` |
+| [movimentacao_estoque](movimentacao_estoque.md) | Fluxo cronologico de estoque | `c170_xml`, `c176_xml` |
 
-## Tabelas Analíticas
+## Tabelas Analiticas
 
-| Tabela | Descrição | Dependências |
+| Tabela | Descricao | Dependencias |
 |--------|-----------|--------------|
-| [calculos_mensais](calculos_mensais.md) | Resumo mensal da movimentação | `movimentacao_estoque` |
+| [calculos_mensais](calculos_mensais.md) | Resumo mensal da movimentacao | `movimentacao_estoque` |
 | [calculos_anuais](calculos_anuais.md) | Auditoria anual com ICMS | `movimentacao_estoque` |
+| [calculos_periodos](calculos_periodo.md) | Recorte por periodos de inventario | `movimentacao_estoque` |
 
 ## Conceitos Fundamentais
 
-### Golden Thread (Fio de Ouro)
+### Golden Thread
 
-O sistema preserva rastreabilidade completa através do "fio de ouro":
+O sistema preserva rastreabilidade pelo fio:
 
-```
-linha original → id_linha_origem → codigo_fonte → id_agrupado → tabelas analíticas
+```text
+linha original -> codigo_fonte -> id_descricao -> id_agrupado -> tabelas analiticas
 ```
 
 ### Chaves Centrais
 
-| Chave | Descrição |
+| Chave | Descricao |
 |-------|-----------|
-| `id_linha_origem` | Chave física da linha original (ex: `chave_acesso + prod_nitem`) |
-| `codigo_fonte` | `CNPJ_Emitente + "|" + codigo_produto_original` |
+| `id_item_unid` | Chave fisica da linha consolidada em `item_unidades` |
+| `codigo_fonte` | Chave canonica da fonte operacional quando disponivel |
+| `id_descricao` | Chave intermediaria de agrupamento por descricao |
 | `id_agrupado` | Chave mestra do produto consolidado |
 
-### Contrato de Funções
+### Contrato de Funcoes
 
-Todas as funções de geração seguem o contrato:
+As funcoes de geracao seguem o contrato:
 
 ```python
 def gerar_<etapa>(cnpj: str, pasta_cnpj: Path | None = None) -> bool
 ```
 
-- Retorna `True` em sucesso, `False` em falha
-- Persiste saída em Parquet
-- Não depende da camada de UI
+ou, no caso de fatores:
 
-## Localização dos Arquivos
-
-As tabelas são geradas em:
-
+```python
+def calcular_fatores_conversao(cnpj: str, pasta_cnpj: Path | None = None) -> bool
 ```
+
+## Localizacao dos Arquivos
+
+Camada analitica principal:
+
+```text
 dados/CNPJ/<cnpj>/analises/produtos/
+```
+
+Fontes enriquecidas `_agr`:
+
+```text
+dados/CNPJ/<cnpj>/arquivos_parquet/
 ```
 
 ## Notas Importantes
 
-### Preservação de Ajustes Manuais
-
-Ajustes manuais feitos pelo usuário (ex: `unid_ref`, `fator`) devem ser preservados em reprocessamentos.
-
-### Separação UI vs ETL
-
-- ETL (`extracao/`, `transformacao/`, `utilitarios/`): não manipula widgets
-- Interface: usa `QThread` para trabalho pesado, comunica por sinais
-
-### Invariantes de Negócio
-
-- `cest` e `gtin` não são equivalentes
-- Estoque final não altera saldo físico, apenas audita
-- Custo médio é calculado cronologicamente, linha a linha
+- ajustes manuais de agrupamento e conversao devem ser preservados em reprocessamentos
+- `produtos_final` tem implementacao canonica em `_produtos_final_impl.py`; os demais entrypoints sao proxies legados
+- `fontes_produtos` nao gera um unico parquet mestre; ela materializa uma saida `_agr` por fonte
+- `fatores_conversao` usa a camada canonica de agrupamento e preserva overrides existentes

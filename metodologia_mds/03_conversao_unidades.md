@@ -1,77 +1,108 @@
-# Conversão de unidades
+# Conversao de unidades: regra atual, heuristica e rastreabilidade
 <a id="mds-03-conversao-unidades"></a>
 
-Este documento consolida as regras de normalização de unidades de medida e cálculo do **fator de conversão** para os produtos agrupados. As nomenclaturas foram atualizadas para esclarecer a finalidade de cada campo e para alinhar o processo às boas práticas de auditoria e à legislação vigente.
+Este documento consolida a regra de conversao de unidades que o runtime realmente executa hoje.
 
 ## Objetivo
 
-Garantir que todas as quantidades e valores de um mesmo produto agregado sejam expressos em uma **unidade de referência** (`unidade_referencia`) comum, preservando fatores de conversão manuais e evitando distorções provocadas por embalagens ou unidades comerciais diferentes.
+Levar unidades comerciais diferentes do mesmo `id_agrupado` para uma unidade de referencia comum, sem perder:
 
-## Fontes de entrada
+- override manual;
+- origem do fator;
+- capacidade de reconciliar reprocessamentos.
 
-O cálculo baseia‑se principalmente nos Parquets:
+## Artefato canonico
 
-* `item_unidades_<cnpj>.parquet` – contêm as quantidades originais (`quantidade_convertida`) e a unidade comercial/tributável de cada item;
-* `produtos_final_<cnpj>.parquet` – catálogo de produtos com códigos, NCM e unidades cadastradas;
-* `descricao_produtos_<cnpj>.parquet` – lista de descrições e unidades utilizadas para cada produto;
-* `map_produto_agrupado_<cnpj>.parquet` – mapeamento entre `id_produto_origem` e `id_produto_agrupado`.
+O artefato principal e `fatores_conversao_<cnpj>.parquet`.
 
-O vínculo preferencial é `descricao_produtos` → `map_produto_agrupado`. Somente quando a correspondência for impossível utiliza‑se `produtos_final` como fallback.
+Colunas centrais hoje:
 
-## Escolha da unidade de referência
+- `id_agrupado`
+- `id_produtos`
+- `descr_padrao`
+- `unid`
+- `unid_ref`
+- `unid_ref_override`
+- `fator`
+- `fator_override`
+- `fator_manual`
+- `unid_ref_manual`
+- `fator_origem`
+- `preco_medio`
+- `origem_preco`
 
-Definida por prioridade:
+## Escolha da unidade de referencia
 
-1. **`unidade_referencia_override`** – unidade definida manualmente pelo auditor para o grupo.
-2. **`unidade_referencia_sugerida`** – unidade recomendada pela camada de agrupamento (por exemplo, a unidade predominante nos dados).
-3. **`unidade_referencia_auto`** – unidade escolhida automaticamente com base no maior volume movimentado, respeitando a coerência física (p.ex. litros vs. mililitros).
+Precedencia real no runtime:
 
-O campo final **`unidade_referencia`** recebe a primeira opção não nula nessa ordem.
+1. `unid_ref_override`
+2. `unid_ref_sugerida` vinda de `produtos_final`
+3. `unid_ref_auto` derivada da unidade com maior movimentacao
 
-## Cálculo do fator de conversão
+O campo final persistido e `unid_ref`.
 
-O fator de conversão expressa quantas unidades originais correspondem a uma unidade de referência. Ao contrário da versão anterior, **o fator deve ser derivado de uma equivalência física** e não de comparações de preço médio. Use os seguintes critérios:
+## Calculo do fator
 
-1. **Equivalência unitária declarada**: quando um mesmo produto é comercializado em diferentes embalagens (ex.: caixa com 12 unidades, pacote de 500 g), derive o fator comparando as quantidades físicas. Se uma nota informa que 2 pacotes de 500 g somam 1 kg, então `fator_conversao` para o pacote de 500 g em relação ao kg é `0.5`.
-2. **Informação do fabricante**: utilize especificações técnicas do produto (ficha técnica) ou informações de catálogo para determinar quantidades equivalentes.
-3. **Override manual** (`fator_conversao_override`): o auditor pode inserir o valor correto quando a equivalência física não for clara ou quando houver divergência nos documentos.
-4. **Fallback por preço médio**: somente utilize uma relação baseada em preço médio (`preco_medio_base / preco_unidade_referencia`) quando as opções acima não forem possíveis e desde que haja evidências de proporcionalidade (ex.: preços proporcionais ao volume). Essa origem deve ser registrada no campo `fator_conversao_origem` como `preco`.
+Precedencia real:
 
-Se nenhuma informação estiver disponível, use `1.0` como último fallback e registre `fator_conversao_origem = 'fallback_sem_dados'`.
+1. `fator_override`
+2. `fator_calc`
+3. fallback
 
-### Campos de saída
+Hoje `fator_calc` ainda e baseado em razao de preco medio da unidade frente a `unid_ref`. Portanto, a implementacao atual ainda nao pode ser descrita como exclusivamente fisica.
 
-| Campo                         | Descrição |
-|------------------------------|-----------|
-| `unidade_referencia`         | Unidade de medida final adotada para o produto agregado. |
-| `fator_conversao`            | Quantidade original multiplicada por este fator resulta na quantidade na unidade de referência. |
-| `unidade_referencia_override`| Unidade definida manualmente (não nula em caso de override). |
-| `fator_conversao_override`   | Fator de conversão definido manualmente. |
-| `fator_conversao_origem`     | Origem do fator: `manual`, `fisico`, `preco`, `fallback_sem_dados`. |
+## Origem do fator
 
-### Exemplo de cálculo físico
+Na tabela canonica de fatores, o runtime registra:
 
-Suponha que o produto “Óleo de Motor” seja vendido em frascos de 1 litro e em frascos de 500 ml. Se o grupo eleger a **unidade de referência** `litro` e a equivalência física declarar que 500 ml = 0,5 litro, então:
+- `manual`
+- `preco`
+- `fallback_sem_preco`
+- `fallback_sem_preco_ref`
 
-* Para linhas com `unidade_medida = '500 ML'`, `fator_conversao = 0.5` e `fator_conversao_origem = 'fisico'`.
-* Para linhas com `unidade_medida = '1 L'`, `fator_conversao = 1.0`.
+Esse ponto e importante: o texto antigo apresentava `preco` como excecao residual, mas no codigo atual a heuristica por preco ainda e parte normal do fluxo.
 
-O preço médio não entra no cálculo do fator; ele será utilizado apenas nas etapas de apuração de ICMS.
+## Overrides manuais
 
-## Reconciliação e reprocessamento
+O pipeline preserva e reconcilia overrides manuais antigos sempre que possivel.
 
-Em reprocessamentos:
+Isso inclui:
 
-* **Preserve overrides manuais**: os campos `unidade_referencia_override` e `fator_conversao_override` nunca devem ser sobrescritos automaticamente.
-* **Verifique correspondência única**: antes de migrar fatores entre versões de agrupamento, confirme que o `id_produto_agrupado` é o mesmo e que a unidade permanece consistente. Caso contrário, descarte o fator e registre log de auditoria.
-* **Registre a origem**: sempre preencha `fator_conversao_origem` para justificar o valor aplicado.
+- reaproveitamento de `unid_ref_manual`
+- reaproveitamento de `fator_manual`
+- log de reconciliacao quando um agrupamento muda
+- preservacao de overrides orfaos quando necessario para nao apagar ajuste manual sem rastreio
 
-## Utilização do fator
+## Vinculo entre item_unidades e produto agregado
 
-O fator de conversão é consumido em diversas etapas do pipeline, notadamente:
+Na conversao de unidades, o vinculo do item ao grupo segue a mesma hierarquia de rastreabilidade do agrupamento:
 
-* **movimentacao_estoque**: cálculo de `quantidade_convertida` a partir de `quantidade_original * fator_conversao`.
-* **c170_xml** e **c176_xml**: normalização de quantidades dos itens de SPED.
-* **agregações mensais e anuais**: harmonização de unidades para médias de preço e cálculo de divergências.
+1. `map_produto_agrupado`
+2. fallback para `produtos_final`
+3. descarte / auditoria quando a descricao for ambigua
 
-Ao seguir estas diretrizes, a conversão de unidades torna‑se coerente com a equivalência física declarada e evita distorções decorrentes de variações de preço.
+Isso significa que `map_produto_agrupado_<cnpj>.parquet` tem prioridade real sobre uma `descricao_normalizada` ambigua em `produtos_final`.
+
+## Alias conceituais usados pelo service MDS
+
+O `MovimentacaoService.apply_conversion_factors()` expõe um envelope conceitual com:
+
+- `fator_conversao`
+- `fator_conversao_origem`
+- `unidade_referencia`
+
+Mas ele faz isso sem romper o contrato legado:
+
+- `fator` continua existindo e e atualizado com o valor efetivo
+- `unid_ref` continua sendo a coluna consumida pelo pipeline
+
+Esse service e uma camada de compatibilidade e clareza; nao substitui a tabela canonica de fatores.
+
+## Como documentar sem ambiguidade
+
+Use a seguinte formulacao:
+
+- objetivo metodologico: preferir equivalencia fisica e preservar override manual;
+- estado real atual: ainda existe derivacao por preco medio com `fator_origem = preco`;
+- contrato materializado: `fator` e `unid_ref`;
+- aliases conceituais: `fator_conversao` e `unidade_referencia`.

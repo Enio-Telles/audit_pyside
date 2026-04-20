@@ -595,6 +595,17 @@ def _extrair_overrides_existentes(df_existente: pl.DataFrame, df_final: pl.DataF
     if df_existente.is_empty():
         return _df_vazio_override_unid(), _df_vazio_override_fator()
 
+    colunas_base = {
+        "id_agrupado": pl.Utf8,
+        "unid": pl.Utf8,
+        "unid_ref": pl.Utf8,
+        "fator": pl.Float64,
+        "preco_medio": pl.Float64,
+    }
+    for coluna, dtype in colunas_base.items():
+        if coluna not in df_existente.columns:
+            df_existente = df_existente.with_columns(pl.lit(None, dtype=dtype).alias(coluna))
+
     df_existente = df_existente.with_columns(
         [
             pl.col("id_agrupado").cast(pl.Utf8, strict=False),

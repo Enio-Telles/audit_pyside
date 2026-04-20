@@ -1,110 +1,177 @@
-# Plano de Implementação — Metodologia MDS
+# Metodologia MDS - estado atual e consolidacao
 
 ## Objetivo
 
-Implementar a metodologia descrita em `metodologia_mds/` no pipeline `audit_pyside` garantindo: rastreabilidade ponta a ponta, compatibilidade retroativa com Parquets legados, separação clara entre regras (services) e apresentação (UI), e entregas incrementais com testes e observabilidade.
+Consolidar a metodologia MDS de forma coerente com o runtime atual do `audit_pyside`, sem confundir:
 
-## Contexto
+- conceito metodologico;
+- contrato real materializado em Parquet;
+- nomenclatura alvo ainda nao migrada;
+- comportamento efetivamente exercido pelos modulos de pipeline;
+- regra desejada simples de agregacao versus o que o codigo ja materializa hoje.
 
-- Repositório: `audit_pyside` (PySide6 + Polars + Parquet).
-- A metodologia MDS define convenções de quantidades, agregação de produtos, conversão de unidades e geração das tabelas de período, mensal e anual.
-- Prioridades: corretude funcional, rastreabilidade, reuso, separação ETL/UI, estabilidade.
+## Escopo confirmado no codigo
 
-## Reuso
+A metodologia nao esta apenas "planejada". Ha implementacao ativa em:
 
-- Reaproveitar módulos existentes em `src/transformacao/` e `src/transformacao/movimentacao_estoque_pkg` quando possível.
-- Reutilizar formatos Parquet já adotados (`dados/CNPJ/...`) e convenções de nomes de colunas.
-- Mapas de agrupamento manuais (`map_produto_agrupado_<cnpj>.parquet`) permanecem como fonte de verdade para ajustes manuais.
+- `src/metodologia_mds/service.py`
+- `src/metodologia_mds/orchestrator.py`
+- `src/transformacao/rastreabilidade_produtos/03_descricao_produtos.py`
+- `src/transformacao/rastreabilidade_produtos/_produtos_final_impl.py`
+- `src/transformacao/rastreabilidade_produtos/fatores_conversao.py`
+- `src/transformacao/movimentacao_estoque_pkg/movimentacao_estoque.py`
+- `src/transformacao/calculos_periodo_pkg/calculos_periodo.py`
+- `src/transformacao/calculos_mensais_pkg/calculos_mensais.py`
+- `src/transformacao/calculos_anuais_pkg/calculos_anuais.py`
 
-## Arquitetura proposta
+Tambem ha cobertura focal em:
 
-- Estilo: monólito modular (modular monolith) com serviços pequenos e testáveis.
-- Componentes principais:
-  - Ingestão: leitura das buscas SQL convertidas para Parquet.
-  - Normalização: conversão de unidades e aplicação de `fator_conversao`.
-  - Agregação: geração de `id_produto_agrupado` e tabelas de mapeamento.
-  - Movimentação: construção de `movimentacao_estoque` com `quantidade_fisica*` e sinalização.
-  - Cálculos periódicos: geração de `tabela_periodos`, `tabela_mensal` e `tabela_anual`.
-  - Auditoria/Export: registros de inconsistências e arquivos de auditoria.
+- `tests/test_metodologia_mds.py`
+- `tests/test_metodologia_mds_conversion.py`
+- `tests/test_metodologia_mds_rules.py`
+- `tests/test_q_conv_semantica_estoque.py`
+- `tests/test_calculos_mensais.py`
+- `tests/test_calculos_anuais.py`
+- `tests/test_agregacao_produtos.py`
+- `tests/test_agrupamento_manual.py`
 
-## Divisão por stack
+## Correcoes aplicadas nesta revisao
 
-- Linguagem: Python 3.x
-- Biblioteca de dados: Polars
-- Armazenamento: Parquet em `dados/CNPJ/<cnpj>/analises/produtos/`
-- Testes: `pytest` (tests/)
-- Observabilidade: logs estruturados (LOG_LEVEL configurável), métricas mínimas e arquivos de auditoria.
+### 1. Contrato real vs nomenclatura conceitual
 
-## Engenharia
+Os documentos anteriores tratavam nomes conceituais como se ja fossem o contrato canonico do runtime. Isso nao e verdade hoje.
 
-- Contratos e schemas: definir e validar schemas Parquet (tipagem e nomes de colunas) em unidades de teste.
-- Testes automatizados: unitários para derivação de quantidades e integração leve que processa um Parquet de amostra.
-- Cancelamento e idempotência: garantir que reprocessamentos preservem overrides manuais.
-- Registro de alterações: `versao_agrupamento` e log auditável em todas as operações manuais.
+Mapa correto:
 
-## GitHub / Processo
+| Conceito metodologico | Coluna / saida real hoje |
+| --- | --- |
+| `id_produto_agrupado` | `id_agrupado` no pipeline e `id_agregado` nas abas finais |
+| `id_produto_origem` | `codigo_fonte` e `chave_produto` / `id_descricao`, conforme a camada |
+| `quantidade_convertida` | `q_conv` |
+| `quantidade_fisica` | `q_conv_fisica` |
+| `quantidade_fisica_sinalizada` | `__q_conv_sinal__` |
+| `estoque_final_declarado` | `__qtd_decl_final_audit__` |
+| `unidade_referencia` | `unid_ref` |
+| `tabela_periodos` | `aba_periodos_<cnpj>.parquet` |
+| `tabela_mensal` | `aba_mensal_<cnpj>.parquet` |
+| `tabela_anual` | `aba_anual_<cnpj>.parquet` |
 
-- Branches: `feat/metodologia-mds-<parte>` ou `fix/metodologia-mds-<issue>`.
-- PRs pequenas e revisáveis; incluir descrição do impacto em dados e migração se houver alteração de schema.
-- CI mínimo: lint, testes unitários, validação de schema (quando aplicável).
+### 2. Pre-agrupamento automatico e agregacao manual
 
-## Contratos
+A regra consolidada mais simples passa a ser esta:
 
-- Entradas: Parquets gerados pelas buscas SQL (C170, NF‑e, NFC‑e, Bloco H).
-- Saídas: `movimentacao_estoque_<cnpj>.parquet`, `tabela_periodos_<cnpj>.parquet`, `tabela_mensal_<cnpj>.parquet`, `tabela_anual_<cnpj>.parquet`.
-- Campos críticos: `id_linha_origem`, `id_produto_origem`, `id_produto_agrupado`, `quantidade_convertida`, `quantidade_fisica`, `quantidade_fisica_sinalizada`, `estoque_final_declarado`.
+1. unir automaticamente apenas descricoes principais iguais apos normalizacao;
+2. a normalizacao da descricao principal e: maiusculas, trim nas pontas, remocao de acentos e colapso de espacos internos duplicados;
+3. `descricao complementar` nao entra na chave automatica;
+4. NCM, CEST, GTIN, CO_SEFIN, unidade e demais atributos tambem nao entram na chave automatica;
+5. descricao complementar e demais atributos devem ser listados para auditoria;
+6. qualquer agregacao alem da igualdade estrita da descricao principal normalizada e manual.
 
-## Implementação (High-level)
+O runtime atual ja implementa quase toda essa base em `03_descricao_produtos.py`:
 
-1. Materializar funções puras para derivação de quantidades (`quantidade_fisica*`) em `src/metodologia_mds/service.py`.
-2. Implementar conversão de unidades e preservação de overrides.
-3. Implementar agregação básica por `id_produto_agrupado_base` e ponte de mapeamento.
-4. Materializar `movimentacao_estoque` com origem dos eventos e flags (`evento_sintetico`).
-5. Implementar geradores de tabelas (`periodos`, `mensal`, `anual`) com fórmulas e arredondamento conforme documentação.
-6. Adicionar testes unitários e integração leve com Parquet de amostra.
+- normaliza `descricao`;
+- agrupa por `descricao_normalizada`;
+- preserva `lista_desc_compl`;
+- preserva listas de NCM, CEST, GTIN, CO_SEFIN, unidades, codigos e fontes.
 
-## Plano detalhado (fases e critérios)
+Em `_produtos_final_impl.py`, essa base vira:
 
-### Fase 1 — Análise e plano (COMPLETED)
-- Resultado: este documento salvo em `docs/metodologia_mds_plan.md`.
+- `id_descricao`: chave da descricao listada;
+- `id_agrupado_base`: chave automatica do grupo-base;
+- `id_agrupado`: chave vigente apos decisao manual, quando houver.
 
-### Fase 2 — Núcleo de derivação de quantidades (IN PROGRESS)
-- GOAL-001: Implementar funções idempotentes que derivam `quantidade_fisica`, `quantidade_fisica_sinalizada` e `estoque_final_declarado`.
-- TASK-001: Criar `src/metodologia_mds/service.py` com `derive_quantities(df)` → saída validada.
-- Critério de aceite: testes unitários que cobrem inventário, entrada, saída e devolução.
+Correcao conceitual importante:
 
-### Fase 3 — Conversão de unidades e fatores (PLANNED)
-- GOAL-002: Implementar cálculo de `fator_conversao` respeitando `override` e fontes.
-- TASK-002: Reaproveitar `produtos_final` e `descricao_produtos`; criar fallback e registrar `fator_conversao_origem`.
+- o que antes vinha sendo descrito genericamente como "agrupamento automatico" deve ser lido como `grupo-base automatico por descricao principal normalizada`;
+- a agregacao final de negocio deve ser tratada como manual.
 
-### Fase 4 — Agregação e mapeamento (PLANNED)
-- GOAL-003: Gerar `id_produto_agrupado_base` e tabela ponte `map_produto_agrupado_<cnpj>.parquet`.
+### 3. Agrupamento manual
 
-### Fase 5 — Movimentação e tabelas finais (PLANNED)
-- GOAL-004: Materializar `movimentacao_estoque` e tabelas `periodos`, `mensal`, `anual`.
+O documento antigo citava override por `id_linha_origem`. Isso nao corresponde ao modulo atual.
 
-### Fase 6 — Testes, validação e performance (PLANNED)
-- GOAL-005: Cobertura mínima de testes unitários e integração; benchmark em dataset reduzido.
+O arquivo `mapa_agrupamento_manual_<cnpj>.parquet` aceita hoje:
 
-### Fase 7 — PR e rollout (PLANNED)
-- GOAL-006: Abrir PR com mudanças, documentação de impacto e plano de roll-back.
+- `id_descricao + id_agrupado`
+- `descricao_normalizada + id_agrupado`
 
-## Riscos
+Precedencia real:
 
-- Mudança de schema Parquet sem migração pode quebrar consumidores downstream.
-- Fatores de conversão deduzidos por preço são arriscados e devem ser marcados como `preco` e revalidados manualmente.
-- Agrupamento automático pode gerar ambiguidades que exigem intervenção manual; é importante exportar casos ambíguos.
-- Operações demoradas precisam de chunking e processamento incremental para evitar OOM.
+1. manual por `id_descricao`
+2. manual por `descricao_normalizada`
+3. grupo-base automatico por `id_agrupado_base`
 
-## MVP
+Leitura recomendada:
 
-- Implementar e testar `derive_quantities` (Fase 2) + documentação e testes básicos.
-- Entregar arquivo de plano em `docs/` e scaffolding inicial em `src/metodologia_mds/`.
+- use `id_descricao` quando a decisao manual for pontual;
+- use `descricao_normalizada` quando a decisao valer para todo o grupo-base;
+- nao venda a etapa automatica como agregacao semantica final.
 
----
+### 4. Conversao de unidades
 
-Arquivo criado automaticamente pelo Agente de Planejamento. Para próximos passos, confirme se deseja que eu:
+O texto anterior apresentava equivalencia fisica como se fosse a unica regra ativa. O runtime atual ainda usa heuristica por preco medio no calculo de `fator`, com rastreabilidade explicita em `fator_origem`.
 
-- rode benchmarks em um Parquet de amostra;
-- gere o primeiro PR com as alterações;
-- agregue validações de schema automáticas na CI.
+Regra real hoje:
+
+- unidade de referencia: `unid_ref_override` -> `unid_ref_sugerida` -> `unid_ref_auto`
+- fator: `fator_override` -> razao de preco medio -> fallback
+- origem do fator na tabela canonica: `manual`, `preco`, `fallback_sem_preco`, `fallback_sem_preco_ref`
+
+O service MDS expoe aliases conceituais (`fator_conversao`, `fator_conversao_origem`), mas o artefato canonico do pipeline continua baseado em `fator` / `unid_ref`.
+
+### 5. Movimentacao e tabelas finais
+
+Os documentos antigos tratavam `quantidade_fisica` e `estoque_final_declarado` como se fossem as colunas consumidas diretamente pelas abas finais. Na pratica:
+
+- `mov_estoque` preserva as colunas conceituais e tambem as colunas legadas;
+- `aba_periodos`, `aba_mensal` e `aba_anual` continuam consumindo principalmente `q_conv`, `q_conv_fisica`, `__qtd_decl_final_audit__`, `id_agrupado`, `unid_ref`.
+
+### 6. Status do plano
+
+O plano anterior dizia "fase 2 em progresso" e "fases seguintes planejadas". Isso tambem ficou desatualizado. O estado correto e:
+
+| Area | Estado |
+| --- | --- |
+| service MDS | implementado |
+| orchestrator MDS | implementado |
+| descricao_produtos | implementado |
+| grupo-base por descricao normalizada | implementado |
+| agregacao manual | implementado |
+| fatores de conversao | implementado |
+| mov_estoque | implementado |
+| aba_periodos | implementado |
+| aba_mensal | implementado |
+| aba_anual | implementado |
+| consolidacao documental | precisava de revisao e foi corrigida nesta rodada |
+
+## Diretriz de documentacao daqui para frente
+
+Sempre separar:
+
+- nome conceitual;
+- nome real do artefato;
+- regra desejada;
+- regra de fato implementada.
+
+Quando o tema for agregacao:
+
+- explicitar o que e grupo-base automatico;
+- explicitar o que e agregacao manual;
+- explicitar que descricao complementar e demais atributos sao listas de apoio, nao chave automatica.
+
+## Lacunas remanescentes a tratar com cuidado
+
+- Ha nomes diferentes entre camada interna (`id_agrupado`) e apresentacao (`id_agregado`); isso e intencional hoje e deve ser documentado, nao mascarado.
+- A heuristica por preco em fatores continua ativa; portanto nao se pode vender a metodologia como 100 por cento fisica.
+- Qualquer migracao de `q_conv` para nomes apenas conceituais exigira transicao nos consumidores atuais.
+- `_produtos_final_impl.py` ainda chama a etapa automatica de agrupamento; conceitualmente, o nome mais preciso agora e `grupo-base automatico`.
+
+## Resultado desta consolidacao
+
+Os arquivos em `metodologia_mds/` passam a descrever:
+
+- o contrato vigente do runtime;
+- os aliases conceituais usados pela metodologia;
+- a regra simples de grupo-base automatico por descricao principal normalizada;
+- a descricao complementar e demais atributos como listas de apoio;
+- a agregacao final como decisao manual;
+- as formulas e nomes efetivamente expostos nos Parquets finais.

@@ -72,32 +72,85 @@ def marcar_mov_rep_por_chave_item(df: pl.DataFrame) -> pl.DataFrame:
     if not candidatos:
         return df
 
-    item_expr = pl.col("Num_item").cast(pl.Utf8, strict=False).fill_null("").str.strip_chars()
-    df = df.with_columns(pl.coalesce(candidatos).fill_null("").alias("__chave_doc__"))
-    if df.is_empty() or "Num_item" not in df.columns:
+    if "Num_item" not in df.columns:
         return df
 
     # Chave de documento com fallback multinível para capturar C170 sem NF-e vinculada
-    _colunas_chave = [c for c in ["Chv_nfe", "num_doc", "id_linha_origem"] if c in df.columns]
-    if not _colunas_chave:
+    # Construir candidatos robustos: preferir Chv_nfe, depois emitente|serie|num_doc,
+    # depois id_linha_origem e por fim num_doc simples.
+    id_candidates: list[pl.Expr] = []
+    # Candidate 1: Chv_nfe, but treat empty string as null so coalesce skips it
+    if "Chv_nfe" in df.columns:
+        val = pl.col("Chv_nfe").cast(pl.Utf8, strict=False).fill_null("").str.strip_chars()
+        id_candidates.append(pl.when(val == "").then(pl.lit(None)).otherwise(val))
+
+    # Candidate 2: emitente|serie|num_doc (or num_doc alone) - prefer when emitente present
+    if "num_doc" in df.columns:
+        col_emitente = next((c for c in ["cnpj_emitente", "cnpj_participante", "co_emitente", "emit_cnpj_cpf"] if c in df.columns), None)
+        col_serie = next((c for c in ["Serie", "serie", "ser"] if c in df.columns), None)
+        partes = []
+        if col_emitente:
+            partes.append(pl.col(col_emitente).cast(pl.Utf8, strict=False).fill_null("").str.strip_chars())
+        if col_serie:
+            partes.append(pl.col(col_serie).cast(pl.Utf8, strict=False).fill_null("").str.strip_chars())
+        partes.append(pl.col("num_doc").cast(pl.Utf8, strict=False).fill_null("").str.strip_chars())
+        val2 = pl.concat_str(partes, separator="|")
+        id_candidates.append(pl.when(val2 == "").then(pl.lit(None)).otherwise(val2))
+
+    # Candidate 3: id_linha_origem or fallback num_doc
+    if "id_linha_origem" in df.columns:
+        val3 = pl.col("id_linha_origem").cast(pl.Utf8, strict=False).fill_null("").str.strip_chars()
+        id_candidates.append(pl.when(val3 == "").then(pl.lit(None)).otherwise(val3))
+    elif "num_doc" in df.columns:
+        val4 = pl.col("num_doc").cast(pl.Utf8, strict=False).fill_null("").str.strip_chars()
+        id_candidates.append(pl.when(val4 == "").then(pl.lit(None)).otherwise(val4))
+
+    if not id_candidates:
         return df
 
-    id_doc_expr = pl.coalesce(
-        [pl.col(c).cast(pl.Utf8, strict=False).str.strip_chars() for c in _colunas_chave]
-    ).fill_null("")
+    id_doc_expr = pl.coalesce(id_candidates).fill_null("")
+    df = df.with_columns(id_doc_expr.alias("__chave_doc__"))
+
     item_expr = pl.col("Num_item").cast(pl.Utf8, strict=False).fill_null("").str.strip_chars()
 
-    df = df.with_columns(id_doc_expr.alias("__chave_doc__"))
-    repetido_expr = (
-        (pl.col("__chave_doc__") != "")
-        & (item_expr != "")
-        & (pl.len().over(["__chave_doc__", "Num_item"]) > 1)
-    )
+    # Compute group sizes per (__chave_doc__, Num_item) robustly and mark duplicates
+    try:
+        grp = df.groupby(["__chave_doc__", "Num_item"]).agg(pl.count().alias("__grp_count__"))
+        df = df.join(grp, on=["__chave_doc__", "Num_item"], how="left")
+        repetido_expr = (
+            (pl.col("__chave_doc__") != "")
+            & (item_expr != "")
+            & (pl.col("__grp_count__").fill_null(0) > 1)
+        )
+    except Exception:
+        # Fallback to window expression if groupby/join fails for any reason
+        repetido_expr = (
+            (pl.col("__chave_doc__") != "")
+            & (item_expr != "")
+            & (pl.len().over(["__chave_doc__", "Num_item"]) > 1)
+        )
+
+    # Debugging helper: when DEBUG_MOV_REP env var is set, print intermediate values
+    try:
+        import os
+
+        if os.environ.get("DEBUG_MOV_REP"):
+            df_debug = df.with_columns(repetido_expr.alias("_rep_debug"))
+            print("DEBUG __chave_doc__:", df_debug["__chave_doc__"].to_list())
+            print("DEBUG Num_item:", df_debug["Num_item"].to_list())
+            print("DEBUG __grp_count__:", df_debug.get_column("__grp_count__").to_list() if "__grp_count__" in df_debug.columns else [])
+            print("DEBUG _rep_debug:", df_debug["_rep_debug"].to_list())
+    except Exception:
+        pass
 
     if "mov_rep" in df.columns:
         df = df.with_columns((repetido_expr | _boolish_expr("mov_rep").fill_null(False)).alias("mov_rep"))
     else:
         df = df.with_columns(repetido_expr.alias("mov_rep"))
+
+    # Clean up helper column
+    if "__grp_count__" in df.columns:
+        df = df.drop("__grp_count__")
 
     return df.drop("__chave_doc__")
 
