@@ -97,6 +97,16 @@ class MovimentacaoService:
                 .alias("__q_conv_sinal__")
             )
 
+        # Aplicar arredondamento consistente para quantidades (4 casas decimais)
+        df = df.with_columns(
+            pl.col("quantidade_fisica").cast(pl.Float64, strict=False).round(4).alias("quantidade_fisica"),
+            pl.col("quantidade_fisica_sinalizada").cast(pl.Float64, strict=False).round(4).alias("quantidade_fisica_sinalizada"),
+            pl.col("estoque_final_declarado").cast(pl.Float64, strict=False).round(4).alias("estoque_final_declarado"),
+            pl.col("q_conv").cast(pl.Float64, strict=False).round(4).alias("q_conv"),
+            pl.col("q_conv_fisica").cast(pl.Float64, strict=False).round(4).alias("q_conv_fisica"),
+            pl.col("__q_conv_sinal__").cast(pl.Float64, strict=False).round(4).alias("__q_conv_sinal__"),
+        )
+
         # calcular preco_unit de forma centralizada
         df = MovimentacaoService.compute_preco_unit(df)
 
@@ -153,21 +163,31 @@ class MovimentacaoService:
 
         df = df.with_columns(fator_expr)
 
-        # origem do fator
+        # origem do fator (proteger referências quando coluna `fator` não existir)
         if "fator_conversao_override" in cols:
-            origem_expr = (
-                pl.when(pl.col("fator_conversao_override").is_not_null())
-                .then(pl.lit("manual"))
-                .when(pl.col("fator").is_not_null())
-                .then(pl.lit("fisico"))
-                .otherwise(pl.lit("fallback_sem_dados"))
-            ).alias("fator_conversao_origem")
+            if "fator" in cols:
+                origem_expr = (
+                    pl.when(pl.col("fator_conversao_override").is_not_null())
+                    .then(pl.lit("manual"))
+                    .when(pl.col("fator").is_not_null())
+                    .then(pl.lit("fisico"))
+                    .otherwise(pl.lit("fallback_sem_dados"))
+                ).alias("fator_conversao_origem")
+            else:
+                origem_expr = (
+                    pl.when(pl.col("fator_conversao_override").is_not_null())
+                    .then(pl.lit("manual"))
+                    .otherwise(pl.lit("fallback_sem_dados"))
+                ).alias("fator_conversao_origem")
         else:
-            origem_expr = (
-                pl.when(pl.col("fator").is_not_null())
-                .then(pl.lit("fisico"))
-                .otherwise(pl.lit("fallback_sem_dados"))
-            ).alias("fator_conversao_origem")
+            if "fator" in cols:
+                origem_expr = (
+                    pl.when(pl.col("fator").is_not_null())
+                    .then(pl.lit("fisico"))
+                    .otherwise(pl.lit("fallback_sem_dados"))
+                ).alias("fator_conversao_origem")
+            else:
+                origem_expr = pl.lit("fallback_sem_dados").alias("fator_conversao_origem")
 
         df = df.with_columns(origem_expr)
 
@@ -203,8 +223,9 @@ class MovimentacaoService:
         df = df.with_columns(unidade_expr)
 
         # normalizar e garantir colunas esperadas
+        # normalizar e aplicar arredondamento para fator_conversao
         df = df.with_columns(
-            pl.col("fator_conversao").cast(pl.Float64).abs(),
+            pl.col("fator_conversao").cast(pl.Float64).abs().round(6).alias("fator_conversao"),
         )
 
         # atualizar coluna `fator` usada historicamente no pipeline

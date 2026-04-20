@@ -62,3 +62,30 @@ def test_apply_neutralizations_marks_duplicates():
     assert out["mov_rep"][2] is False
     assert out["__is_neutralizada__"][0] is True
     assert out["__is_neutralizada__"][2] is False
+
+
+def test_apply_conversion_factors_override_without_fator_column():
+    df = pl.DataFrame({
+        "fator_conversao_override": [1.5],
+        "unidade_referencia_override": ["KG"],
+    })
+
+    out = MovimentacaoService.apply_conversion_factors(df)
+    assert "fator_conversao" in out.columns
+    assert out["fator_conversao"][0] == 1.5
+    assert out["fator"][0] == 1.5
+    assert out["fator_conversao_origem"][0] == "manual"
+    assert out["unidade_referencia"][0] == "KG"
+
+
+def test_apply_conversion_factors_override_precedence_with_fator():
+    df = pl.DataFrame({
+        "fator_conversao_override": [2.0],
+        "fator": [1.2],
+    })
+
+    out = MovimentacaoService.apply_conversion_factors(df)
+    # override must take precedence
+    assert out["fator_conversao"][0] == 2.0
+    assert out["fator"][0] == 2.0
+    assert out["fator_conversao_origem"][0] == "manual"

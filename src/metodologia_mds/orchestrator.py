@@ -15,7 +15,7 @@ def gerar_movimentacao_estoque(cnpj: str, pasta_cnpj: Optional[str] = None) -> b
     except Exception as exc:  # pragma: no cover - import path issues surfaced at runtime
         raise RuntimeError(f"Não foi possível importar módulo de movimentacao_estoque: {exc}") from exc
 
-    return _gerar(cnpj)
+    return _gerar(cnpj, pasta_cnpj)
 
 
 def gerar_calculos_periodos(cnpj: str, pasta_cnpj: Optional[str] = None) -> bool:
@@ -26,7 +26,7 @@ def gerar_calculos_periodos(cnpj: str, pasta_cnpj: Optional[str] = None) -> bool
     except Exception as exc:
         raise RuntimeError(f"Não foi possível importar calculos_periodo: {exc}") from exc
 
-    return _gerar_per(cnpj)
+    return _gerar_per(cnpj, pasta_cnpj)
 
 
 def gerar_calculos_mensais(cnpj: str, pasta_cnpj: Optional[str] = None) -> bool:
@@ -37,7 +37,7 @@ def gerar_calculos_mensais(cnpj: str, pasta_cnpj: Optional[str] = None) -> bool:
     except Exception as exc:
         raise RuntimeError(f"Não foi possível importar calculos_mensais: {exc}") from exc
 
-    return _gerar_mes(cnpj)
+    return _gerar_mes(cnpj, pasta_cnpj)
 
 
 def gerar_calculos_anuais(cnpj: str, pasta_cnpj: Optional[str] = None) -> bool:
@@ -48,7 +48,7 @@ def gerar_calculos_anuais(cnpj: str, pasta_cnpj: Optional[str] = None) -> bool:
     except Exception as exc:
         raise RuntimeError(f"Não foi possível importar calculos_anuais: {exc}") from exc
 
-    return _gerar_ano(cnpj)
+    return _gerar_ano(cnpj, pasta_cnpj)
 
 
 __all__ = [
