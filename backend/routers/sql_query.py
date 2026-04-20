@@ -37,7 +37,7 @@ def list_sql_files():
 
 
 class SqlRequest(BaseModel):
-    sql: str
+    sql_id: str
     cnpj: str | None = None
     params: dict[str, str] = {}
 
@@ -46,8 +46,9 @@ class SqlRequest(BaseModel):
 def execute_sql(req: SqlRequest):
     """Execute a parametric SQL file against the Oracle DB (if available)."""
     try:
+        sql = SqlService.read_sql(req.sql_id)
         svc = SqlService()
-        result = svc.executar_sql(req.sql, params=req.params, cnpj=req.cnpj)
+        result = svc.executar_sql(sql, params=req.params, cnpj=req.cnpj)
         rows = [_safe_value(dict(row)) for row in (result or [])]
         return {"rows": rows, "count": len(rows)}
     except Exception as exc:
