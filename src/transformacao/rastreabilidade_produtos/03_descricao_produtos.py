@@ -13,6 +13,7 @@ import re
 import sys
 from pathlib import Path
 from utilitarios.project_paths import PROJECT_ROOT
+import hashlib
 
 import polars as pl
 from rich import print as rprint
@@ -31,28 +32,13 @@ try:
     )
     from transformacao.item_unidades import item_unidades
     from transformacao.itens import itens
+    from utilitarios.text import expr_normalizar_descricao
 except ImportError as e:
     rprint(f"[red]Erro ao importar modulos:[/red] {e}")
     sys.exit(1)
 
 
-def _normalizar_descricao_expr(col: str) -> pl.Expr:
-    return (
-        pl.col(col)
-        .cast(pl.Utf8, strict=False)
-        .fill_null("")
-        .str.to_uppercase()
-        .str.replace_all(r"[ÃÃ€Ã‚ÃƒÃ„]", "A")
-        .str.replace_all(r"[Ã‰ÃˆÃŠÃ‹]", "E")
-        .str.replace_all(r"[ÃÃŒÃŽÃ]", "I")
-        .str.replace_all(r"[Ã“Ã’Ã”Ã•Ã–]", "O")
-        .str.replace_all(r"[ÃšÃ™Ã›Ãœ]", "U")
-        .str.replace_all(r"Ã‡", "C")
-        .str.replace_all(r"Ã‘", "N")
-        .str.strip_chars()
-        .str.replace_all(r"\s+", " ")
-        .alias("descricao_normalizada")
-    )
+# Use centralized normalization expression from utilitarios.text
 
 
 def _agg_list(col: str, alias: str) -> pl.Expr:
@@ -65,6 +51,22 @@ def _agg_list(col: str, alias: str) -> pl.Expr:
         .unique()
         .sort()
         .alias(alias)
+    )
+
+
+def _gerar_id_agrupado_automatico(texto_normalizado: str | None) -> str:
+    texto = (texto_normalizado or "").strip()
+    digest = hashlib.sha1(texto.encode("utf-8")).hexdigest()[:12]
+    return f"id_agrupado_auto_{digest}"
+
+
+def _gerar_id_agrupado_automatico_expr(col: str = "descricao_normalizada") -> pl.Expr:
+    return (
+        pl.col(col)
+        .cast(pl.Utf8, strict=False)
+        .fill_null("")
+        .map_elements(_gerar_id_agrupado_automatico, return_dtype=pl.Utf8)
+        .alias("id_agrupado_base")
     )
 
 
@@ -146,7 +148,9 @@ def descricao_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
                     pl.lit(None, pl.String).alias(col)
                 )
 
-    df_item_unid = df_item_unid.with_columns(_normalizar_descricao_expr("descricao"))
+    df_item_unid = df_item_unid.with_columns(
+        expr_normalizar_descricao("descricao").alias("descricao_normalizada")
+    )
 
     df_lista_ids = (
         pl.scan_parquet(arq_itens)
@@ -184,10 +188,12 @@ def descricao_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         .with_row_count("seq", offset=1)
         .with_columns(pl.format("id_descricao_{}", pl.col("seq")).alias("id_descricao"))
         .drop("seq")
+        .with_columns(_gerar_id_agrupado_automatico_expr())
         .select(
             [
                 "id_descricao",
                 "descricao_normalizada",
+                "id_agrupado_base",
                 "descricao",
                 "lista_desc_compl",
                 "lista_codigos",

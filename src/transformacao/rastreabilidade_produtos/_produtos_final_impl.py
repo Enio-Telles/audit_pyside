@@ -45,27 +45,13 @@ try:
     )
     from transformacao.descricao_produtos import descricao_produtos
     from transformacao.id_agrupados import gerar_id_agrupados
+    from utilitarios.text import expr_normalizar_descricao
 except ImportError as erro:
     rprint(f"[red]Erro ao importar modulos:[/red] {erro}")
     sys.exit(1)
 
 
-def _normalizar_descricao_expr(col: str) -> pl.Expr:
-    return (
-        pl.col(col)
-        .cast(pl.Utf8, strict=False)
-        .fill_null("")
-        .str.to_uppercase()
-        .str.replace_all(r"[ÁÀÂÃÄ]", "A")
-        .str.replace_all(r"[ÉÈÊË]", "E")
-        .str.replace_all(r"[ÍÌÎÏ]", "I")
-        .str.replace_all(r"[ÓÒÔÕÖ]", "O")
-        .str.replace_all(r"[ÚÙÛÜ]", "U")
-        .str.replace_all(r"Ç", "C")
-        .str.replace_all(r"Ñ", "N")
-        .str.strip_chars()
-        .str.replace_all(r"\s+", " ")
-    )
+# Use centralized normalization from utilitarios.text.expr_normalizar_descricao
 
 
 def _gerar_id_agrupado_automatico(texto_normalizado: str | None) -> str:
@@ -184,6 +170,15 @@ def _registrar_auditoria_mapa_manual(
 
 
 def _aplicar_agrupamento_automatico(df_descricoes: pl.DataFrame) -> pl.DataFrame:
+    # Reuse `id_agrupado_base` if already materialized in `descricao_produtos`.
+    cols = df_descricoes.columns if hasattr(df_descricoes, "columns") else []
+    if "id_agrupado_base" in cols:
+        return df_descricoes.with_columns([
+            pl.lit("automatico_descricao_normalizada").alias("criterio_agrupamento"),
+            pl.lit("automatico").alias("origem_agrupamento"),
+            pl.col("id_agrupado_base").alias("id_agrupado"),
+        ])
+
     return df_descricoes.with_columns(
         [
             _gerar_id_agrupado_automatico_expr("descricao_normalizada"),
@@ -433,7 +428,7 @@ def produtos_agrupados(cnpj: str, pasta_cnpj: Path | None = None, versao: int = 
     df_item_unid_norm = (
         df_item_unid
         .filter(pl.col("descricao").is_not_null())
-        .with_columns(_normalizar_descricao_expr("descricao").alias("descricao_normalizada_item"))
+        .with_columns(expr_normalizar_descricao("descricao").alias("descricao_normalizada_item"))
     )
 
     df_item_com_grupo = (

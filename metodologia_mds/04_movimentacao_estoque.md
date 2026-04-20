@@ -1,49 +1,127 @@
-# Movimentação de estoque
+# Movimentacao de estoque: contrato vigente do mov_estoque
 <a id="mds-04-movimentacao-estoque"></a>
 
-Este documento consolida as regras operacionais e nomenclaturas da `movimentacao_estoque_<cnpj>.parquet`. A camada de movimentação é o coração do pipeline, pois integra as linhas de NF‑e/NFC‑e, C170 e inventário (Bloco H), aplicando as convenções de quantidade e agrupamento.
+Este documento descreve a camada `mov_estoque_<cnpj>.parquet` do jeito que ela existe hoje no pipeline.
 
-## Papel da tabela
+## Papel da camada
 
-A `movimentacao_estoque` é uma visão cronológica e auditável de todos os eventos que impactam o estoque de um produto agregado. Ela é construída a partir das buscas SQL e incorpora ajustes derivados (por exemplo, abertura de estoque inicial, linhas sintéticas geradas anualmente e periodicamente).
+`mov_estoque` e o ponto de consolidacao entre:
 
-## Campos principais
+- fontes fiscais enriquecidas;
+- fatores de conversao;
+- agregacao de produtos;
+- eventos sinteticos de estoque;
+- calculo sequencial de saldos;
+- comparacao entre saldo calculado e inventario declarado.
 
-| Campo                         | Descrição |
-|------------------------------|-----------|
-| `id_linha_origem`            | Chave física da linha no documento original (C170, NF‑e, NFC‑e ou Bloco H). |
-| `id_produto_origem`          | Chave formada por CNPJ do emitente (ou participante) e código do item; extraída diretamente nas consultas SQL. |
-| `id_produto_agrupado`        | Identificador do produto agregado resultante do mapeamento. |
-| `tipo_operacao`              | Classificação da linha: `0 – ESTOQUE INICIAL`, `1 – ENTRADA`, `2 – SAIDA`, `3 – ESTOQUE FINAL`, entre outros. |
-| `quantidade_convertida`      | Quantidade convertida para a unidade de referência (`unidade_referencia`) usando o fator de conversão. |
-| `quantidade_fisica`          | Quantidade de movimento físico (0 em inventários). |
-| `quantidade_fisica_sinalizada` | Quantidade física com sinal, usada no cálculo sequencial do saldo. |
-| `estoque_final_declarado`     | Quantidade declarada no inventário (Bloco H) preservada para auditoria. |
-| `origem_evento_estoque`       | Indica a origem da linha: `registro` (linha original), `inventario_bloco_h`, `estoque_final_gerado`, `estoque_inicial_derivado` ou `estoque_inicial_gerado`. |
-| `evento_sintetico`            | Flag booleana que diferencia linhas geradas pelo pipeline (`True`) das linhas físicas dos documentos (`False`). |
+## Colunas centrais do runtime
 
-## Semântica das operações
+As colunas mais importantes hoje sao:
 
-1. **Estoque inicial (0 – ESTOQUE INICIAL)**: representa a abertura de saldo no início de um período ou ano. Contribui positivamente para o saldo físico (`quantidade_fisica_sinalizada > 0`).
-2. **Entradas (1 – ENTRADA)**: movimentações de compra ou devoluções que aumentam o estoque. Também incrementam o saldo físico.
-3. **Saídas (2 – SAIDA)**: vendas, baixas de estoque ou devoluções de entrada. Reduzem o saldo físico (`quantidade_fisica_sinalizada < 0`).
-4. **Estoque final (3 – ESTOQUE FINAL)**: inventário declarado no Bloco H. Não altera o saldo físico; `quantidade_fisica = 0` e `quantidade_fisica_sinalizada = 0`. A quantidade declarada é armazenada em `estoque_final_declarado` para auditoria.
-5. **Eventos sintéticos**: linhas geradas pelo pipeline para ajustar estoque inicial ou final quando não há inventário explícito. Ex.: `estoque_final_gerado` e `estoque_inicial_gerado`.
+- `id_agrupado`
+- `Tipo_operacao`
+- `q_conv`
+- `q_conv_fisica`
+- `__q_conv_sinal__`
+- `__qtd_decl_final_audit__`
+- `periodo_inventario`
+- `saldo_estoque_anual`
+- `saldo_estoque_periodo`
+- `delta_decl_final_anual`
+- `delta_decl_final_periodo`
+- `origem_evento_estoque`
+- `evento_sintetico`
+- `ordem_operacoes`
 
-## Regras de cálculo
+O service MDS tambem acrescenta:
 
-1. **Salto cronológico**: o saldo do produto agregado é calculado sequencialmente somando `quantidade_fisica_sinalizada` em ordem cronológica. Inventários apenas informam a quantidade declarada e não alteram o saldo.
-2. **Custo médio**: ao entrar mercadoria com preço unitário, atualiza‑se o custo médio por método de média ponderada. Inventários não alteram o custo médio.
-3. **Devoluções**: devoluções de compra ou de venda devem ser classificadas corretamente (`tipo_operacao` apropriado) e inverter o sinal da `quantidade_fisica_sinalizada` em relação à operação original.
+- `quantidade_convertida`
+- `quantidade_fisica`
+- `quantidade_fisica_sinalizada`
+- `estoque_final_declarado`
 
-## Controle de unidades
+Essas colunas conceituais convivem com o contrato legado; elas nao substituem os nomes historicos consumidos pelas abas finais.
 
-Cada linha utiliza a unidade de medida original e o fator de conversão calculado na etapa de **conversão de unidades**. A `quantidade_convertida` sempre deve corresponder à unidade de referência do produto agregado. O campo `quantidade_fisica` resulta da aplicação de regras semânticas (ver [Abordagem de quantidades](01_abordagem_quantidades.md)).
+## Operacoes reconhecidas
 
-## Integridade e auditoria
+O pipeline trabalha com quatro familias canonicas:
 
-* **Campos legados preservados**: as quantidades originais extraídas das consultas SQL (`qtd`, `prod_qcom`, `prod_qtrib`) devem ser preservadas para auditabilidade, mesmo que não sejam usadas no cálculo.
-* **Logs de inconsistências**: linhas com `id_produto_origem` sem mapeamento ou com unidade incompatível devem ser exportadas para auditoria. O pipeline não deve gerar agrupamentos ou saldos silenciosos.
-* **Separação de inventário**: sempre que uma linha de inventário (`3 – ESTOQUE FINAL`) estiver presente, a quantidade deve ser copiada para `estoque_final_declarado`. Camadas posteriores (tabelas periódicas e anuais) usam esse valor para comparar com o saldo calculado.
+- `0 - ESTOQUE INICIAL`
+- `1 - ENTRADA`
+- `2 - SAIDAS`
+- `3 - ESTOQUE FINAL`
 
-Ao seguir essas nomenclaturas e regras, a tabela de movimentação oferece transparência sobre a origem e a natureza de cada movimento de estoque e estabelece a base para as tabelas de período, mensal e anual.
+Tambem existem variantes sinteticas, por exemplo:
+
+- `0 - ESTOQUE INICIAL gerado`
+- `3 - ESTOQUE FINAL gerado`
+
+Logo, qualquer documentacao correta deve considerar prefixo para estoque inicial e estoque final, e nao igualdade textual absoluta.
+
+## Regras de quantidade
+
+### `q_conv`
+
+Quantidade observada da linha apos fator e validacoes.
+
+### `q_conv_fisica`
+
+Quantidade usada como movimento fisico. Estoque final fica zerado aqui.
+
+### `__q_conv_sinal__`
+
+Quantidade com sinal para saldo:
+
+- positivo em estoque inicial e entrada
+- negativo em saida
+- zero em estoque final
+
+### `__qtd_decl_final_audit__`
+
+Quantidade declarada em inventario, preservada para auditoria.
+
+## Neutralizacao
+
+No runtime atual, neutralizacao relevante ocorre antes do saldo final:
+
+- `mov_rep`
+- `excluir_estoque`
+- protocolo de autorizacao invalido
+
+Quando uma linha cai nessas regras, o valor efetivo consumido pelo saldo vira zero.
+
+## Eventos sinteticos
+
+`gerar_eventos_estoque()` pode criar linhas sinteticas para manter coerencia do fluxo temporal, especialmente quando falta estoque final de 31/12 ou quando e necessario derivar estoque inicial do periodo seguinte.
+
+Essas linhas sao rastreadas por:
+
+- `evento_sintetico`
+- `origem_evento_estoque`
+
+## Periodo de inventario
+
+`periodo_inventario` e incrementado quando o fluxo encontra linhas que comecam com `0 - ESTOQUE INICIAL`.
+
+Na pratica isso significa que o periodo e ancorado pelo estoque inicial do ciclo, inclusive quando esse estoque inicial e derivado de um inventario final anterior.
+
+## Saldo e divergencia
+
+Depois de materializar quantidades e ordem operacional, o pipeline calcula:
+
+- `saldo_estoque_anual`
+- `saldo_estoque_periodo`
+- `delta_decl_final_anual`
+- `delta_decl_final_periodo`
+
+Os deltas comparam saldo sistemico com `__qtd_decl_final_audit__` apenas em linhas de estoque final.
+
+## Regra pratica
+
+Ao ler `mov_estoque`, interprete assim:
+
+1. `q_conv` = o que a linha observou
+2. `q_conv_fisica` = o que move estoque
+3. `__q_conv_sinal__` = o que entra no saldo
+4. `__qtd_decl_final_audit__` = o que o inventario declarou
+5. `evento_sintetico` e `origem_evento_estoque` = de onde veio o evento

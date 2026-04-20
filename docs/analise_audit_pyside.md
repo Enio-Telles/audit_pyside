@@ -14,6 +14,28 @@ A documentação é internamente contraditória em um ponto importante (`q_conv`
 
 ---
 
+## 1.1 Atualizacao de Runtime - 20/04/2026
+
+O roteamento de `produtos_final` foi simplificado apos a auditoria original.
+
+Cadeia vigente:
+
+```text
+orquestrador_pipeline.py
+  -> "transformacao.produtos_final_v2:gerar_produtos_final"
+    -> src/transformacao/produtos_final_v2.py                  (proxy canonico)
+      -> src/transformacao/rastreabilidade_produtos/produtos_final_v2.py
+        -> src/transformacao/rastreabilidade_produtos/_produtos_final_impl.py
+```
+
+Entry points legados agora apenas delegam para a mesma implementacao:
+
+- `src/transformacao/produtos_final.py`
+- `src/transformacao/04_produtos_final.py`
+- `src/transformacao/rastreabilidade_produtos/04_produtos_final.py`
+
+Com isso, o risco descrito abaixo sobre `importlib` e dependencia do nome fisico `04_produtos_final.py` nao e mais o caminho principal de runtime.
+
 ## 2. Cadeia de Roteamento Confirmada
 
 Antes de qualquer diagnóstico, é essencial entender a cadeia real de execução — que tem até **4 níveis de indireção**:

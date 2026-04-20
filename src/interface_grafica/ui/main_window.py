@@ -1331,6 +1331,10 @@ class MainWindow(QMainWindow):
         tb_acoes.addWidget(self.btn_reverter_agregacao)
         self.btn_desfazer_agregacao.clicked.connect(self._desfazer_agregacao)
         tb_acoes.addWidget(self.btn_desfazer_agregacao)
+        # Botao para restaurar snapshot do mapa manual
+        self.btn_reverter_mapa_manual = QPushButton("Reverter Mapa Manual")
+        tb_acoes.addWidget(self.btn_reverter_mapa_manual)
+        self.btn_reverter_mapa_manual.clicked.connect(self.reverter_mapa_manual_ui)
         bottom_layout.addWidget(tb_acoes)
 
         splitter.addWidget(bottom_box)
@@ -8603,6 +8607,84 @@ class MainWindow(QMainWindow):
             )
         except Exception as exc:
             self.show_error("Erro ao reverter agrupamento", str(exc))
+
+    def reverter_mapa_manual_ui(self) -> None:
+        cnpj = self._obter_cnpj_valido()
+        if cnpj is None:
+            return
+
+        try:
+            snapshots = self.servico_agregacao.listar_snapshots_mapa_manual(cnpj)
+        except Exception as exc:
+            self.show_error("Erro", f"Falha ao listar snapshots: {exc}")
+            return
+
+        if not snapshots:
+            self.show_error("Nenhum snapshot", "Nao ha snapshots disponiveis para este CNPJ.")
+            return
+
+        items = [Path(p).name for p in snapshots]
+        name, ok = QInputDialog.getItem(
+            self,
+            "Restaurar snapshot do mapa manual",
+            "Escolha snapshot:",
+            items,
+            0,
+            False,
+        )
+        if not ok or not name:
+            return
+
+        if (
+            QMessageBox.question(
+                self,
+                "Confirmar restauração",
+                f"Restaurar snapshot {name}?",
+            )
+            != QMessageBox.StandardButton.Yes
+        ):
+            return
+
+        try:
+            restored = self.servico_agregacao.reverter_mapa_manual(cnpj, snapshot_name=name)
+        except Exception as exc:
+            self.show_error("Erro", f"Falha ao restaurar snapshot: {exc}")
+            return
+
+        if not restored:
+            self.show_error("Falha", "Nao foi possivel restaurar o snapshot selecionado.")
+            return
+
+        def _on_success(resultado) -> None:
+            ok = bool(resultado)
+            if ok:
+                self.atualizar_tabelas_agregacao()
+                self.recarregar_historico_agregacao(cnpj)
+                self.refresh_logs()
+                self.show_info("Restaurado", f"Snapshot {name} restaurado e reprocessado.")
+            else:
+                self.show_error("Restaurado", "Snapshot restaurado, mas reprocessamento falhou.")
+
+        def _on_failure(mensagem: str) -> None:
+            self.show_error("Erro no reprocessamento", mensagem)
+
+        started = self._executar_em_worker(
+            self.servico_agregacao.recalcular_produtos_final,
+            cnpj,
+            mensagem_inicial="Reprocessando produtos_final...",
+            on_success=_on_success,
+            on_failure=_on_failure,
+        )
+
+        if not started:
+            # Worker ocupado; still refresh UI state minimally
+            self.atualizar_tabelas_agregacao()
+            self.recarregar_historico_agregacao(cnpj)
+            self.refresh_logs()
+            self.show_info(
+                "Restaurado",
+                f"Snapshot {name} restaurado. Reprocessamento nao iniciado (worker ocupado).",
+            )
 
     def _load_aggregation_table(self) -> None:
         cnpj = self.state.current_cnpj

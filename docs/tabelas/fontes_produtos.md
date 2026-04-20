@@ -1,76 +1,90 @@
 # fontes_produtos
 
-## Visão Geral
+## Visao Geral
 
-Tabela ponte que relaciona cada `codigo_fonte` ao respectivo `id_agrupado`, preservando a capacidade de voltar da análise ao item bruto e permitindo agregação/desagregação manual.
+Camada de enriquecimento que propaga `id_agrupado` e atributos consolidados de produto para as fontes brutas usadas depois por `c170_xml`, `c176_xml` e `movimentacao_estoque`.
 
-## Função de Geração
+## Funcao de Geracao
 
 ```python
 def gerar_fontes_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool
 ```
 
-Módulo: `src/transformacao/fontes_produtos.py`
+Modulo de entrada: `src/transformacao/fontes_produtos.py`
 
-## Dependências
+Implementacao canonica: `src/transformacao/rastreabilidade_produtos/fontes_produtos.py`
 
-- **Depende de**: `produtos_final`
-- **É dependência de**: `fatores_conversao`
+## Dependencias
+
+- **Depende de**: `produtos_final`, `map_produto_agrupado`
+- **E dependencia de**: `fatores_conversao`, `c170_xml`, `c176_xml`, `movimentacao_estoque`
 
 ## Fontes de Entrada
 
-- `produtos_final_<cnpj>.parquet`
+- `dados/CNPJ/<cnpj>/analises/produtos/produtos_final_<cnpj>.parquet`
+- `dados/CNPJ/<cnpj>/analises/produtos/map_produto_agrupado_<cnpj>.parquet`
+- fontes brutas em `dados/CNPJ/<cnpj>/arquivos_parquet/`
 
 ## Objetivo
 
-Criar uma tabela de mapeamento entre as fontes originais dos produtos (`codigo_fonte`) e os produtos agrupados (`id_agrupado`). Esta tabela é essencial para:
+Enriquecer cada fonte operacional com:
 
-1. **Agregação**: permitir que múltiplas fontes apontem para o mesmo produto mestre
-2. **Desagregação**: permitir voltar do produto mestre às fontes originais
-3. **Rastreabilidade**: manter o vínculo entre análise e dados brutos
+- `id_agrupado`
+- `descr_padrao`
+- `ncm_padrao`
+- `cest_padrao`
+- `co_sefin_agr`
+- `unid_ref_sugerida`
 
-## Principais Colunas
+O vinculo prioriza `codigo_fonte` quando possivel e usa `descricao_normalizada` apenas como fallback controlado.
 
-| Coluna | Tipo | Descrição |
+## Principais Colunas de Saida
+
+| Coluna | Tipo | Descricao |
 |--------|------|-----------|
-| `codigo_fonte` | str | Identificador da fonte: `CNPJ_Emitente + "|" + codigo_produto_original` |
-| `id_agrupado` | str | Chave do produto agrupado associado |
-| `descr_padrao` | str | Descrição padrão do grupo |
-| `ncm_padrao` | str | NCM padrão do grupo |
-| `cest_padrao` | str | CEST padrão do grupo |
-| `unid_ref_sugerida` | str | Unidade de referência sugerida |
+| `id_agrupado` | str | Chave do produto agrupado |
+| `codigo_fonte` | str | Chave canonica da fonte quando presente |
+| `descricao_normalizada` | str | Descricao normalizada usada no fallback |
+| `descr_padrao` | str | Descricao padrao do grupo |
+| `ncm_padrao` | str | NCM padrao do grupo |
+| `cest_padrao` | str | CEST padrao do grupo |
+| `co_sefin_agr` | str | Codigo SEFIN consolidado do grupo |
+| `unid_ref_sugerida` | str | Unidade de referencia sugerida do grupo |
 
 ## Regras de Processamento
 
-### Agregação Manual
+### Vinculo principal
 
-Quando a heurística automática não é suficiente:
+- tenta vincular por `codigo_fonte`
+- quando ha ambiguidade, registra aviso e mantem um unico match
 
-- Vários grupos mestre podem ser fundidos em um novo `id_agrupado`
-- Os vínculos da tabela ponte passam a apontar para o novo grupo
+### Fallback
 
-### Desagregação Manual
+- para linhas sem match por `codigo_fonte`, tenta `descricao_normalizada`
+- linhas ainda sem `id_agrupado` sao registradas em log e removidas da saida `_agr`
 
-- O grupo consolidado é particionado
-- A tabela ponte restaura a associação autônoma dos itens de origem
-- A rastreabilidade é preservada, nunca substituída
+### Rastreabilidade
 
-## Uso Posterior
+- preserva colunas de rastreabilidade da fonte original quando existirem
+- nao substitui a fonte bruta; gera artefatos enriquecidos paralelos
 
-Esta tabela é consumida por:
+## Saidas Geradas
 
-- **fatores_conversao**: para vincular unidades ao produto agrupado
-- **c170_xml**, **c176_xml**: para enriquecer fontes com `id_agrupado`
-- **movimentacao_estoque**: para JOINs entre fontes e tabelas de/para
+Nao ha um unico parquet `fontes_produtos_<cnpj>.parquet`.
 
-## Saída Gerada
+A funcao gera artefatos por fonte em `dados/CNPJ/<cnpj>/arquivos_parquet/`, por exemplo:
 
-```
-dados/CNPJ/<cnpj>/analises/produtos/fontes_produtos_<cnpj>.parquet
-```
+- `c170_agr_<cnpj>.parquet`
+- `bloco_h_agr_<cnpj>.parquet`
+- `nfe_agr_<cnpj>.parquet`
+- `nfce_agr_<cnpj>.parquet`
+
+Logs auxiliares de faltantes sao gravados em `dados/CNPJ/<cnpj>/analises/produtos/`, por exemplo:
+
+- `<fonte>_agr_sem_id_agrupado_<cnpj>.parquet`
 
 ## Notas
 
-- Esta tabela é a peça central da agregação e desagregação
-- Permite intervenção manual quando o agrupamento automático falha
-- Essencial para auditoria: permite navegar do analítico ao bruto
+- A camada canonica de vinculo e `map_produto_agrupado_<cnpj>.parquet`
+- `produtos_final` fornece os atributos consolidados que sao propagados para as fontes
+- Esta etapa e parte do fio de ouro entre fonte operacional e tabela analitica

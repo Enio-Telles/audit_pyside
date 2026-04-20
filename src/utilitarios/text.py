@@ -62,6 +62,9 @@ def normalize_desc(text: str | None) -> str:
         return ""
     t = remove_accents(str(text)) or ""
     t = t.upper()
+    # Normalize hyphens and common connector punctuation into spaces
+    # but preserve periods (e.g. "PROD. A") as tests expect.
+    t = re.sub(r"[-/–—_\\]+", " ", t)
     t = re.sub(r"\s+", " ", t).strip()
     return t
 

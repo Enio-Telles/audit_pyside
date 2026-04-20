@@ -1,73 +1,112 @@
-# Tabela anual
+# Aba anual: contrato real de saida
 <a id="mds-07-tabela-anual"></a>
 
-Este documento consolida as regras da **tabela_anual\_<cnpj>.parquet**, gerada pelo módulo de cálculos anuais. A nomenclatura segue o padrão adotado nas demais camadas para garantir consistência e legibilidade.
+Este documento descreve a saida real hoje gerada por `calculos_anuais`.
 
-## Identificação fiscal (SITAFE)
+## Nome do artefato
 
-Tal como nas demais tabelas, cada `id_produto_agrupado` é vinculado a um `co_sefin` com base nas tabelas de referência da SEFIN. O match é feito por `CEST + NCM`, `CEST` ou `NCM`, em ordem de prioridade.
+O arquivo gerado atualmente e:
 
-## Objetivo da tabela
+`dados/CNPJ/<cnpj>/analises/produtos/aba_anual_<cnpj>.parquet`
 
-A tabela anual resume a auditoria de cada produto agregado por ano civil, confrontando:
+Portanto, `tabela_anual` e um nome conceitual; o artefato real persiste como `aba_anual`.
 
-* estoque inicial;
-* entradas e saídas físicas;
-* estoque final declarado;
-* saldo final calculado pelo fluxo cronológico;
-* divergências (entradas, saídas e estoque final desacobertos);
-* bases e valores de ICMS presumidos.
+## Chaves e nomes expostos
 
-## Campos principais
+Campos principais de identificacao:
 
-### Identificação e agrupamento
+- `ano`
+- `id_agregado` - alias de apresentacao de `id_agrupado`
+- `descr_padrao`
+- `unid_ref`
+- `ST`
 
-| Campo                 | Tipo | Descrição |
-|-----------------------|------|-----------|
-| `ano`                 | int  | Ano civil da movimentação. |
-| `id_produto_agrupado` | str  | Identificador do produto agregado. |
-| `descricao_padrao`    | str  | Descrição padronizada do grupo. |
-| `unidade_referencia`  | str  | Unidade de referência adotada na conversão de unidades. |
+## Quantidades e saldos
 
-### Quantidades físicas
+Campos principais:
 
-| Campo                         | Tipo  | Descrição |
-|-------------------------------|-------|-----------|
-| `estoque_inicial`             | float | Soma de `quantidade_fisica` das linhas `0 – ESTOQUE INICIAL` ao longo do ano. |
-| `entradas`                    | float | Soma de `quantidade_fisica` das linhas `1 – ENTRADA`. |
-| `saidas`                      | float | Soma do valor absoluto de `quantidade_fisica` das linhas `2 – SAIDA`. |
-| `estoque_final_declarado`     | float | Soma de `estoque_final_declarado` das linhas `3 – ESTOQUE FINAL` ao longo do ano. |
-| `entradas_desacobertas`       | float | Soma anual de divergências de entrada (`entr_desac_anual`). |
-| `saldo_final_calculado`       | float | Último `saldo_estoque_anual` calculado no ano. |
+- `estoque_inicial`
+- `entradas`
+- `saidas`
+- `estoque_final`
+- `saidas_calculadas`
+- `saldo_final`
+- `entradas_desacob`
+- `saidas_desacob`
+- `estoque_final_desacob`
 
-### Divergências
+Semantica importante:
 
-| Campo                         | Tipo  | Fórmula |
-|-------------------------------|-------|---------|
-| `saidas_calculadas`           | float | `estoque_inicial + entradas + entradas_desacobertas − estoque_final_declarado` |
-| `saidas_desacobertas`         | float | `max(estoque_final_declarado − saldo_final_calculado, 0)` |
-| `estoque_final_desacoberto`   | float | `max(saldo_final_calculado − estoque_final_declarado, 0)` |
+- `estoque_final` vem da soma anual de `__qtd_decl_final_audit__`
+- essa soma considera todos os estoques finais existentes no ano, nao apenas 31/12
+- `saldo_final` vem do ultimo `saldo_estoque_anual` em `ordem_operacoes`
 
-### Preços médios e alíquotas
+## Formula de divergencia
 
-| Campo              | Tipo  | Descrição |
-|--------------------|-------|-----------|
-| `pme`              | float | Preço médio de entrada anual (`valor_entradas_validas / quantidade_entradas_validas`). |
-| `pms`              | float | Preço médio de saída anual (`valor_saidas_validas / quantidade_saidas_validas`). |
-| `aliquota_interna` | float | Alíquota interna de ICMS segundo SITAFE ou último valor movimentado. |
-| `ST`               | str   | Histórico textual de períodos de ST vigentes no ano. |
+O runtime aplica:
 
-### Bases e ICMS
+`saidas_calculadas = estoque_inicial + entradas + entradas_desacob - estoque_final`
 
-A base de saída e a base de estoque são calculadas com as mesmas fórmulas da tabela de períodos, substituindo a granularidade anual. O ICMS presumido se obtém multiplicando a base pela alíquota interna; se houver ST, o ICMS de saídas desacobertas é zerado.
+Depois:
 
-## Arredondamento
+- `saidas_desacob = max(estoque_final - saldo_final, 0)`
+- `estoque_final_desacob = max(saldo_final - estoque_final, 0)`
 
-* Quantidades e saldos: 4 casas decimais.
-* `pme`, `pms`, `aliquota_interna`, `icms_saidas_desacobertas` e `icms_estoque_final_desacoberto`: 2 casas decimais.
+## Medias
 
-## Saída gerada
+Campos principais:
 
-O arquivo resultante é salvo em `dados/CNPJ/<cnpj>/analises/produtos/tabela_anual_<cnpj>.parquet`.
+- `pme`
+- `pms`
+- `aliq_interna`
 
-Com a padronização de nomenclaturas e a aplicação das fórmulas acima, a tabela anual oferece uma visão consolidada e auditável do comportamento de estoque e da tributação presumida ao longo do ano.
+A implementacao anual atual usa `q_conv_fisica` quando presente; se a coluna faltar, deriva a quantidade fisica a partir de `q_conv`, zerando estoque final.
+
+## Observacao importante sobre filtros de media
+
+A camada anual hoje exclui das medias principalmente:
+
+- `dev_simples`
+- `excluir_estoque`
+- linhas com quantidade fisica menor ou igual a zero
+
+Ela nao aplica hoje o mesmo conjunto ampliado de devolucao da camada mensal. Essa diferenca precisa permanecer explicita na documentacao para nao criar falsa sensacao de uniformidade.
+
+## ICMS e ST
+
+Campos principais:
+
+- `ICMS_saidas_desac`
+- `ICMS_estoque_desac`
+
+Regra:
+
+- se houver ST ativo no ano, `ICMS_saidas_desac` zera
+- `ICMS_estoque_desac` continua calculado mesmo com ST
+
+Base monetaria:
+
+- se `pms > 0`, usa `pms` arredondado a 2 casas
+- senao, usa `pme * 1.30`
+
+## O que deixou de ser ambiguo
+
+Esta revisao corrige quatro ambiguidades recorrentes:
+
+1. `estoque_final` na saida anual nao e o saldo sistemico; e o estoque declarado consolidado
+2. `saldo_final` e o ultimo saldo calculado do ano
+3. `id_agregado` e alias de apresentacao, nao a chave interna do pipeline
+4. os nomes literais da saida sao `estoque_final`, `saldo_final`, `ICMS_saidas_desac` e `ICMS_estoque_desac`, e nao suas variantes conceituais longas
+
+## Regra pratica
+
+Ao descrever a aba anual, use os nomes reais da saida:
+
+- `id_agregado`
+- `unid_ref`
+- `estoque_final`
+- `saldo_final`
+- `saidas_desacob`
+- `estoque_final_desacob`
+- `ICMS_saidas_desac`
+- `ICMS_estoque_desac`
