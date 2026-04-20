@@ -66,3 +66,54 @@ Observações
 - A retenção e política de limpeza não estão implementadas automaticamente
   pelo `ServicoAgregacao` — sugere-se um job cron/Task Scheduler que execute
   a limpeza conforme a política de retenção descrita.
+
+## Inspecionar artifacts do workflow
+
+O workflow `Cleanup manual-map snapshots` (arquivo `.github/workflows/cleanup-snapshots.yml`) produz dois artifacts principais por execução:
+
+- `cleanup-report` — arquivo de texto (`cleanup-report.txt`) com o stdout/stderr completo do run;
+- `cleanup-removed-snapshots` — arquivo JSON (`cleanup-removed-snapshots.json`) com detalhes por CNPJ sobre arquivos removidos/retidos (campos: `removed`, `removed_files`, `kept_files`, `would_remove_files`).
+
+Como baixar e inspecionar (GitHub Web UI):
+
+1. Acesse o repositório no GitHub: https://github.com/Enio-Telles/audit_pyside
+2. Clique em **Actions** e selecione o workflow "Cleanup manual-map snapshots" (ou o arquivo `cleanup-snapshots.yml`).
+3. Na lista de execuções, abra a execução desejada (pela data/hora).
+4. Na página da execução, localize a seção **Artifacts** e clique em `cleanup-report` ou `cleanup-removed-snapshots` para baixar.
+5. Abra `cleanup-report.txt` para revisar logs; abra `cleanup-removed-snapshots.json` para analisar o resumo por CNPJ.
+
+Como baixar via `gh` CLI (exemplo):
+
+```bash
+# listar últimas execuções do workflow
+gh run list --workflow cleanup-snapshots.yml --repo Enio-Telles/audit_pyside --limit 5
+
+# supondo que o run id seja 123456789, baixar o JSON do run
+gh run download 123456789 --name cleanup-removed-snapshots --repo Enio-Telles/audit_pyside --dir ./artifacts
+
+# baixar também o relatório de logs
+gh run download 123456789 --name cleanup-report --repo Enio-Telles/audit_pyside --dir ./artifacts
+```
+
+Exemplo simplificado do conteúdo JSON (resumo):
+
+```json
+{
+  "99999999000107": {
+    "removed": 7,
+    "removed_files": [
+      "dados/CNPJ/99999999000107/analises/produtos/snapshots/mapa_agrupamento_manual_99999999000107_20260101T000000.parquet"
+    ],
+    "kept_files": [
+      "dados/CNPJ/99999999000107/analises/produtos/snapshots/mapa_agrupamento_manual_99999999000107_20260401T000000.parquet"
+    ],
+    "would_remove_files": []
+  }
+}
+```
+
+Observações importantes:
+
+- Artifacts expiram por padrão (normalmente 90 dias). Baixe ou armazene os relatórios se precisar retenção mais longa.
+- Para execuções manuais (`workflow_dispatch`) use `dry_run=true` para validar sem remover nada — o JSON conterá `would_remove_files`.
+- Se desejar, podemos estender o workflow para publicar os JSONs em um bucket (S3/Blob) ou anexá-los automaticamente a uma issue/relatório.
