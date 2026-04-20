@@ -56,4 +56,11 @@ jobs:
             CMD="$CMD --dry-run"
           fi
           echo "Executing: $CMD"
-          eval $CMD
+          # capture stdout/stderr to a report file and to the console
+          eval $CMD 2>&1 | tee cleanup-report.txt
+
+      - name: Upload cleanup report
+        uses: actions/upload-artifact@v4
+        with:
+          name: cleanup-report
+          path: cleanup-report.txt
