@@ -1,0 +1,21 @@
+{
+  "origem": "dossie_nif.xml",
+  "total_sql_files": 48,
+  "docs": [
+    "README.md",
+    "docs/plano_implementacao_polars.md",
+    "docs/matriz_dependencias.md",
+    "docs/ordem_execucao.md",
+    "docs/inventario_consultas.csv",
+    "exemplos/pipeline_polars_exemplo.py"
+  ],
+  "dominios": {
+    "00_base": 3,
+    "10_cadastro": 12,
+    "20_societario": 5,
+    "30_documentos_fiscais": 7,
+    "40_arrecadacao_regularidade": 7,
+    "50_fiscalizacao_conformidade": 11,
+    "90_orquestracao": 3
+  }
+}

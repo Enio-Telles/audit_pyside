@@ -177,11 +177,11 @@ def main():
     # include up to 50 files with samples
     for i, (fpath, fm) in enumerate(list(matches.items())[:50], start=1):
         report.append(f"{i}) {fpath}")
-            for m in fm[:MAX_MATCHES_PER_FILE]:
-                report.append(f'  - Linha {m["line_no"]} | keyword={m["keyword"]}')
-                for line in m["snippet"].splitlines():
-                    report.append("    " + line)
-            report.append("")
+        for m in fm[:MAX_MATCHES_PER_FILE]:
+            report.append(f'  - Linha {m["line_no"]} | keyword={m["keyword"]}')
+            for line in m["snippet"].splitlines():
+                report.append("    " + line)
+        report.append("")
 
     if tracebacks:
         report.append("\nTracebacks detectados:")

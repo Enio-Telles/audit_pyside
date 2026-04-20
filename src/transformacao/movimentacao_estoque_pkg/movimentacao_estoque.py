@@ -38,6 +38,7 @@ try:
         parse_expression as _parse_expression,
         carregar_flags_cfop as _carregar_flags_cfop,
     )
+    from metodologia_mds.service import MovimentacaoService
 except ImportError as e:
     rprint(f"[red]Erro ao importar modulos:[/red] {e}")
     sys.exit(1)
@@ -95,11 +96,6 @@ def marcar_mov_rep_por_chave_item(df: pl.DataFrame) -> pl.DataFrame:
 
     if "mov_rep" in df.columns:
         df = df.with_columns((repetido_expr | _boolish_expr("mov_rep").fill_null(False)).alias("mov_rep"))
-    else:
-        df = df.with_columns(repetido_expr.alias("mov_rep"))
-        df = df.with_columns(
-            (repetido_expr | _boolish_expr("mov_rep").fill_null(False)).alias("mov_rep")
-        )
     else:
         df = df.with_columns(repetido_expr.alias("mov_rep"))
 
@@ -516,7 +512,6 @@ def gerar_movimentacao_estoque(cnpj: str, pasta_cnpj: Path | None = None) -> boo
             except Exception:
                 exprs.append(pl.lit(None).alias(target))
             v = str(orig)
-            if v and v not in ["(vazio)", "correspondência com chave NF", "icms_orig & icms_cst ou icms_csosn", "prod_ceantrib ou caso for nulo -> prod_cean", "vl_item-vl_desc", "prod_vprod+prod_vfrete+prod_vseg+prod_voutro-prod_vdesc", "\"gerado\" ou \"registro\" (se está no bloco_h)"] and not v.startswith('"'):
             if v and v not in [
                 "(vazio)",
                 "correspondência com chave NF",
@@ -635,7 +630,15 @@ def gerar_movimentacao_estoque(cnpj: str, pasta_cnpj: Path | None = None) -> boo
     qtd_bruta_expr = pl.col("Qtd").cast(pl.Float64, strict=False).fill_null(0.0).abs()
     fator_expr = pl.col("fator").cast(pl.Float64, strict=False).fill_null(1.0).abs()
     q_conv_base_expr = (qtd_bruta_expr * fator_expr)
+    # Aplicar fatores de conversão centralizados e preservar overrides
+    try:
+        df_final = MovimentacaoService.apply_conversion_factors(df_final, df_prod_final)
+    except Exception as exc:
+        rprint(f"[yellow]Aviso: falha ao aplicar fatores de conversao: {exc}[/yellow]")
     linha_neutra_expr = (_boolish_expr("excluir_estoque").fill_null(False) | _boolish_expr("mov_rep").fill_null(False))
+    # garantir coluna de protoco de autorizacao quando ausente (compatibilidade retroativa)
+    if "infprot_cstat" not in df_final.columns:
+        df_final = df_final.with_columns(pl.lit("").alias("infprot_cstat"))
     infprot_valido_expr = (
         pl.col("infprot_cstat").cast(pl.Utf8, strict=False).fill_null("").str.strip_chars().is_in(["", "100", "150"])
     )
@@ -738,6 +741,12 @@ def gerar_movimentacao_estoque(cnpj: str, pasta_cnpj: Path | None = None) -> boo
             .otherwise(pl.lit(0.0))
             .alias("preco_unit")
         )
+        .with_columns([
+            # alinhar colunas esperadas pelo serviço de metodologia
+            pl.col("q_conv").alias("quantidade_convertida"),
+            pl.col("Tipo_operacao").alias("tipo_operacao"),
+        ])
+        .pipe(MovimentacaoService.derive_quantities)
         .group_by("id_agrupado", "__ano_saldo__", maintain_order=True)
         .map_groups(_calcular_saldo_estoque_anual)
         .group_by("id_agrupado", "periodo_inventario", maintain_order=True)

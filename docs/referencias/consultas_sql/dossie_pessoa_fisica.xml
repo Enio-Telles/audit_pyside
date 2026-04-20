@@ -1,0 +1,3719 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<displays>
+<display id="9e01f456-0174-1000-8007-ac16fb8dc918" type="" style="Table" enable="true">
+	<name><![CDATA[Dossiê Pessoa Física 1.3]]></name>
+	<description><![CDATA[]]></description>
+	<tooltip><![CDATA[]]></tooltip>
+	<drillclass><![CDATA[]]></drillclass>
+	<CustomValues>
+		<TYPE><![CDATA[horizontal]]></TYPE>
+	</CustomValues>
+	<query>
+		<sql><![CDATA[with itcd as(
+								--consolidado do sistema antigo e novo, pegando apenas o ultimo
+								select
+									cpf_de_cujus,
+									'<html><b style="color:red">Consta óbito em '||count(1)||' processo(s) de inventário, números '||LISTAGG(numero_processo,' * ') within group (order by data_envio desc)||'.</b><b> Checar DIEF(s) em:</b>' info,
+									'https://itcd.sefin.ro.gov.br/visualizar_consulta_autenticacao_sistemas_sefin' link
+									
+								from (
+										--sistema antigo de itcd
+										select 
+										   prot.da_envio              data_envio,
+										   proc.nu_ident_inventariado cpf_de_cujus,
+										   prot.co_protocolo          numero_processo
+										from 
+											itcd_prod.tri_itd_processo proc, 
+											itcd_prod.tri_itd_protocolo prot, 
+											itcd_prod.tri_itd_fato_gerador fg 
+										where prot.fk_fato_gerador = 1
+										  and prot.fk_situacao = 5
+										  --and proc.nu_ident_inventariado = regexp_replace(:CPF_,'\D+', '')
+										  and proc.fk_protocolo = prot.pk_protocolo
+										  and fg.pk_fato_gerador = prot.fk_fato_gerador
+										union
+										--sistema novo de itcd
+										select
+											proc.data_envio         data_envio,
+											inv.cpf_cnpj            cpf_de_cujus,
+											proc.numero_processo    numero_processo
+											
+										from 
+											ITCD.processos proc, 
+											itcd.inventariados inv
+										where proc.fato_gerador_id = 1
+										  and proc.situacao_id = 5
+										  --and inv.cpf_cnpj = regexp_replace(:CPF_,'\D+', '')
+										  and proc.id = inv.processo_id
+								)
+								group by cpf_de_cujus
+								)
+
+								SELECT
+									t.co_cnpj_cpf CPF,
+									'<html><b>'||t.no_razao_social nome,
+									t.desc_endereco logradouro,
+									t.bairro,
+									t.nu_cep CEP,
+									localid.no_municipio municipio,
+									localid.co_uf uf,
+									nvl(i.info,' ') info,
+									nvl(i.link,' ') link
+								FROM
+									bi.dm_pessoa t
+									left join bi.dm_localidade localid on t.co_municipio = localid.co_municipio
+									left join itcd i on t.co_cnpj_cpf = i.cpf_de_cujus
+								where (:CPF_ is null or t.co_cnpj_cpf = regexp_replace(:CPF_,'\D+', ''))
+								  and (:NOME is null or upper(t.no_razao_social) like '%'||regexp_replace(upper(:NOME),'\s', '%')||'%')
+								  and length(t.co_cnpj_cpf) = 11
+								order by case when :NOME is not null then t.no_razao_social else t.co_cnpj_cpf end]]></sql>
+		<binds>
+			<bind id="CPF_">
+				<prompt><![CDATA[CPF_]]></prompt>
+				<tooltip><![CDATA[CPF_]]></tooltip>
+				<value><![CDATA[03027064290]]></value>
+				<bracket><![CDATA[null]]></bracket>
+			</bind>
+			<bind id="NOME">
+				<prompt><![CDATA[NOME]]></prompt>
+				<tooltip><![CDATA[NOME]]></tooltip>
+				<value><![CDATA[NULL_VALUE]]></value>
+				<bracket><![CDATA[null]]></bracket>
+			</bind>
+		</binds>
+	</query>
+	<display id="" type="" style="Table" enable="true">
+		<name><![CDATA[Empresas em que é/foi sócio(a)]]></name>
+		<description><![CDATA[]]></description>
+		<tooltip><![CDATA[]]></tooltip>
+		<drillclass><![CDATA[]]></drillclass>
+		<CustomValues>
+			<TYPE><![CDATA[horizontal]]></TYPE>
+		</CustomValues>
+		<query>
+			<sql><![CDATA[SELECT
+      b.inicio_ativ,
+      b.cnpj_cpf,
+      b.ie,
+      '<html><b>'||b.nome nome,
+      b.municipio,
+      b.rp,
+      CASE
+            WHEN b.in_situacao = '001' THEN
+                  '<html><p style="color:blue">' || b.situacao
+            ELSE
+                  '<html><p style="color:red">' || b.situacao
+      END          situacao,
+      to_date(b.da_entr, 'yyyymmdd')    inicio_part,
+      CASE
+            WHEN ult_fac = 9 THEN
+                  NULL
+            ELSE
+                  to_date(b.da_saida, 'yyyymmdd') 
+      END          fim_part,
+      '<html><font color="red">'
+      || lpad(
+            TRIM(to_char(
+                  b.total,
+                  '999G999G999G990D00'
+            )),
+            length(
+                         b.total
+                   )+ 6
+      )            inadimplencia
+  FROM
+      (
+            SELECT
+                  p.co_cnpj_cpf                                                                cnpj_cpf,
+                  t.it_nu_inscricao_estadual                                                   ie,
+                  p.no_razao_social                                                            nome,
+                  l.no_municipio                                                               municipio,
+                  p.in_situacao,
+                  p.in_situacao
+                  || ' - '
+                  || s.no_situacao                                                             situacao,
+                  p.co_regime_pagto
+                  || ' - '
+                  || r.no_regime_pagamento                                                     rp,
+                  p.da_inicio_atividade                                                        inicio_ativ,
+                  MIN(h.it_da_referencia)
+                  OVER(PARTITION BY h.it_nu_inscricao_estadual || t.gr_identificacao)          da_entr,
+                  MAX(h.it_da_referencia)
+                  OVER(PARTITION BY h.it_nu_inscricao_estadual || t.gr_identificacao)          da_saida,
+                  MAX(h.it_in_ultima_fac)
+                  OVER(PARTITION BY h.it_nu_inscricao_estadual || t.gr_identificacao)          ult_fac,
+                  total
+              FROM
+                  sitafe.sitafe_historico_socio           t
+                    LEFT JOIN sitafe.sitafe_historico_contribuinte    h ON t.it_nu_fac = h.it_nu_fac
+                    LEFT JOIN bi.dm_pessoa                            p ON substr(
+                        h.gr_identificacao,
+                        2
+                  )= p.co_cnpj_cpf
+                    LEFT JOIN bi.dm_localidade                        l ON p.co_municipio = l.co_municipio
+                    LEFT JOIN bi.dm_regime_pagto_descricao            r ON p.co_regime_pagto = r.co_regime_pagamento
+                    LEFT JOIN bi.vw_situacao_contribuinte             s ON p.in_situacao = s.in_situacao
+                    LEFT JOIN sitafe.sitafe_tabelas_cadastro          tb ON t.it_co_cargo_socio = tb.it_co_cargo_socio
+                    LEFT JOIN(
+                        SELECT
+                              v.co_cnpj_cpf,
+                              SUM(v.va_principal + v.va_multa + v.va_juros + v.va_acrescimo)total
+                          FROM
+                              bi.fato_lanc_arrec_sum v
+                         WHERE
+                                    v.vencido = 3
+                                 AND v.id_situacao = '01'
+                         GROUP BY
+                              v.co_cnpj_cpf
+                  )                                       vencido ON p.co_cnpj_cpf = vencido.co_cnpj_cpf
+             WHERE
+                  substr(
+                        t.gr_identificacao,
+                        2
+                  )= :CPF
+      )b
+ GROUP BY
+      b.inicio_ativ,
+      b.cnpj_cpf,
+      b.ie,
+      b.nome,
+      b.municipio,
+      CASE
+            WHEN b.in_situacao = '001' THEN
+                        '<html><p style="color:blue">' || b.situacao
+            ELSE
+                  '<html><p style="color:red">' || b.situacao
+      END,
+      b.rp,
+      b.da_entr,
+      CASE
+            WHEN ult_fac = 9 THEN
+                  NULL
+            ELSE
+                  to_date(b.da_saida, 'yyyymmdd') 
+      END ,
+      '<html><font color="red">'
+      || lpad(
+            TRIM(to_char(
+                  b.total,
+                  '999G999G999G990D00'
+            )),
+            length(
+                         b.total
+                   )+ 6
+      )
+ ORDER BY
+      fim_part DESC,
+      inicio_part]]></sql>
+			<binds>
+				<bind id="CPF">
+					<prompt><![CDATA[CPF]]></prompt>
+					<tooltip><![CDATA[CPF]]></tooltip>
+					<value><![CDATA[NULL_VALUE]]></value>
+					<bracket><![CDATA[null]]></bracket>
+				</bind>
+			</binds>
+		</query>
+			<pdf version="VERSION_1_7" compression="CONTENT">
+				<docproperty title="" author="" subject="" keywords="" />
+				<cell toppadding="2" bottompadding="2" leftpadding="2" rightpadding="2" horizontalalign="LEFT" verticalalign="TOP" wrap="true" />
+				<column>
+					<heading font="null" size="10" style="NORMAL" color="-16777216" rowshading="-1" labeling="FIRST_PAGE" />
+					<footing font="null" size="10" style="NORMAL" color="-16777216" rowshading="-1" labeling="NONE" />
+					<blob blob="NONE" zip="false" />
+				</column>
+				<table font="null" size="10" style="NORMAL" color="-16777216" userowshading="false" oddrowshading="-1" evenrowshading="-1" showborders="true" spacingbefore="12" spacingafter="12" horizontalalign="LEFT" />
+				<header enable="false" generatedate="false">
+					<data>
+					
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+					
+						
+						
+						
+					
+						
+						
+					
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						null																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																						</data>
+				</header>
+				<footer enable="false" generatedate="false">
+					<data value="null" />
+				</footer>
+				<pagesetup papersize="LETTER" orientation="1" measurement="in" margintop="1.0" marginbottom="1.0" marginleft="1.0" marginright="1.0" />
+			</pdf>
+	</display>
+	<display id="" type="" style="Table" enable="true">
+		<name><![CDATA[Veículos]]></name>
+		<description><![CDATA[]]></description>
+		<tooltip><![CDATA[]]></tooltip>
+		<drillclass><![CDATA[]]></drillclass>
+		<CustomValues>
+			<TYPE><![CDATA[horizontal]]></TYPE>
+		</CustomValues>
+		<query>
+			<sql><![CDATA[SELECT info FROM (
+SELECT
+      1 codigo, '<html><b style="background-color:#4ACC70">É proprietário:' info
+  FROM
+      dual
+UNION ALL
+SELECT
+      2 codigo, 
+      '<html>----Modelo: '
+      ||'<b>'|| tb.it_no_marca_modelo
+      || '</b> - Ano Fabricação <b>'
+      || t.it_da_ano_fabricacao
+      || '</b> -  Ano do Modelo: <b>'
+      || t.it_da_ano_modelo
+      || '</b> - Placa: <b>'
+      || t.it_nu_placa
+      || '</b> Renavam: <b>'
+      || t.it_co_renavam
+      || '</b> Chassi: <b>'
+      || t.it_nu_chassi info
+  FROM
+      sitafe.sitafe_veiculo        t
+        LEFT JOIN sitafe.sitafe_tab_veiculo    tb ON t.it_co_marca_modelo = tb.it_co_marca_modelo
+ WHERE
+      it_nu_devedor = :CPF
+UNION ALL
+SELECT
+     3 codigo,  '<html><b style="background-color:orange">Já foi proprietário:' info
+  FROM
+      dual
+UNION ALL
+SELECT
+     4 codigo,
+     '<html>----Modelo: '
+      || '<b>'||tb.it_no_marca_modelo
+      || '</b> - Ano Fabricação <b>'
+      || t.ano_fabricacao
+      || '</b> -  Modelo: <b>'
+      || t.ano_modelo
+      || '</b> - Placa: <b>'
+      || t.placa
+      || '</b> Renavam: <b>'
+      || t.renavam
+      || '</b> Chassi: <b>'
+      || t.chassi info
+  FROM
+      detran.log_cadastro       t
+        LEFT JOIN sitafe.sitafe_tab_veiculo    tb ON t.marca_modelo = tb.it_co_marca_modelo
+ WHERE
+            substr(
+                  numero_devedor,
+                  1,
+                  11
+            )= :CPF
+         AND TRIM(chassi)NOT IN(
+            SELECT
+                  TRIM(it_nu_chassi)
+              FROM
+                  sitafe.sitafe_veiculo
+             WHERE
+                  it_nu_devedor = :CPF
+      ))
+group by codigo, info
+order by codigo]]></sql>
+			<binds>
+				<bind id="CPF">
+					<prompt><![CDATA[CPF]]></prompt>
+					<tooltip><![CDATA[CPF]]></tooltip>
+					<value><![CDATA[NULL_VALUE]]></value>
+					<bracket><![CDATA[null]]></bracket>
+				</bind>
+			</binds>
+		</query>
+	</display>
+	<display id="" type="" style="Table" enable="true">
+		<name><![CDATA[Endereços NFe]]></name>
+		<description><![CDATA[]]></description>
+		<tooltip><![CDATA[]]></tooltip>
+		<drillclass><![CDATA[]]></drillclass>
+		<CustomValues>
+			<TYPE><![CDATA[horizontal]]></TYPE>
+		</CustomValues>
+		<query>
+			<sql><![CDATA[SELECT * FROM (
+select 
+      'ITCD' origem,
+      null ano_mes,
+     upper( t.tx_logradouro) logradouro,
+      upper(t.tx_numero) numero,
+      upper(t.tx_complemento) complemento,
+      upper(t.tx_bairro) bairro,
+      upper(t.tx_telefone) fone,
+      upper(t.tx_cep) cep,
+      upper(t.tx_cidade) municipio, 
+      upper(t.tx_estado) uf,
+      null max_valor_nf
+
+from itcd_prod.tri_itd_pessoa t
+where pk_pessoa =:CPF
+
+union all
+
+SELECT
+      'NFE' ORIGEM,
+    extract(year from dhemi)||'/'||extract(month from dhemi) ano_mes,
+    upper(xlgr_dest) logradouro,
+    upper(nro_dest) numero,
+    upper(xcpl_dest) complemento,
+    upper(xbairro_dest) bairro,
+    upper(fone_dest) fone,
+    upper(cep_dest) cep,
+    upper(xmun_dest) muncipio,
+    upper(co_uf_dest) uf,
+    max(TOT_VNF) max_valor_nf
+FROM
+    bi.fato_nfe_detalhe t
+where t.co_destinatario = :CPF
+group by    upper(xlgr_dest),
+    upper(nro_dest),
+    upper(xcpl_dest),
+    upper(xbairro_dest),
+    upper(fone_dest),
+    upper(xmun_dest),
+    upper(cep_dest),
+    upper(co_uf_dest),
+    extract(year from dhemi)||'/'||extract(month from dhemi))
+
+order by ano_mes desc]]></sql>
+			<binds>
+				<bind id="CPF">
+					<prompt><![CDATA[CPF]]></prompt>
+					<tooltip><![CDATA[CPF]]></tooltip>
+					<value><![CDATA[NULL_VALUE]]></value>
+					<bracket><![CDATA[null]]></bracket>
+				</bind>
+			</binds>
+		</query>
+			<pdf version="VERSION_1_7" compression="CONTENT">
+				<docproperty title="" author="" subject="" keywords="" />
+				<cell toppadding="2" bottompadding="2" leftpadding="2" rightpadding="2" horizontalalign="LEFT" verticalalign="TOP" wrap="true" />
+				<column>
+					<heading font="null" size="10" style="NORMAL" color="-16777216" rowshading="-1" labeling="FIRST_PAGE" />
+					<footing font="null" size="10" style="NORMAL" color="-16777216" rowshading="-1" labeling="NONE" />
+					<blob blob="NONE" zip="false" />
+				</column>
+				<table font="null" size="10" style="NORMAL" color="-16777216" userowshading="false" oddrowshading="-1" evenrowshading="-1" showborders="true" spacingbefore="12" spacingafter="12" horizontalalign="LEFT" />
+				<header enable="false" generatedate="false">
+					<data>
+					
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+					
+						
+						
+						
+					
+						
+						
+					
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						null																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																						</data>
+				</header>
+				<footer enable="false" generatedate="false">
+					<data value="null" />
+				</footer>
+				<pagesetup papersize="LETTER" orientation="1" measurement="in" margintop="1.0" marginbottom="1.0" marginleft="1.0" marginright="1.0" />
+			</pdf>
+	</display>
+	<display id="" type="" style="Table" enable="true">
+		<name><![CDATA[Conta Corrente]]></name>
+		<description><![CDATA[]]></description>
+		<tooltip><![CDATA[]]></tooltip>
+		<drillclass><![CDATA[]]></drillclass>
+		<CustomValues>
+			<TYPE><![CDATA[horizontal]]></TYPE>
+		</CustomValues>
+		<query>
+			<sql><![CDATA[SELECT
+			:CPF cpf,
+      case when id_situacao is null then '<html><b>Σ TOTAL GERAL' 
+      when id_situacao = '01 - Não pago e Vencido' then '<html><b style="color:#CF3434">01 - Não pago e Vencido'
+      when id_situacao = '01 - Não pago a vencer' then '<html><b style="color:#3440CF">01 - Não pago a Vencer'
+      else  '<html><p style="color:#121212">'||id_situacao  end situacao,
+
+      lpad(
+            TRIM(to_char(
+                  SUM(total),
+                  '999G999G999G990D00'
+            )),
+            length(
+                   MAX(SUM(total))
+                   OVER()
+             )+7
+      )    total,
+         lpad(TRIM(to_char(round(RATIO_TO_REPORT(SUM(total))
+                       OVER(PARTITION BY case when id_situacao is null then 1 else 2 end), 4) * 100,
+                 '990.00L',
+                 'NLS_CURRENCY=%')),
+      8)           rr,
+      receitas
+  FROM
+      (
+            SELECT
+                  id_situacao_,
+                  id_situacao,
+                  SUM(valor)     total,
+                  LISTAGG('<html><b>'
+                          || id_receita
+                          || '</b> - '
+                          || '<i style="color:#854607">'||rr||'</i>',
+                          '; ')WITHIN GROUP(
+                         ORDER BY
+                              rr DESC
+                  )              receitas
+              FROM
+                  (
+                        SELECT
+                              id_situacao  id_situacao_,
+                              CASE
+                                    WHEN t.id_situacao = '01'
+                                       AND t.da_vencimento < sysdate THEN
+                                          '01 - Não pago e Vencido'
+                                    WHEN t.id_situacao = '01'
+                                       AND t.da_vencimento > sysdate THEN
+                                          '01 - Não pago a vencer'
+                                    ELSE
+                                          t.id_situacao
+                                          || ' - '
+                                          || initcap(
+                                                s.it_no_situacao
+                                          )
+                              END          id_situacao,
+                              t.id_receita,
+                              SUM(
+                                    CASE
+                                          WHEN t.va_pago IS NULL THEN
+                                                (t.va_principal + t.va_multa + t.va_juros + t.va_acrescimo)
+                                          ELSE
+                                                t.va_pago
+                                    END
+                              )            valor,
+                              lpad(
+                                    TRIM(to_char(
+                                          round(
+                                                RATIO_TO_REPORT(SUM(
+                                                      CASE
+                                                            WHEN va_pago IS NULL THEN
+                                                                  (t.va_principal + t.va_multa + t.va_juros + t.va_acrescimo)
+                                                            ELSE
+                                                                  t.va_pago
+                                                      END
+                                                ))
+                                                OVER(PARTITION BY
+                                                      CASE
+                                                            WHEN t.id_situacao = '01'
+                                                               AND t.da_vencimento < sysdate THEN
+                                                                  '01 - Não pago e Vencido'
+                                                            WHEN t.id_situacao = '01'
+                                                               AND t.da_vencimento > sysdate THEN
+                                                                  '01 - Não pago a vencer'
+                                                            ELSE
+                                                                  t.id_situacao
+                                                                  || ' - '
+                                                                  || initcap(
+                                                                        s.it_no_situacao
+                                                                  )
+                                                      END
+                                                ),
+                                                4
+                                          )* 100,
+                                          '990.00L',
+                                          'NLS_CURRENCY=%'
+                                    )),
+                                    8
+                              )            rr
+                          FROM
+                              bi.fato_lanc_arrec           t
+                                LEFT JOIN bi.dm_situacao_lancamento    s ON t.id_situacao = s.it_co_situacao
+                         WHERE
+                              t.id_cpf_cnpj = :CPF
+                         GROUP BY
+                                    CASE
+                                          WHEN t.id_situacao = '01'
+                                             AND t.da_vencimento < sysdate THEN
+                                                '01 - Não pago e Vencido'
+                                          WHEN t.id_situacao = '01'
+                                             AND t.da_vencimento > sysdate THEN
+                                                '01 - Não pago a vencer'
+                                          ELSE
+                                                t.id_situacao
+                                                || ' - '
+                                                || initcap(
+                                                      s.it_no_situacao
+                                                )
+                                    END,
+                                    t.id_situacao,
+                                    t.id_receita
+                  )
+             GROUP BY
+                  id_situacao_,
+                  id_situacao
+      )
+ GROUP BY
+      GROUPING SETS((),(id_situacao_,
+                        id_situacao,
+                        receitas))
+                        
+order by case when id_situacao_ is null then 1
+                  when id_situacao_ = '01' then 2
+                  else 3 end, total desc]]></sql>
+			<binds>
+				<bind id="CPF">
+					<prompt><![CDATA[CPF]]></prompt>
+					<tooltip><![CDATA[CPF]]></tooltip>
+					<value><![CDATA[NULL_VALUE]]></value>
+					<bracket><![CDATA[null]]></bracket>
+				</bind>
+			</binds>
+		</query>
+			<pdf version="VERSION_1_7" compression="CONTENT">
+				<docproperty title="" author="" subject="" keywords="" />
+				<cell toppadding="2" bottompadding="2" leftpadding="2" rightpadding="2" horizontalalign="LEFT" verticalalign="TOP" wrap="true" />
+				<column>
+					<heading font="null" size="10" style="NORMAL" color="-16777216" rowshading="-1" labeling="FIRST_PAGE" />
+					<footing font="null" size="10" style="NORMAL" color="-16777216" rowshading="-1" labeling="NONE" />
+					<blob blob="NONE" zip="false" />
+				</column>
+				<table font="null" size="10" style="NORMAL" color="-16777216" userowshading="false" oddrowshading="-1" evenrowshading="-1" showborders="true" spacingbefore="12" spacingafter="12" horizontalalign="LEFT" />
+				<header enable="false" generatedate="false">
+					<data>
+					
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+					
+						
+						
+						
+					
+						
+						
+					
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						null																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																						</data>
+				</header>
+				<footer enable="false" generatedate="false">
+					<data value="null" />
+				</footer>
+				<pagesetup papersize="LETTER" orientation="1" measurement="in" margintop="1.0" marginbottom="1.0" marginleft="1.0" marginright="1.0" />
+			</pdf>
+		<display id="" type="" style="Table" enable="true">
+			<name><![CDATA[Detalhe]]></name>
+			<description><![CDATA[]]></description>
+			<tooltip><![CDATA[]]></tooltip>
+			<drillclass><![CDATA[]]></drillclass>
+			<CustomValues>
+				<TYPE><![CDATA[horizontal]]></TYPE>
+			</CustomValues>
+			<query>
+				<sql><![CDATA[SELECT
+      da_vencimento,
+      da_pagamento,
+      nu_guia_parcela,
+      nu_complemento,
+      CASE
+            WHEN da_vencimento IS NULL
+               AND da_pagamento IS NULL THEN
+                  '<html><b>' || receita
+            ELSE
+                  receita
+      END            receita,
+      lpad(
+            TRIM(to_char(
+                  round(
+                        RATIO_TO_REPORT(SUM(total))
+                        OVER(PARTITION BY
+                              CASE
+                                    WHEN da_vencimento IS NULL
+                                       AND da_pagamento IS NULL THEN
+                                          1
+                                    ELSE
+                                          2
+                              END
+                        ),
+                        4
+                  )* 100,
+                  '990.00L',
+                  'NLS_CURRENCY=%'
+            )),
+            8
+      )              rr,
+      
+          lpad(
+            TRIM(to_char(
+                  SUM(total),
+                  '999G999G999G990D00'
+            )),
+            length(
+                   MAX(SUM(total))
+                   OVER()
+             )+7
+      )    total  
+      
+  FROM
+      (
+            SELECT
+                  t.da_vencimento,
+                  t.da_pagamento,
+                  t.nu_guia_parcela,
+                  t.nu_complemento,
+                  t.va_principal + t.va_multa + t.va_juros + t.va_acrescimo          total,
+                  t.va_pago,
+                  substr(
+                        t.id_receita
+                        || ' - '
+                        || r.it_no_receita,
+                        1,
+                        100
+                  )                                                                  receita
+              FROM
+                  bi.fato_lanc_arrec    t
+                    LEFT JOIN bi.dm_receita         r ON t.id_receita = r.it_co_receita
+             WHERE
+                        id_cpf_cnpj = :CPF
+                     AND(:SITUACAO = '<html><b>Σ TOTAL GERAL'
+                      OR id_situacao = substr(
+                        :SITUACAO,
+                        32,
+                        2
+                  ))
+      )
+ GROUP BY
+      GROUPING SETS((receita),(da_vencimento,
+                               da_pagamento,
+                               nu_guia_parcela,
+                               nu_complemento,
+                               receita))
+ ORDER BY
+      CASE
+            WHEN da_vencimento IS NULL
+               AND da_pagamento IS NULL THEN
+                  1
+            ELSE
+                  2
+      END,
+      total DESC]]></sql>
+				<binds>
+					<bind id="CPF">
+						<prompt><![CDATA[CPF]]></prompt>
+						<tooltip><![CDATA[CPF]]></tooltip>
+						<value><![CDATA[NULL_VALUE]]></value>
+						<bracket><![CDATA[null]]></bracket>
+					</bind>
+					<bind id="SITUACAO">
+						<prompt><![CDATA[SITUACAO]]></prompt>
+						<tooltip><![CDATA[SITUACAO]]></tooltip>
+						<value><![CDATA[NULL_VALUE]]></value>
+						<bracket><![CDATA[null]]></bracket>
+					</bind>
+				</binds>
+			</query>
+		</display>
+	</display>
+	<display id="" type="" style="Table" enable="true">
+		<name><![CDATA[NFe - Consumo]]></name>
+		<description><![CDATA[]]></description>
+		<tooltip><![CDATA[]]></tooltip>
+		<drillclass><![CDATA[]]></drillclass>
+		<CustomValues>
+			<TYPE><![CDATA[horizontal]]></TYPE>
+		</CustomValues>
+		<query>
+			<sql><![CDATA[SELECT
+      extract(year from t.dhemi) ano,
+      t.dhemi data,
+      t.chave_acesso,
+      t.co_emitente cnpj,
+      upper(t.xnome_emit) nome,
+      upper(t.xlgr_emit) logradouro,
+     upper(t.xbairro_emit) bairro,
+      t.nro_emit numero,
+     upper( t.xcpl_emit) complemento,
+     upper( t.xmun_emit) municipio,
+      t.co_uf_emit uf,
+     '<html><b>'||upper(t.prod_xprod) produto,
+      t.prod_ucom und,
+      t.prod_qcom quant,
+      sum((t.prod_vprod + t.prod_vfrete + t.prod_vseg - t.prod_vdesc + t.prod_voutro)) valor
+  FROM
+      bi.fato_nfe_detalhe t
+ WHERE
+            t.co_destinatario = :CPF
+         AND t.infprot_cstat IN('100',
+                                '150')
+
+group by grouping sets (
+      
+      (),
+      (extract(year from t.dhemi)),
+      (t.co_emitente,
+      upper(t.xnome_emit)),
+      (t.co_uf_emit),
+      (extract(year from t.dhemi),
+      t.dhemi,
+      t.chave_acesso,
+      t.co_emitente,
+      upper(t.xnome_emit),
+      upper(t.xlgr_emit),
+     upper(t.xbairro_emit),
+      t.nro_emit,
+     upper( t.xcpl_emit),
+     upper( t.xmun_emit),
+      t.co_uf_emit,
+     '<html><b>'||upper(t.prod_xprod),
+      t.prod_ucom,
+      t.prod_qcom)
+      
+      )
+
+
+order by case when ano is null and cnpj is null and uf is null and nome is null  then 1
+      when ano is not null and cnpj is null and uf is null then 2
+      when ano is not null and cnpj is not null and chave_acesso is not null then 3
+      when ano is null and cnpj is null and uf is not null then 4 
+      else 5 end, ano desc, data desc, valor desc
+      
+
+--dhemi desc]]></sql>
+			<binds>
+				<bind id="CPF">
+					<prompt><![CDATA[CPF]]></prompt>
+					<tooltip><![CDATA[CPF]]></tooltip>
+					<value><![CDATA[NULL_VALUE]]></value>
+					<bracket><![CDATA[null]]></bracket>
+				</bind>
+			</binds>
+		</query>
+			<pdf version="VERSION_1_7" compression="CONTENT">
+				<docproperty title="" author="" subject="" keywords="" />
+				<cell toppadding="2" bottompadding="2" leftpadding="2" rightpadding="2" horizontalalign="LEFT" verticalalign="TOP" wrap="true" />
+				<column>
+					<heading font="null" size="10" style="NORMAL" color="-16777216" rowshading="-1" labeling="FIRST_PAGE" />
+					<footing font="null" size="10" style="NORMAL" color="-16777216" rowshading="-1" labeling="NONE" />
+					<blob blob="NONE" zip="false" />
+				</column>
+				<table font="null" size="10" style="NORMAL" color="-16777216" userowshading="false" oddrowshading="-1" evenrowshading="-1" showborders="true" spacingbefore="12" spacingafter="12" horizontalalign="LEFT" />
+				<header enable="false" generatedate="false">
+					<data>
+					
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+					
+						
+						
+						
+					
+						
+						
+					
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						null																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																						</data>
+				</header>
+				<footer enable="false" generatedate="false">
+					<data value="null" />
+				</footer>
+				<pagesetup papersize="LETTER" orientation="1" measurement="in" margintop="1.0" marginbottom="1.0" marginleft="1.0" marginright="1.0" />
+			</pdf>
+	</display>
+	<display id="" type="" style="Table" enable="true">
+		<name><![CDATA[Eleições - TSE]]></name>
+		<description><![CDATA[]]></description>
+		<tooltip><![CDATA[]]></tooltip>
+		<drillclass><![CDATA[]]></drillclass>
+		<CustomValues>
+			<TYPE><![CDATA[horizontal]]></TYPE>
+		</CustomValues>
+		<query>
+			<sql><![CDATA[SELECT
+      bi.dm_candidatos.ds_eleicao eleicao,
+      bi.dm_candidatos.ds_cargo                  cargo,
+      bi.dm_candidatos.nm_ue
+      || ' / '
+      || bi.dm_candidatos.sg_uf                  local,
+      bi.dm_candidatos.nm_candidato nome,
+      bi.dm_candidatos.nm_urna_candidato         nome_urna,
+      bi.dm_candidatos.nm_email                  email,
+      bi.dm_candidatos.sg_partido                partido,
+      bi.dm_candidatos.nm_municipio_nascimento
+      || ' / '
+      || bi.dm_candidatos.sg_uf_nascimento       local_nascimento,
+      bi.dm_candidatos.dt_nascimento,
+      bi.dm_candidatos.nr_titulo_eleitoral_candidato titulo_eleitor,
+      bi.dm_candidatos.ds_grau_instrucao grau_instrucao,
+      bi.dm_candidatos.ds_estado_civil estado_civil,
+      bi.dm_candidatos.ds_cor_raca cor_raca,
+      bi.dm_candidatos.ds_ocupacao ocupacao,
+      '<html><b>'||bi.dm_candidatos.ds_sit_tot_turno resultado
+  FROM
+      bi.dm_candidatos
+ WHERE
+      bi.dm_candidatos.nr_cpf_candidato = :CPF]]></sql>
+			<binds>
+				<bind id="CPF">
+					<prompt><![CDATA[CPF]]></prompt>
+					<tooltip><![CDATA[CPF]]></tooltip>
+					<value><![CDATA[NULL_VALUE]]></value>
+					<bracket><![CDATA[null]]></bracket>
+				</bind>
+			</binds>
+		</query>
+			<pdf version="VERSION_1_7" compression="CONTENT">
+				<docproperty title="" author="" subject="" keywords="" />
+				<cell toppadding="2" bottompadding="2" leftpadding="2" rightpadding="2" horizontalalign="LEFT" verticalalign="TOP" wrap="true" />
+				<column>
+					<heading font="null" size="10" style="NORMAL" color="-16777216" rowshading="-1" labeling="FIRST_PAGE" />
+					<footing font="null" size="10" style="NORMAL" color="-16777216" rowshading="-1" labeling="NONE" />
+					<blob blob="NONE" zip="false" />
+				</column>
+				<table font="null" size="10" style="NORMAL" color="-16777216" userowshading="false" oddrowshading="-1" evenrowshading="-1" showborders="true" spacingbefore="12" spacingafter="12" horizontalalign="LEFT" />
+				<header enable="false" generatedate="false">
+					<data>
+					
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+					
+						
+						
+						
+					
+						
+						
+					
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						null																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																						</data>
+				</header>
+				<footer enable="false" generatedate="false">
+					<data value="null" />
+				</footer>
+				<pagesetup papersize="LETTER" orientation="1" measurement="in" margintop="1.0" marginbottom="1.0" marginleft="1.0" marginright="1.0" />
+			</pdf>
+	</display>
+	<display id="" type="" style="Table" enable="true">
+		<name><![CDATA[DIMP]]></name>
+		<description><![CDATA[]]></description>
+		<tooltip><![CDATA[]]></tooltip>
+		<drillclass><![CDATA[]]></drillclass>
+		<CustomValues>
+			<TYPE><![CDATA[horizontal]]></TYPE>
+		</CustomValues>
+		<query>
+			<sql><![CDATA[SELECT
+      case when ano is null and periodo is null then '<html><b style="color:blue">Σ TOTAL GERAL'
+      when ano is not null and periodo is null then '<html><b style="color:green">Σ Total no ano '|| ano
+      when ano is not null and periodo is not null then '----Total no período '||periodo
+      END info,
+      operacoes,
+          lpad(
+            TRIM(to_char(
+                  total,
+                  '999G999G999G990D00'
+            )),
+            length(
+                   MAX(total)
+                   OVER()
+             )+7
+      )    total 
+      
+      
+  FROM
+      (
+            SELECT
+                  EXTRACT(YEAR FROM dt_ini)          ano,
+                  EXTRACT(YEAR FROM dt_ini)
+                  || '/'
+                  || EXTRACT(MONTH FROM dt_ini)      periodo,
+                  SUM(qtd)                           operacoes,
+                  SUM(valor)                         total
+              FROM
+                  (
+                        SELECT
+                              t.cnpj,
+                              reg0100.cpf,
+                              reg1100.dt_ini,
+                              reg1100.dt_fin,
+                              reg1100.qtd,
+                              reg1100.valor
+                          FROM
+                              dimp.reg0000s    t
+                                LEFT JOIN dimp.reg0100s    reg0100 ON t.id = reg0100.reg0000_id
+                                LEFT JOIN dimp.reg1100s    reg1100 ON t.id = reg1100.reg0000_id
+                                 AND reg0100.cod_cliente = reg1100.cod_cliente
+                         WHERE
+                              reg0100.cpf = :CPF
+                         GROUP BY
+                              t.cnpj,
+                              reg0100.cpf,
+                              reg1100.dt_ini,
+                              reg1100.dt_fin,
+                              reg1100.qtd,
+                              reg1100.valor
+                  )
+             GROUP BY
+                  GROUPING SETS((),
+                  (EXTRACT(YEAR FROM dt_ini)),(EXTRACT(YEAR FROM dt_ini),
+                                               EXTRACT(YEAR FROM dt_ini)
+                                               || '/'
+                                               || EXTRACT(MONTH FROM dt_ini)))
+      )
+      
+order by ano desc, periodo desc]]></sql>
+			<binds>
+				<bind id="CPF">
+					<prompt><![CDATA[CPF]]></prompt>
+					<tooltip><![CDATA[CPF]]></tooltip>
+					<value><![CDATA[NULL_VALUE]]></value>
+					<bracket><![CDATA[null]]></bracket>
+				</bind>
+			</binds>
+		</query>
+			<pdf version="VERSION_1_7" compression="CONTENT">
+				<docproperty title="" author="" subject="" keywords="" />
+				<cell toppadding="2" bottompadding="2" leftpadding="2" rightpadding="2" horizontalalign="LEFT" verticalalign="TOP" wrap="true" />
+				<column>
+					<heading font="null" size="10" style="NORMAL" color="-16777216" rowshading="-1" labeling="FIRST_PAGE" />
+					<footing font="null" size="10" style="NORMAL" color="-16777216" rowshading="-1" labeling="NONE" />
+					<blob blob="NONE" zip="false" />
+				</column>
+				<table font="null" size="10" style="NORMAL" color="-16777216" userowshading="false" oddrowshading="-1" evenrowshading="-1" showborders="true" spacingbefore="12" spacingafter="12" horizontalalign="LEFT" />
+				<header enable="false" generatedate="false">
+					<data>
+					
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+					
+						
+						
+						
+					
+						
+						
+					
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						null																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																</data>
+				</header>
+				<footer enable="false" generatedate="false">
+					<data value="null" />
+				</footer>
+				<pagesetup papersize="LETTER" orientation="1" measurement="in" margintop="1.0" marginbottom="1.0" marginleft="1.0" marginright="1.0" />
+			</pdf>
+	</display>
+	<display id="" type="" style="Table" enable="true">
+		<name><![CDATA[Outros endereços]]></name>
+		<description><![CDATA[]]></description>
+		<tooltip><![CDATA[]]></tooltip>
+		<drillclass><![CDATA[]]></drillclass>
+		<CustomValues>
+			<TYPE><![CDATA[horizontal]]></TYPE>
+		</CustomValues>
+		<query>
+			<sql><![CDATA[select fonte, periodo, endereco, numero, complemento, bairro, municipio, uf, cep, telefone, email
+from(
+SELECT
+      '<html><p style="color:blue">DETRAN'                                          fonte,
+      t.data                                                                        ordem,
+      to_char(EXTRACT(YEAR FROM t.data)|| '/' || EXTRACT(MONTH FROM t.data))        periodo,
+      t.endereco,
+      t.numero,
+      t.complemento,
+      t.bairro,
+      m.it_no_municipio                                                             municipio,
+      m.it_sg_uf                                                                    uf,
+      t.cep,
+      t.ddd || '-' || t.telefone                                                    telefone,
+      NULL                                                                          email
+  FROM
+      detran.log_cadastro          t
+        LEFT JOIN sitafe.sitafe_municipio_ipva    m ON t.municipio = m.it_co_municipio_ant
+ WHERE
+      substr(numero_devedor,1,11) = :CPF
+UNION ALL
+SELECT
+      '<html><p style="color:red">TSE'                                              fonte,
+      t.dt_eleicao,
+      to_char( to_char(EXTRACT(YEAR FROM t.dt_eleicao) || '/' || EXTRACT(MONTH FROM t.dt_eleicao)) ) periodo,
+      NULL,
+      NULL,
+      NULL,
+      NULL,
+      t.nm_ue,
+      t.sg_uf,
+      NULL,
+      NULL,
+      t.nm_email
+  FROM
+      bi.dm_candidatos t
+ WHERE
+      t.nr_cpf_candidato = :CPF
+union all
+
+SELECT
+'SITAFE',
+to_date(t.it_da_transacao, 'YYYYMMDD'),
+      to_char(EXTRACT(YEAR FROM to_date(t.it_da_transacao, 'YYYYMMDD'))
+              || '/'
+              || EXTRACT(MONTH FROM to_date(t.it_da_transacao, 'YYYYMMDD'))),
+t.it_tx_logradouro_corresp,
+null,
+null,
+t.it_no_bairro_corresp,
+l.no_municipio,
+l.co_uf,
+t.it_co_cep_corresp,
+t.it_nu_ddd_corresp||'-'||t.it_nu_telefone_corresp,
+t.it_co_correio_eletro_corresp
+  FROM
+      sitafe.sitafe_pessoa t
+      left join bi.dm_localidade l on t.it_co_municipio_corresp = l.co_municipio
+ WHERE
+      substr(
+            t.gr_identificacao,
+            2
+      )= :CPF
+
+union all
+
+SELECT
+'<html><p style="color:green">CRC',
+      t.CREATED_AT                                 ordem,
+      to_char(EXTRACT(YEAR FROM t.CREATED_AT)
+              || '/'
+              || EXTRACT(MONTH FROM t.CREATED_AT))         periodo,
+              e.tipo_logradouro||' '||e.logradouro,
+              e.numero,
+              e.complemento,
+              e.bairro,
+              e.cidade, 
+              e.uf,
+              e.cep,
+              e.telefone,
+              e.email
+  FROM
+      app_crc.contadores t
+      left join app_crc.enderecos e on t.id = e.contador_id
+where t.cpf_cnpj = :CPF
+
+group by '<html><p style="color:green">CRC',
+      t.CREATED_AT                              ,
+      to_char(EXTRACT(YEAR FROM t.CREATED_AT)
+              || '/'
+              || EXTRACT(MONTH FROM t.CREATED_AT))  ,
+              e.tipo_logradouro||' '||e.logradouro,
+              e.numero,
+              e.complemento,
+              e.bairro,
+              e.cidade, 
+              e.uf,
+              e.cep,
+              e.telefone,
+              e.email
+union all
+SELECT
+'<html><p style="color:orange">ITCD' fonte,
+null,
+null,
+t.tx_logradouro,
+t.tx_numero,
+t.tx_complemento,
+t.tx_bairro,
+t.tx_cidade,
+t.tx_estado,
+t.tx_cep,
+t.tx_telefone,
+null
+  FROM
+      itcd_prod.tri_itd_pessoa t
+where t.pk_pessoa = :CPF
+union all
+select 
+       case when cv115.modelo = '06' then 'CV115 - ENERGIA ELÉTRICA'
+            when cv115.modelo = '21' then 'CV115 - COMUNICAÇÃO'
+            when cv115.modelo = '22' then 'CV115 - TELECOMUNICAÇÃO'
+       end                                                                      fonte,
+       to_date(cv115.dt_emissao,'yyyymmdd')                                     ordem,
+       substr(cv115.dt_emissao,1,4)||'/'||substr(cv115.dt_emissao,5,2)          periodo,
+       cv115.logradouro                                                         endereco,
+       cv115.numero_end                                                         numero,
+       cv115.complemento                                                        complemento,
+       cv115.bairro                                                             bairro,
+       cv115.municipio                                                          municipio,
+       cv115.uf                                                                 uf,
+       cv115.cep                                                                cep,
+       cv115.telefone                                                           telefone,
+       ''                                                                       email       
+from novo_sisconv.dados_cadastrais cv115 
+   where cv115.cpf_cnpj like '%'||:CPF
+) b
+order by case when substr(b.fonte,1,5) = 'CV115' THEN 2
+              else 1 end,              
+          b.ordem desc]]></sql>
+			<binds>
+				<bind id="CPF">
+					<prompt><![CDATA[CPF]]></prompt>
+					<tooltip><![CDATA[CPF]]></tooltip>
+					<value><![CDATA[NULL_VALUE]]></value>
+					<bracket><![CDATA[null]]></bracket>
+				</bind>
+			</binds>
+		</query>
+			<pdf version="VERSION_1_7" compression="CONTENT">
+				<docproperty title="" author="" subject="" keywords="" />
+				<cell toppadding="2" bottompadding="2" leftpadding="2" rightpadding="2" horizontalalign="LEFT" verticalalign="TOP" wrap="true" />
+				<column>
+					<heading font="null" size="10" style="NORMAL" color="-16777216" rowshading="-1" labeling="FIRST_PAGE" />
+					<footing font="null" size="10" style="NORMAL" color="-16777216" rowshading="-1" labeling="NONE" />
+					<blob blob="NONE" zip="false" />
+				</column>
+				<table font="null" size="10" style="NORMAL" color="-16777216" userowshading="false" oddrowshading="-1" evenrowshading="-1" showborders="true" spacingbefore="12" spacingafter="12" horizontalalign="LEFT" />
+				<header enable="false" generatedate="false">
+					<data>
+					
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+					
+						
+						
+						
+					
+						
+						
+					
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						null																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																				</data>
+				</header>
+				<footer enable="false" generatedate="false">
+					<data value="null" />
+				</footer>
+				<pagesetup papersize="LETTER" orientation="1" measurement="in" margintop="1.0" marginbottom="1.0" marginleft="1.0" marginright="1.0" />
+			</pdf>
+	</display>
+	<display id="" type="" style="Table" enable="true">
+		<name><![CDATA[Autos de Infração]]></name>
+		<description><![CDATA[]]></description>
+		<tooltip><![CDATA[]]></tooltip>
+		<drillclass><![CDATA[]]></drillclass>
+		<CustomValues>
+			<TYPE><![CDATA[horizontal]]></TYPE>
+		</CustomValues>
+		<query>
+			<sql><![CDATA[SELECT
+      da_lavratura,
+      nu_termo_infracao,
+      case when local is null then '<html><b>VALOR TOTAL DOS AUTOS DE INFRAÇÕES LAVRADOS:' else local end local,
+      LPAD(TRIM(to_char(va_tributo, '999G999G999G990D00')),18) va_tributo,      
+      LPAD(TRIM(to_char(va_multa, '999G999G999G990D00')),18) va_multa,   
+      LPAD(TRIM(to_char(va_juros, '999G999G999G990D00')),18) va_juros,   
+       LPAD(TRIM(to_char(total, '999G999G999G990D00')),18) total,
+      periodo_fiscalizado,
+      situacao_tate,
+      solid_trib,
+      solid_multa
+  FROM
+      (
+            SELECT
+                  t.da_lavratura_auto                                   da_lavratura,
+                  t.nu_termo_infracao,
+                  upper(
+                        convert(
+                              t.no_local_lavratura,
+                              'AL32UTF8',
+                              'WE8MSWIN1252'
+                        )
+                  )                                                     local,
+                  SUM(t.va_tributo)                                     va_tributo,
+                  SUM(t.va_multa)                                       va_multa,
+                  SUM(t.va_juros)                                       va_juros,
+                  SUM(t.va_tributo + t.va_multa + t.va_juros)           total,
+                  '  '
+                  || t.da_periodo_inicio_auto
+                  || '    -    '
+                  || t.da_periodo_final_auto
+                  || '  '                                               periodo_fiscalizado,
+                  tate.no_situacao                                      situacao_tate,
+                  solid_trib.solidarios_trib                            solid_trib,
+                  solid_multa.solidarios_multa                          solid_multa
+              FROM
+                  bi.fato_acao_fiscal_ainf            t
+                    LEFT JOIN bi.dm_acao_fiscal                   u ON t.nu_acao_fiscal = u.nu_acao_fiscal
+                    LEFT JOIN bi.dm_acao_fiscal_historico_tate    tate ON t.nu_termo_infracao = tate.nu_termo_infracao
+                    LEFT JOIN(
+                        SELECT
+                              d.it_nu_guia,
+                              LISTAGG(ptrib.co_cnpj_cpf
+                                      || ' - '
+                                      || ptrib.no_razao_social,
+                                      ', ')WITHIN GROUP(
+                                     ORDER BY
+                                          d.it_nu_guia
+                              )solidarios_trib
+                          FROM
+                              sitafe.sitafe_devedor_solidario    d
+                                LEFT JOIN bi.dm_pessoa                       ptrib ON d.it_nu_cpf_cnpj_devedor = ptrib.co_cnpj_cpf
+                         GROUP BY
+                              d.it_nu_guia
+                  )                                   solid_trib ON solid_trib.it_nu_guia = t.nu_guia_lanc_trib
+                    LEFT JOIN(
+                        SELECT
+                              d.it_nu_guia,
+                              LISTAGG(pmulta.co_cnpj_cpf
+                                      || ' - '
+                                      || pmulta.no_razao_social,
+                                      ', ')WITHIN GROUP(
+                                     ORDER BY
+                                          d.it_nu_guia
+                              )solidarios_multa
+                          FROM
+                              sitafe.sitafe_devedor_solidario    d
+                                LEFT JOIN bi.dm_pessoa                       pmulta ON d.it_nu_cpf_cnpj_devedor = pmulta.co_cnpj_cpf
+                         GROUP BY
+                              d.it_nu_guia
+                  )                                   solid_multa ON solid_multa.it_nu_guia = t.nu_guia_lanc_multa
+             WHERE
+                        u.co_cnpj_cpf = :CPF
+                     AND tate.in_ultima = 9
+             GROUP BY
+                  GROUPING SETS((),(t.da_lavratura_auto,
+                                    t.nu_termo_infracao,
+                                    upper(
+                                          convert(
+                                                t.no_local_lavratura,
+                                                'AL32UTF8',
+                                                'WE8MSWIN1252'
+                                          )
+                                    ),
+                                    '  '
+                                    || t.da_periodo_inicio_auto
+                                    || '    -    '
+                                    || t.da_periodo_final_auto
+                                    || '  ',
+                                    tate.no_situacao,
+                                    solid_trib.solidarios_trib,
+                                    solid_multa.solidarios_multa))
+             ORDER BY
+                  t.da_lavratura_auto DESC
+      )]]></sql>
+			<binds>
+				<bind id="CPF">
+					<prompt><![CDATA[CPF]]></prompt>
+					<tooltip><![CDATA[CPF]]></tooltip>
+					<value><![CDATA[NULL_VALUE]]></value>
+					<bracket><![CDATA[null]]></bracket>
+				</bind>
+			</binds>
+		</query>
+			<pdf version="VERSION_1_7" compression="CONTENT">
+				<docproperty title="" author="" subject="" keywords="" />
+				<cell toppadding="2" bottompadding="2" leftpadding="2" rightpadding="2" horizontalalign="LEFT" verticalalign="TOP" wrap="true" />
+				<column>
+					<heading font="null" size="10" style="NORMAL" color="-16777216" rowshading="-1" labeling="FIRST_PAGE" />
+					<footing font="null" size="10" style="NORMAL" color="-16777216" rowshading="-1" labeling="NONE" />
+					<blob blob="NONE" zip="false" />
+				</column>
+				<table font="null" size="10" style="NORMAL" color="-16777216" userowshading="false" oddrowshading="-1" evenrowshading="-1" showborders="true" spacingbefore="12" spacingafter="12" horizontalalign="LEFT" />
+				<header enable="false" generatedate="false">
+					<data>
+					
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+					
+						
+						
+						
+					
+						
+						
+					null																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																								</data>
+				</header>
+				<footer enable="false" generatedate="false">
+					<data value="null" />
+				</footer>
+				<pagesetup papersize="LETTER" orientation="1" measurement="in" margintop="1.0" marginbottom="1.0" marginleft="1.0" marginright="1.0" />
+			</pdf>
+		<display id="" type="" style="Script" enable="true">
+			<name><![CDATA[Descrição do AI]]></name>
+			<description><![CDATA[]]></description>
+			<tooltip><![CDATA[]]></tooltip>
+			<drillclass><![CDATA[]]></drillclass>
+			<CustomValues>
+			</CustomValues>
+			<query>
+				<sql><![CDATA[set pagesize 25;
+                                        SET LINESIZE 110;
+                                        SELECT
+                                            'Número do Auto de Infração: '
+                                            || t.nu_termo_infracao
+                                            || '                 Data da lavratura: '
+                                            || t.da_lavratura_auto
+                                            || CHR(10)
+                                            || 'Sujeito passivo: '
+                                            || pessoa.no_razao_social
+                                            || CHR(10)
+                                            || 'CNPJ: '|| pessoa.co_cnpj_cpf || '            IE: ' || pessoa.co_cad_icms
+                                            || CHR(10)
+                                            || CHR(10)
+                                            || 'Histórico da infração:'
+                                            || CHR(10)
+                                            ||CONVERT(t.tx_infracao, 'AL32UTF8', 'WE8MSWIN1252')
+                                            || CHR(10)
+                                            || CHR(10)
+                                            || 'Penalidade:'
+                                            || CHR(10)
+                                            || t.no_penalidade_auto
+                                            || CHR(10)
+                                            || CHR(10)
+                                            || 'Trâmite do processo no TATE: '
+                                            || CHR(10)
+                                            || TO_CHAR(
+                                                LISTAGG(u.da_situacao
+                                                        || ' - '
+                                                        || u.no_situacao, CHR(10)) WITHIN GROUP(
+                                                    ORDER BY
+                                                        u.da_situacao
+                                                )
+                                            ) tramite
+                                        FROM
+                                            bi.fato_acao_fiscal_ainf           t
+                                            LEFT JOIN bi.dm_acao_fiscal_historico_tate   u ON t.nu_termo_infracao = u.nu_termo_infracao
+                                            LEFT JOIN bi.dm_acao_fiscal                  acao ON t.nu_acao_fiscal = acao.nu_acao_fiscal
+                                            LEFT JOIN bi.dm_pessoa                       pessoa ON acao.co_cnpj_cpf = pessoa.co_cnpj_cpf
+                                        WHERE
+                                            t.nu_termo_infracao = :NU_TERMO_INFRACAO
+                                        GROUP BY
+                                            t.nu_termo_infracao,
+                                            t.da_lavratura_auto,
+                                            t.no_penalidade_auto,
+                                            t.tx_infracao,
+                                            pessoa.no_razao_social,  pessoa.co_cnpj_cpf, pessoa.co_cad_icms]]></sql>
+				<binds>
+					<bind id="NU_TERMO_INFRACAO">
+						<prompt><![CDATA[NU_TERMO_INFRACAO]]></prompt>
+						<tooltip><![CDATA[NU_TERMO_INFRACAO]]></tooltip>
+						<value><![CDATA[NULL_VALUE]]></value>
+						<bracket><![CDATA[null]]></bracket>
+					</bind>
+				</binds>
+			</query>
+		</display>
+	</display>
+	<display id="" type="" style="Table" enable="true">
+		<name><![CDATA[Processo(s) Administrativo(s)]]></name>
+		<description><![CDATA[]]></description>
+		<tooltip><![CDATA[]]></tooltip>
+		<drillclass><![CDATA[]]></drillclass>
+		<CustomValues>
+			<TYPE><![CDATA[horizontal]]></TYPE>
+		</CustomValues>
+		<query>
+			<sql><![CDATA[SELECT
+      t.dt_abertura,
+      t.nu_processo,
+      t.co_servico,
+      t.in_status,
+      t.cpf_solicitante,
+      serv.it_co_servico
+      || ' - '
+      || upper(
+            convert(
+                  serv.it_no_servico,
+                  'AL32UTF8',
+                  'WE8MSWIN1252'
+            )
+      )servico
+  FROM
+      bi.dm_processo_administrativo    t
+        LEFT JOIN sitafe.sitafe_servico            serv ON t.co_servico = serv.it_co_servico
+        LEFT JOIN bi.dm_pessoa                     pessoa ON t.cpf_solicitante = pessoa.co_cnpj_cpf
+ WHERE
+      t.co_cpf_cnpj_contribuinte = :CPF
+ ORDER BY
+      t.dt_abertura DESC]]></sql>
+			<binds>
+				<bind id="CPF">
+					<prompt><![CDATA[CPF]]></prompt>
+					<tooltip><![CDATA[CPF]]></tooltip>
+					<value><![CDATA[NULL_VALUE]]></value>
+					<bracket><![CDATA[null]]></bracket>
+				</bind>
+			</binds>
+		</query>
+	</display>
+</display>
+</displays>
