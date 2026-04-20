@@ -51,7 +51,7 @@ jobs:
           echo "Keep last: $KEEP_LAST"
           echo "Keep days: $KEEP_DAYS"
           echo "Dry run: $DRY_RUN"
-          CMD="python scripts/cleanup_snapshots.py --base \"$BASE_DIR\" --keep-last $KEEP_LAST --keep-days $KEEP_DAYS"
+          CMD="python scripts/cleanup_snapshots.py --base \"$BASE_DIR\" --keep-last $KEEP_LAST --keep-days $KEEP_DAYS --json-report cleanup-removed-snapshots.json"
           if [ "$DRY_RUN" = "true" ]; then
             CMD="$CMD --dry-run"
           fi
@@ -64,3 +64,9 @@ jobs:
         with:
           name: cleanup-report
           path: cleanup-report.txt
+
+      - name: Upload removed snapshots JSON
+        uses: actions/upload-artifact@v4
+        with:
+          name: cleanup-removed-snapshots
+          path: cleanup-removed-snapshots.json
