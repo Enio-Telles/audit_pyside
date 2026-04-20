@@ -64,8 +64,9 @@ class MovimentacaoService:
             .otherwise(pl.lit(None).cast(pl.Float64))
             .alias("estoque_final_declarado")
         )
+        # aplicar padrões de flags e garantir colunas auxiliares
+        df = MovimentacaoService.apply_flag_defaults(df)
 
-        # Compatibilidade: garantir colunas usadas pelo restante do pipeline
         cols = set(df.columns)
 
         # `q_conv` é a coluna histórica de quantidade convertida usada por vários cálculos
@@ -96,21 +97,12 @@ class MovimentacaoService:
                 .alias("__q_conv_sinal__")
             )
 
-        # Preço unitário derivado quando houver valor agregado (evita divisão por zero)
-        if "preco_unit" not in cols:
-            preco_expr = None
-            if "preco_item" in cols:
-                preco_expr = pl.col("preco_item").cast(pl.Float64, strict=False).fill_null(0.0)
-            elif "Vl_item" in cols:
-                preco_expr = pl.col("Vl_item").cast(pl.Float64, strict=False).fill_null(0.0)
+        # calcular preco_unit de forma centralizada
+        df = MovimentacaoService.compute_preco_unit(df)
 
-            if preco_expr is not None:
-                df = df.with_columns(
-                    pl.when(pl.col("q_conv").cast(pl.Float64, strict=False).fill_null(0.0) > 0)
-                    .then(preco_expr / pl.col("q_conv"))
-                    .otherwise(pl.lit(0.0))
-                    .alias("preco_unit")
-                )
+        # marcar devolucoes e linhas validas para calculo de medias
+        df = MovimentacaoService.compute_is_devolucao(df)
+        df = MovimentacaoService.mark_valid_for_average(df)
 
         return df
 
@@ -223,3 +215,171 @@ class MovimentacaoService:
             df = df.with_columns(pl.col("unidade_referencia").alias("unid_ref"))
 
         return df
+
+    @staticmethod
+    def _boolish_expr(coluna: str) -> pl.Expr:
+        """Retorna uma expressão que interpreta valores "truthy" comuns como booleanos."""
+        return (
+            pl.col(coluna)
+            .cast(pl.Utf8, strict=False)
+            .fill_null("")
+            .str.strip_chars()
+            .str.to_uppercase()
+            .is_in(["1", "TRUE", "T", "S", "SIM", "Y", "YES", "X"])
+        )
+
+    @staticmethod
+    def apply_flag_defaults(df: "pl.DataFrame") -> "pl.DataFrame":
+        """Garante existência das colunas de flags usadas pela metodologia.
+
+        Mantém valores existentes quando presentes; adiciona colunas ausentes como None.
+        """
+        for col in ["mov_rep", "excluir_estoque", "dev_simples", "dev_venda", "dev_compra", "dev_ent_simples"]:
+            if col not in df.columns:
+                df = df.with_columns(pl.lit(None).alias(col))
+        return df
+
+    @staticmethod
+    def compute_is_devolucao(df: "pl.DataFrame") -> "pl.DataFrame":
+        """Marca linhas que representam devoluções (venda/compra/simples/entrada simples).
+
+        Considera também o campo `finnfe` igual a '4' como devolução.
+        """
+        cols = set(df.columns)
+        parts = []
+        for c in ["dev_simples", "dev_venda", "dev_compra", "dev_ent_simples"]:
+            if c in cols:
+                parts.append(MovimentacaoService._boolish_expr(c))
+            else:
+                parts.append(pl.lit(False))
+
+        if "finnfe" in cols:
+            finnfe_part = pl.col("finnfe").cast(pl.Utf8, strict=False).fill_null("").str.strip_chars() == "4"
+        else:
+            finnfe_part = pl.lit(False)
+
+        devol_expr = parts[0] | parts[1] | parts[2] | parts[3] | finnfe_part
+        return df.with_columns(devol_expr.alias("__is_devolucao__"))
+
+    @staticmethod
+    def mark_valid_for_average(df: "pl.DataFrame") -> "pl.DataFrame":
+        """Marca linhas válidas para cálculo de médias (pme/pms).
+
+        Regras: não é devolução; não está marcada como excluir_estoque; q_conv_fisica > 0.
+        """
+        cols = set(df.columns)
+        if "excluir_estoque" in cols:
+            excl_expr = MovimentacaoService._boolish_expr("excluir_estoque")
+        else:
+            excl_expr = pl.lit(False)
+
+        if "q_conv_fisica" in cols:
+            qtd_ok = pl.col("q_conv_fisica").cast(pl.Float64, strict=False).fill_null(0.0) > 0
+        else:
+            qtd_ok = pl.lit(False)
+
+        valid_expr = (~pl.col("__is_devolucao__")) & (~excl_expr) & qtd_ok
+        return df.with_columns(valid_expr.alias("__is_valida_media__"))
+
+    @staticmethod
+    def compute_preco_unit(df: "pl.DataFrame") -> "pl.DataFrame":
+        """Calcula ou normaliza a coluna `preco_unit` (preco por unidade convertida)."""
+        cols = set(df.columns)
+        if "preco_unit" in cols:
+            return df
+
+        preco_expr = None
+        if "preco_item" in cols:
+            preco_expr = pl.col("preco_item").cast(pl.Float64, strict=False).fill_null(0.0)
+        elif "Vl_item" in cols:
+            preco_expr = pl.col("Vl_item").cast(pl.Float64, strict=False).fill_null(0.0)
+
+        if preco_expr is None:
+            return df
+
+        df = df.with_columns(
+            pl.when(pl.col("q_conv").cast(pl.Float64, strict=False).fill_null(0.0) > 0)
+            .then(preco_expr / pl.col("q_conv"))
+            .otherwise(pl.lit(0.0))
+            .alias("preco_unit")
+        )
+        return df
+
+    @staticmethod
+    def apply_neutralizations(
+        df: "pl.DataFrame",
+        persist_neutralized: bool = False,
+        output_dir: Union[str, Path] | None = None,
+        cnpj: str | None = None,
+    ) -> "pl.DataFrame":
+        """Marca linhas neutralizadas por duplicidade ou flag de exclusao.
+
+        Se `persist_neutralized` for True e `output_dir` + `cnpj` forem informados,
+        grava as linhas neutralizadas em um parquet para rastreabilidade.
+        """
+        if df.is_empty() or "Num_item" not in df.columns:
+            return df
+
+        cols = set(df.columns)
+
+        candidatos: list[pl.Expr] = []
+        if "Chv_nfe" in cols:
+            candidatos.append(
+                pl.col("Chv_nfe").cast(pl.Utf8, strict=False).fill_null("").str.strip_chars()
+            )
+
+        if "num_doc" in cols:
+            col_emitente = next((c for c in ["cnpj_emitente", "cnpj_participante", "co_emitente", "emit_cnpj_cpf"] if c in cols), None)
+            col_serie = next((c for c in ["Serie", "serie", "ser"] if c in cols), None)
+            partes = []
+            if col_emitente:
+                partes.append(pl.col(col_emitente).cast(pl.Utf8, strict=False).fill_null("").str.strip_chars())
+            if col_serie:
+                partes.append(pl.col(col_serie).cast(pl.Utf8, strict=False).fill_null("").str.strip_chars())
+            partes.append(pl.col("num_doc").cast(pl.Utf8, strict=False).fill_null("").str.strip_chars())
+            candidatos.append(pl.concat_str(partes, separator="|"))
+
+        if "id_linha_origem" in cols:
+            candidatos.append(pl.col("id_linha_origem").cast(pl.Utf8, strict=False).fill_null("").str.strip_chars())
+        elif "num_doc" in cols:
+            candidatos.append(pl.col("num_doc").cast(pl.Utf8, strict=False).fill_null("").str.strip_chars())
+
+        if not candidatos:
+            return df
+
+        df = df.with_columns(pl.coalesce(candidatos).fill_null("").alias("__chave_doc__"))
+        if df.is_empty() or "Num_item" not in df.columns:
+            return df.drop("__chave_doc__")
+
+        id_doc_expr = pl.coalesce([pl.col(c).cast(pl.Utf8, strict=False).str.strip_chars() for c in [c for c in ["Chv_nfe", "num_doc", "id_linha_origem"] if c in cols]]).fill_null("")
+        item_expr = pl.col("Num_item").cast(pl.Utf8, strict=False).fill_null("").str.strip_chars()
+
+        df = df.with_columns(id_doc_expr.alias("__chave_doc__"))
+        repetido_expr = (
+            (pl.col("__chave_doc__") != "")
+            & (item_expr != "")
+            & (pl.len().over(["__chave_doc__", "Num_item"]) > 1)
+        )
+
+        if "mov_rep" in cols:
+            df = df.with_columns((repetido_expr | MovimentacaoService._boolish_expr("mov_rep")).alias("mov_rep"))
+        else:
+            df = df.with_columns(repetido_expr.alias("mov_rep"))
+
+        # linha neutra: duplicidade ou flag explicita de exclusao
+        excl_expr = MovimentacaoService._boolish_expr("excluir_estoque") if "excluir_estoque" in cols else pl.lit(False)
+        linha_neutra = (excl_expr | MovimentacaoService._boolish_expr("mov_rep"))
+        df = df.with_columns(linha_neutra.alias("__is_neutralizada__"))
+
+        # persistir artefato opcional
+        if persist_neutralized and output_dir and cnpj:
+            try:
+                df_neu = df.filter(pl.col("__is_neutralizada__"))
+                if not df_neu.is_empty():
+                    out_path = Path(output_dir) / f"linhas_neutralizadas_duplicidade_{cnpj}.parquet"
+                    df_neu.write_parquet(str(out_path))
+            except Exception:
+                # não interromper o fluxo principal por falha de gravação
+                pass
+
+        return df.drop("__chave_doc__")
