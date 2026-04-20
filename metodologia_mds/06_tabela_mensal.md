@@ -1,4 +1,5 @@
 # Tabela mensal
+<a id="mds-06-tabela-mensal"></a>
 
 Este documento consolida as regras da **tabela_mensal\_<cnpj>.parquet**, gerada a partir da `movimentacao_estoque` pelo módulo de cálculos mensais. A nomenclatura foi revisada para manter coerência com as demais camadas do pipeline.
 

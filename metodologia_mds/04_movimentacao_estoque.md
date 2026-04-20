@@ -1,4 +1,5 @@
 # Movimentação de estoque
+<a id="mds-04-movimentacao-estoque"></a>
 
 Este documento consolida as regras operacionais e nomenclaturas da `movimentacao_estoque_<cnpj>.parquet`. A camada de movimentação é o coração do pipeline, pois integra as linhas de NF‑e/NFC‑e, C170 e inventário (Bloco H), aplicando as convenções de quantidade e agrupamento.
 

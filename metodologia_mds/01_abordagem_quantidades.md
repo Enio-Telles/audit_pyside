@@ -1,4 +1,5 @@
 # Abordagem de quantidades: convertidas e físicas
+<a id="mds-01-abordagem-quantidades"></a>
 
 Este documento apresenta a nova nomenclatura e semântica para as quantidades derivadas das buscas SQL (Bloco H, C170, NF‑e e NFC‑e) e consumidas ao longo do pipeline de auditoria.
 

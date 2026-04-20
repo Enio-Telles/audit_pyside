@@ -1,4 +1,5 @@
 # Tabela anual
+<a id="mds-07-tabela-anual"></a>
 
 Este documento consolida as regras da **tabela_anual\_<cnpj>.parquet**, gerada pelo módulo de cálculos anuais. A nomenclatura segue o padrão adotado nas demais camadas para garantir consistência e legibilidade.
 

@@ -1,4 +1,5 @@
 # Agregação de produtos
+<a id="mds-02-agregacao-produtos"></a>
 
 Este documento define a regra canônica de rastreabilidade, agrupamento e enriquecimento de produtos consumindo as buscas SQL (Bloco H, C170, NF‑e, NFC‑e). As nomenclaturas foram atualizadas para reforçar a ligação com os dados de origem e eliminar ambiguidades identificadas na versão anterior.
 

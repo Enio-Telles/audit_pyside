@@ -1,4 +1,5 @@
 # Tabela de períodos
+<a id="mds-05-tabela-periodos"></a>
 
 Este documento descreve a geração da **tabela_periodos\_<cnpj>.parquet**, que resume a auditoria por **período de inventário** e produto agregado. A nomenclatura foi atualizada para refletir as novas convenções de quantidade e agrupamento.
 
