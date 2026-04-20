@@ -74,6 +74,17 @@ Campos relevantes:
 - `codigo_fonte`
 - `descricao_normalizada`
 
+## Regra de normalização textual
+
+A `descricao_normalizada` deve aplicar apenas estas transformações:
+
+1. remover espaços no início e no fim;
+2. reduzir espaços internos consecutivos para um único espaço;
+3. remover acentos;
+4. converter para maiúsculas.
+
+Pontuação e demais caracteres textuais são preservados. Assim, `"PROD. A"` e `"PROD A"` continuam sendo descrições diferentes.
+
 ## Agregação automática
 
 A agregação automática segue a sistemática abaixo:
