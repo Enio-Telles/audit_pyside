@@ -1,21 +1,15 @@
-"""Gerar amostras (até 3 linhas) de Parquet de saída e salvar em Markdown.
+"""Gerar amostras (até N linhas) de Parquet de saída e salvar em Markdown.
 
-Uso:
-    python scripts/generate_output_samples.py <cnpj>
+Exemplo:
+  python scripts/generate_output_samples.py --cnpj 84654326000394
 
-Gera arquivos em `docs/referencias/samples/`:
- - mov_estoque_{cnpj}.md
- - aba_periodos_{cnpj}.md
- - aba_mensal_{cnpj}.md
- - aba_anual_{cnpj}.md
- - index_output_samples_{cnpj}.md
-
+Opções úteis: `--base-dir` para apontar para outra raiz de dados e `--out-dir`.
 """
 from __future__ import annotations
+import argparse
 from pathlib import Path
-import sys
-import json
 import datetime
+import sys
 
 try:
     import polars as pl
@@ -50,17 +44,17 @@ def df_to_markdown(df: pl.DataFrame, max_rows: int = 3) -> str:
     return header + sep + body
 
 
-def main(cnpj: str | None = None):
-    if cnpj is None:
-        if len(sys.argv) > 1:
-            cnpj = sys.argv[1]
-        else:
-            print("Uso: python scripts/generate_output_samples.py <cnpj>")
-            return 2
+def main(argv: list[str] | None = None) -> int:
+    p = argparse.ArgumentParser(description="Generate markdown samples for generated Parquet outputs")
+    p.add_argument("--cnpj", required=True, help="CNPJ to generate samples for")
+    p.add_argument("--base-dir", default=str(Path("dados") / "CNPJ"), help="Root CNPJ data directory")
+    p.add_argument("--out-dir", default=str(Path("docs") / "referencias" / "samples"), help="Output directory for sample markdowns")
+    p.add_argument("--max-rows", type=int, default=3, help="Maximum number of rows to include in samples")
+    args = p.parse_args(argv)
 
-    cnpj = ''.join(ch for ch in cnpj if ch.isdigit())
-    base = Path("dados") / "CNPJ" / cnpj / "analises" / "produtos"
-    out_dir = Path("docs") / "referencias" / "samples"
+    cnpj = ''.join(ch for ch in args.cnpj if ch.isdigit())
+    base = Path(args.base_dir) / cnpj / "analises" / "produtos"
+    out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     files = [
@@ -84,8 +78,8 @@ def main(cnpj: str | None = None):
             md = "# Amostra: {0}\n\n".format(path.name)
             md += f"**Arquivo**: {path}\n\n"
             md += f"**Linhas totais**: {nrows}  \n**Colunas**: {ncols}\n\n"
-            md += "Amostra (até 3 linhas):\n\n"
-            md += df_to_markdown(df, max_rows=3)
+            md += f"Amostra (até {args.max_rows} linhas):\n\n"
+            md += df_to_markdown(df, max_rows=args.max_rows)
             md += "\n"
             md_path.write_text(md, encoding="utf-8")
             created.append(md_path)
@@ -110,4 +104,4 @@ def main(cnpj: str | None = None):
 
 
 if __name__ == '__main__':
-    sys.exit(main(None if len(sys.argv) <= 1 else sys.argv[1]))
+    sys.exit(main())
