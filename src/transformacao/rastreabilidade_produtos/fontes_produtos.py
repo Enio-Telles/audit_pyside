@@ -93,18 +93,6 @@ def _ler_primeiro(arq_dir: Path, prefix: str) -> pl.DataFrame | None:
     return pl.read_parquet(arquivos[0])
 
 
-def _preservar_colunas_rastreabilidade(df_src: pl.DataFrame, cnpj: str) -> pl.DataFrame:
-    exprs: list[pl.Expr] = []
-    if "codigo_fonte" in df_src.columns:
-        exprs.append(expr_normalizar_codigo_fonte("codigo_fonte"))
-    else:
-        for cand in ["codigo_produto", "codigo_produto_original", "cod_item", "prod_cprod"]:
-            if cand in df_src.columns:
-                exprs.append(expr_gerar_codigo_fonte("__cnpj_ref__", cand, alias="codigo_fonte"))
-                break
-    if exprs:
-        return df_src.with_columns([pl.lit(cnpj).alias("__cnpj_ref__"), *exprs]).drop("__cnpj_ref__", strict=False)
-    return df_src
 
 
 def _construir_mapas(df_mapa: pl.DataFrame) -> tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame]:
@@ -368,36 +356,6 @@ def gerar_fontes_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
             rprint(f"[yellow]Fonte {fonte} ignorada: sem coluna de descricao reconhecida.[/yellow]")
             continue
 
-        df_src = _preservar_colunas_rastreabilidade(df_src, cnpj)
-        df_out = (
-            df_src
-            .with_columns(_normalizar_descricao_expr(col_desc))
-            .join(df_codigo_unico, on="codigo_fonte", how="left")
-            .join(df_desc_unico, left_on="__descricao_normalizada__", right_on="descricao_normalizada", how="left")
-            .join(df_desc_ambiguo.rename({"descricao_normalizada": "__descricao_normalizada__"}), on="__descricao_normalizada__", how="left")
-            .with_columns([
-                pl.coalesce([pl.col("id_agrupado_codigo"), pl.col("id_agrupado_desc")]).alias("id_agrupado"),
-                pl.when(pl.col("id_agrupado_codigo").is_not_null())
-                .then(pl.lit("codigo_fonte"))
-                .when(pl.col("id_agrupado_desc").is_not_null())
-                .then(pl.lit("descricao_normalizada"))
-                .otherwise(pl.lit(None, dtype=pl.Utf8))
-                .alias("origem_vinculo_agrupamento"),
-            ])
-            .with_columns(
-                pl.when(pl.col("id_agrupado").is_not_null())
-                .then(pl.lit(None, dtype=pl.Utf8))
-                .when(pl.col("codigo_fonte").cast(pl.Utf8, strict=False).fill_null("").str.strip_chars() != "")
-                .then(pl.lit("codigo_fonte_sem_mapeamento"))
-                .when(pl.col("descricao_ambigua").fill_null(False))
-                .then(pl.lit("descricao_normalizada_ambigua"))
-                .when(pl.col("__descricao_normalizada__").cast(pl.Utf8, strict=False).fill_null("").str.strip_chars() == "")
-                .then(pl.lit("sem_codigo_fonte_sem_descricao"))
-                .otherwise(pl.lit("descricao_normalizada_sem_match"))
-                .alias("motivo_sem_id_agrupado")
-            )
-            .drop(["id_agrupado_codigo", "id_agrupado_desc"], strict=False)
-            .join(df_prod_final, on="id_agrupado", how="left")
         exprs_rastreabilidade = _preservar_colunas_rastreabilidade(df_src)
         if exprs_rastreabilidade:
             df_src = df_src.with_columns(exprs_rastreabilidade)

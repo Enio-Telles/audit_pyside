@@ -479,7 +479,7 @@ class MainWindow(QMainWindow):
         self.refresh_logs()
         self._populate_sql_combo()
         # verifica conexão Oracle automaticamente na abertura da aplicação
-        QTimer.singleShot(800, self._verificar_conexoes)
+        # Removido: não verificar conexões automaticamente na inicialização (solicitado pelo usuário)
 
     def _executar_callback_debounce(self, key: str) -> None:
         callback = self._debounce_callbacks.get(key)

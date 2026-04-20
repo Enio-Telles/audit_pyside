@@ -25,6 +25,10 @@ from pathlib import Path
 
 import polars as pl
 from rich import print as rprint
+import logging
+
+# logger is used for internal debug traces; keep default handler behavior
+logger = logging.getLogger(__name__)
 
 from utilitarios.project_paths import PROJECT_ROOT
 
@@ -336,6 +340,57 @@ def produtos_agrupados(cnpj: str, pasta_cnpj: Path | None = None, versao: int = 
         .select(["descricao", "ncm", "cest", "gtin", "co_sefin_item"])
         .collect()
     )
+
+    # Debugging introspection: help diagnose AttributeError like "'DataFrame' object has no attribute 'agg'"
+    try:
+        logger.debug("polars version: %s", getattr(pl, "__version__", "unknown"))
+        logger.debug("polars module file: %s", getattr(pl, "__file__", "builtin or unknown"))
+        logger.debug("df_descricoes type: %s; class: %s", type(df_descricoes), getattr(df_descricoes, "__class__", None))
+        logger.debug("df_item_unid type: %s; class: %s", type(df_item_unid), getattr(df_item_unid, "__class__", None))
+        for name, var in [("df_descricoes", df_descricoes), ("df_item_unid", df_item_unid)]:
+            has_agg = hasattr(var, "agg")
+            has_group_by = hasattr(var, "group_by")
+            has_groupby = hasattr(var, "groupby")
+            logger.debug("%s attributes -> agg: %s, group_by: %s, groupby: %s", name, has_agg, has_group_by, has_groupby)
+    except Exception:
+        logger.debug("introspection helper failed")
+
+    # Defensive conversions: if these objects are pandas DataFrames or other
+    # convertible structures, coerce them into polars.DataFrame to avoid
+    # AttributeError when calling polars-specific methods like .group_by/.agg.
+    try:
+        try:
+            import pandas as pd
+        except Exception:
+            pd = None
+
+        if pd is not None:
+            if isinstance(df_descricoes, pd.DataFrame):
+                logger.debug("converting df_descricoes from pandas.DataFrame to polars.DataFrame")
+                df_descricoes = pl.from_pandas(df_descricoes)
+            if isinstance(df_item_unid, pd.DataFrame):
+                logger.debug("converting df_item_unid from pandas.DataFrame to polars.DataFrame")
+                df_item_unid = pl.from_pandas(df_item_unid)
+
+        # Final coercion attempt for other types (dicts, lists, etc.)
+        if not isinstance(df_descricoes, pl.DataFrame):
+            try:
+                df_descricoes = pl.DataFrame(df_descricoes)
+                logger.debug("coerced df_descricoes to polars.DataFrame")
+            except Exception as _e:  # pragma: no cover - surface the original error
+                rprint("[red]Failed to coerce df_descricoes to polars.DataFrame.[/red]")
+                raise
+
+        if not isinstance(df_item_unid, pl.DataFrame):
+            try:
+                df_item_unid = pl.DataFrame(df_item_unid)
+                logger.debug("coerced df_item_unid to polars.DataFrame")
+            except Exception as _e:  # pragma: no cover - surface the original error
+                rprint("[red]Failed to coerce df_item_unid to polars.DataFrame.[/red]")
+                raise
+    except Exception:
+        # Re-raise so the calling code (and UI) shows the original problem
+        raise
 
     if df_descricoes.is_empty():
         rprint("[yellow]descricao_produtos esta vazio.[/yellow]")
