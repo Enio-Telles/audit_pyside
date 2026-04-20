@@ -1054,6 +1054,8 @@ backend/
 - [frontend/src/api/client.ts](../../frontend/src/api/client.ts) — API client
 - [frontend/src/api/types.ts](../../frontend/src/api/types.ts) — Tipos TypeScript
 - [backend/routers/cnpj.py](../../backend/routers/cnpj.py) — Router CNPJ
+ - [Referências Parquet](referencias/parquet_referencias.md) — Listagem gerada de arquivos Parquet (metadados + amostras até 3 linhas)
+
 
 ---
 
