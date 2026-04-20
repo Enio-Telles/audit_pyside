@@ -367,7 +367,7 @@ for section_title, items in info_sections:
     row += 1
 
 # Salvar arquivo
-output_file = r"c:\Users\03002693901\OneDrive - SECRETARIA DE ESTADO DE FINANCAS\GEFIS_ENIO\consultas_oracle_sql_developer\consultas_sql\MAPEAMENTO_EFD_REGC170.xlsx"
+output_file = "MAPEAMENTO_EFD_REGC170.xlsx"
 wb.save(output_file)
 print(f"✅ Arquivo Excel criado com sucesso: {output_file}")
 print(f"\n📊 Abas criadas:")
