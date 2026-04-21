@@ -9,8 +9,26 @@ import unicodedata
 from typing import Any
 
 STOPWORDS = {
-    "A", "AS", "O", "OS", "DE", "DA", "DO", "DAS", "DOS", "COM", "PARA", "POR",
-    "E", "EM", "NA", "NO", "NAS", "NOS", "UM", "UMA",
+    "A",
+    "AS",
+    "O",
+    "OS",
+    "DE",
+    "DA",
+    "DO",
+    "DAS",
+    "DOS",
+    "COM",
+    "PARA",
+    "POR",
+    "E",
+    "EM",
+    "NA",
+    "NO",
+    "NAS",
+    "NOS",
+    "UM",
+    "UMA",
 }
 
 
@@ -32,31 +50,39 @@ def normalize_text(text: str | None) -> str:
 
 
 def normalize_desc(text: str | None) -> str:
-    """Versao específica para match de descricoes fiscais (unificada)."""
+    """Normaliza descricoes fiscais preservando pontuacao e semantica textual.
+
+    Regras aplicadas:
+    - remover acentos;
+    - converter para maiusculas;
+    - remover espacos no inicio e no fim;
+    - reduzir espacos internos consecutivos para um unico espaco.
+    """
     if text is None:
         return ""
-    # Normalizacao manual de caracteres acentuados para garantir consistencia
-    t = str(text).upper()
-    chars = {
-        "Á": "A", "À": "A", "Ã": "A", "Â": "A", "Ä": "A",
-        "É": "E", "È": "E", "Ê": "E", "Ë": "E",
-        "Í": "I", "Ì": "I", "Î": "I", "Ï": "I",
-        "Ó": "O", "Ò": "O", "Õ": "O", "Ô": "O", "Ö": "O",
-        "Ú": "U", "Ù": "U", "Û": "U", "Ü": "U",
-        "Ç": "C", "Ñ": "N"
-    }
-    for c, r in chars.items():
-        t = t.replace(c, r)
-    
-    # Remove qualquer outro especial e limpa espacos
-    t = re.sub(r"[^A-Z0-9\s]", " ", t)
+    t = remove_accents(str(text)) or ""
+    t = t.upper()
+    # Normalize hyphens and common connector punctuation into spaces
+    # but preserve periods (e.g. "PROD. A") as tests expect.
+    t = re.sub(r"[-/–—_\\]+", " ", t)
     t = re.sub(r"\s+", " ", t).strip()
     return t
 
 
-def expr_normalizar_descricao(coluna: str) -> pl.Expr:
-    """Expressao Polars unificada para normalizacao de descricoes."""
+def expr_normalizar_descricao(coluna: str) -> "pl.Expr":
+    """Expressao Polars unificada para normalizacao de descricoes.
+
+    A igualdade textual considera apenas:
+    - remocao de acentos;
+    - caixa alta;
+    - trim;
+    - colapso de espacos consecutivos.
+
+    Caracteres de pontuacao sao preservados para evitar agregacoes mais amplas
+    do que o criterio textual solicitado.
+    """
     import polars as pl
+
     return (
         pl.when(pl.col(coluna).is_null())
         .then(pl.lit(""))
@@ -71,16 +97,18 @@ def expr_normalizar_descricao(coluna: str) -> pl.Expr:
             .str.replace_all(r"[ÚÙÛÜ]", "U")
             .str.replace_all(r"Ç", "C")
             .str.replace_all(r"Ñ", "N")
-            .str.replace_all(r"[^A-Z0-9\s]", " ")
-            .str.strip_chars()
             .str.replace_all(r"\s+", " ")
+            .str.strip_chars()
         )
     )
 
 
 def natural_sort_key(value: str | None) -> list[Any]:
     text = "" if value is None else str(value)
-    return [int(part) if part.isdigit() else part.lower() for part in re.split(r"(\d+)", text)]
+    return [
+        int(part) if part.isdigit() else part.lower()
+        for part in re.split(r"(\d+)", text)
+    ]
 
 
 def _normalizar_nome_coluna(column_name: str | None) -> str:
@@ -144,7 +172,9 @@ def display_cell(value: Any, column_name: str | None = None) -> str:
 
     if isinstance(value, (list, tuple)):
         # Join elements, recursively calling display_cell for each
-        return ", ".join(display_cell(v, column_name=column_name) for v in value if v is not None)
+        return ", ".join(
+            display_cell(v, column_name=column_name) for v in value if v is not None
+        )
 
     if isinstance(value, bool):
         return "true" if value else "false"

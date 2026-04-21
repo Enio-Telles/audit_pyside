@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from interface_grafica.config import CNPJ_ROOT
-from routers._common import sanitize_cnpj, safe_value, df_to_response
+from routers._common import sanitize_cnpj, df_to_response
 
 router = APIRouter()
 
@@ -22,10 +22,11 @@ def _enriquecer_lista_descr_compl(df: pl.DataFrame, cnpj: str) -> pl.DataFrame:
     if not arq_c170.exists() or "id_agrupado" not in df.columns:
         return df
     try:
-        df_c170 = pl.scan_parquet(arq_c170).select(["id_agrupado", "Descr_compl"]).collect()
+        df_c170 = (
+            pl.scan_parquet(arq_c170).select(["id_agrupado", "Descr_compl"]).collect()
+        )
         df_agg = (
-            df_c170
-            .filter(
+            df_c170.filter(
                 pl.col("Descr_compl").is_not_null()
                 & (pl.col("Descr_compl").str.strip_chars() != "")
             )
@@ -54,7 +55,7 @@ def get_tabela_agrupada(cnpj: str, page: int = 1, page_size: int = 300):
         raise HTTPException(404, "Tabela agrupada não encontrada")
     df = pl.read_parquet(path)
     df = _enriquecer_lista_descr_compl(df, cnpj)
-    return _df_to_response(df, page, page_size)
+    return df_to_response(df, page, page_size)
 
 
 class AggregateRequest(BaseModel):
@@ -68,12 +69,15 @@ def merge_agrupados(req: AggregateRequest):
     cnpj = sanitize_cnpj(req.cnpj)
     try:
         from interface_grafica.services.aggregation_service import ServicoAgregacao
+
         svc = ServicoAgregacao()
         # O primeiro elemento da lista é o id canônico (destino); os demais são as origens.
         ids_ordenados = [req.id_agrupado_destino] + [
             i for i in req.ids_origem if i != req.id_agrupado_destino
         ]
-        resultado = svc.agregar_linhas(cnpj=cnpj, ids_agrupados_selecionados=ids_ordenados)
+        resultado = svc.agregar_linhas(
+            cnpj=cnpj, ids_agrupados_selecionados=ids_ordenados
+        )
         return {"ok": True, "resultado": resultado}
     except ValueError as exc:
         raise HTTPException(400, "Parâmetros inválidos para agregação.") from exc
@@ -94,14 +98,15 @@ def unmerge_agrupados(req: UnmergeRequest):
     Restaura os grupos originais a partir do historico de agregacoes
     (log_agregacoes_{cnpj}.json) e recalcula a cascata de tabelas derivadas.
     """
-    cnpj = _sanitize(req.cnpj)
+    cnpj = sanitize_cnpj(req.cnpj)
     try:
         from interface_grafica.services.aggregation_service import ServicoAgregacao
+
         svc = ServicoAgregacao()
         resultado = svc.reverter_agrupamento(cnpj=cnpj, id_agrupado=req.id_agrupado)
         return {"ok": True, "resultado": resultado}
     except ValueError as exc:
-        raise HTTPException(400, "Não foi possível reverter: " + str(exc)) from exc
+        raise HTTPException(400, "Não foi possível reverter o agrupamento devido a um erro de validação.") from exc
     except Exception as exc:
         raise HTTPException(500, "Erro interno ao processar desagregação.") from exc
 
@@ -113,13 +118,14 @@ def get_historico_agregacoes(cnpj: str):
 
     Le log_agregacoes_{cnpj}.json e retorna como lista de eventos.
     """
-    cnpj = _sanitize(cnpj)
+    cnpj = sanitize_cnpj(cnpj)
     log_path = _pasta_produtos(cnpj) / f"log_agregacoes_{cnpj}.json"
     if not log_path.exists():
         return {"eventos": []}
 
     try:
         import json
+
         with open(log_path, "r", encoding="utf-8") as f:
             eventos = json.load(f)
         return {"eventos": eventos}

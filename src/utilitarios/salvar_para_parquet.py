@@ -44,7 +44,9 @@ def salvar_para_parquet(
             df = df.collect()
 
         if df.is_empty():
-            logger.warning(f"Aviso: o DataFrame a ser salvo em {arquivo.name} esta vazio.")
+            logger.warning(
+                f"Aviso: o DataFrame a ser salvo em {arquivo.name} esta vazio."
+            )
 
         if schema or metadata:
             table = df.to_arrow()
@@ -84,6 +86,10 @@ def salvar_para_parquet(
         return True
 
     except Exception as e:
-        nome = arquivo.name if "arquivo" in locals() else str(nome_arquivo or caminho_saida)
+        nome = (
+            arquivo.name
+            if "arquivo" in locals()
+            else str(nome_arquivo or caminho_saida)
+        )
         logger.error(f"Erro ao salvar arquivo Parquet {nome}: {e}")
         return False

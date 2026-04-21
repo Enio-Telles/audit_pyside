@@ -1,4 +1,5 @@
 ﻿"""Modulo auxiliar para identificar bind variables em comandos SQL."""
+
 from __future__ import annotations
 
 import re

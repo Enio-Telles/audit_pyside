@@ -18,11 +18,14 @@ def _formatar_tipo(dtype: pl.DataType | None) -> str:
 
 
 def garantir_colunas_obrigatorias(
-    df: pl.DataFrame,
+    df: pl.DataFrame | pl.LazyFrame,
     colunas: list[str] | tuple[str, ...],
     contexto: str | None = None,
-) -> pl.DataFrame:
-    colunas_ausentes = [col for col in colunas if col not in df.columns]
+) -> pl.DataFrame | pl.LazyFrame:
+    columns = (
+        df.collect_schema().names() if isinstance(df, pl.LazyFrame) else df.columns
+    )
+    colunas_ausentes = [col for col in colunas if col not in columns]
     if colunas_ausentes:
         raise SchemaValidacaoError(
             f"{_prefixo_contexto(contexto)}colunas obrigatorias ausentes: {', '.join(colunas_ausentes)}"
@@ -36,7 +39,9 @@ def validar_parquet_essencial(
     contexto: str | None = None,
 ) -> list[str]:
     if not path.exists():
-        raise FileNotFoundError(f"{_prefixo_contexto(contexto)}arquivo nao encontrado: {path}")
+        raise FileNotFoundError(
+            f"{_prefixo_contexto(contexto)}arquivo nao encontrado: {path}"
+        )
 
     schema_cols = list(pl.read_parquet_schema(path).names())
     colunas_ausentes = [col for col in colunas if col not in schema_cols]
@@ -48,15 +53,16 @@ def validar_parquet_essencial(
 
 
 def garantir_tipos_compativeis(
-    df: pl.DataFrame,
+    df: pl.DataFrame | pl.LazyFrame,
     schema_esperado: dict[str, pl.DataType],
     contexto: str | None = None,
-) -> pl.DataFrame:
+) -> pl.DataFrame | pl.LazyFrame:
     garantir_colunas_obrigatorias(df, list(schema_esperado.keys()), contexto=contexto)
 
+    schema_atual = df.collect_schema() if isinstance(df, pl.LazyFrame) else df.schema
     incompatibilidades: list[str] = []
     for coluna, dtype_esperado in schema_esperado.items():
-        dtype_atual = df.schema.get(coluna)
+        dtype_atual = schema_atual.get(coluna)
         if dtype_atual != dtype_esperado:
             incompatibilidades.append(
                 f"{coluna} (atual={_formatar_tipo(dtype_atual)}, esperado={_formatar_tipo(dtype_esperado)})"

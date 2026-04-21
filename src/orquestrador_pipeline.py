@@ -12,7 +12,6 @@ import re
 import sys
 from pathlib import Path
 from typing import Callable
-from transformacao.auxiliares.logs import log_exception
 
 from rich import print as rprint
 
@@ -38,6 +37,7 @@ class _TabelaRegistro:
         if self._func is None:
             modulo_path, nome_func = self.funcao_path.rsplit(":", 1)
             import importlib
+
             mod = importlib.import_module(modulo_path)
             self._func = getattr(mod, nome_func)
         return self._func
@@ -51,22 +51,75 @@ def _registar(id: str, funcao_path: str, deps: list[str] | None = None) -> None:
 
 
 # Ordem lógica: dependencias criticas explícitas
-_registar("tb_documentos",       "transformacao.tabela_documentos:gerar_tabela_documentos")
-_registar("item_unidades",       "transformacao.item_unidades:gerar_item_unidades",       deps=["tb_documentos"])
-_registar("itens",               "transformacao.itens:gerar_itens",                       deps=["item_unidades"])
-_registar("descricao_produtos",  "transformacao.descricao_produtos:gerar_descricao_produtos", deps=["itens"])
-_registar("produtos_final",      "transformacao.produtos_final_v2:gerar_produtos_final",  deps=["descricao_produtos"])
-_registar("fontes_produtos",     "transformacao.fontes_produtos:gerar_fontes_produtos",   deps=["produtos_final"])
-_registar("fatores_conversao",   "transformacao.fatores_conversao:calcular_fatores_conversao", deps=["fontes_produtos"])
-_registar("c170_xml",            "transformacao.c170_xml:gerar_c170_xml",                 deps=["fatores_conversao"])
-_registar("c176_xml",            "transformacao.c176_xml:gerar_c176_xml",                 deps=["fatores_conversao"])
-_registar("movimentacao_estoque","transformacao.movimentacao_estoque:gerar_movimentacao_estoque", deps=["c170_xml", "c176_xml"])
-_registar("calculos_mensais",    "transformacao.calculos_mensais:gerar_calculos_mensais", deps=["movimentacao_estoque"])
-_registar("calculos_anuais",     "transformacao.calculos_anuais:gerar_calculos_anuais",   deps=["movimentacao_estoque"])
-_registar("calculos_periodos",   "transformacao.calculos_periodo_pkg:gerar_calculos_periodos", deps=["movimentacao_estoque"])
-_registar("ressarcimento_st",    "transformacao.ressarcimento_st_pkg:executar_pipeline_ressarcimento_st", deps=["movimentacao_estoque"])
-_registar("aba_resumo_global",   "transformacao.resumo_global:gerar_aba_resumo_global",   deps=["calculos_mensais", "calculos_anuais"])
-_registar("aba_produtos_selecionados", "transformacao.produtos_selecionados:gerar_aba_produtos_selecionados", deps=["calculos_mensais", "calculos_anuais"])
+_registar("tb_documentos", "transformacao.tabela_documentos:gerar_tabela_documentos")
+_registar("efd_atomizacao", "transformacao.efd_atomizacao:gerar_efd_atomizacao")
+_registar(
+    "item_unidades",
+    "transformacao.item_unidades:gerar_item_unidades",
+    deps=["tb_documentos"],
+)
+_registar("itens", "transformacao.itens:gerar_itens", deps=["item_unidades"])
+_registar(
+    "descricao_produtos",
+    "transformacao.descricao_produtos:gerar_descricao_produtos",
+    deps=["itens"],
+)
+_registar(
+    "produtos_final",
+    "transformacao.produtos_final_v2:gerar_produtos_final",
+    deps=["descricao_produtos"],
+)
+_registar(
+    "fontes_produtos",
+    "transformacao.fontes_produtos:gerar_fontes_produtos",
+    deps=["produtos_final"],
+)
+_registar(
+    "fatores_conversao",
+    "transformacao.fatores_conversao:calcular_fatores_conversao",
+    deps=["fontes_produtos"],
+)
+_registar(
+    "c170_xml", "transformacao.c170_xml:gerar_c170_xml", deps=["fatores_conversao"]
+)
+_registar(
+    "c176_xml", "transformacao.c176_xml:gerar_c176_xml", deps=["fatores_conversao"]
+)
+_registar(
+    "movimentacao_estoque",
+    "transformacao.movimentacao_estoque:gerar_movimentacao_estoque",
+    deps=["c170_xml", "c176_xml"],
+)
+_registar(
+    "calculos_mensais",
+    "transformacao.calculos_mensais:gerar_calculos_mensais",
+    deps=["movimentacao_estoque"],
+)
+_registar(
+    "calculos_anuais",
+    "transformacao.calculos_anuais:gerar_calculos_anuais",
+    deps=["movimentacao_estoque"],
+)
+_registar(
+    "calculos_periodos",
+    "transformacao.calculos_periodo_pkg:gerar_calculos_periodos",
+    deps=["movimentacao_estoque"],
+)
+_registar(
+    "ressarcimento_st",
+    "transformacao.ressarcimento_st_pkg:executar_pipeline_ressarcimento_st",
+    deps=["movimentacao_estoque"],
+)
+_registar(
+    "aba_resumo_global",
+    "transformacao.resumo_global:gerar_aba_resumo_global",
+    deps=["calculos_mensais", "calculos_anuais"],
+)
+_registar(
+    "aba_produtos_selecionados",
+    "transformacao.produtos_selecionados:gerar_aba_produtos_selecionados",
+    deps=["calculos_mensais", "calculos_anuais"],
+)
 
 
 def _ordem_topologica(selecionadas: list[str]) -> list[str]:
@@ -107,9 +160,12 @@ def executar_pipeline_completo(
     sucesso_global = True
 
     if consultas_selecionadas:
-        rprint(f"[bold blue]Fase 1: extraindo {len(consultas_selecionadas)} tabelas brutas...[/bold blue]")
+        rprint(
+            f"[bold blue]Fase 1: extraindo {len(consultas_selecionadas)} tabelas brutas...[/bold blue]"
+        )
         try:
             from extracao.extrair_dados_cnpj import extrair_dados
+
             extrair_dados(
                 cnpj_input=cnpj,
                 data_limite_input=data_limite,
@@ -118,13 +174,18 @@ def executar_pipeline_completo(
             rprint("[green]Extracao concluida.[/green]")
         except Exception as e:
             from transformacao.auxiliares.logs import setup_logging
+
             setup_logging().error(f"Falha critica na extracao para {cnpj}", exc_info=e)
-            rprint(f"[red]Falha critica na extracao para {cnpj}. Consulte os logs para mais detalhes.[/red]")
+            rprint(
+                f"[red]Falha critica na extracao para {cnpj}. Consulte os logs para mais detalhes.[/red]"
+            )
             return False
 
     if tabelas_selecionadas:
         ordem = _ordem_topologica(tabelas_selecionadas)
-        rprint(f"[bold blue]Fase 2: gerando {len(ordem)} tabelas de negocio...[/bold blue]")
+        rprint(
+            f"[bold blue]Fase 2: gerando {len(ordem)} tabelas de negocio...[/bold blue]"
+        )
 
         etapas_executadas: set[str] = set()
 
@@ -135,9 +196,15 @@ def executar_pipeline_completo(
                 continue
 
             # Verificar dependencias criticas
-            deps_falhadas = [d for d in reg.deps if d not in etapas_executadas and d in tabelas_selecionadas]
+            deps_falhadas = [
+                d
+                for d in reg.deps
+                if d not in etapas_executadas and d in tabelas_selecionadas
+            ]
             if deps_falhadas:
-                rprint(f"[red]Pulando {tab_id}: dependencias falharam ({', '.join(deps_falhadas)})[/red]")
+                rprint(
+                    f"[red]Pulando {tab_id}: dependencias falharam ({', '.join(deps_falhadas)})[/red]"
+                )
                 sucesso_global = False
                 continue
 
@@ -154,14 +221,21 @@ def executar_pipeline_completo(
                     rprint(f"[green]{tab_id} finalizada.[/green]")
             except Exception as e:
                 from transformacao.auxiliares.logs import setup_logging
+
                 setup_logging().error(f"Erro inesperado na etapa {tab_id}", exc_info=e)
-                rprint(f"[red]Erro inesperado na etapa {tab_id}. Consulte os logs para mais detalhes.[/red]")
+                rprint(
+                    f"[red]Erro inesperado na etapa {tab_id}. Consulte os logs para mais detalhes.[/red]"
+                )
                 sucesso_global = False
 
     if sucesso_global:
-        rprint(f"\n[bold green]Pipeline finalizado com sucesso para {cnpj}![/bold green]\n")
+        rprint(
+            f"\n[bold green]Pipeline finalizado com sucesso para {cnpj}![/bold green]\n"
+        )
     else:
-        rprint(f"\n[bold yellow]Pipeline finalizado com avisos/falhas parciais para {cnpj}.[/bold yellow]\n")
+        rprint(
+            f"\n[bold yellow]Pipeline finalizado com avisos/falhas parciais para {cnpj}.[/bold yellow]\n"
+        )
 
     return sucesso_global
 
@@ -169,6 +243,8 @@ def executar_pipeline_completo(
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         cnpj_alvo = sys.argv[1]
-        executar_pipeline_completo(cnpj_alvo, tabelas_selecionadas=["tb_documentos", "item_unidades", "itens"])
+        executar_pipeline_completo(
+            cnpj_alvo, tabelas_selecionadas=["tb_documentos", "item_unidades", "itens"]
+        )
     else:
         rprint("[yellow]Uso: python orquestrador_pipeline.py <CNPJ>[/yellow]")

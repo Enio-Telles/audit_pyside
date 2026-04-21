@@ -25,15 +25,15 @@ import sys
 
 # Configuração de logging
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
 # Configuração e Carregamento de Ambiente
 from .path_resolver import get_root_dir, get_env_path
+
 ROOT_DIR = get_root_dir()
-load_dotenv(dotenv_path=get_env_path(), encoding='latin-1', override=True)
+load_dotenv(dotenv_path=get_env_path(), encoding="latin-1", override=True)
 
 # Tornar possível importar utilitários do pacote `src` quando executado diretamente
 SRC_DIR = Path(ROOT_DIR) / "src"
@@ -61,8 +61,13 @@ class ExtratorOracle:
         self.usuario = os.getenv("DB_USER")
         self.senha = os.getenv("DB_PASSWORD")
         self.host = os.getenv("ORACLE_HOST")
-        self.porta = int(os.getenv("ORACLE_PORT", 1521))
+        porta_str = os.getenv("ORACLE_PORT")
+        self.porta = int(porta_str) if porta_str else 0
         self.servico = os.getenv("ORACLE_SERVICE")
+
+        if not all([self.host, porta_str, self.servico, self.usuario, self.senha]):
+            raise RuntimeError("Configuracao Oracle incompleta. Verifique as variaveis ORACLE_HOST, ORACLE_PORT, ORACLE_SERVICE, DB_USER e DB_PASSWORD no .env")
+
         self.dsn = oracledb.makedsn(self.host, self.porta, service_name=self.servico)
         self.pasta_dados = ROOT_DIR / "dados" / "fisconforme" / "data_parquet"
         self.pasta_dados.mkdir(parents=True, exist_ok=True)
@@ -81,7 +86,7 @@ class ExtratorOracle:
                 dsn=self.dsn,
                 min=2,
                 max=4,
-                increment=1
+                increment=1,
             )
             logger.info("Connection pool Oracle criado (min=2, max=4)")
         return self._pool
@@ -130,7 +135,7 @@ class ExtratorOracle:
                         f"tentativas falharam. Último erro: {e}"
                     )
                     raise
-                espera = 2 ** tentativa
+                espera = 2**tentativa
                 logger.warning(
                     f"[RETRY] {descricao}: tentativa {tentativa}/{self.MAX_TENTATIVAS} "
                     f"falhou ({e}). Aguardando {espera}s..."
@@ -157,6 +162,7 @@ class ExtratorOracle:
             return False
         try:
             import polars as pl
+
             n_linhas = pl.scan_parquet(arquivo).select(pl.len()).collect().item()
             if n_linhas == 0:
                 logger.warning(f"[VALIDAÇÃO] {nome_tabela}: 0 linhas extraídas")
@@ -214,7 +220,12 @@ class ExtratorOracle:
                             cursor.execute(sql, params)
                         else:
                             cursor.execute(sql)
-                        _gravar_cursor_em_parquet(cursor, arquivo_saida, tamanho_lote=50_000, rotulo_consulta=nome_completo)
+                        _gravar_cursor_em_parquet(
+                            cursor,
+                            arquivo_saida,
+                            tamanho_lote=50_000,
+                            rotulo_consulta=nome_completo,
+                        )
 
         try:
             self._executar_com_retry(_extrair, descricao=nome_completo)
@@ -261,7 +272,12 @@ class ExtratorOracle:
                         except Exception:
                             # fallback simples
                             cursor.execute(sql, params or {})
-                        _gravar_cursor_em_parquet(cursor, arquivo_saida, tamanho_lote=50_000, rotulo_consulta=nome_saida)
+                        _gravar_cursor_em_parquet(
+                            cursor,
+                            arquivo_saida,
+                            tamanho_lote=50_000,
+                            rotulo_consulta=nome_saida,
+                        )
 
         try:
             self._executar_com_retry(_extrair, descricao=nome_saida)
@@ -365,9 +381,7 @@ class ExtratorOracle:
 
             # Grupo 2: dimensões integrais
             for schema, tabela in tabelas_full:
-                tarefas.append(
-                    executor.submit(self.extrair_tabela, schema, tabela)
-                )
+                tarefas.append(executor.submit(self.extrair_tabela, schema, tabela))
 
             # Grupo 3: SQL customizado
             for config in tabelas_sql_customizado:

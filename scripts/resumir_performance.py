@@ -31,23 +31,43 @@ def _prefixo_evento(nome: str) -> str:
     return partes[0] if partes and partes[0] else "desconhecido"
 
 
-def _formatar_linhas(agregados: dict[str, dict[str, float]]) -> list[tuple[str, int, float, float, float, float, int]]:
+def _formatar_linhas(
+    agregados: dict[str, dict[str, float]]
+) -> list[tuple[str, int, float, float, float, float, int]]:
     linhas = []
     for nome, bloco in agregados.items():
         media = bloco["total"] / bloco["count"] if bloco["count"] else 0.0
         minimo = bloco["min"] if bloco["count"] else 0.0
-        linhas.append((nome, int(bloco["count"]), media, minimo, bloco["max"], bloco["total"], int(bloco["errors"])))
+        linhas.append(
+            (
+                nome,
+                int(bloco["count"]),
+                media,
+                minimo,
+                bloco["max"],
+                bloco["total"],
+                int(bloco["errors"]),
+            )
+        )
     linhas.sort(key=lambda item: item[5], reverse=True)
     return linhas
 
 
-def _imprimir_tabela(titulo: str, linhas: list[tuple[str, int, float, float, float, float, int]], largura_nome: int = 45) -> None:
+def _imprimir_tabela(
+    titulo: str,
+    linhas: list[tuple[str, int, float, float, float, float, int]],
+    largura_nome: int = 45,
+) -> None:
     print(titulo)
     print("-" * 112)
-    print(f"{'Nome':{largura_nome}} {'Qtd':>6} {'Media(s)':>10} {'Min(s)':>10} {'Max(s)':>10} {'Total(s)':>10} {'Erros':>7}")
+    print(
+        f"{'Nome':{largura_nome}} {'Qtd':>6} {'Media(s)':>10} {'Min(s)':>10} {'Max(s)':>10} {'Total(s)':>10} {'Erros':>7}"
+    )
     print("-" * 112)
     for nome, qtd, media, minimo, maximo, total, erros in linhas:
-        print(f"{nome[:largura_nome]:{largura_nome}} {qtd:6d} {media:10.3f} {minimo:10.3f} {maximo:10.3f} {total:10.3f} {erros:7d}")
+        print(
+            f"{nome[:largura_nome]:{largura_nome}} {qtd:6d} {media:10.3f} {minimo:10.3f} {maximo:10.3f} {total:10.3f} {erros:7d}"
+        )
     print()
 
 

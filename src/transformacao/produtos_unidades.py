@@ -31,6 +31,7 @@ except ImportError as e:
 
 def _inferir_co_sefin(df: pl.DataFrame) -> pl.DataFrame:
     """Inferencia de co_sefin_item: CEST+NCM, depois CEST, depois NCM."""
+
     def _candidatos_ref_dir() -> list[Path]:
         return [
             REFS_DIR / "referencias" / "CO_SEFIN",
@@ -54,7 +55,9 @@ def _inferir_co_sefin(df: pl.DataFrame) -> pl.DataFrame:
     def _limpar_expr(col: str) -> pl.Expr:
         return pl.col(col).cast(pl.String).str.replace_all(r"\D", "").str.strip_chars()
 
-    df_join = df.with_columns([_limpar_expr("ncm").alias("_ncm_j"), _limpar_expr("cest").alias("_cest_j")])
+    df_join = df.with_columns(
+        [_limpar_expr("ncm").alias("_ncm_j"), _limpar_expr("cest").alias("_cest_j")]
+    )
 
     if path_cn is not None:
         ref_cn = pl.read_parquet(path_cn).select(
@@ -64,7 +67,12 @@ def _inferir_co_sefin(df: pl.DataFrame) -> pl.DataFrame:
                 pl.col("it_co_sefin").cast(pl.String).alias("co_sefin_cn"),
             ]
         )
-        df_join = df_join.join(ref_cn, left_on=["_cest_j", "_ncm_j"], right_on=["ref_cest", "ref_ncm"], how="left")
+        df_join = df_join.join(
+            ref_cn,
+            left_on=["_cest_j", "_ncm_j"],
+            right_on=["ref_cest", "ref_ncm"],
+            how="left",
+        )
     else:
         df_join = df_join.with_columns(pl.lit(None, pl.String).alias("co_sefin_cn"))
 
@@ -75,7 +83,9 @@ def _inferir_co_sefin(df: pl.DataFrame) -> pl.DataFrame:
                 pl.col("co-sefin").cast(pl.String).alias("co_sefin_c"),
             ]
         )
-        df_join = df_join.join(ref_c, left_on="_cest_j", right_on="ref_cest_only", how="left")
+        df_join = df_join.join(
+            ref_c, left_on="_cest_j", right_on="ref_cest_only", how="left"
+        )
     else:
         df_join = df_join.with_columns(pl.lit(None, pl.String).alias("co_sefin_c"))
 
@@ -86,15 +96,17 @@ def _inferir_co_sefin(df: pl.DataFrame) -> pl.DataFrame:
                 pl.col("co-sefin").cast(pl.String).alias("co_sefin_n"),
             ]
         )
-        df_join = df_join.join(ref_n, left_on="_ncm_j", right_on="ref_ncm_only", how="left")
+        df_join = df_join.join(
+            ref_n, left_on="_ncm_j", right_on="ref_ncm_only", how="left"
+        )
     else:
         df_join = df_join.with_columns(pl.lit(None, pl.String).alias("co_sefin_n"))
 
-    return (
-        df_join
-        .with_columns(pl.coalesce([pl.col("co_sefin_cn"), pl.col("co_sefin_c"), pl.col("co_sefin_n")]).alias("co_sefin_item"))
-        .drop(["_ncm_j", "_cest_j", "co_sefin_cn", "co_sefin_c", "co_sefin_n"])
-    )
+    return df_join.with_columns(
+        pl.coalesce(
+            [pl.col("co_sefin_cn"), pl.col("co_sefin_c"), pl.col("co_sefin_n")]
+        ).alias("co_sefin_item")
+    ).drop(["_ncm_j", "_cest_j", "co_sefin_cn", "co_sefin_c", "co_sefin_n"])
 
 
 def gerar_produtos_unidades(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
@@ -127,7 +139,9 @@ def gerar_produtos_unidades(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
 
     # 2. Leitura de fontes
     def _res(prefix: str):
-        return encontrar_arquivo(arq_dir, prefix, cnpj) or encontrar_arquivo(pasta_cnpj, prefix, cnpj)
+        return encontrar_arquivo(arq_dir, prefix, cnpj) or encontrar_arquivo(
+            pasta_cnpj, prefix, cnpj
+        )
 
     fragmentos: list[pl.DataFrame] = []
 
@@ -147,7 +161,9 @@ def gerar_produtos_unidades(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
     # Bloco H (Inventario): usa valor_item e quantidade para enriquecer base de custo por unidade
     df_bloco_h = ler_bloco_h(_res("bloco_h"))
     if df_bloco_h is not None:
-        df_bloco_h = df_bloco_h.rename({"valor_saida": "vendas", "valor_entrada": "compras"})
+        df_bloco_h = df_bloco_h.rename(
+            {"valor_saida": "vendas", "valor_entrada": "compras"}
+        )
         fragmentos.append(df_bloco_h)
 
     if not fragmentos:
@@ -157,14 +173,36 @@ def gerar_produtos_unidades(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
     df_total = pl.concat(fragmentos, how="diagonal_relaxed")
 
     # Consolidar colunas nulas
-    cols = ["codigo", "codigo_fonte", "descricao", "descr_compl", "tipo_item", "ncm", "cest", "gtin", "unidade"]
+    cols = [
+        "codigo",
+        "codigo_fonte",
+        "descricao",
+        "descr_compl",
+        "tipo_item",
+        "ncm",
+        "cest",
+        "gtin",
+        "unidade",
+    ]
     for c in cols:
         if c not in df_total.columns:
             df_total = df_total.with_columns(pl.lit(None, pl.String).alias(c))
 
     # 3. Agrupamento por (item + unidade)
     df_grouped = (
-        df_total.group_by(["codigo", "codigo_fonte", "descricao", "descr_compl", "tipo_item", "ncm", "cest", "gtin", "unidade"])
+        df_total.group_by(
+            [
+                "codigo",
+                "codigo_fonte",
+                "descricao",
+                "descr_compl",
+                "tipo_item",
+                "ncm",
+                "cest",
+                "gtin",
+                "unidade",
+            ]
+        )
         .agg(
             [
                 pl.col("compras").fill_null(0).sum().alias("compras"),
@@ -181,7 +219,9 @@ def gerar_produtos_unidades(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
 
     # 5. Salvar
     pasta_saida = pasta_cnpj / "analises" / "produtos"
-    ok = salvar_para_parquet(df_grouped, pasta_saida, f"produtos_unidades_{cnpj}.parquet")
+    ok = salvar_para_parquet(
+        df_grouped, pasta_saida, f"produtos_unidades_{cnpj}.parquet"
+    )
     return ok
 
 
@@ -191,5 +231,3 @@ if __name__ == "__main__":
     else:
         c = input("CNPJ: ")
         gerar_produtos_unidades(c)
-
-

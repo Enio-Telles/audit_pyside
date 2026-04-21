@@ -7,6 +7,7 @@ Responsabilidades:
 - extrair bind variables Oracle (:param) e inferir tipo de widget;
 - construir dicionario de binds para execucao.
 """
+
 from __future__ import annotations
 
 import re
@@ -92,7 +93,9 @@ class SqlService:
     @staticmethod
     def _infer_widget_type(name: str) -> str:
         low = name.lower()
-        if low.startswith(("data_", "dt_", "date_")) or low in ("data_limite_processamento",):
+        if low.startswith(("data_", "dt_", "date_")) or low in (
+            "data_limite_processamento",
+        ):
             return WIDGET_DATE
         return WIDGET_TEXT
 
@@ -120,13 +123,20 @@ class SqlService:
         return binds
 
     @staticmethod
-    def executar_sql(sql: str, params: dict[str, Any] | None = None, cnpj: str | None = None) -> list[dict[str, Any]]:
+    def executar_sql(
+        sql: str, params: dict[str, Any] | None = None, cnpj: str | None = None
+    ) -> list[dict[str, Any]]:
         try:
-            from interface_grafica.services.query_worker import _conectar_oracle_fallback
+            from interface_grafica.services.query_worker import (
+                _conectar_oracle_fallback,
+            )
         except Exception as exc:
             from transformacao.auxiliares.logs import log_exception
+
             log_exception(exc)
-            raise RuntimeError("Nao foi possivel inicializar a conexao com o banco de dados.") from exc
+            raise RuntimeError(
+                "Nao foi possivel inicializar a conexao com o banco de dados."
+            ) from exc
 
         values = dict(params or {})
         if cnpj and not any(str(k).lower() == "cnpj" for k in values):
@@ -146,6 +156,7 @@ class SqlService:
                 rows = cursor.fetchall()
             if not rows:
                 return []
-            return [dict(zip(columns, row)) for row in rows]
+            # Optimization: dict comprehension is faster than dict(zip())
+            return [{k: v for k, v in zip(columns, row)} for row in rows]
         finally:
             conn.close()

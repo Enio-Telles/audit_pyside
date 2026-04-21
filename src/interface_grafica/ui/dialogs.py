@@ -24,7 +24,9 @@ from interface_grafica.models.table_model import PolarsTableModel
 
 
 class ColumnSelectorDialog(QDialog):
-    def __init__(self, columns: list[str], visible_columns: list[str], parent=None) -> None:
+    def __init__(
+        self, columns: list[str], visible_columns: list[str], parent=None
+    ) -> None:
         super().__init__(parent)
         self.setWindowTitle("Selecionar colunas visiveis")
         self.resize(420, 520)
@@ -84,7 +86,9 @@ class ColumnSelectorDialog(QDialog):
         return selected
 
     def column_order(self) -> list[str]:
-        return [self.list_widget.item(idx).text() for idx in range(self.list_widget.count())]
+        return [
+            self.list_widget.item(idx).text() for idx in range(self.list_widget.count())
+        ]
 
     def _select_all(self) -> None:
         for idx in range(self.list_widget.count()):
@@ -121,7 +125,12 @@ class ColumnSelectorDialog(QDialog):
 class DialogoSelecaoConsultas(QDialog):
     """Dialogo para selecionar quais consultas SQL executar."""
 
-    def __init__(self, consultas: list[str], parent=None, pre_selecionados: list[str] | None = None) -> None:
+    def __init__(
+        self,
+        consultas: list[str],
+        parent=None,
+        pre_selecionados: list[str] | None = None,
+    ) -> None:
         super().__init__(parent)
         self.setWindowTitle("Selecionar consultas SQL para execucao")
         self.resize(520, 480)
@@ -131,7 +140,9 @@ class DialogoSelecaoConsultas(QDialog):
 
         layout.addWidget(QLabel("Marque as consultas SQL que deseja executar:"))
 
-        todos_marcados = pre_selecionados is None or len(pre_selecionados) == len(consultas)
+        todos_marcados = pre_selecionados is None or len(pre_selecionados) == len(
+            consultas
+        )
 
         self.chk_todos = QCheckBox("Selecionar todas")
         self.chk_todos.setChecked(todos_marcados)
@@ -148,7 +159,9 @@ class DialogoSelecaoConsultas(QDialog):
                 rotulo = f"{'/'.join(path_parts[:-1])}/{Path(sql_id).stem}"
             item = QListWidgetItem(rotulo)
             item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
-            estado = Qt.Checked if (pre_set is None or sql_id in pre_set) else Qt.Unchecked
+            estado = (
+                Qt.Checked if (pre_set is None or sql_id in pre_set) else Qt.Unchecked
+            )
             item.setCheckState(estado)
             item.setToolTip(sql_id)
             item.setData(Qt.UserRole, sql_id)
@@ -177,7 +190,12 @@ class DialogoSelecaoConsultas(QDialog):
 class DialogoSelecaoTabelas(QDialog):
     """Dialogo para selecionar quais tabelas gerar."""
 
-    def __init__(self, tabelas: list[dict[str, str]], parent=None, pre_selecionados: list[str] | None = None) -> None:
+    def __init__(
+        self,
+        tabelas: list[dict[str, str]],
+        parent=None,
+        pre_selecionados: list[str] | None = None,
+    ) -> None:
         super().__init__(parent)
         self.setWindowTitle("Selecionar tabelas a gerar")
         self.resize(520, 380)
@@ -191,7 +209,9 @@ class DialogoSelecaoTabelas(QDialog):
             )
         )
 
-        todos_marcados = pre_selecionados is None or len(pre_selecionados) == len(tabelas)
+        todos_marcados = pre_selecionados is None or len(pre_selecionados) == len(
+            tabelas
+        )
         self.chk_todos = QCheckBox("Selecionar todas")
         self.chk_todos.setChecked(todos_marcados)
         self.chk_todos.stateChanged.connect(self._alternar_todos)
@@ -204,7 +224,11 @@ class DialogoSelecaoTabelas(QDialog):
             texto = f"{tabela['nome']}\n   {tabela['descricao']}"
             item = QListWidgetItem(texto)
             item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
-            estado = Qt.Checked if (pre_set is None or tabela["id"] in pre_set) else Qt.Unchecked
+            estado = (
+                Qt.Checked
+                if (pre_set is None or tabela["id"] in pre_set)
+                else Qt.Unchecked
+            )
             item.setCheckState(estado)
             item.setData(Qt.UserRole, tabela["id"])
             self.lista.addItem(item)
@@ -251,36 +275,39 @@ class DialogoFioDeOuro(QDialog):
 
 class DialogoExportacaoEstoque(QDialog):
     """Dialogo para selecionar parametros de exportacao (datas limite)."""
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Exportar Produtos Selecionados")
         self.resize(320, 140)
-        
+
         layout = QVBoxLayout(self)
-        layout.addWidget(QLabel("Defina o periodo de extracao das informacoes para Excel:"))
-        
+        layout.addWidget(
+            QLabel("Defina o periodo de extracao das informacoes para Excel:")
+        )
+
         form_layout = QHBoxLayout()
         self.data_ini = QDateEdit()
         self.data_ini.setCalendarPopup(True)
         self.data_ini.setDisplayFormat("dd/MM/yyyy")
         self.data_ini.setDate(QDate(2020, 1, 1))
-        
+
         self.data_fim = QDateEdit()
         self.data_fim.setCalendarPopup(True)
         self.data_fim.setDisplayFormat("dd/MM/yyyy")
         self.data_fim.setDate(QDate(2025, 12, 31))
-        
+
         form_layout.addWidget(QLabel("De:"))
         form_layout.addWidget(self.data_ini)
         form_layout.addWidget(QLabel("Ate:"))
         form_layout.addWidget(self.data_fim)
-        
+
         layout.addLayout(form_layout)
-        
+
         botoes = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         botoes.accepted.connect(self.accept)
         botoes.rejected.connect(self.reject)
         layout.addWidget(botoes)
-        
+
     def obter_datas(self) -> tuple[QDate, QDate]:
         return self.data_ini.date(), self.data_fim.date()

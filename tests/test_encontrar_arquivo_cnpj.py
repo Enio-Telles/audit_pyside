@@ -1,6 +1,7 @@
 from pathlib import Path
 from utilitarios.encontrar_arquivo_cnpj import encontrar_arquivo
 
+
 def test_encontrar_arquivo_agrupado(tmp_path: Path):
     prefixo = "NFE"
     cnpj = "12345678901234"
@@ -16,6 +17,7 @@ def test_encontrar_arquivo_agrupado(tmp_path: Path):
     resultado = encontrar_arquivo(tmp_path, prefixo, cnpj)
 
     assert resultado == arquivo_agrupado
+
 
 def test_encontrar_arquivo_normal(tmp_path: Path):
     prefixo = "NFE"
@@ -33,6 +35,7 @@ def test_encontrar_arquivo_normal(tmp_path: Path):
 
     assert resultado == arquivo_normal
 
+
 def test_encontrar_arquivo_fallback(tmp_path: Path):
     prefixo = "NFE"
     cnpj = "12345678901234"
@@ -45,6 +48,7 @@ def test_encontrar_arquivo_fallback(tmp_path: Path):
     resultado = encontrar_arquivo(tmp_path, prefixo, cnpj)
 
     assert resultado == arquivo_fallback
+
 
 def test_encontrar_arquivo_nao_encontrado(tmp_path: Path):
     prefixo = "NFE"
