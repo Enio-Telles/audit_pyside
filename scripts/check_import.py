@@ -15,3 +15,5 @@ try:
 except Exception:
     traceback.print_exc()
     print('import-failed')
+    # Return non-zero so CI / callers detect import failure
+    sys.exit(1)
