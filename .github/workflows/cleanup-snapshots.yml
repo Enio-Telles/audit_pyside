@@ -20,7 +20,7 @@ on:
       dry_run:
         description: 'If true, show what would be removed but do not delete'
         required: false
-        default: 'false'
+        default: 'true'
 
 jobs:
   cleanup:
@@ -46,7 +46,7 @@ jobs:
           BASE_DIR="${{ github.event.inputs.base_dir || 'dados' }}"
           KEEP_LAST="${{ github.event.inputs.keep_last || '10' }}"
           KEEP_DAYS="${{ github.event.inputs.keep_days || '180' }}"
-          DRY_RUN="${{ github.event.inputs.dry_run || 'false' }}"
+          DRY_RUN="${{ github.event.inputs.dry_run || 'true' }}"
           echo "Base dir: $BASE_DIR"
           echo "Keep last: $KEEP_LAST"
           echo "Keep days: $KEEP_DAYS"
