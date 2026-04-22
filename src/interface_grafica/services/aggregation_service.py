@@ -107,6 +107,8 @@ try:
 except ImportError:
     salvar_para_parquet = None
 
+from utilitarios.compat import ensure_id_aliases
+
 
 class ServicoAgregacao:
     # Cache global de DataFrames por CNPJ
@@ -720,7 +722,9 @@ class ServicoAgregacao:
                 )
 
         df_resultado_sem_chaves = df_resultado.drop("lista_chave_produto", strict=False)
-        df_resultado_sem_chaves.write_parquet(self.caminho_tabela_agregadas(cnpj))
+        # Garantir compatibilidade de nomes de id ao persistir (dual-write)
+        df_to_write = ensure_id_aliases(df_resultado_sem_chaves)
+        df_to_write.write_parquet(self.caminho_tabela_agregadas(cnpj))
 
         if "lista_chave_produto" in cols_res:
             # R3: Ponte expandida com codigo_fonte e descricao_normalizada
@@ -789,10 +793,13 @@ class ServicoAgregacao:
                 / "produtos"
                 / f"map_produto_agrupado_{cnpj}.parquet"
             )
+            # Garantir alias `id_agregado` na ponte e persistir ambas colunas
+            df_map = ensure_id_aliases(df_map)
             df_map = df_map.select(
                 [
                     pl.col("chave_produto").cast(pl.Utf8),
                     pl.col("id_agrupado").cast(pl.Utf8),
+                    pl.col("id_agregado").cast(pl.Utf8),
                     pl.col("codigo_fonte").cast(pl.Utf8),
                     pl.col("descricao_normalizada").cast(pl.Utf8),
                 ]
@@ -920,7 +927,7 @@ class ServicoAgregacao:
             return None
 
     def limpar_snapshots_mapa_manual(
-        self, cnpj: str, keep_last: int = 10, keep_days: int = 180
+        self, cnpj: str, keep_last: int = 10, keep_days: int = 180, dry_run: bool = False
     ) -> int:
         """
         Limpa snapshots antigos gerados para `mapa_agrupamento_manual_<cnpj>_*.parquet`.
@@ -955,9 +962,12 @@ class ServicoAgregacao:
                 continue
             try:
                 mtime = datetime.fromtimestamp(path.stat().st_mtime)
-                # Remove if older than threshold or simply beyond keep_last
-                if mtime < threshold or True:
-                    path.unlink()
+                # Remove only if older than threshold. If keep_days is 0 or
+                # negative the threshold logic still applies; callers can use
+                # `dry_run=True` to preview removals without deleting files.
+                if mtime < threshold:
+                    if not dry_run:
+                        path.unlink()
                     removed += 1
             except Exception:
                 # Ignore individual failures
