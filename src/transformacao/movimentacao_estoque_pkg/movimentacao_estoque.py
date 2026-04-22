@@ -115,7 +115,7 @@ def marcar_mov_rep_por_chave_item(df: pl.DataFrame) -> pl.DataFrame:
 
     # Compute group sizes per (__chave_doc__, Num_item) robustly and mark duplicates
     try:
-        grp = df.groupby(["__chave_doc__", "Num_item"]).agg(pl.count().alias("__grp_count__"))
+        grp = df.group_by(["__chave_doc__", "Num_item"]).agg(pl.len().alias("__grp_count__"))
         df = df.join(grp, on=["__chave_doc__", "Num_item"], how="left")
         repetido_expr = (
             (pl.col("__chave_doc__") != "")
@@ -670,10 +670,6 @@ def gerar_movimentacao_estoque(cnpj: str, pasta_cnpj: Path | None = None) -> boo
         .drop(["__data_ord__", "__nsu_ord__", "__ord_tipo__"], strict=False)
     )
 
-    data_ref_expr = pl.coalesce([
-        pl.col("Dt_e_s").cast(pl.Date, strict=False),
-        pl.col("Dt_doc").cast(pl.Date, strict=False),
-    ])
     data_ref_expr = pl.coalesce(
         [
             pl.col("Dt_e_s").cast(pl.Date, strict=False),
@@ -744,50 +740,6 @@ def gerar_movimentacao_estoque(cnpj: str, pasta_cnpj: Path | None = None) -> boo
             .otherwise(pl.lit(0.0))
             .alias("__q_conv_sinal__"),
         ])
-        .with_columns(
-            [
-                pl.when(
-                    pl.col("Tipo_operacao").cast(pl.Utf8, strict=False).str.starts_with("3 - ESTOQUE FINAL")
-                )
-                .then(q_conv_valido_expr)
-                .otherwise(pl.lit(0.0))
-                .alias("__qtd_decl_final_audit__"),
-                pl.when(
-                    pl.col("Tipo_operacao").cast(pl.Utf8, strict=False).str.starts_with("0 - ESTOQUE INICIAL")
-                )
-                .then(q_conv_valido_expr)
-                .when(pl.col("Tipo_operacao") == "1 - ENTRADA")
-                .then(q_conv_valido_expr)
-                .when(pl.col("Tipo_operacao") == "2 - SAIDAS")
-                .then(q_conv_valido_expr)
-                .when(
-                    pl.col("Tipo_operacao").cast(pl.Utf8, strict=False).str.starts_with("3 - ESTOQUE FINAL")
-                )
-                .then(q_conv_valido_expr)
-                .otherwise(pl.lit(0.0))
-                .alias("q_conv"),
-                pl.when(
-                    pl.col("Tipo_operacao").cast(pl.Utf8, strict=False).str.starts_with("0 - ESTOQUE INICIAL")
-                )
-                .then(q_conv_valido_expr)
-                .when(pl.col("Tipo_operacao") == "1 - ENTRADA")
-                .then(q_conv_valido_expr)
-                .when(pl.col("Tipo_operacao") == "2 - SAIDAS")
-                .then(q_conv_valido_expr)
-                .otherwise(pl.lit(0.0))
-                .alias("q_conv_fisica"),
-                pl.when(
-                    pl.col("Tipo_operacao").cast(pl.Utf8, strict=False).str.starts_with("0 - ESTOQUE INICIAL")
-                )
-                .then(q_conv_valido_expr)
-                .when(pl.col("Tipo_operacao") == "1 - ENTRADA")
-                .then(q_conv_valido_expr)
-                .when(pl.col("Tipo_operacao") == "2 - SAIDAS")
-                .then(-q_conv_valido_expr)
-                .otherwise(pl.lit(0.0))
-                .alias("__q_conv_sinal__"),
-            ]
-        )
         .with_columns(
             pl.when(pl.col("q_conv") > 0)
             .then(pl.col("preco_item").cast(pl.Float64, strict=False).fill_null(0.0) / pl.col("q_conv"))

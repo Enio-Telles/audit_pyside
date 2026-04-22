@@ -1,9 +1,6 @@
 from datetime import date
 from pathlib import Path
 import sys
-from datetime import date
-from pathlib import Path
-import sys
 
 import polars as pl
 
@@ -14,7 +11,7 @@ from transformacao.calculos_mensais_pkg.calculos_mensais import calcular_aba_men
 from transformacao.rastreabilidade_produtos.fatores_conversao import calcular_fatores_conversao
 
 
-def test_calculos_anuais_separam_fluxo_fisico_de_auditoria_final():
+def test_calculos_anuais_separam_fluxo_fisico_de_auditoria_final() -> None:
     df = pl.DataFrame(
         {
             "id_agrupado": ["prod_1"] * 4,
@@ -53,7 +50,7 @@ def test_calculos_anuais_separam_fluxo_fisico_de_auditoria_final():
     assert row["saldo_final"] == 110.0
 
 
-def test_calculos_mensais_ignoram_qconv_observacional_em_estoque_final():
+def test_calculos_mensais_ignoram_qconv_observacional_em_estoque_final() -> None:
     df = pl.DataFrame(
         {
             "id_agrupado": ["prod_1"] * 3,
@@ -97,7 +94,7 @@ def test_calculos_mensais_ignoram_qconv_observacional_em_estoque_final():
     assert row["qtd_saidas"] == 5.0
 
 
-def test_q_conv_fallback_and_semantics():
+def test_q_conv_fallback_and_semantics() -> None:
     df = pl.DataFrame(
         {
             "id_agrupado": ["A", "A", "A"],
@@ -132,64 +129,7 @@ def test_q_conv_fallback_and_semantics():
     assert float(res_feb["qtd_entradas"][0]) == 5.0
 
 
-def test_fatores_conversao_prioriza_map_produto_agrupado_no_vinculo(tmp_path):
-    cnpj = "12345678901234"
-    pasta = tmp_path
-
-    # produtos_final com descricoes ambiguas (mesma descricao_normalizada para ids diferentes)
-    df_prod_final = pl.DataFrame(
-        {
-            "id_agrupado": ["P2", "P3"],
-            "descricao_normalizada": ["prod_x", "prod_x"],
-            "descr_padrao": ["Prod X v2", "Prod X v3"],
-            "unid_ref_sugerida": ["UN", "UN"],
-        }
-    )
-
-    # map_produto_agrupado aponta para P1 para 'prod_x' (deve ser priorizado)
-    df_map = pl.DataFrame({"descricao_normalizada": ["prod_x"], "id_agrupado": ["P1"]})
-
-    # item_unidades com a descricao que sera vinculada
-    df_unid = pl.DataFrame(
-        {
-            "descricao": ["prod_x"],
-            "unid": ["UN"],
-            "compras": [0.0],
-            "vendas": [0.0],
-            "qtd_compras": [0.0],
-            "qtd_vendas": [0.0],
-        }
-    )
-
-    arq_prod_final = pasta / f"produtos_final_{cnpj}.parquet"
-    arq_map = pasta / f"map_produto_agrupado_{cnpj}.parquet"
-    arq_unid = pasta / f"item_unidades_{cnpj}.parquet"
-
-    df_prod_final.write_parquet(arq_prod_final)
-    df_map.write_parquet(arq_map)
-    df_unid.write_parquet(arq_unid)
-
-    ok = calcular_fatores_conversao(cnpj, pasta)
-    assert ok is True
-
-    arq_fatores = pasta / f"fatores_conversao_{cnpj}.parquet"
-    assert arq_fatores.exists()
-    df_fatores = pl.read_parquet(arq_fatores)
-
-    # Verifica se id_agrupado P1 (vinculo pelo map) esta presente
-    assert df_fatores.filter(pl.col("id_agrupado") == "P1").height == 1
-    # Simula parquet antigo sem q_conv_fisica
-    res = calcular_aba_mensal_dataframe(df)
-
-    # No mês de 2023-02 (entrada) esperamos qtd_entradas == 5.0
-    res_feb = res.filter(
-        (pl.col("ano") == 2023) & (pl.col("mes") == 2) & (pl.col("id_agregado") == "A")
-    )
-    assert res_feb.height == 1
-    assert float(res_feb["qtd_entradas"][0]) == 5.0
-
-
-def test_fatores_conversao_prioriza_map_produto_agrupado_no_vinculo(tmp_path):
+def test_fatores_conversao_prioriza_map_produto_agrupado_no_vinculo(tmp_path) -> None:
     cnpj = "12345678901234"
     pasta = tmp_path
 
