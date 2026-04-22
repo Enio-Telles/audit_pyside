@@ -1,9 +1,6 @@
 from datetime import date
 from pathlib import Path
 import sys
-from datetime import date
-from pathlib import Path
-import sys
 
 import polars as pl
 
@@ -14,7 +11,7 @@ from transformacao.calculos_mensais_pkg.calculos_mensais import calcular_aba_men
 from transformacao.rastreabilidade_produtos.fatores_conversao import calcular_fatores_conversao
 
 
-def test_calculos_anuais_separam_fluxo_fisico_de_auditoria_final():
+def test_calculos_anuais_separam_fluxo_fisico_de_auditoria_final() -> None:
     df = pl.DataFrame(
         {
             "id_agrupado": ["prod_1"] * 4,
@@ -53,7 +50,7 @@ def test_calculos_anuais_separam_fluxo_fisico_de_auditoria_final():
     assert row["saldo_final"] == 110.0
 
 
-def test_calculos_mensais_ignoram_qconv_observacional_em_estoque_final():
+def test_calculos_mensais_ignoram_qconv_observacional_em_estoque_final() -> None:
     df = pl.DataFrame(
         {
             "id_agrupado": ["prod_1"] * 3,
@@ -97,7 +94,7 @@ def test_calculos_mensais_ignoram_qconv_observacional_em_estoque_final():
     assert row["qtd_saidas"] == 5.0
 
 
-def test_q_conv_fallback_and_semantics():
+def test_q_conv_fallback_and_semantics() -> None:
     df = pl.DataFrame(
         {
             "id_agrupado": ["A", "A", "A"],
@@ -132,7 +129,7 @@ def test_q_conv_fallback_and_semantics():
     assert float(res_feb["qtd_entradas"][0]) == 5.0
 
 
-def test_fatores_conversao_prioriza_map_produto_agrupado_no_vinculo(tmp_path):
+def test_fatores_conversao_prioriza_map_produto_agrupado_no_vinculo(tmp_path) -> None:
     cnpj = "12345678901234"
     pasta = tmp_path
 
