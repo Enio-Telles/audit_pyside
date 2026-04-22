@@ -38,10 +38,35 @@ def normalizar_codigo_fonte(valor: str | None) -> str | None:
 
 
 def expr_normalizar_codigo_fonte(col: str, alias: str = "codigo_fonte") -> pl.Expr:
-    return (
+    # Optimization: Replace .map_elements with native Polars string operations to preserve vectorization
+    cleaned = (
         pl.col(col)
         .cast(pl.Utf8, strict=False)
-        .map_elements(normalizar_codigo_fonte, return_dtype=pl.Utf8)
+        .fill_null("")
+        .str.strip_chars()
+        .str.replace_all(r"\s+", " ")
+    )
+
+    has_pipe = cleaned.str.contains(r"\|")
+    split_parts = cleaned.str.extract_groups(r"^([^|]*)\|(.*)$")
+
+    esquerda_raw = split_parts.struct.field("1")
+    direita_raw = split_parts.struct.field("2")
+
+    esquerda_proc = esquerda_raw.str.replace_all(r"\D", "")
+    direita_proc = (
+        direita_raw
+        .fill_null("")
+        .str.strip_chars()
+        .str.replace_all(r"\s+", " ")
+    )
+
+    return (
+        pl.when(cleaned == "").then(pl.lit(None))
+        .when(~has_pipe).then(cleaned)
+        .when((esquerda_proc != "") & (direita_proc != "")).then(pl.concat_str([esquerda_proc, pl.lit("|"), direita_proc]))
+        .when(direita_proc != "").then(direita_proc)
+        .otherwise(pl.lit(None))
         .alias(alias)
     )
 
