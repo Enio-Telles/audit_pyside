@@ -112,8 +112,12 @@ def normalize_sql_id(value: Path | str | None) -> str | None:
             direct = by_id.get(suffix_match.lower())
             if direct is not None:
                 return direct.sql_id
-            text = text.split(marker, 1)[1]
-            break
+            # If the path contains a known marker but the suffix does not match
+            # any catalog entry, fail early: do not fallback to name-based
+            # heuristics. This preserves explicit marker semantics used by the
+            # tests (e.g. unknown folders under a `/sql/` path must not match
+            # by filename alone).
+            return None
 
     candidate_name = Path(text).name.lower()
     matches = by_name.get(candidate_name, [])
