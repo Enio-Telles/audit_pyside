@@ -74,6 +74,7 @@ def get_sql_id(path: Path | str) -> str | None:
         return None
 
 
+@functools.lru_cache(maxsize=1)
 def _index_entries() -> (
     tuple[dict[str, SqlCatalogEntry], dict[str, list[SqlCatalogEntry]]]
 ):
