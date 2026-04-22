@@ -48,10 +48,10 @@ def expr_normalizar_codigo_fonte(col: str, alias: str = "codigo_fonte") -> pl.Ex
     )
 
     has_pipe = cleaned.str.contains(r"\|")
-    split_parts = cleaned.str.extract_groups(r"^([^|]*)\|(.*)$")
+    split_parts = cleaned.str.split_exact("|", 1)
 
-    esquerda_raw = split_parts.struct.field("1")
-    direita_raw = split_parts.struct.field("2")
+    esquerda_raw = split_parts.struct.field("field_0")
+    direita_raw = split_parts.struct.field("field_1")
 
     esquerda_proc = esquerda_raw.str.replace_all(r"\D", "")
     direita_proc = (
