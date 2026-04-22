@@ -218,22 +218,104 @@ class ServicoAgregacao:
         if progresso:
             progresso("[REPROCESSANDO] item_unidades...")
         # Chame a função real do pipeline aqui
-        return False
+        try:
+            # Prefer the compat proxy which re-exports the real implementation
+            from transformacao.item_unidades import item_unidades
+
+            ok = bool(item_unidades(cnpj))
+            if progresso:
+                progresso(f"[OK] item_unidades reprocessado: {ok}")
+            return ok
+        except ImportError:
+            if progresso:
+                progresso("[ERRO] Módulo transformacao.item_unidades não disponível.")
+            return False
+        except Exception as exc:
+            if progresso:
+                progresso(f"[ERRO] Falha ao reprocessar item_unidades: {exc}")
+            return False
 
     def _regerar_descricao_produtos(self, cnpj, progresso=None):
         if progresso:
             progresso("[REPROCESSANDO] descricao_produtos...")
-        return False
+        try:
+            # Use the compatibility proxy which points to the canonical implementation
+            from transformacao.descricao_produtos import descricao_produtos
+
+            ok = bool(descricao_produtos(cnpj))
+            if progresso:
+                progresso(f"[OK] descricao_produtos reprocessado: {ok}")
+            return ok
+        except ImportError:
+            if progresso:
+                progresso("[ERRO] Módulo transformacao.descricao_produtos não disponível.")
+            return False
+        except Exception as exc:
+            if progresso:
+                progresso(f"[ERRO] Falha ao reprocessar descricao_produtos: {exc}")
+            return False
 
     def _regerar_produtos_final(self, cnpj, progresso=None):
         if progresso:
             progresso("[REPROCESSANDO] produtos_final...")
-        return False
+        try:
+            # Try the legacy proxy which should call the v2 generator
+            try:
+                from transformacao.produtos_final import gerar_produtos_final
+            except Exception:
+                gerar_produtos_final = None
+
+            if gerar_produtos_final is not None:
+                ok = bool(gerar_produtos_final(cnpj))
+                if progresso:
+                    progresso(f"[OK] produtos_final reprocessado via gerar_produtos_final: {ok}")
+                return ok
+
+            # Fallbacks: attempt available helpers imported at module level
+            if inicializar_produtos_agrupados is not None:
+                ok = bool(inicializar_produtos_agrupados(cnpj))
+                if progresso:
+                    progresso(f"[OK] produtos_final reprocessado via inicializar_produtos_agrupados: {ok}")
+                return ok
+
+            if progresso:
+                progresso("[ERRO] Nenhuma função disponível para gerar produtos_final.")
+            return False
+        except Exception as exc:
+            if progresso:
+                progresso(f"[ERRO] Falha ao reprocessar produtos_final: {exc}")
+            return False
 
     def _regerar_produtos_agrupados(self, cnpj, progresso=None):
         if progresso:
             progresso("[REPROCESSANDO] produtos_agrupados...")
-        return False
+        try:
+            # Prefer the initializer imported from produtos_final_v2 if present
+            if inicializar_produtos_agrupados is not None:
+                ok = bool(inicializar_produtos_agrupados(cnpj))
+                if progresso:
+                    progresso(f"[OK] produtos_agrupados reprocessado: {ok}")
+                return ok
+
+            # As a fallback, try the legacy gerar_produtos_final
+            try:
+                from transformacao.produtos_final import gerar_produtos_final
+            except Exception:
+                gerar_produtos_final = None
+
+            if gerar_produtos_final is not None:
+                ok = bool(gerar_produtos_final(cnpj))
+                if progresso:
+                    progresso(f"[OK] produtos_agrupados reprocessado via gerar_produtos_final: {ok}")
+                return ok
+
+            if progresso:
+                progresso("[ERRO] Nenhuma função disponível para gerar produtos_agrupados.")
+            return False
+        except Exception as exc:
+            if progresso:
+                progresso(f"[ERRO] Falha ao reprocessar produtos_agrupados: {exc}")
+            return False
 
     """
     Gerencia a tabela produtos_agrupados e as derivacoes da camada _agr.
