@@ -107,6 +107,8 @@ try:
 except ImportError:
     salvar_para_parquet = None
 
+from utilitarios.compat import ensure_id_aliases
+
 
 class ServicoAgregacao:
     # Cache global de DataFrames por CNPJ
@@ -216,22 +218,104 @@ class ServicoAgregacao:
         if progresso:
             progresso("[REPROCESSANDO] item_unidades...")
         # Chame a função real do pipeline aqui
-        return False
+        try:
+            # Prefer the compat proxy which re-exports the real implementation
+            from transformacao.item_unidades import item_unidades
+
+            ok = bool(item_unidades(cnpj))
+            if progresso:
+                progresso(f"[OK] item_unidades reprocessado: {ok}")
+            return ok
+        except ImportError:
+            if progresso:
+                progresso("[ERRO] Módulo transformacao.item_unidades não disponível.")
+            return False
+        except Exception as exc:
+            if progresso:
+                progresso(f"[ERRO] Falha ao reprocessar item_unidades: {exc}")
+            return False
 
     def _regerar_descricao_produtos(self, cnpj, progresso=None):
         if progresso:
             progresso("[REPROCESSANDO] descricao_produtos...")
-        return False
+        try:
+            # Use the compatibility proxy which points to the canonical implementation
+            from transformacao.descricao_produtos import descricao_produtos
+
+            ok = bool(descricao_produtos(cnpj))
+            if progresso:
+                progresso(f"[OK] descricao_produtos reprocessado: {ok}")
+            return ok
+        except ImportError:
+            if progresso:
+                progresso("[ERRO] Módulo transformacao.descricao_produtos não disponível.")
+            return False
+        except Exception as exc:
+            if progresso:
+                progresso(f"[ERRO] Falha ao reprocessar descricao_produtos: {exc}")
+            return False
 
     def _regerar_produtos_final(self, cnpj, progresso=None):
         if progresso:
             progresso("[REPROCESSANDO] produtos_final...")
-        return False
+        try:
+            # Try the legacy proxy which should call the v2 generator
+            try:
+                from transformacao.produtos_final import gerar_produtos_final
+            except Exception:
+                gerar_produtos_final = None
+
+            if gerar_produtos_final is not None:
+                ok = bool(gerar_produtos_final(cnpj))
+                if progresso:
+                    progresso(f"[OK] produtos_final reprocessado via gerar_produtos_final: {ok}")
+                return ok
+
+            # Fallbacks: attempt available helpers imported at module level
+            if inicializar_produtos_agrupados is not None:
+                ok = bool(inicializar_produtos_agrupados(cnpj))
+                if progresso:
+                    progresso(f"[OK] produtos_final reprocessado via inicializar_produtos_agrupados: {ok}")
+                return ok
+
+            if progresso:
+                progresso("[ERRO] Nenhuma função disponível para gerar produtos_final.")
+            return False
+        except Exception as exc:
+            if progresso:
+                progresso(f"[ERRO] Falha ao reprocessar produtos_final: {exc}")
+            return False
 
     def _regerar_produtos_agrupados(self, cnpj, progresso=None):
         if progresso:
             progresso("[REPROCESSANDO] produtos_agrupados...")
-        return False
+        try:
+            # Prefer the initializer imported from produtos_final_v2 if present
+            if inicializar_produtos_agrupados is not None:
+                ok = bool(inicializar_produtos_agrupados(cnpj))
+                if progresso:
+                    progresso(f"[OK] produtos_agrupados reprocessado: {ok}")
+                return ok
+
+            # As a fallback, try the legacy gerar_produtos_final
+            try:
+                from transformacao.produtos_final import gerar_produtos_final
+            except Exception:
+                gerar_produtos_final = None
+
+            if gerar_produtos_final is not None:
+                ok = bool(gerar_produtos_final(cnpj))
+                if progresso:
+                    progresso(f"[OK] produtos_agrupados reprocessado via gerar_produtos_final: {ok}")
+                return ok
+
+            if progresso:
+                progresso("[ERRO] Nenhuma função disponível para gerar produtos_agrupados.")
+            return False
+        except Exception as exc:
+            if progresso:
+                progresso(f"[ERRO] Falha ao reprocessar produtos_agrupados: {exc}")
+            return False
 
     """
     Gerencia a tabela produtos_agrupados e as derivacoes da camada _agr.
@@ -720,7 +804,9 @@ class ServicoAgregacao:
                 )
 
         df_resultado_sem_chaves = df_resultado.drop("lista_chave_produto", strict=False)
-        df_resultado_sem_chaves.write_parquet(self.caminho_tabela_agregadas(cnpj))
+        # Garantir compatibilidade de nomes de id ao persistir (dual-write)
+        df_to_write = ensure_id_aliases(df_resultado_sem_chaves)
+        df_to_write.write_parquet(self.caminho_tabela_agregadas(cnpj))
 
         if "lista_chave_produto" in cols_res:
             # R3: Ponte expandida com codigo_fonte e descricao_normalizada
@@ -789,10 +875,13 @@ class ServicoAgregacao:
                 / "produtos"
                 / f"map_produto_agrupado_{cnpj}.parquet"
             )
+            # Garantir alias `id_agregado` na ponte e persistir ambas colunas
+            df_map = ensure_id_aliases(df_map)
             df_map = df_map.select(
                 [
                     pl.col("chave_produto").cast(pl.Utf8),
                     pl.col("id_agrupado").cast(pl.Utf8),
+                    pl.col("id_agregado").cast(pl.Utf8),
                     pl.col("codigo_fonte").cast(pl.Utf8),
                     pl.col("descricao_normalizada").cast(pl.Utf8),
                 ]
@@ -920,7 +1009,7 @@ class ServicoAgregacao:
             return None
 
     def limpar_snapshots_mapa_manual(
-        self, cnpj: str, keep_last: int = 10, keep_days: int = 180
+        self, cnpj: str, keep_last: int = 10, keep_days: int = 180, dry_run: bool = False
     ) -> int:
         """
         Limpa snapshots antigos gerados para `mapa_agrupamento_manual_<cnpj>_*.parquet`.
@@ -955,9 +1044,12 @@ class ServicoAgregacao:
                 continue
             try:
                 mtime = datetime.fromtimestamp(path.stat().st_mtime)
-                # Remove if older than threshold or simply beyond keep_last
-                if mtime < threshold or True:
-                    path.unlink()
+                # Remove only if older than threshold. If keep_days is 0 or
+                # negative the threshold logic still applies; callers can use
+                # `dry_run=True` to preview removals without deleting files.
+                if mtime < threshold:
+                    if not dry_run:
+                        path.unlink()
                     removed += 1
             except Exception:
                 # Ignore individual failures
