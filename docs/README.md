@@ -75,7 +75,7 @@ A decisão sobre o futuro do backend FastAPI está em discussão — veja [ADR-0
 |---|---|
 | [PLAN.md](PLAN.md) | Plano de execução P0–P5 (fonte de verdade do roadmap) |
 | [plano_q.md](plano_q.md) | Plano de melhorias da qualidade dos dados |
-| [adr/0001-futuro-backend-fastapi.md](adr/0001-futuro-backend-fastapi.md) | ADR-001: decisão sobre o futuro do backend FastAPI *(a criar em P1-03)* |
+| [ADR-001](adr/0001-futuro-backend-fastapi.md) | Decisão sobre o futuro do backend FastAPI |
 
 > **Gap de documentação:**
 > - `TODO`: `docs/plano_melhorias_backend_frontend_arquitetura.md` — consolidar a partir
@@ -136,6 +136,17 @@ Antes de contribuir em uma área, leia o AGENTS.md correspondente:
 - **GUI PySide6** → [`src/interface_grafica/AGENTS.md`](../src/interface_grafica/AGENTS.md)
 - **Backend FastAPI** → [`backend/AGENTS.md`](../backend/AGENTS.md)
 - **Qualquer outra área** → [`AGENTS.md`](../AGENTS.md) (raiz)
+
+## Transição
+
+| Origem anterior | Situação em P1-01 | Destino canônico atual |
+|---|---|---|
+| `.agent.md` | Removido | [`AGENTS.md`](../AGENTS.md) |
+| `docs/AGENTS.md` | Removido | [`AGENTS.md`](../AGENTS.md) |
+| `tests/AGENTS.md` | Removido | [`AGENTS.md`](../AGENTS.md) |
+| Escopo de pipeline | Mantido como escopo canônico | [`src/transformacao/AGENTS.md`](../src/transformacao/AGENTS.md) |
+| Escopo de GUI PySide6 | Mantido como escopo canônico | [`src/interface_grafica/AGENTS.md`](../src/interface_grafica/AGENTS.md) |
+| Backend stub | Criado como novo escopo canônico em P1-01 | [`backend/AGENTS.md`](../backend/AGENTS.md) |
 
 ### Regras de PR
 

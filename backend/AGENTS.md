@@ -30,21 +30,25 @@ O backend é um **stub FastAPI** com dois roteadores:
 ## Contratos atuais
 
 ### `GET /{cnpj}/tabela_agrupada`
+
 - Lê `produtos_agrupados_{cnpj}.parquet` ou `produtos_final_{cnpj}.parquet`.
 - Enriquece com `lista_descr_compl` do `c170_xml_{cnpj}.parquet`.
 - Retorna página (default: `page=1`, `page_size=300`).
 - Chave exposta: `id_agrupado`.
 
 ### `POST /merge`
+
 - Corpo: `{ cnpj, id_agrupado_destino, ids_origem: [...] }`.
 - Delega a `ServicoAgregacao.agregar_linhas()`.
 - Preserva `id_agrupado` canônico como destino.
 
 ### `POST /unmerge`
+
 - Corpo: `{ cnpj, id_agrupado }`.
 - Reverte último merge via `log_agregacoes_{cnpj}.json`.
 
 ### `POST /execute` (SQL)
+
 - Aceita `sql_id` (identificador de query no catálogo) — **não** aceita SQL arbitrário.
 - Mitiga SQL Injection: queries são lidas do catálogo `sql/`, nunca do cliente.
 

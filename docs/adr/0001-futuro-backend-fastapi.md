@@ -126,6 +126,12 @@ Os testes cobrem `ServicoAgregacao` (lógica de negócio), não as rotas HTTP.
 
 ---
 
+## Decisão
+
+`<!-- TODO: preencher após a escolha ser feita -->`
+
+---
+
 ## Consequências da decisão
 
 `<!-- TODO: preencher após a escolha ser feita -->`

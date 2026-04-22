@@ -46,31 +46,37 @@ Crie módulos separados por etapa; evite scripts monolíticos que misturam extra
 ## Regras específicas de pipeline
 
 ### Polars e LazyFrame
+
 - Use sempre `.group_by()` — `.groupby()` é **proibido** em Polars 1.x e levanta erro de runtime.
 - Prefira `pl.scan_parquet` / `pl.scan_csv` (LazyFrame) para operações encadeadas.
 - Chame `.collect()` apenas nos **pontos de checkpoint** definidos (fim de etapa, materialização).
 - Não use pandas para grandes volumes; use Polars.
 
 ### SQL e extração
+
 - Consultas de extração residem em `sql/`; **nunca** escreva SQL inline em scripts Python.
 - Chame queries via `utilitarios.sql_catalog` e `utilitarios.ler_sql`.
 - Oracle é apenas fonte de extração inicial; execute toda lógica analítica no Polars.
 
 ### Cache-first
+
 - Prefira ler Parquet existente antes de reextrair do Oracle.
 - Verifique `existe_parquet(cnpj, dataset)` antes de disparar extração.
 
 ### Lineage e logging
+
 - No início de cada pipeline, registre: CNPJ, período (ano-mês), dataset de origem, filtros aplicados.
 - No final, registre: nome do dataset gerado, schema (colunas + tipos) e data/hora de geração.
 - Mantenha manifesto de datasets (localização, origem, schema, periodicidade).
 
 ### Compatibilidade legada
+
 - Use `utilitarios.compat.ensure_id_aliases(df)` ao consumir datasets que podem conter
   nomes de coluna anteriores à padronização (ex.: `id_group` → `id_agrupado`).
   Essa função está em `src/utilitarios/compat.py` e aceita `DataFrame` ou `LazyFrame`.
 
 ### Schema Parquet
+
 - Não altere schema sem avaliar todos os consumidores, migração e necessidade de reprocessamento.
 - Padronize colunas de data, valores monetários e quantidade de forma explícita
   (`pl.Date`, `pl.Float64`, `pl.Decimal` — não deixe como `pl.Utf8` por omissão).
