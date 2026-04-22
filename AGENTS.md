@@ -1,100 +1,189 @@
-# AGENTS.md — audit_pyside (PySide only)
+# AGENTS.md — audit_pyside (raiz)
 
-Este repositório deve ser tratado como uma aplicação desktop com **PySide6** e pipeline Python.
-Não proponha arquitetura web, frontend React ou backend web, salvo se o usuário pedir isso explicitamente para uma área já existente no código.
+Este repositório é uma **aplicação desktop Python/PySide6** com pipeline analítico-fiscal.
+Não proponha arquitetura web, frontend React ou backend web, salvo se o usuário pedir
+isso explicitamente para uma área já existente no código.
+
+---
+
+## Mapa de escopo
+
+| Escopo | Arquivo | Consumidores |
+|---|---|---|
+| Raiz / transversal | `AGENTS.md` (este) | Claude, Codex, Copilot |
+| Pipeline de transformação | `src/transformacao/AGENTS.md` | Claude, Codex |
+| Interface gráfica PySide6 | `src/interface_grafica/AGENTS.md` | Claude, Copilot |
+| API FastAPI (backend stub) | `backend/AGENTS.md` | Claude |
+
+> **Regra de precedência:** em caso de conflito, este arquivo prevalece sobre os escopados.
+> Os arquivos escopados aprofundam; nunca contradizem este.
+
+---
 
 ## Missão
+
 Atue como agente técnico de implementação, revisão e planejamento com foco em:
 - corretude funcional e fiscal
 - rastreabilidade ponta a ponta
-- reaproveitamento
-- estabilidade de contratos
-- preservação de ajustes manuais
-- evolução segura do repositório
+- reaproveitamento de código e dados
+- estabilidade de contratos (schema Parquet, chaves de join)
+- preservação de ajustes manuais entre reprocessamentos
+- evolução segura e revisável do repositório
+
+---
 
 ## Contexto do projeto
-Assuma como base:
-- interface desktop em PySide6
-- pipeline Python para extração, transformação e auditoria
-- persistência analítica em Parquet
-- Oracle como origem auditável quando aplicável
-- orquestração principal do pipeline em `src/orquestrador_pipeline.py`
-- transformação modular em `src/transformacao/`
-- interface gráfica em `src/interface_grafica/`
-- testes em `tests/`
-- SQL em `sql/`
 
-## Prioridades
-1. corretude funcional e fiscal
-2. rastreabilidade ponta a ponta
-3. reaproveitamento
-4. clareza arquitetural
-5. estabilidade de contratos
-6. manutenibilidade
-7. performance
+| Camada | Pasta | Responsabilidade |
+|---|---|---|
+| Extração / raw | `src/transformacao/` (etapa raw) | Captura dados de Oracle, CSV, Parquet sem transformação |
+| Base | `src/transformacao/` (etapa base) | Normaliza tipos, nomes, remove duplicatas, define chaves |
+| Curated | `src/transformacao/` (etapa curated) | Agrega, harmoniza, calcula métricas fiscais |
+| Marts / views | `src/transformacao/` (etapa marts) | Expõe dados prontos para GUI e relatórios |
+| Interface | `src/interface_grafica/` | Orquestração, consulta, revisão operacional (PySide6) |
+| Testes | `tests/` | pytest — corretude fiscal, schema, regressão |
+| SQL | `sql/` | Scripts de extração SQL (nunca inline no Python) |
+| Documentação | `docs/` | Docs técnicos, ADRs, runbooks, referências |
+| Backend API | `backend/` | Stub FastAPI — ver ADR-001 para decisão de futuro |
+
+Entrypoints:
+- `app.py` — lançador padrão (`MainWindow`) — importado por `tests/test_app.py`
+- `app_safe.py` — lançador com `SafeMainWindow` (shutdown seguro de workers)
+- Orquestrador principal: `src/orquestrador_pipeline.py`
+
+---
+
+## Prioridades (ordem decrescente)
+
+1. Corretude funcional e fiscal
+2. Rastreabilidade ponta a ponta
+3. Reaproveitamento (reutilize antes de criar)
+4. Clareza arquitetural
+5. Estabilidade de contratos
+6. Manutenibilidade
+7. Performance
+
+---
 
 ## Regras centrais
-- Reutilize módulos, wrappers, utilitários, datasets e telas antes de criar novos artefatos.
-- Não duplique regra de negócio entre pipeline e interface.
-- O pipeline Python é a fonte principal da regra analítica e fiscal.
-- A interface PySide6 deve orquestrar, consultar e apoiar revisão operacional.
-- Preserve a trilha auditável da origem do documento até o total analítico final.
 
-## Convenções sensíveis
-Considere como pontos críticos:
-- `id_agrupado` como chave mestra de produto quando aplicável
-- `id_agregado` como alias de apresentação quando existir
-- `__qtd_decl_final_audit__` como valor de auditoria sem alterar indevidamente o saldo físico
-- ajustes manuais de conversão e agrupamento devem sobreviver a reprocessamentos
+- **Reutilize** módulos, wrappers, utilitários, datasets e telas antes de criar novos artefatos.
+- **Não duplique** regra de negócio entre pipeline e interface.
+- O pipeline Python (`src/transformacao/`) é a **fonte principal** da regra analítica e fiscal.
+- A interface PySide6 deve **orquestrar, consultar e apoiar revisão** — nunca reimplementar cálculo fiscal.
+- Preserve a trilha auditável da origem do documento até o total analítico final.
+- **Cache-first**: prefira ler materializações Parquet existentes antes de reextrair do Oracle.
+- **Polars sobre Oracle**: use Polars para joins, harmonizações, cálculos e agregações. Oracle é apenas fonte de extração inicial.
+- **Logs e lineage**: cada pipeline deve registrar CNPJ, período, dataset de origem, filtros aplicados e — ao final — nome do dataset gerado, schema e data.
+
+---
+
+## Chaves invariantes (5 canônicas)
+
+Preserve estas colunas em **todas** as etapas do pipeline, na GUI e nos testes.
+Nunca sobrescreva, renomeie ou descarte sem análise de impacto completa:
+
+| Chave | Papel |
+|---|---|
+| `id_agrupado` | Chave mestra de produto; formato canônico: `id_agrupado_auto_<sha1[:12]>` |
+| `id_agregado` | Alias de apresentação quando existir |
+| `__qtd_decl_final_audit__` | Valor de auditoria — não altera o saldo físico |
+| `q_conv` | Quantidade convertida para unidade de referência |
+| `q_conv_fisica` | Quantidade convertida na perspectiva física (estoque) |
+
+---
 
 ## Mudanças sensíveis
-Trate como sensível qualquer alteração que impacte:
-- schema de Parquet
-- chaves de join
-- agrupamento de produtos
-- conversão de unidades
+
+Trate como **sensível** qualquer alteração que impacte:
+- schema de Parquet (colunas, tipos, ordem)
+- chaves de join ou agrupamento de produtos
+- conversão de unidades (`q_conv`, `q_conv_fisica`)
 - movimentação de estoque
-- cálculos mensais/anuais
+- cálculos mensais ou anuais
 - comportamento da GUI PySide6
 - preservação de ajustes manuais
 
-Nesses casos:
-- explicite o risco
-- proponha validação
-- indique rollback ou reprocessamento
-- preserve compatibilidade quando possível
+Em mudanças sensíveis:
+1. Declare a seção explícita de **Riscos** e **Rollback**
+2. Proponha validação antes e depois
+3. Preserve compatibilidade quando possível
+4. Abra PR separado — nunca misture com refatoração ampla
 
-## Como trabalhar
-Ao receber uma tarefa:
-1. identifique se ela afeta pipeline, GUI, testes ou documentação
-2. verifique reaproveitamento antes de criar algo novo
-3. proponha uma mudança pequena e revisável
-4. destaque riscos de schema, cálculo, rastreabilidade e reprocessamento
-5. rode ou sugira validações compatíveis com o impacto da mudança
+---
+
+## Anti-padrões
+
+- Inserir SQL ad hoc em scripts Python ou na GUI.
+- Pular etapas do pipeline (ex.: escrever direto no curated sem passar pelo base).
+- Duplicar lógica fiscal na interface e no pipeline.
+- Alterar `id_agrupado`, `id_agregado` ou `__qtd_decl_final_audit__` sem propagar consequências a todas as camadas.
+- Usar `.groupby()` — **proibido em Polars 1.x**; sempre usar `.group_by()`.
+- Criar Parquet sem registrar schema ou origem.
+- Executar lógica analítica no Oracle/banco em vez do Polars.
+- Ignorar logs e lineage.
+- Concentrar cálculo fiscal pesado na camada de interface.
+
+---
+
+## Documentação
+
+Ao criar ou alterar documentação em `docs/`:
+- Escreva de forma objetiva; documente apenas o que auxilia manutenção, revisão e operação.
+- Vincule arquivos relacionados (ex.: um doc de pipeline pode referenciar o SQL e o módulo Python correspondentes).
+- Quando houver breaking change, descreva explicitamente a transição.
+- Quando houver reprocessamento, descreva impacto e estratégia de recuperação.
+- Mantenha `docs/README.md` como índice vivo da documentação.
+- ADRs seguem convenção: `docs/adr/NNNN-kebab-case.md`, template Michael Nygard.
+
+---
+
+## Testes
+
+Ao escrever ou alterar testes em `tests/`:
+- Proteja: corretude fiscal, rastreabilidade, compatibilidade de schema, regressões em estoque e cálculos, preservação de ajustes manuais.
+- Cubra: movimentação de estoque, cálculos mensais/anuais, conversão de unidades, agrupamento de produtos, integração GUI/serviços em pontos críticos.
+- Valide reconciliação entre camadas (totais no `base` devem bater com `raw`; métricas no `curated` representam corretamente os originais).
+- Prefira testes pequenos e determinísticos; nomeie cenários de forma explícita.
+- Cubra casos de borda (campos faltantes, unidades não cadastradas, valores zerados).
+- Use fixtures com dados de exemplo representativos; evite depender de dados reais ou sensíveis.
+- Escreva testes de performance para operações Polars sobre grandes volumes.
+- Deixe claro o cenário fiscal/operacional protegido por cada teste.
+
+---
 
 ## Git e revisão
-- nunca sugira commit direto na main
-- prefira branches curtas e focadas
-- toda mudança relevante deve passar por PR
-- PRs devem ser pequenas, revisáveis e com objetivo claro
-- não misture refatoração ampla com correção funcional crítica sem justificativa
 
-## Done means
+- **Nunca** sugira commit direto na `main`.
+- Prefira branches curtas e focadas:
+  `feat/<modulo>-<objetivo>`, `fix/<modulo>-<problema>`, `chore/<escopo>`, `docs/<tema>`.
+- Toda mudança relevante deve passar por PR.
+- PRs devem ser pequenas, revisáveis em uma sessão, com objetivo claro.
+- Não misture refatoração ampla com correção funcional crítica.
+- Descrição da PR deve incluir: objetivo, camadas afetadas, datasets e contratos envolvidos, riscos e plano de rollback.
+
+---
+
+## Critério de pronto ("Done means")
+
 Considere uma tarefa pronta apenas quando:
-- o objetivo estiver atendido
-- o impacto em dados e contratos estiver claro
-- os testes/validações adequados tiverem sido executados ou indicados
-- a mudança preservar rastreabilidade e compatibilidade razoáveis
-- riscos remanescentes tiverem sido explicitados
+- O objetivo estiver atendido.
+- O impacto em dados e contratos estiver claro.
+- Os testes/validações adequados tiverem sido executados ou indicados.
+- A mudança preservar rastreabilidade e compatibilidade razoáveis.
+- Riscos remanescentes tiverem sido explicitados.
 
-## Formato preferido de resposta
-Sempre que possível, responda com:
-- Objetivo
-- Contexto no audit_pyside
-- Reaproveitamento possível
-- Arquitetura proposta
-- Divisão por camada
-- Implementação
-- Validação
-- Riscos
-- MVP recomendado
+---
+
+## Formato de resposta
+
+Ao planejar, analisar ou executar qualquer tarefa, estruture a resposta em:
+
+1. **Objetivo** — o que será feito e por quê.
+2. **Contexto no audit_pyside** — qual área, camada e módulos envolvidos.
+3. **Reaproveitamento** — o que já existe e pode ser reutilizado.
+4. **Arquitetura** — decisão de design e camada adequada.
+5. **Implementação** — passos concretos, ordem de PRs, comandos.
+6. **Validação** — testes, reconciliação, checagem de schema.
+7. **Riscos** — schema, fiscal, performance, rollback.
+8. **MVP recomendado** — menor entrega funcional e segura.
