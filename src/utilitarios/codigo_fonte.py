@@ -38,10 +38,25 @@ def normalizar_codigo_fonte(valor: str | None) -> str | None:
 
 
 def expr_normalizar_codigo_fonte(col: str, alias: str = "codigo_fonte") -> pl.Expr:
+    c = pl.col(col).cast(pl.Utf8, strict=False)
+
+    # Clean the input text
+    texto = c.fill_null("").str.strip_chars().str.replace_all(r"\s+", " ")
+
+    # Condition: no pipe
+    no_pipe = ~texto.str.contains(r"\|")
+
+    # Split
+    split = texto.str.split_exact("|", 1)
+    esquerda = split.struct.field("field_0").str.replace_all(r"\D", "")
+    direita = split.struct.field("field_1").str.strip_chars().str.replace_all(r"\s+", " ")
+
     return (
-        pl.col(col)
-        .cast(pl.Utf8, strict=False)
-        .map_elements(normalizar_codigo_fonte, return_dtype=pl.Utf8)
+        pl.when(texto == "").then(pl.lit(None, dtype=pl.Utf8))
+        .when(no_pipe).then(texto)
+        .when((esquerda != "") & (direita != "")).then(pl.concat_str([esquerda, pl.lit("|"), direita]))
+        .when(direita != "").then(direita)
+        .otherwise(pl.lit(None, dtype=pl.Utf8))
         .alias(alias)
     )
 
