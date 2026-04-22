@@ -1,14 +1,4 @@
-pytest
-pytest-mock
-polars
-rich
-pyarrow
-numpy
-xlsxwriter
-oracledb
-python-dotenv
-PySide6
-python-docx
-pymupdf>=1.22.0
-
-filelock
+# DEPRECATED: Dependências migradas para pyproject.toml
+# Este arquivo é mantido apenas como sentinela para ferramentas legacy.
+# Use: uv sync
+# Ou: pip install -e ".[dev]"
