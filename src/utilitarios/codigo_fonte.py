@@ -38,25 +38,35 @@ def normalizar_codigo_fonte(valor: str | None) -> str | None:
 
 
 def expr_normalizar_codigo_fonte(col: str, alias: str = "codigo_fonte") -> pl.Expr:
-    c = pl.col(col).cast(pl.Utf8, strict=False)
+    # Optimization: Replace .map_elements with native Polars string operations to preserve vectorization
+    cleaned = (
+        pl.col(col)
+        .cast(pl.Utf8, strict=False)
+        .fill_null("")
+        .str.strip_chars()
+        .str.replace_all(r"\s+", " ")
+    )
 
-    # Clean the input text
-    texto = c.fill_null("").str.strip_chars().str.replace_all(r"\s+", " ")
+    has_pipe = cleaned.str.contains(r"\|")
+    split_parts = cleaned.str.split_exact("|", 1)
 
-    # Condition: no pipe
-    no_pipe = ~texto.str.contains(r"\|")
+    esquerda_raw = split_parts.struct.field("field_0")
+    direita_raw = split_parts.struct.field("field_1")
 
-    # Split
-    split = texto.str.split_exact("|", 1)
-    esquerda = split.struct.field("field_0").str.replace_all(r"\D", "")
-    direita = split.struct.field("field_1").str.strip_chars().str.replace_all(r"\s+", " ")
+    esquerda_proc = esquerda_raw.str.replace_all(r"\D", "")
+    direita_proc = (
+        direita_raw
+        .fill_null("")
+        .str.strip_chars()
+        .str.replace_all(r"\s+", " ")
+    )
 
     return (
-        pl.when(texto == "").then(pl.lit(None, dtype=pl.Utf8))
-        .when(no_pipe).then(texto)
-        .when((esquerda != "") & (direita != "")).then(pl.concat_str([esquerda, pl.lit("|"), direita]))
-        .when(direita != "").then(direita)
-        .otherwise(pl.lit(None, dtype=pl.Utf8))
+        pl.when(cleaned == "").then(pl.lit(None))
+        .when(~has_pipe).then(cleaned)
+        .when((esquerda_proc != "") & (direita_proc != "")).then(pl.concat_str([esquerda_proc, pl.lit("|"), direita_proc]))
+        .when(direita_proc != "").then(direita_proc)
+        .otherwise(pl.lit(None))
         .alias(alias)
     )
 
