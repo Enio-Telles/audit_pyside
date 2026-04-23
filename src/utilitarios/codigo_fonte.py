@@ -6,12 +6,14 @@ import polars as pl
 
 
 def _limpar_parte(valor: str | None) -> str:
+    """Normaliza uma parte textual usada no codigo de fonte."""
     texto = str(valor or "").strip()
     texto = re.sub(r"\s+", " ", texto)
     return texto
 
 
 def gerar_codigo_fonte(cnpj: str | None, codigo: str | None) -> str | None:
+    """Gera o identificador de fonte combinando CNPJ e codigo quando disponiveis."""
     cnpj_limpo = re.sub(r"\D", "", str(cnpj or ""))
     codigo_limpo = _limpar_parte(codigo)
     if not codigo_limpo:
@@ -22,6 +24,7 @@ def gerar_codigo_fonte(cnpj: str | None, codigo: str | None) -> str | None:
 
 
 def normalizar_codigo_fonte(valor: str | None) -> str | None:
+    """Normaliza um codigo de fonte legado para o formato canonico."""
     texto = _limpar_parte(valor)
     if not texto:
         return None
@@ -38,6 +41,7 @@ def normalizar_codigo_fonte(valor: str | None) -> str | None:
 
 
 def expr_normalizar_codigo_fonte(col: str, alias: str = "codigo_fonte") -> pl.Expr:
+    """Cria expressao Polars para normalizar uma coluna de codigo de fonte."""
     # Optimization: Replace .map_elements with native Polars string operations to preserve vectorization
     cleaned = (
         pl.col(col)
@@ -54,26 +58,32 @@ def expr_normalizar_codigo_fonte(col: str, alias: str = "codigo_fonte") -> pl.Ex
     direita_raw = split_parts.struct.field("field_1")
 
     esquerda_proc = esquerda_raw.str.replace_all(r"\D", "")
-    direita_proc = (
-        direita_raw
-        .fill_null("")
-        .str.strip_chars()
-        .str.replace_all(r"\s+", " ")
-    )
+    direita_proc = direita_raw.fill_null("").str.strip_chars().str.replace_all(r"\s+", " ")
 
     return (
-        pl.when(cleaned == "").then(pl.lit(None))
-        .when(~has_pipe).then(cleaned)
-        .when((esquerda_proc != "") & (direita_proc != "")).then(pl.concat_str([esquerda_proc, pl.lit("|"), direita_proc]))
-        .when(direita_proc != "").then(direita_proc)
+        pl.when(cleaned == "")
+        .then(pl.lit(None))
+        .when(~has_pipe)
+        .then(cleaned)
+        .when((esquerda_proc != "") & (direita_proc != ""))
+        .then(pl.concat_str([esquerda_proc, pl.lit("|"), direita_proc]))
+        .when(direita_proc != "")
+        .then(direita_proc)
         .otherwise(pl.lit(None))
         .alias(alias)
     )
 
 
 def expr_gerar_codigo_fonte(col_cnpj: str, col_codigo: str, alias: str = "codigo_fonte") -> pl.Expr:
+    """Cria expressao Polars para gerar codigo de fonte a partir de CNPJ e codigo."""
     cnpj_expr = pl.col(col_cnpj).cast(pl.Utf8).fill_null("").str.replace_all(r"\D", "")
-    cod_expr = pl.col(col_codigo).cast(pl.Utf8).fill_null("").str.strip_chars().str.replace_all(r"\s+", " ")
+    cod_expr = (
+        pl.col(col_codigo)
+        .cast(pl.Utf8)
+        .fill_null("")
+        .str.strip_chars()
+        .str.replace_all(r"\s+", " ")
+    )
 
     return (
         pl.when(cod_expr == "")

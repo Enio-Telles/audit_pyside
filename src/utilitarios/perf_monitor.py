@@ -10,11 +10,13 @@ _WRITE_LOCK = Lock()
 
 
 def _root_dir() -> Path:
+    """Retorna a raiz do projeto usada pelos logs de performance."""
     # Allow tests to monkeypatch _root_dir; default is project root
     return Path(__file__).resolve().parents[2]
 
 
 def caminho_log_performance() -> Path:
+    """Resolve e cria o caminho do arquivo JSONL de eventos de performance."""
     # Resolve the performance module that tests may patch under different import names
     import sys
 
@@ -63,12 +65,11 @@ def _now_iso() -> str:
 
 
 def _serializar_valor(valor: Any) -> Any:
+    """Converte valores arbitrarios para tipos serializaveis em JSON."""
     if isinstance(valor, Path):
         return str(valor)
     if isinstance(valor, dict):
-        return {
-            str(chave): _serializar_valor(conteudo) for chave, conteudo in valor.items()
-        }
+        return {str(chave): _serializar_valor(conteudo) for chave, conteudo in valor.items()}
     if isinstance(valor, (list, tuple, set)):
         return [_serializar_valor(item) for item in valor]
     if isinstance(valor, (str, int, float, bool)) or valor is None:
@@ -82,6 +83,7 @@ def registrar_evento_performance(
     contexto: dict[str, Any] | None = None,
     status: str = "ok",
 ) -> None:
+    """Registra um evento de performance sem interromper o fluxo principal."""
     # Use the `_now_iso()` wrapper so tests can monkeypatch `datetime` or `_now_iso` reliably.
     timestamp = _now_iso()
 
