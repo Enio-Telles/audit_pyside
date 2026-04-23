@@ -1,5 +1,7 @@
 # AGENTS.md — audit_pyside (raiz)
 
+[![CI](https://github.com/Enio-Telles/audit_pyside/actions/workflows/ci.yml/badge.svg)](https://github.com/Enio-Telles/audit_pyside/actions/workflows/ci.yml)
+
 Este repositório é uma **aplicação desktop Python/PySide6** com pipeline analítico-fiscal.
 Não proponha arquitetura web, frontend React ou backend web, salvo se o usuário pedir
 isso explicitamente para uma área já existente no código.

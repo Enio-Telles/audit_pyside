@@ -1,11 +1,25 @@
 # Documentação Técnica — audit_pyside
 
+[![CI](https://github.com/Enio-Telles/audit_pyside/actions/workflows/ci.yml/badge.svg)](https://github.com/Enio-Telles/audit_pyside/actions/workflows/ci.yml)
+
 Este arquivo é o **índice vivo** de toda a documentação técnica do repositório.
 Sempre que um documento for criado, movido ou removido, este índice deve ser atualizado no mesmo PR.
 
 O projeto é uma **aplicação desktop Python/PySide6** com pipeline analítico-fiscal.
 Para regras de agente e convenções de desenvolvimento, veja [`AGENTS.md`](../AGENTS.md) na raiz.
 O backend FastAPI foi removido em 2026-04-22 — veja [ADR-001](adr/0001-futuro-backend-fastapi.md) e o [anexo de auditoria](adr/0001-annex-consumers-audit.md).
+
+---
+
+## Executar CI localmente
+
+Para executar o pipeline CI localmente (recomendado em ambiente virtual), rode:
+
+```bash
+uv sync --all-extras
+uv run pre-commit run --all-files
+uv run pytest -q
+```
 
 ---
 

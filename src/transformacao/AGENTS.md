@@ -119,6 +119,9 @@ Quando aplicável:
 - Validação de cálculo (totais `base` ≡ `raw`; métricas `curated` representam os originais).
 - Validação de reprocessamento idempotente (rodar duas vezes produz o mesmo resultado).
 
+- Nota de CI: o pipeline CI e o hook local executam `mypy src/transformacao` (hook `mypy-transformacao`).
+  Execute localmente com: `uv run mypy src/transformacao` antes de abrir PRs que alterem esta camada.
+
 ---
 
 ## Formato de resposta
