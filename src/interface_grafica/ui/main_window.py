@@ -83,6 +83,7 @@ from interface_grafica.ui.dialogs import (
 )
 from interface_grafica.windows.aba_agregacao import AbaAgregacao
 from interface_grafica.windows.aba_auditoria import AbaAuditoria
+from interface_grafica.windows.aba_importacao import AbaImportacao
 from interface_grafica.windows.aba_relatorios import AbaRelatorios
 from utilitarios.text import (
     display_cell,
@@ -1190,84 +1191,7 @@ class MainWindow(QMainWindow):
         return AbaAuditoria(self).root
 
     def _build_tab_conversao(self) -> QWidget:
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
-
-        toolbar = QHBoxLayout()
-        self.btn_refresh_conversao = QPushButton("Recarregar")
-        self.btn_refresh_conversao.setIcon(
-            QApplication.style().standardIcon(
-                QApplication.style().StandardPixmap.SP_BrowserReload
-            )
-        )
-        self.chk_show_single_unit = QCheckBox("Mostrar itens de unidade unica")
-        self.chk_show_single_unit.setChecked(False)
-        self.btn_export_conversao = QPushButton("Exportar Excel")
-        self.btn_import_conversao = QPushButton("Importar Excel")
-        self.btn_conversao_destacar = self._criar_botao_destacar()
-        self.btn_recalcular_fatores = self._criar_botao_destacar("Recalcular fatores")
-        self.btn_recalcular_fatores.setEnabled(False)
-        self.conversao_profile = QComboBox()
-        self.conversao_profile.addItems(["Padrao", "Auditoria", "Estoque", "Custos"])
-        self.btn_apply_conversao_profile = QPushButton("Perfil")
-        self.btn_save_conversao_profile = QPushButton("Salvar perfil")
-        self.btn_conversao_colunas = QPushButton("Colunas")
-
-        toolbar.addWidget(self.btn_refresh_conversao)
-        toolbar.addWidget(self.chk_show_single_unit)
-        toolbar.addStretch()
-        toolbar.addWidget(self.btn_recalcular_fatores)
-        toolbar.addWidget(self.conversao_profile)
-        toolbar.addWidget(self.btn_apply_conversao_profile)
-        toolbar.addWidget(self.btn_save_conversao_profile)
-        toolbar.addWidget(self.btn_conversao_colunas)
-        toolbar.addWidget(self.btn_conversao_destacar)
-        toolbar.addWidget(self.btn_import_conversao)
-        layout.addLayout(toolbar)
-
-        filtros = QHBoxLayout()
-        self.conv_filter_id = QComboBox()
-        self.conv_filter_id.setEditable(True)
-        self.conv_filter_id.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
-        self.conv_filter_id.setMinimumWidth(220)
-        self.conv_filter_id.lineEdit().setPlaceholderText("Filtrar id_agrupado")
-        self.conv_filter_desc = QLineEdit()
-        self.conv_filter_desc.setPlaceholderText("Filtrar descr_padrao")
-        filtros.addWidget(self.conv_filter_id)
-        filtros.addWidget(self.conv_filter_desc)
-        layout.addLayout(filtros)
-
-        self.panel_unid_ref = QGroupBox(
-            "Alterar Unidade de Referencia do Produto Selecionado"
-        )
-        panel_layout = QHBoxLayout(self.panel_unid_ref)
-        self.lbl_produto_sel = QLabel("Nenhum produto selecionado")
-        self.lbl_produto_sel.setStyleSheet("font-weight: bold; color: #1e40af;")
-        self.combo_unid_ref = QComboBox()
-        self.btn_apply_unid_ref = QPushButton("Aplicar a todos os itens")
-        self.btn_apply_unid_ref.setStyleSheet("font-weight: bold;")
-        self.btn_apply_unid_ref.setEnabled(False)
-        self.combo_unid_ref.setEnabled(False)
-        panel_layout.addWidget(self.lbl_produto_sel)
-        panel_layout.addWidget(QLabel("   -> Nova unid_ref:"))
-        panel_layout.addWidget(self.combo_unid_ref)
-        panel_layout.addWidget(self.btn_apply_unid_ref)
-        panel_layout.addStretch()
-        layout.addWidget(self.panel_unid_ref)
-
-        self.conversion_table = QTableView()
-        self.conversion_table.setModel(self.conversion_model)
-        self.conversion_table.setAlternatingRowColors(True)
-        self.conversion_table.setSelectionBehavior(QAbstractItemView.SelectItems)
-        self.conversion_table.setSelectionMode(QAbstractItemView.ExtendedSelection)
-        self.conversion_table.setSortingEnabled(True)
-        self.conversion_table.horizontalHeader().setSectionsMovable(True)
-        self.conversion_table.horizontalHeader().setContextMenuPolicy(
-            Qt.CustomContextMenu
-        )
-        layout.addWidget(self.conversion_table)
-
-        return tab
+        return AbaImportacao(self).build_conversao()
 
     def _build_tab_analise_lote_cnpj(self) -> QWidget:
         """Retorna o painel Fisconforme não Atendido como aba do QTabWidget."""
@@ -1693,122 +1617,7 @@ class MainWindow(QMainWindow):
         return tab
 
     def _build_tab_nfe_entrada(self) -> QWidget:
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
-
-        self.lbl_nfe_entrada_titulo = QLabel("Tabela: nfe_entrada")
-        self.lbl_nfe_entrada_titulo.setStyleSheet(
-            "QLabel { font-weight: bold; color: #f8fafc; background: #1f2a44; border: 1px solid #334155; border-radius: 4px; padding: 6px 10px; }"
-        )
-        layout.addWidget(self.lbl_nfe_entrada_titulo)
-
-        toolbar = QHBoxLayout()
-        self.btn_extract_nfe_entrada = QPushButton("Extrair")
-        self.btn_refresh_nfe_entrada = QPushButton("Recarregar")
-        self.btn_apply_nfe_entrada_filters = QPushButton("Aplicar filtros")
-        self.btn_clear_nfe_entrada_filters = QPushButton("Limpar filtros")
-        self.nfe_entrada_profile = QComboBox()
-        self.nfe_entrada_profile.addItems(["Padrao", "Auditoria", "Estoque", "Custos"])
-        self.btn_nfe_entrada_profile = QPushButton("Perfil")
-        self.btn_nfe_entrada_save_profile = QPushButton("Salvar perfil")
-        self.btn_nfe_entrada_colunas = QPushButton("Colunas")
-        self.btn_nfe_entrada_destacar = self._criar_botao_destacar()
-        self.btn_export_nfe_entrada = QPushButton("Exportar Excel")
-        for widget in [
-            self.btn_extract_nfe_entrada,
-            self.btn_refresh_nfe_entrada,
-            self.btn_apply_nfe_entrada_filters,
-            self.btn_clear_nfe_entrada_filters,
-            self.nfe_entrada_profile,
-            self.btn_nfe_entrada_profile,
-            self.btn_nfe_entrada_save_profile,
-            self.btn_nfe_entrada_colunas,
-        ]:
-            toolbar.addWidget(widget)
-        toolbar.addStretch()
-        toolbar.addWidget(self.btn_nfe_entrada_destacar)
-        toolbar.addWidget(self.btn_export_nfe_entrada)
-        layout.addLayout(toolbar)
-
-        filtros = QHBoxLayout()
-        self.nfe_entrada_filter_id = QComboBox()
-        self.nfe_entrada_filter_id.setEditable(True)
-        self.nfe_entrada_filter_id.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
-        self.nfe_entrada_filter_id.setMinimumWidth(220)
-        self.nfe_entrada_filter_id.lineEdit().setPlaceholderText("Filtrar id_agrupado")
-        self.nfe_entrada_filter_desc = QLineEdit()
-        self.nfe_entrada_filter_desc.setPlaceholderText("Filtrar descricao")
-        self.nfe_entrada_filter_ncm = QLineEdit()
-        self.nfe_entrada_filter_ncm.setPlaceholderText("Filtrar NCM")
-        self.nfe_entrada_filter_sefin = QLineEdit()
-        self.nfe_entrada_filter_sefin.setPlaceholderText("Filtrar co_sefin")
-        self.nfe_entrada_filter_texto = QLineEdit()
-        self.nfe_entrada_filter_texto.setPlaceholderText("Busca ampla...")
-        for widget in [
-            self.nfe_entrada_filter_id,
-            self.nfe_entrada_filter_desc,
-            self.nfe_entrada_filter_ncm,
-            self.nfe_entrada_filter_sefin,
-            self.nfe_entrada_filter_texto,
-        ]:
-            filtros.addWidget(widget)
-        layout.addLayout(filtros)
-
-        filtros_datas = QHBoxLayout()
-        self.nfe_entrada_filter_data_ini = QDateEdit()
-        self.nfe_entrada_filter_data_ini.setCalendarPopup(True)
-        self.nfe_entrada_filter_data_ini.setDisplayFormat("dd/MM/yyyy")
-        self.nfe_entrada_filter_data_ini.setSpecialValueText("Data inicial")
-        self.nfe_entrada_filter_data_ini.setMinimumDate(QDate(1900, 1, 1))
-        self.nfe_entrada_filter_data_ini.setDate(
-            self.nfe_entrada_filter_data_ini.minimumDate()
-        )
-        self.nfe_entrada_filter_data_fim = QDateEdit()
-        self.nfe_entrada_filter_data_fim.setCalendarPopup(True)
-        self.nfe_entrada_filter_data_fim.setDisplayFormat("dd/MM/yyyy")
-        self.nfe_entrada_filter_data_fim.setSpecialValueText("Data final")
-        self.nfe_entrada_filter_data_fim.setMinimumDate(QDate(1900, 1, 1))
-        self.nfe_entrada_filter_data_fim.setDate(
-            self.nfe_entrada_filter_data_fim.minimumDate()
-        )
-        filtros_datas.addWidget(QLabel("Data inicial"))
-        filtros_datas.addWidget(self.nfe_entrada_filter_data_ini)
-        filtros_datas.addWidget(QLabel("Data final"))
-        filtros_datas.addWidget(self.nfe_entrada_filter_data_fim)
-        filtros_datas.addStretch()
-        layout.addLayout(filtros_datas)
-
-        self.lbl_nfe_entrada_status = QLabel(
-            "Selecione um CNPJ para carregar as NFes de entrada."
-        )
-        self.lbl_nfe_entrada_status.setStyleSheet(
-            "QLabel { padding: 4px 8px; background: #101827; border: 1px solid #374151; border-radius: 4px; color: #e5e7eb; }"
-        )
-        layout.addWidget(self.lbl_nfe_entrada_status)
-
-        self.lbl_nfe_entrada_filtros = QLabel("Filtros ativos: nenhum")
-        self.lbl_nfe_entrada_filtros.setStyleSheet(
-            "QLabel { padding: 4px 8px; color: #dbeafe; background: #0f1b33; border: 1px solid #334155; border-radius: 4px; }"
-        )
-        layout.addWidget(self.lbl_nfe_entrada_filtros)
-
-        self.nfe_entrada_table = QTableView()
-        self.nfe_entrada_table.setModel(self.nfe_entrada_model)
-        self.nfe_entrada_table.setSelectionBehavior(QAbstractItemView.SelectItems)
-        self.nfe_entrada_table.setSelectionMode(QAbstractItemView.ExtendedSelection)
-        self.nfe_entrada_table.setAlternatingRowColors(True)
-        self.nfe_entrada_table.setSortingEnabled(True)
-        self.nfe_entrada_table.setWordWrap(True)
-        self.nfe_entrada_table.verticalHeader().setDefaultSectionSize(40)
-        self.nfe_entrada_table.horizontalHeader().setMinimumSectionSize(40)
-        self.nfe_entrada_table.horizontalHeader().setDefaultSectionSize(170)
-        self.nfe_entrada_table.horizontalHeader().setMaximumSectionSize(420)
-        self.nfe_entrada_table.horizontalHeader().setSectionsMovable(True)
-        self.nfe_entrada_table.horizontalHeader().setContextMenuPolicy(
-            Qt.CustomContextMenu
-        )
-        layout.addWidget(self.nfe_entrada_table, 1)
-        return tab
+        return AbaImportacao(self).build_nfe_entrada()
 
     def _build_tab_aba_anual(self) -> QWidget:
         tab = QWidget()
