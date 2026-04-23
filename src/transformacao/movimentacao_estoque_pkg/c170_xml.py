@@ -86,20 +86,34 @@ def _to_int_expr(col: str, alias: str | None = None) -> pl.Expr:
     return expr.alias(alias or col)
 
 
-def _desc_similarity(payload: dict) -> float:
-    a = _norm_text(payload.get("a"))
-    b = _norm_text(payload.get("b"))
-    if not a or not b:
-        return 0.0
-    if a == b:
-        return 1.0
-    ta = {t for t in a.split(" ") if t}
-    tb = {t for t in b.split(" ") if t}
-    if not ta or not tb:
-        return 0.0
-    inter = len(ta & tb)
-    denom = max(len(ta), len(tb), 1)
-    return inter / denom
+def _get_desc_similarity_expr() -> pl.Expr:
+    return (
+        pl.when(
+            pl.col("Descr_item_c170_norm").is_null()
+            | pl.col("Descr_item_xml_norm").is_null()
+            | (pl.col("Descr_item_c170_norm") == "")
+            | (pl.col("Descr_item_xml_norm") == "")
+        )
+        .then(0.0)
+        .when(pl.col("Descr_item_c170_norm") == pl.col("Descr_item_xml_norm"))
+        .then(1.0)
+        .otherwise(
+            pl.col("Descr_item_c170_norm").str.split(" ")
+            .list.eval(pl.element().filter(pl.element() != "")).list.unique()
+            .list.set_intersection(
+                pl.col("Descr_item_xml_norm").str.split(" ")
+                .list.eval(pl.element().filter(pl.element() != "")).list.unique()
+            )
+            .list.len().cast(pl.Float64)
+            / pl.max_horizontal(
+                pl.col("Descr_item_c170_norm").str.split(" ")
+                .list.eval(pl.element().filter(pl.element() != "")).list.unique().list.len(),
+                pl.col("Descr_item_xml_norm").str.split(" ")
+                .list.eval(pl.element().filter(pl.element() != "")).list.unique().list.len(),
+                1
+            ).cast(pl.Float64)
+        )
+    ).alias("desc_similarity")
 
 
 def _build_cst_xml(df: pl.DataFrame | pl.LazyFrame, columns: list[str]) -> pl.Expr:
@@ -406,16 +420,7 @@ def gerar_c170_xml(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
                 )
                 .fill_null(False)
                 .alias("ind_match_gtin"),
-                (
-                    pl.struct(
-                        [
-                            pl.col("Descr_item_c170_norm").alias("a"),
-                            pl.col("Descr_item_xml_norm").alias("b"),
-                        ]
-                    )
-                    .map_elements(_desc_similarity, return_dtype=pl.Float64)
-                    .fill_null(0.0)
-                ).alias("desc_similarity"),
+                                _get_desc_similarity_expr(),
                 (pl.col("Qtd_c170") - pl.col("Qtd_xml")).abs().alias("diff_qtd"),
                 (pl.col("Vl_item_c170") - pl.col("Vl_item_xml"))
                 .abs()
