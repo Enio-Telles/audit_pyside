@@ -23,6 +23,7 @@ TRACEBACK_PATH = WORKSPACE_ROOT / "traceback.txt"
 
 
 def ensure_runtime_directories() -> None:
+    """Cria os diretorios de runtime esperados pela aplicacao desktop."""
     for path in (
         SQL_ROOT,
         SQL_ARCHIVE_ROOT,
@@ -36,6 +37,7 @@ def ensure_runtime_directories() -> None:
 
 
 def migrate_legacy_app_state() -> None:
+    """Migra arquivos de estado legados para a pasta workspace atual."""
     if not LEGACY_APP_STATE_ROOT.exists():
         return
 
