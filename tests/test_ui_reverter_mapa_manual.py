@@ -10,7 +10,7 @@ try:
 except ImportError as exc:
     pytest.skip(f"PySide6 indisponivel neste ambiente: {exc}", allow_module_level=True)
 
-from interface_grafica.ui.main_window import MainWindow
+from interface_grafica.windows.main_window import MainWindow
 
 
 def ensure_qapp():
