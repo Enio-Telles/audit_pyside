@@ -169,7 +169,7 @@ Antes de contribuir em uma área, leia o AGENTS.md correspondente:
 | P1-01 | Consolidação de AGENTS.md (11 → 4) | ✅ Concluído (PR atual) |
 | P1-02 | Índice mestre `docs/README.md` | ✅ Concluído (PR atual) |
 | P1-03 | ADR-001 draft (futuro do backend) | ✅ Concluído (PR atual) |
-| P1-04/05/06 | pyproject+uv, ruff+mypy+pre-commit, CI | Aguarda Codex |
+| P1-04/05/06 | pyproject+uv, ruff+mypy+pre-commit, CI | Concluído (PR atual) |
 | P2 | Remoção do backend FastAPI (ADR-001 Opção B) | Em andamento (PR atual) |
 | P3 | Decomposição de `main_window.py` | Planejado |
 | P4 | Multi-tenant / autenticação | Não iniciado |
