@@ -1,1 +1,1 @@
-"""Temas QSS da GUI PySide6."""
+"""Temas QSS da interface grafica."""

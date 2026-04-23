@@ -1,1 +1,1 @@
-"""Janelas e construtores de abas da GUI PySide6."""
+"""Janelas e mixins de composicao da GUI."""

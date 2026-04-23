@@ -1,223 +1,321 @@
+from __future__ import annotations
+
 from PySide6.QtCore import QDate, Qt
 from PySide6.QtWidgets import (
-    QAbstractItemView,
-    QApplication,
     QCheckBox,
     QComboBox,
     QDateEdit,
+    QFormLayout,
     QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QListWidget,
     QPushButton,
-    QTableView,
+    QPlainTextEdit,
+    QScrollArea,
+    QTreeWidget,
     QVBoxLayout,
     QWidget,
 )
 
 
-class AbaImportacao:
-    """Construtores das abas operacionais de importacao/entrada."""
+class ImportacaoWindowMixin:
+    def _build_left_panel(self) -> QWidget:
+        panel = QWidget()
+        layout = QVBoxLayout(panel)
 
-    def __init__(self, main_window):
-        self.main = main_window
+        cnpj_box = QGroupBox("CPF/CNPJ")
+        cnpj_layout = QVBoxLayout(cnpj_box)
+        input_line = QHBoxLayout()
+        self.cnpj_input = QLineEdit()
+        self.cnpj_input.setPlaceholderText("Digite o CPF ou CNPJ com ou sem mascara")
+        self.btn_run_pipeline = QPushButton("Extrair + Processar")
+        input_line.addWidget(self.cnpj_input)
+        input_line.addWidget(self.btn_run_pipeline)
+        cnpj_layout.addLayout(input_line)
 
-    def build_conversao(self) -> QWidget:
-        main = self.main
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
+        date_line = QHBoxLayout()
+        date_line.addWidget(QLabel("Data limite EFD:"))
+        self.date_input = QDateEdit()
+        self.date_input.setCalendarPopup(True)
+        self.date_input.setDate(QDate.currentDate())
+        self.date_input.setDisplayFormat("dd/MM/yyyy")
+        date_line.addWidget(self.date_input)
+        cnpj_layout.addLayout(date_line)
 
-        toolbar = QHBoxLayout()
-        main.btn_refresh_conversao = QPushButton("Recarregar")
-        main.btn_refresh_conversao.setIcon(
-            QApplication.style().standardIcon(
-                QApplication.style().StandardPixmap.SP_BrowserReload
+        actions_row1 = QHBoxLayout()
+        self.btn_extrair_brutas = QPushButton("Extrair Tabelas Brutas")
+        self.btn_processamento = QPushButton("Processamento")
+        actions_row1.addWidget(self.btn_extrair_brutas)
+        actions_row1.addWidget(self.btn_processamento)
+        cnpj_layout.addLayout(actions_row1)
+
+        actions_row2 = QHBoxLayout()
+        self.btn_refresh_cnpjs = QPushButton("Atualizar lista")
+        self.btn_open_cnpj_folder = QPushButton("Abrir pasta")
+        actions_row2.addWidget(self.btn_refresh_cnpjs)
+        actions_row2.addWidget(self.btn_open_cnpj_folder)
+        cnpj_layout.addLayout(actions_row2)
+
+        actions_row3 = QHBoxLayout()
+        self.btn_apagar_dados = QPushButton("Apagar Dados do CNPJ")
+        self.btn_apagar_dados.setStyleSheet("QPushButton { color: #e57373; }")
+        self.btn_apagar_dados.setToolTip(
+            "Apaga todos os parquets e análises do CNPJ (mantém o registro)"
+        )
+        self.btn_apagar_cnpj = QPushButton("Apagar CNPJ")
+        self.btn_apagar_cnpj.setStyleSheet(
+            "QPushButton { color: #ef5350; font-weight: bold; }"
+        )
+        self.btn_apagar_cnpj.setToolTip(
+            "Remove permanentemente a pasta inteira e os registros no banco"
+        )
+        actions_row3.addWidget(self.btn_apagar_dados)
+        actions_row3.addWidget(self.btn_apagar_cnpj)
+        cnpj_layout.addLayout(actions_row3)
+
+        self.cnpj_list = QListWidget()
+        cnpj_layout.addWidget(self.cnpj_list)
+        layout.addWidget(cnpj_box)
+
+        files_box = QGroupBox("Arquivos Parquet do CNPJ")
+        files_layout = QVBoxLayout(files_box)
+        self.file_tree = QTreeWidget()
+        self.file_tree.setHeaderLabels(["Arquivo", "Local"])
+        files_layout.addWidget(self.file_tree)
+        layout.addWidget(files_box)
+
+        notes = QLabel(
+            "Fluxo recomendado: analise um CNPJ, abra a tabela desejada, filtre, selecione colunas e exporte. "
+            "Para agregacao, trabalhe sobre a tabela desagregada e monte o lote na aba Agregacao."
+        )
+        notes.setWordWrap(True)
+        layout.addWidget(notes)
+        return panel
+
+    def _build_tab_configuracoes(self) -> QWidget:
+        """Aba de configuração de conexões Oracle e opções gerais da aplicação."""
+        from dotenv import dotenv_values
+        from interface_grafica.fisconforme.path_resolver import get_env_path
+
+        env_path = get_env_path()
+        env_vars = dotenv_values(env_path) if env_path.exists() else {}
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        container = QWidget()
+        scroll.setWidget(container)
+        root = QVBoxLayout(container)
+        root.setContentsMargins(16, 16, 16, 16)
+        root.setSpacing(12)
+
+        # ── helpers ──────────────────────────────────────────────────
+        def _field(
+            key: str, placeholder: str = "", password: bool = False
+        ) -> QLineEdit:
+            le = QLineEdit()
+            le.setText(str(env_vars.get(key, "")))
+            if placeholder:
+                le.setPlaceholderText(placeholder)
+            if password:
+                le.setEchoMode(QLineEdit.Password)
+            return le
+
+        def _status_label() -> QLabel:
+            lbl = QLabel("—")
+            lbl.setWordWrap(True)
+            lbl.setMinimumHeight(36)
+            return lbl
+
+        def _test_button(texto: str = "Testar Conexão") -> QPushButton:
+            btn = QPushButton(texto)
+            btn.setFixedWidth(160)
+            return btn
+
+        # ── Status de Conexão — painel de destaque no topo ────────────
+        grp_status = QGroupBox("Status da Conexão Oracle")
+        sl = QVBoxLayout(grp_status)
+        sl.setSpacing(6)
+        sl.setContentsMargins(12, 8, 12, 8)
+
+        r1 = QHBoxLayout()
+        lbl_c1_title = QLabel("Conexão 1 — Principal:")
+        lbl_c1_title.setFixedWidth(190)
+        self._cfg_conn_lbl_1 = QLabel("— não verificado")
+        self._cfg_conn_lbl_1.setWordWrap(True)
+        r1.addWidget(lbl_c1_title)
+        r1.addWidget(self._cfg_conn_lbl_1)
+        r1.addStretch()
+        sl.addLayout(r1)
+
+        r2 = QHBoxLayout()
+        lbl_c2_title = QLabel("Conexão 2 — Secundária:")
+        lbl_c2_title.setFixedWidth(190)
+        self._cfg_conn_lbl_2 = QLabel("— não verificado")
+        self._cfg_conn_lbl_2.setWordWrap(True)
+        r2.addWidget(lbl_c2_title)
+        r2.addWidget(self._cfg_conn_lbl_2)
+        r2.addStretch()
+        sl.addLayout(r2)
+
+        btn_verify_all = QPushButton("↺  Verificar Conexões")
+        btn_verify_all.setFixedWidth(180)
+        btn_verify_all.clicked.connect(self._verificar_conexoes)
+        sl.addWidget(btn_verify_all)
+        root.addWidget(grp_status)
+
+        # ── Conexão Oracle 1 (Principal) ─────────────────────────────
+        grp1 = QGroupBox("Conexão Oracle 1 — Principal")
+        form1 = QFormLayout(grp1)
+        form1.setLabelAlignment(Qt.AlignRight)
+        form1.setFieldGrowthPolicy(QFormLayout.ExpandingFieldsGrow)
+        self._cfg_host = _field("ORACLE_HOST", "ex: exa01-scan.sefin.ro.gov.br")
+        self._cfg_port = _field("ORACLE_PORT", "1521")
+        self._cfg_service = _field("ORACLE_SERVICE", "ex: sefindw")
+        self._cfg_user = _field("DB_USER", "CPF ou usuário")
+        self._cfg_password = _field("DB_PASSWORD", "Senha", password=True)
+        form1.addRow("Host:", self._cfg_host)
+        form1.addRow("Porta:", self._cfg_port)
+        form1.addRow("Serviço:", self._cfg_service)
+        form1.addRow("Usuário:", self._cfg_user)
+        form1.addRow("Senha:", self._cfg_password)
+
+        self._cfg_test_status_1 = _status_label()
+        self._cfg_btn_test_1 = _test_button()
+        self._cfg_btn_test_1.clicked.connect(
+            lambda: self._testar_conexao(
+                self._cfg_host,
+                self._cfg_port,
+                self._cfg_service,
+                self._cfg_user,
+                self._cfg_password,
+                self._cfg_btn_test_1,
+                self._cfg_test_status_1,
+                "_oracle_test_worker_1",
             )
         )
-        main.chk_show_single_unit = QCheckBox("Mostrar itens de unidade unica")
-        main.chk_show_single_unit.setChecked(False)
-        main.btn_export_conversao = QPushButton("Exportar Excel")
-        main.btn_import_conversao = QPushButton("Importar Excel")
-        main.btn_conversao_destacar = main._criar_botao_destacar()
-        main.btn_recalcular_fatores = main._criar_botao_destacar("Recalcular fatores")
-        main.btn_recalcular_fatores.setEnabled(False)
-        main.conversao_profile = QComboBox()
-        main.conversao_profile.addItems(["Padrao", "Auditoria", "Estoque", "Custos"])
-        main.btn_apply_conversao_profile = QPushButton("Perfil")
-        main.btn_save_conversao_profile = QPushButton("Salvar perfil")
-        main.btn_conversao_colunas = QPushButton("Colunas")
+        test_row1 = QHBoxLayout()
+        test_row1.addWidget(self._cfg_btn_test_1)
+        test_row1.addWidget(self._cfg_test_status_1)
+        test_row1.addStretch()
+        form1.addRow("Teste:", test_row1)
+        root.addWidget(grp1)
 
-        toolbar.addWidget(main.btn_refresh_conversao)
-        toolbar.addWidget(main.chk_show_single_unit)
-        toolbar.addStretch()
-        toolbar.addWidget(main.btn_recalcular_fatores)
-        toolbar.addWidget(main.conversao_profile)
-        toolbar.addWidget(main.btn_apply_conversao_profile)
-        toolbar.addWidget(main.btn_save_conversao_profile)
-        toolbar.addWidget(main.btn_conversao_colunas)
-        toolbar.addWidget(main.btn_conversao_destacar)
-        toolbar.addWidget(main.btn_import_conversao)
-        layout.addLayout(toolbar)
-
-        filtros = QHBoxLayout()
-        main.conv_filter_id = QComboBox()
-        main.conv_filter_id.setEditable(True)
-        main.conv_filter_id.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
-        main.conv_filter_id.setMinimumWidth(220)
-        main.conv_filter_id.lineEdit().setPlaceholderText("Filtrar id_agrupado")
-        main.conv_filter_desc = QLineEdit()
-        main.conv_filter_desc.setPlaceholderText("Filtrar descr_padrao")
-        filtros.addWidget(main.conv_filter_id)
-        filtros.addWidget(main.conv_filter_desc)
-        layout.addLayout(filtros)
-
-        main.panel_unid_ref = QGroupBox(
-            "Alterar Unidade de Referencia do Produto Selecionado"
+        # ── Conexão Oracle 2 (Secundária) ────────────────────────────
+        grp2 = QGroupBox("Conexão Oracle 2 — Secundária")
+        form2 = QFormLayout(grp2)
+        form2.setLabelAlignment(Qt.AlignRight)
+        form2.setFieldGrowthPolicy(QFormLayout.ExpandingFieldsGrow)
+        self._cfg_host_1 = _field(
+            "ORACLE_HOST_1", "ex: exacc-x10-sefinscan.sefin.ro.gov.br"
         )
-        panel_layout = QHBoxLayout(main.panel_unid_ref)
-        main.lbl_produto_sel = QLabel("Nenhum produto selecionado")
-        main.lbl_produto_sel.setStyleSheet("font-weight: bold; color: #1e40af;")
-        main.combo_unid_ref = QComboBox()
-        main.btn_apply_unid_ref = QPushButton("Aplicar a todos os itens")
-        main.btn_apply_unid_ref.setStyleSheet("font-weight: bold;")
-        main.btn_apply_unid_ref.setEnabled(False)
-        main.combo_unid_ref.setEnabled(False)
-        panel_layout.addWidget(main.lbl_produto_sel)
-        panel_layout.addWidget(QLabel("   -> Nova unid_ref:"))
-        panel_layout.addWidget(main.combo_unid_ref)
-        panel_layout.addWidget(main.btn_apply_unid_ref)
-        panel_layout.addStretch()
-        layout.addWidget(main.panel_unid_ref)
+        self._cfg_port_1 = _field("ORACLE_PORT_1", "1521")
+        self._cfg_service_1 = _field("ORACLE_SERVICE_1", "ex: svc.bi.users")
+        self._cfg_user_1 = _field("DB_USER_1", "CPF ou usuário")
+        self._cfg_password_1 = _field("DB_PASSWORD_1", "Senha", password=True)
+        form2.addRow("Host:", self._cfg_host_1)
+        form2.addRow("Porta:", self._cfg_port_1)
+        form2.addRow("Serviço:", self._cfg_service_1)
+        form2.addRow("Usuário:", self._cfg_user_1)
+        form2.addRow("Senha:", self._cfg_password_1)
 
-        main.conversion_table = QTableView()
-        main.conversion_table.setModel(main.conversion_model)
-        main.conversion_table.setAlternatingRowColors(True)
-        main.conversion_table.setSelectionBehavior(QAbstractItemView.SelectItems)
-        main.conversion_table.setSelectionMode(QAbstractItemView.ExtendedSelection)
-        main.conversion_table.setSortingEnabled(True)
-        main.conversion_table.horizontalHeader().setSectionsMovable(True)
-        main.conversion_table.horizontalHeader().setContextMenuPolicy(
-            Qt.CustomContextMenu
+        self._cfg_test_status_2 = _status_label()
+        self._cfg_btn_test_2 = _test_button()
+        self._cfg_btn_test_2.clicked.connect(
+            lambda: self._testar_conexao(
+                self._cfg_host_1,
+                self._cfg_port_1,
+                self._cfg_service_1,
+                self._cfg_user_1,
+                self._cfg_password_1,
+                self._cfg_btn_test_2,
+                self._cfg_test_status_2,
+                "_oracle_test_worker_2",
+            )
         )
-        layout.addWidget(main.conversion_table)
+        test_row2 = QHBoxLayout()
+        test_row2.addWidget(self._cfg_btn_test_2)
+        test_row2.addWidget(self._cfg_test_status_2)
+        test_row2.addStretch()
+        form2.addRow("Teste:", test_row2)
+        root.addWidget(grp2)
 
-        return tab
+        # ── Configurações do Aplicativo ───────────────────────────────
+        grp3 = QGroupBox("Configurações do Aplicativo")
+        form3 = QFormLayout(grp3)
+        form3.setLabelAlignment(Qt.AlignRight)
+        form3.setFieldGrowthPolicy(QFormLayout.ExpandingFieldsGrow)
 
-    def build_nfe_entrada(self) -> QWidget:
-        main = self.main
+        self._cfg_log_level = QComboBox()
+        self._cfg_log_level.addItems(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"])
+        current_level = env_vars.get("LOG_LEVEL", "INFO").upper()
+        idx = self._cfg_log_level.findText(current_level)
+        if idx >= 0:
+            self._cfg_log_level.setCurrentIndex(idx)
+
+        self._cfg_cache_enabled = QCheckBox("Ativar cache")
+        self._cfg_cache_enabled.setChecked(
+            env_vars.get("CACHE_ENABLED", "true").lower() == "true"
+        )
+
+        self._cfg_cache_ttl = _field("CACHE_TTL", "3600 (segundos)")
+
+        self._cfg_theme = QComboBox()
+        self._cfg_theme.addItems(["dark", "light"])
+        current_theme = env_vars.get("DASHBOARD_THEME", "dark").lower()
+        theme_idx = self._cfg_theme.findText(current_theme)
+        if theme_idx >= 0:
+            self._cfg_theme.setCurrentIndex(theme_idx)
+
+        form3.addRow("Nível de log:", self._cfg_log_level)
+        form3.addRow("Cache:", self._cfg_cache_enabled)
+        form3.addRow("TTL do cache (s):", self._cfg_cache_ttl)
+        form3.addRow("Tema do dashboard:", self._cfg_theme)
+        root.addWidget(grp3)
+
+        # ── Botão salvar ──────────────────────────────────────────────
+        btn_row = QHBoxLayout()
+        self._cfg_status_label = QLabel("")
+        btn_salvar = QPushButton("Salvar Configurações")
+        btn_salvar.setStyleSheet(self._estilo_botao_destacar())
+        btn_salvar.clicked.connect(self._salvar_configuracoes)
+        btn_row.addStretch()
+        btn_row.addWidget(self._cfg_status_label)
+        btn_row.addWidget(btn_salvar)
+        root.addLayout(btn_row)
+        root.addStretch()
+
+        # init worker slots
+        self._oracle_test_worker_1: object | None = None
+        self._oracle_test_worker_2: object | None = None
+        self._oracle_verify_worker_1: object | None = None
+        self._oracle_verify_worker_2: object | None = None
+
+        return scroll
+
+    def _build_tab_analise_lote_cnpj(self) -> QWidget:
+        """Retorna o painel Fisconforme não Atendido como aba do QTabWidget."""
+        try:
+            from ..fisconforme import FisconformeNaoAtendidoPanel
+
+            return FisconformeNaoAtendidoPanel()
+        except Exception as exc:
+            import logging
+
+            logging.getLogger(__name__).warning(
+                "Não foi possível carregar o painel Fisconforme: %s", exc
+            )
+            from PySide6.QtWidgets import QLabel
+
+            lbl = QLabel(f"Painel Fisconforme indisponível: {exc}")
+            lbl.setWordWrap(True)
+            return lbl
+
+    def _build_tab_logs(self) -> QWidget:
         tab = QWidget()
         layout = QVBoxLayout(tab)
-
-        main.lbl_nfe_entrada_titulo = QLabel("Tabela: nfe_entrada")
-        main.lbl_nfe_entrada_titulo.setStyleSheet(
-            "QLabel { font-weight: bold; color: #f8fafc; background: #1f2a44; border: 1px solid #334155; border-radius: 4px; padding: 6px 10px; }"
-        )
-        layout.addWidget(main.lbl_nfe_entrada_titulo)
-
-        toolbar = QHBoxLayout()
-        main.btn_extract_nfe_entrada = QPushButton("Extrair")
-        main.btn_refresh_nfe_entrada = QPushButton("Recarregar")
-        main.btn_apply_nfe_entrada_filters = QPushButton("Aplicar filtros")
-        main.btn_clear_nfe_entrada_filters = QPushButton("Limpar filtros")
-        main.nfe_entrada_profile = QComboBox()
-        main.nfe_entrada_profile.addItems(["Padrao", "Auditoria", "Estoque", "Custos"])
-        main.btn_nfe_entrada_profile = QPushButton("Perfil")
-        main.btn_nfe_entrada_save_profile = QPushButton("Salvar perfil")
-        main.btn_nfe_entrada_colunas = QPushButton("Colunas")
-        main.btn_nfe_entrada_destacar = main._criar_botao_destacar()
-        main.btn_export_nfe_entrada = QPushButton("Exportar Excel")
-        for widget in [
-            main.btn_extract_nfe_entrada,
-            main.btn_refresh_nfe_entrada,
-            main.btn_apply_nfe_entrada_filters,
-            main.btn_clear_nfe_entrada_filters,
-            main.nfe_entrada_profile,
-            main.btn_nfe_entrada_profile,
-            main.btn_nfe_entrada_save_profile,
-            main.btn_nfe_entrada_colunas,
-        ]:
-            toolbar.addWidget(widget)
-        toolbar.addStretch()
-        toolbar.addWidget(main.btn_nfe_entrada_destacar)
-        toolbar.addWidget(main.btn_export_nfe_entrada)
-        layout.addLayout(toolbar)
-
-        filtros = QHBoxLayout()
-        main.nfe_entrada_filter_id = QComboBox()
-        main.nfe_entrada_filter_id.setEditable(True)
-        main.nfe_entrada_filter_id.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
-        main.nfe_entrada_filter_id.setMinimumWidth(220)
-        main.nfe_entrada_filter_id.lineEdit().setPlaceholderText("Filtrar id_agrupado")
-        main.nfe_entrada_filter_desc = QLineEdit()
-        main.nfe_entrada_filter_desc.setPlaceholderText("Filtrar descricao")
-        main.nfe_entrada_filter_ncm = QLineEdit()
-        main.nfe_entrada_filter_ncm.setPlaceholderText("Filtrar NCM")
-        main.nfe_entrada_filter_sefin = QLineEdit()
-        main.nfe_entrada_filter_sefin.setPlaceholderText("Filtrar co_sefin")
-        main.nfe_entrada_filter_texto = QLineEdit()
-        main.nfe_entrada_filter_texto.setPlaceholderText("Busca ampla...")
-        for widget in [
-            main.nfe_entrada_filter_id,
-            main.nfe_entrada_filter_desc,
-            main.nfe_entrada_filter_ncm,
-            main.nfe_entrada_filter_sefin,
-            main.nfe_entrada_filter_texto,
-        ]:
-            filtros.addWidget(widget)
-        layout.addLayout(filtros)
-
-        filtros_datas = QHBoxLayout()
-        main.nfe_entrada_filter_data_ini = QDateEdit()
-        main.nfe_entrada_filter_data_ini.setCalendarPopup(True)
-        main.nfe_entrada_filter_data_ini.setDisplayFormat("dd/MM/yyyy")
-        main.nfe_entrada_filter_data_ini.setSpecialValueText("Data inicial")
-        main.nfe_entrada_filter_data_ini.setMinimumDate(QDate(1900, 1, 1))
-        main.nfe_entrada_filter_data_ini.setDate(
-            main.nfe_entrada_filter_data_ini.minimumDate()
-        )
-        main.nfe_entrada_filter_data_fim = QDateEdit()
-        main.nfe_entrada_filter_data_fim.setCalendarPopup(True)
-        main.nfe_entrada_filter_data_fim.setDisplayFormat("dd/MM/yyyy")
-        main.nfe_entrada_filter_data_fim.setSpecialValueText("Data final")
-        main.nfe_entrada_filter_data_fim.setMinimumDate(QDate(1900, 1, 1))
-        main.nfe_entrada_filter_data_fim.setDate(
-            main.nfe_entrada_filter_data_fim.minimumDate()
-        )
-        filtros_datas.addWidget(QLabel("Data inicial"))
-        filtros_datas.addWidget(main.nfe_entrada_filter_data_ini)
-        filtros_datas.addWidget(QLabel("Data final"))
-        filtros_datas.addWidget(main.nfe_entrada_filter_data_fim)
-        filtros_datas.addStretch()
-        layout.addLayout(filtros_datas)
-
-        main.lbl_nfe_entrada_status = QLabel(
-            "Selecione um CNPJ para carregar as NFes de entrada."
-        )
-        main.lbl_nfe_entrada_status.setStyleSheet(
-            "QLabel { padding: 4px 8px; background: #101827; border: 1px solid #374151; border-radius: 4px; color: #e5e7eb; }"
-        )
-        layout.addWidget(main.lbl_nfe_entrada_status)
-
-        main.lbl_nfe_entrada_filtros = QLabel("Filtros ativos: nenhum")
-        main.lbl_nfe_entrada_filtros.setStyleSheet(
-            "QLabel { padding: 4px 8px; color: #dbeafe; background: #0f1b33; border: 1px solid #334155; border-radius: 4px; }"
-        )
-        layout.addWidget(main.lbl_nfe_entrada_filtros)
-
-        main.nfe_entrada_table = QTableView()
-        main.nfe_entrada_table.setModel(main.nfe_entrada_model)
-        main.nfe_entrada_table.setSelectionBehavior(QAbstractItemView.SelectItems)
-        main.nfe_entrada_table.setSelectionMode(QAbstractItemView.ExtendedSelection)
-        main.nfe_entrada_table.setAlternatingRowColors(True)
-        main.nfe_entrada_table.setSortingEnabled(True)
-        main.nfe_entrada_table.setWordWrap(True)
-        main.nfe_entrada_table.verticalHeader().setDefaultSectionSize(40)
-        main.nfe_entrada_table.horizontalHeader().setMinimumSectionSize(40)
-        main.nfe_entrada_table.horizontalHeader().setDefaultSectionSize(170)
-        main.nfe_entrada_table.horizontalHeader().setMaximumSectionSize(420)
-        main.nfe_entrada_table.horizontalHeader().setSectionsMovable(True)
-        main.nfe_entrada_table.horizontalHeader().setContextMenuPolicy(
-            Qt.CustomContextMenu
-        )
-        layout.addWidget(main.nfe_entrada_table, 1)
+        self.log_view = QPlainTextEdit()
+        self.log_view.setReadOnly(True)
+        layout.addWidget(self.log_view)
         return tab

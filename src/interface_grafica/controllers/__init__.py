@@ -1,1 +1,1 @@
-"""Controllers da GUI PySide6."""
+"""Controllers e estado compartilhado da interface grafica."""

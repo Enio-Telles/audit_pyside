@@ -1,1 +1,1 @@
-"""Widgets reutilizaveis da GUI PySide6."""
+"""Widgets reutilizaveis da interface grafica."""
