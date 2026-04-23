@@ -28,7 +28,18 @@ class AuditoriaControllerMixin:
             self.atualizar_aba_produtos_selecionados()
             return
 
-        def _finalizar_carga_estoque(df: pl.DataFrame, uniques: dict | None = None):
+        def _finalizar_carga_estoque(
+            df: pl.DataFrame | None, uniques: dict | None = None
+        ) -> None:
+            if df is None:
+                self.mov_estoque_model.set_dataframe(pl.DataFrame())
+                self._mov_estoque_df = pl.DataFrame()
+                self._mov_estoque_file_path = None
+                self.lbl_mov_estoque_status.setText(
+                    "Arquivo 'mov_estoque' nao encontrado para este CNPJ."
+                )
+                self._atualizar_titulo_aba_mov_estoque()
+                return
             self._mov_estoque_df = df
             self._mov_estoque_file_path = path
             self._reset_table_resize_flag("mov_estoque")
@@ -245,7 +256,18 @@ class AuditoriaControllerMixin:
             self._atualizar_titulo_aba_nfe_entrada()
             return
 
-        def _finalizar_carga_nfe(df: pl.DataFrame, uniques: dict | None = None):
+        def _finalizar_carga_nfe(
+            df: pl.DataFrame | None, uniques: dict | None = None
+        ) -> None:
+            if df is None:
+                self.nfe_entrada_model.set_dataframe(pl.DataFrame())
+                self._nfe_entrada_df = pl.DataFrame()
+                self._nfe_entrada_file_path = None
+                self.lbl_nfe_entrada_status.setText(
+                    "Tabela nfe_entrada nao encontrada para este CNPJ."
+                )
+                self._atualizar_titulo_aba_nfe_entrada()
+                return
             self._nfe_entrada_df = df
             self._nfe_entrada_file_path = path
             self._reset_table_resize_flag("nfe_entrada")

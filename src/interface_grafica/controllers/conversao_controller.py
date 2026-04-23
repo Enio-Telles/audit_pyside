@@ -530,7 +530,14 @@ class ConversaoControllerMixin:
             df = df.with_row_index("__row_id__")
             return df
 
-        def _finalizar_carga_conversao(df: pl.DataFrame):
+        def _finalizar_carga_conversao(df: pl.DataFrame | None) -> None:
+            if df is None:
+                self._conversion_df_full = pl.DataFrame()
+                self.conversion_model.set_dataframe(pl.DataFrame())
+                self.lbl_conversion_status.setText(
+                    "Tabela de conversao nao encontrada para este CNPJ."
+                )
+                return
             self._conversion_df_full = df
             self._conversion_file_path = arq_conversao
             self._limpar_recalculo_conversao_pendente()

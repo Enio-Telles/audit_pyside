@@ -1,4 +1,4 @@
-﻿"""
+"""
 produtos_unidades.py
 
 Objetivo: Gerar a tabela base de movimentacoes por unidade.
@@ -83,9 +83,7 @@ def _inferir_co_sefin(df: pl.DataFrame) -> pl.DataFrame:
                 pl.col("co-sefin").cast(pl.String).alias("co_sefin_c"),
             ]
         )
-        df_join = df_join.join(
-            ref_c, left_on="_cest_j", right_on="ref_cest_only", how="left"
-        )
+        df_join = df_join.join(ref_c, left_on="_cest_j", right_on="ref_cest_only", how="left")
     else:
         df_join = df_join.with_columns(pl.lit(None, pl.String).alias("co_sefin_c"))
 
@@ -96,16 +94,14 @@ def _inferir_co_sefin(df: pl.DataFrame) -> pl.DataFrame:
                 pl.col("co-sefin").cast(pl.String).alias("co_sefin_n"),
             ]
         )
-        df_join = df_join.join(
-            ref_n, left_on="_ncm_j", right_on="ref_ncm_only", how="left"
-        )
+        df_join = df_join.join(ref_n, left_on="_ncm_j", right_on="ref_ncm_only", how="left")
     else:
         df_join = df_join.with_columns(pl.lit(None, pl.String).alias("co_sefin_n"))
 
     return df_join.with_columns(
-        pl.coalesce(
-            [pl.col("co_sefin_cn"), pl.col("co_sefin_c"), pl.col("co_sefin_n")]
-        ).alias("co_sefin_item")
+        pl.coalesce([pl.col("co_sefin_cn"), pl.col("co_sefin_c"), pl.col("co_sefin_n")]).alias(
+            "co_sefin_item"
+        )
     ).drop(["_ncm_j", "_cest_j", "co_sefin_cn", "co_sefin_c", "co_sefin_n"])
 
 
@@ -161,9 +157,7 @@ def gerar_produtos_unidades(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
     # Bloco H (Inventario): usa valor_item e quantidade para enriquecer base de custo por unidade
     df_bloco_h = ler_bloco_h(_res("bloco_h"))
     if df_bloco_h is not None:
-        df_bloco_h = df_bloco_h.rename(
-            {"valor_saida": "vendas", "valor_entrada": "compras"}
-        )
+        df_bloco_h = df_bloco_h.rename({"valor_saida": "vendas", "valor_entrada": "compras"})
         fragmentos.append(df_bloco_h)
 
     if not fragmentos:
@@ -219,9 +213,7 @@ def gerar_produtos_unidades(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
 
     # 5. Salvar
     pasta_saida = pasta_cnpj / "analises" / "produtos"
-    ok = salvar_para_parquet(
-        df_grouped, pasta_saida, f"produtos_unidades_{cnpj}.parquet"
-    )
+    ok = salvar_para_parquet(df_grouped, pasta_saida, f"produtos_unidades_{cnpj}.parquet")
     return ok
 
 

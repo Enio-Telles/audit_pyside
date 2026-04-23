@@ -4,6 +4,7 @@ import polars as pl
 
 from interface_grafica.services.query_worker import QueryWorker
 from interface_grafica.services.sql_service import ParamInfo, WIDGET_DATE
+from PySide6.QtCore import QDate
 from PySide6.QtWidgets import QDateEdit, QLabel, QLineEdit
 
 
@@ -164,10 +165,7 @@ class SqlQueryControllerMixin:
             .str.contains(search, literal=True)
             for c in self._sql_result_df.columns
         ]
-        combined = exprs[0]
-        for e in exprs[1:]:
-            combined = combined | e
-        filtered = self._sql_result_df.filter(combined)
+        filtered = self._sql_result_df.filter(pl.any_horizontal(exprs))
         if filtered.height == 0:
             self._set_sql_status(
                 f"Busca '{search}' nao encontrou resultados.", "#e0e7ff", "#3730a3"

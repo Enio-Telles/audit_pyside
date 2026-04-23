@@ -11,9 +11,7 @@ from utilitarios.perf_monitor import registrar_evento_performance
 CNPJ_ROOT = PROJECT_ROOT / "dados" / "CNPJ"
 
 
-def gerar_resumo_global_dataframe(
-    mensal: pl.DataFrame, anual: pl.DataFrame
-) -> pl.DataFrame:
+def gerar_resumo_global_dataframe(mensal: pl.DataFrame, anual: pl.DataFrame) -> pl.DataFrame:
     """Consolida os totais de ICMS por competência a partir das abas mensal e anual."""
     if mensal.is_empty() and anual.is_empty():
         return pl.DataFrame(
@@ -30,11 +28,7 @@ def gerar_resumo_global_dataframe(
     for df in (mensal, anual):
         if not df.is_empty() and "ano" in df.columns:
             anos.update(
-                df.get_column("ano")
-                .cast(pl.Int32, strict=False)
-                .drop_nulls()
-                .unique()
-                .to_list()
+                df.get_column("ano").cast(pl.Int32, strict=False).drop_nulls().unique().to_list()
             )
 
     if not anos:
@@ -71,9 +65,7 @@ def gerar_resumo_global_dataframe(
             .agg(pl.col("ICMS_entr_desacob").sum())
         )
     else:
-        m_base = pl.DataFrame(
-            schema={"Ano/Mes": pl.Utf8, "ICMS_entr_desacob": pl.Float64}
-        )
+        m_base = pl.DataFrame(schema={"Ano/Mes": pl.Utf8, "ICMS_entr_desacob": pl.Float64})
 
     # Processar Anual (atribui ao mês 12)
     if not anual.is_empty() and {"ICMS_saidas_desac", "ICMS_estoque_desac"}.issubset(
@@ -82,17 +74,13 @@ def gerar_resumo_global_dataframe(
         a_base = (
             anual.select(
                 [
-                    pl.concat_str([pl.col("ano").cast(pl.Utf8), pl.lit("-12")]).alias(
-                        "Ano/Mes"
-                    ),
+                    pl.concat_str([pl.col("ano").cast(pl.Utf8), pl.lit("-12")]).alias("Ano/Mes"),
                     pl.col("ICMS_saidas_desac").fill_null(0.0),
                     pl.col("ICMS_estoque_desac").fill_null(0.0),
                 ]
             )
             .group_by("Ano/Mes")
-            .agg(
-                [pl.col("ICMS_saidas_desac").sum(), pl.col("ICMS_estoque_desac").sum()]
-            )
+            .agg([pl.col("ICMS_saidas_desac").sum(), pl.col("ICMS_estoque_desac").sum()])
         )
     else:
         a_base = pl.DataFrame(

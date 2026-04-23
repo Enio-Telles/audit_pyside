@@ -1,4 +1,4 @@
-﻿import polars as pl
+import polars as pl
 from pathlib import Path
 from utilitarios.project_paths import PROJECT_ROOT
 import sys
@@ -14,9 +14,7 @@ CNPJ_ROOT = DADOS_DIR / "CNPJ"
 try:
     from utilitarios.salvar_para_parquet import salvar_para_parquet
 except ImportError as e:
-    rprint(
-        f"[red]Erro ao importar mÃ³dulos utilitÃ¡rios em tabela_documentos:[/red] {e}"
-    )
+    rprint(f"[red]Erro ao importar mÃ³dulos utilitÃ¡rios em tabela_documentos:[/red] {e}")
     sys.exit(1)
 
 
@@ -59,9 +57,7 @@ def gerar_tabela_documentos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
             fragmentos.append(df_nfce.with_columns(pl.lit("NFCe").alias("origem")))
 
         if not fragmentos:
-            rprint(
-                "[yellow]Aviso: Nenhum documento bruto encontrado para consolidar.[/yellow]"
-            )
+            rprint("[yellow]Aviso: Nenhum documento bruto encontrado para consolidar.[/yellow]")
             return False
 
         df_final = pl.concat(fragmentos, how="diagonal_relaxed")

@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import logging
 import inspect
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
+from typing import Any
 
 from PySide6.QtCore import QThread, Signal
 
 from interface_grafica.services.pipeline_funcoes_service import ServicoPipelineCompleto
+
+logger = logging.getLogger(__name__)
 
 
 class PipelineWorker(QThread):
@@ -52,7 +56,7 @@ class PipelineWorker(QThread):
         if result.ok:
             self.finished_ok.emit(result)
         else:
-            message = "\n".join(result.erros) if result.erros else "Falha nao pipeline."
+            message = "\n".join(result.erros) if result.erros else "Falha no pipeline."
             self.failed.emit(message or "Falha sem detalhes.")
 
 
@@ -61,7 +65,7 @@ class ServiceTaskWorker(QThread):
     failed = Signal(str)
     progress = Signal(str)
 
-    def __init__(self, func: Callable, *args, **kwargs) -> None:
+    def __init__(self, func: Callable, *args: Any, **kwargs: Any) -> None:
         super().__init__()
         self.func = func
         self.args = args
@@ -78,7 +82,11 @@ class ServiceTaskWorker(QThread):
                 ):
                     call_kwargs["progresso"] = self.progress.emit
             except Exception:
-                pass
+                logger.debug(
+                    "Falha ao inspecionar assinatura do worker %s",
+                    getattr(self.func, "__name__", repr(self.func)),
+                    exc_info=True,
+                )
             resultado = self.func(*self.args, **call_kwargs)
         except Exception as exc:
             from utilitarios.perf_monitor import registrar_evento_performance

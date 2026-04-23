@@ -40,12 +40,7 @@ def _primeira_descricao_valida(df: pl.DataFrame) -> str | None:
         return None
 
     first_val = (
-        df.select(
-            pl.col("descricao")
-            .cast(pl.Utf8, strict=False)
-            .fill_null("")
-            .str.strip_chars()
-        )
+        df.select(pl.col("descricao").cast(pl.Utf8, strict=False).fill_null("").str.strip_chars())
         .filter(pl.col("descricao") != "")
         .limit(1)
     )
@@ -117,11 +112,11 @@ def calcular_atributos_padrao(df_itens_base: pl.DataFrame) -> dict:
 
     descs = descs.with_columns(
         filled=(
-            pl.when(pl.col("ncm").is_not_null() & (pl.col("ncm") != "")).then(1).otherwise(0) +
-            pl.when(pl.col("cest").is_not_null() & (pl.col("cest") != "")).then(1).otherwise(0) +
-            pl.when(pl.col("gtin").is_not_null() & (pl.col("gtin") != "")).then(1).otherwise(0)
+            pl.when(pl.col("ncm").is_not_null() & (pl.col("ncm") != "")).then(1).otherwise(0)
+            + pl.when(pl.col("cest").is_not_null() & (pl.col("cest") != "")).then(1).otherwise(0)
+            + pl.when(pl.col("gtin").is_not_null() & (pl.col("gtin") != "")).then(1).otherwise(0)
         ),
-        len_desc=pl.col("descricao").str.len_chars()
+        len_desc=pl.col("descricao").str.len_chars(),
     ).sort(["count", "filled", "len_desc"], descending=True)
 
     if not descs.is_empty():
@@ -217,9 +212,7 @@ def inicializar_produtos_agrupados(cnpj: str, pasta_cnpj: Path | None = None) ->
         id_grp = _gerar_id_agrupado(seq)
         seq += 1
 
-        desc_norms = [
-            r.get("descricao_normalizada") for r in g if r.get("descricao_normalizada")
-        ]
+        desc_norms = [r.get("descricao_normalizada") for r in g if r.get("descricao_normalizada")]
 
         if desc_norms:
             group_dfs = []
@@ -240,25 +233,13 @@ def inicializar_produtos_agrupados(cnpj: str, pasta_cnpj: Path | None = None) ->
 
         padrao = calcular_atributos_padrao(df_base_filtered)
 
-        lista_sefin = list(
-            set([item for r in g for item in (r.get("lista_co_sefin") or [])])
-        )
-        lista_unidades = list(
-            set([item for r in g for item in (r.get("lista_unid") or [])])
-        )
-        lista_ncm = sorted(
-            set([item for r in g for item in (r.get("lista_ncm") or []) if item])
-        )
-        lista_cest = sorted(
-            set([item for r in g for item in (r.get("lista_cest") or []) if item])
-        )
-        lista_gtin = sorted(
-            set([item for r in g for item in (r.get("lista_gtin") or []) if item])
-        )
+        lista_sefin = list(set([item for r in g for item in (r.get("lista_co_sefin") or [])]))
+        lista_unidades = list(set([item for r in g for item in (r.get("lista_unid") or [])]))
+        lista_ncm = sorted(set([item for r in g for item in (r.get("lista_ncm") or []) if item]))
+        lista_cest = sorted(set([item for r in g for item in (r.get("lista_cest") or []) if item]))
+        lista_gtin = sorted(set([item for r in g for item in (r.get("lista_gtin") or []) if item]))
         # A lista principal deve conter apenas descricoes-base do grupo.
-        lista_descricoes = sorted(
-            set([r.get("descricao") for r in g if r.get("descricao")])
-        )
+        lista_descricoes = sorted(set([r.get("descricao") for r in g if r.get("descricao")]))
         # Complementos permanecem auditaveis em coluna propria.
         lista_desc_compl = sorted(
             set([item for r in g for item in (r.get("lista_desc_compl") or []) if item])
@@ -296,12 +277,8 @@ def inicializar_produtos_agrupados(cnpj: str, pasta_cnpj: Path | None = None) ->
     df_mestra = pl.DataFrame(registros_mestra)
     df_ponte = pl.DataFrame(registros_ponte)
 
-    ok1 = salvar_para_parquet(
-        df_mestra, pasta_analises, f"produtos_agrupados_{cnpj}.parquet"
-    )
-    ok2 = salvar_para_parquet(
-        df_ponte, pasta_analises, f"map_produto_agrupado_{cnpj}.parquet"
-    )
+    ok1 = salvar_para_parquet(df_mestra, pasta_analises, f"produtos_agrupados_{cnpj}.parquet")
+    ok2 = salvar_para_parquet(df_ponte, pasta_analises, f"map_produto_agrupado_{cnpj}.parquet")
     return ok1 and ok2
 
 

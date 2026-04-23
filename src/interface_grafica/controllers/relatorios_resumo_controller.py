@@ -8,6 +8,7 @@ from openpyxl.styles import Font as OpenPyxlFont
 from PySide6.QtWidgets import QMessageBox
 
 from interface_grafica.config import CNPJ_ROOT
+from utilitarios.text import display_cell, is_year_column_name
 
 
 class RelatoriosResumoControllerMixin:
@@ -219,7 +220,16 @@ class RelatoriosResumoControllerMixin:
             / f"aba_resumo_global_{cnpj}.parquet"
         )
 
-        def _finalizar_carga_resumo(df: pl.DataFrame, uniques: dict | None = None):
+        def _finalizar_carga_resumo(
+            df: pl.DataFrame | None, uniques: dict | None = None
+        ) -> None:
+            if df is None:
+                self._resumo_global_df = pl.DataFrame()
+                self.resumo_global_model.set_dataframe(pl.DataFrame())
+                self.lbl_resumo_global_status.setText(
+                    "Resumo global nao encontrado para este CNPJ."
+                )
+                return
             self._resumo_global_df = df
             self.resumo_global_model.set_dataframe(df)
             self.lbl_resumo_global_status.setText(

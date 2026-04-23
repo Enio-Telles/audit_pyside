@@ -4,7 +4,10 @@ import base64
 
 import polars as pl
 from interface_grafica.models.table_model import PolarsTableModel
-from interface_grafica.services.profile_utils import ordenar_colunas_visiveis
+from interface_grafica.services.profile_utils import (
+    ordenar_colunas_perfil,
+    ordenar_colunas_visiveis,
+)
 from interface_grafica.ui.dialogs import ColumnSelectorDialog
 from PySide6.QtCore import QByteArray, Qt
 from PySide6.QtWidgets import QComboBox, QInputDialog, QTableView
@@ -338,6 +341,15 @@ class MainWindowPreferencesMixin:
         self, table: QTableView, colunas: list[str], visiveis: list[str]
     ) -> None:
         visiveis_set = set(visiveis)
+        visiveis_set.update(
+            {
+                "id_agrupado",
+                "id_agregado",
+                "__qtd_decl_final_audit__",
+                "q_conv",
+                "q_conv_fisica",
+            }
+        )
         model = table.model()
         if not isinstance(model, PolarsTableModel):
             return
@@ -450,6 +462,12 @@ class MainWindowPreferencesMixin:
                     "Estoque",
                     "Custos",
                 ],
+                None,
+            ),
+            (
+                self.periodo_profile,
+                "aba_periodos",
+                ["Exportar", "Padrao", "Auditoria", "Estoque", "Custos"],
                 None,
             ),
             (

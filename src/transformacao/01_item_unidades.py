@@ -106,10 +106,7 @@ def _inferir_co_sefin(df: pl.DataFrame) -> pl.DataFrame:
 
     def _limpar_expr(col: str) -> pl.Expr:
         return (
-            pl.col(col)
-            .cast(pl.String, strict=False)
-            .str.replace_all(r"\D", "")
-            .str.strip_chars()
+            pl.col(col).cast(pl.String, strict=False).str.replace_all(r"\D", "").str.strip_chars()
         )
 
     df_join = df.with_columns(
@@ -140,9 +137,7 @@ def _inferir_co_sefin(df: pl.DataFrame) -> pl.DataFrame:
                 pl.col("co-sefin").cast(pl.String).alias("co_sefin_c"),
             ]
         )
-        df_join = df_join.join(
-            ref_c, left_on="_cest_j", right_on="ref_cest_only", how="left"
-        )
+        df_join = df_join.join(ref_c, left_on="_cest_j", right_on="ref_cest_only", how="left")
     else:
         df_join = df_join.with_columns(pl.lit(None, pl.String).alias("co_sefin_c"))
 
@@ -153,16 +148,14 @@ def _inferir_co_sefin(df: pl.DataFrame) -> pl.DataFrame:
                 pl.col("co-sefin").cast(pl.String).alias("co_sefin_n"),
             ]
         )
-        df_join = df_join.join(
-            ref_n, left_on="_ncm_j", right_on="ref_ncm_only", how="left"
-        )
+        df_join = df_join.join(ref_n, left_on="_ncm_j", right_on="ref_ncm_only", how="left")
     else:
         df_join = df_join.with_columns(pl.lit(None, pl.String).alias("co_sefin_n"))
 
     return df_join.with_columns(
-        pl.coalesce(
-            [pl.col("co_sefin_cn"), pl.col("co_sefin_c"), pl.col("co_sefin_n")]
-        ).alias("co_sefin_item")
+        pl.coalesce([pl.col("co_sefin_cn"), pl.col("co_sefin_c"), pl.col("co_sefin_n")]).alias(
+            "co_sefin_item"
+        )
     ).drop(["_ncm_j", "_cest_j", "co_sefin_cn", "co_sefin_c", "co_sefin_n"])
 
 
@@ -192,17 +185,13 @@ def _garantir_colunas(df: pl.DataFrame, colunas: list[str]) -> pl.DataFrame:
     return df
 
 
-def _ler_c170(
-    path: Path | None, cfop_mercantil: pl.DataFrame | None
-) -> pl.DataFrame | None:
+def _ler_c170(path: Path | None, cfop_mercantil: pl.DataFrame | None) -> pl.DataFrame | None:
     if path is None or not path.exists():
         return None
 
     # OtimizaÃ§Ã£o Bolt: pl.read_parquet_schema le a metadata sem alocar o DataFrame na memoria
     schema = pl.read_parquet_schema(path)
-    col_cfop = (
-        "co_cfop" if "co_cfop" in schema else "cfop" if "cfop" in schema else None
-    )
+    col_cfop = "co_cfop" if "co_cfop" in schema else "cfop" if "cfop" in schema else None
     selecionar = [
         c
         for c in [
@@ -228,14 +217,10 @@ def _ler_c170(
 
     lf = pl.scan_parquet(path).select(selecionar)
     if col_cfop is not None:
-        lf = lf.with_columns(
-            pl.col(col_cfop).cast(pl.String).str.strip_chars().alias("co_cfop")
-        )
+        lf = lf.with_columns(pl.col(col_cfop).cast(pl.String).str.strip_chars().alias("co_cfop"))
         if cfop_mercantil is not None:
             lf = lf.join(
-                cfop_mercantil.lazy().with_columns(
-                    pl.lit(True).alias("__cfop_mercantil__")
-                ),
+                cfop_mercantil.lazy().with_columns(pl.lit(True).alias("__cfop_mercantil__")),
                 on="co_cfop",
                 how="left",
             ).with_columns(pl.col("__cfop_mercantil__").fill_null(False))
@@ -426,9 +411,7 @@ def _ler_nfe_ou_nfce(
 
     # OtimizaÃ§Ã£o Bolt: pl.read_parquet_schema le a metadata sem alocar o DataFrame na memoria
     schema = pl.read_parquet_schema(path)
-    col_tp = next(
-        (c for c in ["tipo_operacao", "co_tp_nf", "tp_nf"] if c in schema), None
-    )
+    col_tp = next((c for c in ["tipo_operacao", "co_tp_nf", "tp_nf"] if c in schema), None)
     if "co_emitente" not in schema or col_tp is None:
         return None
 
@@ -465,9 +448,7 @@ def _ler_nfe_ou_nfce(
             .cast(pl.String, strict=False)
             .str.extract(r"(\d+)")
             .alias("__tipo_digit"),
-            pl.col("co_emitente")
-            .cast(pl.String, strict=False)
-            .alias("__co_emitente_str__"),
+            pl.col("co_emitente").cast(pl.String, strict=False).alias("__co_emitente_str__"),
         ]
     )
 
@@ -479,16 +460,12 @@ def _ler_nfe_ou_nfce(
         )
         if cfop_mercantil is not None:
             lf_selected = lf_selected.join(
-                cfop_mercantil.lazy().with_columns(
-                    pl.lit(True).alias("__cfop_mercantil__")
-                ),
+                cfop_mercantil.lazy().with_columns(pl.lit(True).alias("__cfop_mercantil__")),
                 on="co_cfop",
                 how="left",
             ).with_columns(pl.col("__cfop_mercantil__").fill_null(False))
         else:
-            lf_selected = lf_selected.with_columns(
-                pl.lit(True).alias("__cfop_mercantil__")
-            )
+            lf_selected = lf_selected.with_columns(pl.lit(True).alias("__cfop_mercantil__"))
     else:
         lf_selected = lf_selected.with_columns(pl.lit(True).alias("__cfop_mercantil__"))
 

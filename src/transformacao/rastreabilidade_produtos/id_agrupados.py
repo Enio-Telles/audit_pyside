@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import re
 import sys
@@ -33,15 +33,20 @@ def _carregar_codigos_da_ponte(pasta_analises: Path, cnpj: str) -> pl.DataFrame:
         return pl.DataFrame(schema={"id_agrupado": pl.Utf8, "lista_codigos": pl.List(pl.Utf8)})
 
     df_mapa = pl.read_parquet(arq_mapa)
-    if df_mapa.is_empty() or "id_agrupado" not in df_mapa.columns or "codigo_fonte" not in df_mapa.columns:
+    if (
+        df_mapa.is_empty()
+        or "id_agrupado" not in df_mapa.columns
+        or "codigo_fonte" not in df_mapa.columns
+    ):
         return pl.DataFrame(schema={"id_agrupado": pl.Utf8, "lista_codigos": pl.List(pl.Utf8)})
 
     return (
-        df_mapa
-        .select([
-            pl.col("id_agrupado").cast(pl.Utf8, strict=False),
-            pl.col("codigo_fonte").cast(pl.Utf8, strict=False),
-        ])
+        df_mapa.select(
+            [
+                pl.col("id_agrupado").cast(pl.Utf8, strict=False),
+                pl.col("codigo_fonte").cast(pl.Utf8, strict=False),
+            ]
+        )
         .drop_nulls(["id_agrupado", "codigo_fonte"])
         .filter(pl.col("codigo_fonte").str.strip_chars() != "")
         .group_by("id_agrupado")
@@ -79,14 +84,19 @@ def gerar_id_agrupados(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         if col not in df_final.columns:
             df_final = df_final.with_columns(pl.lit(None, dtype=pl.Utf8).alias(col))
 
-    for col in ["lista_desc_compl", "lista_codigos", "lista_unid", "lista_unidades_agr", "lista_descricoes"]:
+    for col in [
+        "lista_desc_compl",
+        "lista_codigos",
+        "lista_unid",
+        "lista_unidades_agr",
+        "lista_descricoes",
+    ]:
         df_final = _adicionar_lista_vazia(df_final, col)
 
     df_codigos_ponte = _carregar_codigos_da_ponte(pasta_analises, cnpj)
     if not df_codigos_ponte.is_empty():
         df_final = (
-            df_final
-            .join(df_codigos_ponte, on="id_agrupado", how="left", suffix="_ponte")
+            df_final.join(df_codigos_ponte, on="id_agrupado", how="left", suffix="_ponte")
             .with_columns(
                 pl.when(pl.col("lista_codigos").list.len() > 0)
                 .then(pl.col("lista_codigos"))
@@ -123,34 +133,68 @@ def gerar_id_agrupados(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
             ]
         )
         .group_by("id_agrupado")
-        .agg([
-            pl.col("descr_padrao").filter(pl.col("descr_padrao").str.strip_chars() != "").drop_nulls().first().alias("descr_padrao"),
-            pl.concat_list([
-                pl.col("descr_padrao").drop_nulls().implode(),
-                pl.col("descricao_final").drop_nulls().implode(),
-                pl.col("descricao").drop_nulls().implode(),
-                pl.col("lista_descricoes").explode().drop_nulls().implode(),
-            ]).explode().drop_nulls().str.strip_chars().unique().sort().alias("lista_descricoes"),
-            pl.col("lista_codigos").explode().drop_nulls().str.strip_chars().unique().sort().alias("lista_codigos"),
-            pl.col("lista_desc_compl").explode().drop_nulls().str.strip_chars().unique().sort().alias("lista_desc_compl"),
-            pl.concat_list([
-                pl.col("lista_unid").explode().drop_nulls().implode(),
-                pl.col("lista_unidades_agr").explode().drop_nulls().implode(),
-                pl.col("unid_ref_sugerida").drop_nulls().implode()
-            ]).explode().drop_nulls().str.strip_chars().unique().sort().alias("lista_unidades")
-        ])
-        .with_columns([
-            pl.col("lista_descricoes").list.eval(pl.element().filter(pl.element() != "")),
-            pl.col("lista_codigos").list.eval(pl.element().filter(pl.element() != "")),
-            pl.col("lista_desc_compl").list.eval(pl.element().filter(pl.element() != "")),
-            pl.col("lista_unidades").list.eval(pl.element().filter(pl.element() != ""))
-        ])
+        .agg(
+            [
+                pl.col("descr_padrao")
+                .filter(pl.col("descr_padrao").str.strip_chars() != "")
+                .drop_nulls()
+                .first()
+                .alias("descr_padrao"),
+                pl.concat_list(
+                    [
+                        pl.col("descr_padrao").drop_nulls().implode(),
+                        pl.col("descricao_final").drop_nulls().implode(),
+                        pl.col("descricao").drop_nulls().implode(),
+                        pl.col("lista_descricoes").explode().drop_nulls().implode(),
+                    ]
+                )
+                .explode()
+                .drop_nulls()
+                .str.strip_chars()
+                .unique()
+                .sort()
+                .alias("lista_descricoes"),
+                pl.col("lista_codigos")
+                .explode()
+                .drop_nulls()
+                .str.strip_chars()
+                .unique()
+                .sort()
+                .alias("lista_codigos"),
+                pl.col("lista_desc_compl")
+                .explode()
+                .drop_nulls()
+                .str.strip_chars()
+                .unique()
+                .sort()
+                .alias("lista_desc_compl"),
+                pl.concat_list(
+                    [
+                        pl.col("lista_unid").explode().drop_nulls().implode(),
+                        pl.col("lista_unidades_agr").explode().drop_nulls().implode(),
+                        pl.col("unid_ref_sugerida").drop_nulls().implode(),
+                    ]
+                )
+                .explode()
+                .drop_nulls()
+                .str.strip_chars()
+                .unique()
+                .sort()
+                .alias("lista_unidades"),
+            ]
+        )
+        .with_columns(
+            [
+                pl.col("lista_descricoes").list.eval(pl.element().filter(pl.element() != "")),
+                pl.col("lista_codigos").list.eval(pl.element().filter(pl.element() != "")),
+                pl.col("lista_desc_compl").list.eval(pl.element().filter(pl.element() != "")),
+                pl.col("lista_unidades").list.eval(pl.element().filter(pl.element() != "")),
+            ]
+        )
         .sort("id_agrupado")
     )
 
-    return salvar_para_parquet(
-        df_id_agrupados, pasta_analises, f"id_agrupados_{cnpj}.parquet"
-    )
+    return salvar_para_parquet(df_id_agrupados, pasta_analises, f"id_agrupados_{cnpj}.parquet")
 
 
 if __name__ == "__main__":

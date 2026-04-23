@@ -32,8 +32,16 @@ class IdAgrupadosControllerMixin:
             return
 
         def _finalizar_carga_id_agrupados(
-            df: pl.DataFrame, uniques: dict | None = None
-        ):
+            df: pl.DataFrame | None, uniques: dict | None = None
+        ) -> None:
+            if df is None:
+                self.id_agrupados_model.set_dataframe(pl.DataFrame())
+                self._id_agrupados_df = pl.DataFrame()
+                self.lbl_id_agrupados_status.setText(
+                    "Tabela id_agrupados nao encontrada para este CNPJ."
+                )
+                self._atualizar_titulo_id_agrupados()
+                return
             self._id_agrupados_df = df
             self._id_agrupados_file_path = path
             self._reset_table_resize_flag("id_agrupados")

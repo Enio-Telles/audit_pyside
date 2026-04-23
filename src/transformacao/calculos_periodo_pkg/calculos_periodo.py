@@ -1,11 +1,12 @@
-import sys
 import re
+import sys
 from pathlib import Path
-from utilitarios.project_paths import PROJECT_ROOT, TRACEBACK_PATH
 from time import perf_counter
 
 import polars as pl
 from rich import print as rprint
+
+from utilitarios.project_paths import PROJECT_ROOT
 
 ROOT_DIR = PROJECT_ROOT
 SRC_DIR = ROOT_DIR / "src"
@@ -63,9 +64,7 @@ def _carregar_referencia_st_periodo(df_periodo: pl.DataFrame) -> pl.DataFrame:
         )
 
     df_chaves = (
-        df_periodo.select(
-            ["co_sefin_agr", "periodo_inventario", "__data_inicio__", "__data_fim__"]
-        )
+        df_periodo.select(["co_sefin_agr", "periodo_inventario", "__data_inicio__", "__data_fim__"])
         .drop_nulls("co_sefin_agr")
         .unique()
     )
@@ -82,9 +81,7 @@ def _carregar_referencia_st_periodo(df_periodo: pl.DataFrame) -> pl.DataFrame:
 
     df_aux = (
         pl.read_parquet(caminho_aux)
-        .select(
-            ["it_co_sefin", "it_da_inicio", "it_da_final", "it_pc_interna", "it_in_st"]
-        )
+        .select(["it_co_sefin", "it_da_inicio", "it_da_final", "it_pc_interna", "it_in_st"])
         .with_columns(
             [
                 pl.col("it_co_sefin").cast(pl.Utf8, strict=False).alias("it_co_sefin"),
@@ -96,9 +93,7 @@ def _carregar_referencia_st_periodo(df_periodo: pl.DataFrame) -> pl.DataFrame:
                 .cast(pl.Utf8, strict=False)
                 .str.strptime(pl.Date, "%Y%m%d", strict=False)
                 .alias("da_final"),
-                pl.col("it_pc_interna")
-                .cast(pl.Float64, strict=False)
-                .alias("it_pc_interna"),
+                pl.col("it_pc_interna").cast(pl.Float64, strict=False).alias("it_pc_interna"),
                 pl.col("it_in_st")
                 .cast(pl.Utf8, strict=False)
                 .fill_null("")
@@ -110,24 +105,16 @@ def _carregar_referencia_st_periodo(df_periodo: pl.DataFrame) -> pl.DataFrame:
     )
 
     df_ref = (
-        df_chaves.join(
-            df_aux, left_on="co_sefin_agr", right_on="it_co_sefin", how="left"
-        )
+        df_chaves.join(df_aux, left_on="co_sefin_agr", right_on="it_co_sefin", how="left")
         .filter(
-            (
-                pl.col("da_inicio").is_null()
-                | (pl.col("da_inicio") <= pl.col("__data_fim__"))
-            )
-            & (
-                pl.col("da_final").is_null()
-                | (pl.col("da_final") >= pl.col("__data_inicio__"))
-            )
+            (pl.col("da_inicio").is_null() | (pl.col("da_inicio") <= pl.col("__data_fim__")))
+            & (pl.col("da_final").is_null() | (pl.col("da_final") >= pl.col("__data_inicio__")))
         )
         .with_columns(
             [
-                pl.max_horizontal(
-                    [pl.col("da_inicio"), pl.col("__data_inicio__")]
-                ).alias("vig_ini"),
+                pl.max_horizontal([pl.col("da_inicio"), pl.col("__data_inicio__")]).alias(
+                    "vig_ini"
+                ),
                 pl.min_horizontal(
                     [
                         pl.coalesce([pl.col("da_final"), pl.col("__data_fim__")]),
@@ -249,9 +236,7 @@ def calcular_aba_periodos_dataframe(
             pl.lit(0.0),
         ]
     )
-    q_conv_positiva_expr = (
-        pl.col("q_conv").cast(pl.Float64, strict=False).fill_null(0.0) > 0
-    )
+    q_conv_positiva_expr = pl.col("q_conv").cast(pl.Float64, strict=False).fill_null(0.0) > 0
     entrada_valida_media_expr = (
         pl.col("Tipo_operacao").str.starts_with("1 - ENTRADA")
         & ~_boolish_expr("dev_simples").fill_null(False)
@@ -299,9 +284,7 @@ def calcular_aba_periodos_dataframe(
                 .alias("saidas"),
                 pl.when(pl.col("Tipo_operacao").str.starts_with("3 - ESTOQUE FINAL"))
                 .then(
-                    pl.col("__qtd_decl_final_audit__")
-                    .cast(pl.Float64, strict=False)
-                    .fill_null(0.0)
+                    pl.col("__qtd_decl_final_audit__").cast(pl.Float64, strict=False).fill_null(0.0)
                 )
                 .otherwise(0.0)
                 .sum()
@@ -377,9 +360,7 @@ def calcular_aba_periodos_dataframe(
         df_st_per = df_aux_st
 
     if not df_st_per.is_empty():
-        df_per = df_per.join(
-            df_st_per, on=["co_sefin_agr", "periodo_inventario"], how="left"
-        )
+        df_per = df_per.join(df_st_per, on=["co_sefin_agr", "periodo_inventario"], how="left")
     else:
         df_per = df_per.with_columns(
             [
@@ -391,18 +372,16 @@ def calcular_aba_periodos_dataframe(
 
     df_per = df_per.with_columns(
         [
-            pl.coalesce(
-                [pl.col("__aliq_ref__"), pl.col("aliq_interna_mov"), pl.lit(0.0)]
-            ).alias("aliq_interna"),
+            pl.coalesce([pl.col("__aliq_ref__"), pl.col("aliq_interna_mov"), pl.lit(0.0)]).alias(
+                "aliq_interna"
+            ),
             pl.col("__tem_st_per__").fill_null(False).alias("__tem_st_per__"),
             pl.col("ST").fill_null("").alias("ST"),
             pl.col("pms").round(2).alias("__pms_icms__"),
         ]
     )
 
-    aliq_factor = (
-        pl.col("aliq_interna").cast(pl.Float64, strict=False).fill_null(0.0) / 100.0
-    )
+    aliq_factor = pl.col("aliq_interna").cast(pl.Float64, strict=False).fill_null(0.0) / 100.0
     base_saida = (
         pl.when(pl.col("__pms_icms__") > 0)
         .then(pl.col("saidas_desacob") * pl.col("__pms_icms__"))
@@ -443,9 +422,7 @@ def calcular_aba_periodos_dataframe(
         "aliq_interna",
     ]
     exprs_arredondamento = [pl.col(c).round(4) for c in cols_qtd if c in df_per.columns]
-    exprs_arredondamento += [
-        pl.col(c).round(2) for c in cols_valor if c in df_per.columns
-    ]
+    exprs_arredondamento += [pl.col(c).round(2) for c in cols_valor if c in df_per.columns]
     df_per = df_per.with_columns(exprs_arredondamento)
 
     return df_per.select(
@@ -490,9 +467,7 @@ def gerar_calculos_periodos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         rprint(f"[red]Arquivo necessário não encontrado:[/red] {arq_mov_estoque}")
         return False
 
-    rprint(
-        f"\n[bold cyan]Gerando calculos_periodos (Aba Períodos) para CNPJ: {cnpj}[/bold cyan]"
-    )
+    rprint(f"\n[bold cyan]Gerando calculos_periodos (Aba Períodos) para CNPJ: {cnpj}[/bold cyan]")
 
     inicio_leitura = perf_counter()
     df = pl.read_parquet(arq_mov_estoque)
@@ -524,9 +499,7 @@ def gerar_calculos_periodos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         status="ok" if ok else "error",
     )
     if ok:
-        rprint(
-            f"[green]Sucesso! {df_result.height} registros salvos na aba períodos.[/green]"
-        )
+        rprint(f"[green]Sucesso! {df_result.height} registros salvos na aba períodos.[/green]")
     registrar_evento_performance(
         "calculos_periodos.total",
         perf_counter() - inicio_total,
@@ -544,9 +517,8 @@ if __name__ == "__main__":
         else:
             c = input("CNPJ: ")
             gerar_calculos_periodos(c)
-    except Exception:
-        import traceback
+    except Exception as e:
+        from transformacao.auxiliares.logs import setup_logging
 
-        with open(TRACEBACK_PATH, "w", encoding="utf-8") as f:
-            traceback.print_exc(file=f)
+        setup_logging().error("Erro na geracao de calculos por periodo", exc_info=e)
         raise

@@ -1,0 +1,3 @@
+# DEPRECATED: Dependências de desenvolvimento migradas para pyproject.toml
+# Este arquivo é mantido apenas como sentinela para ferramentas legacy.
+# Use: uv sync --group dev

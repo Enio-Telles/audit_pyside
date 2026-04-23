@@ -1,4 +1,4 @@
-﻿"""
+"""
 02_itens.py
 
 Objetivo: Gerar a tabela consolidada de itens a partir de item_unidades.

@@ -33,6 +33,7 @@ STOPWORDS = {
 
 
 def remove_accents(text: str | None) -> str | None:
+    """Remove acentos de um texto preservando `None`."""
     if text is None:
         return None
     normalized = unicodedata.normalize("NFKD", str(text))
@@ -40,6 +41,7 @@ def remove_accents(text: str | None) -> str | None:
 
 
 def normalize_text(text: str | None) -> str:
+    """Normaliza texto para comparacoes amplas sem acentos e stopwords."""
     if text is None:
         return ""
     text = remove_accents(text) or ""
@@ -104,18 +106,18 @@ def expr_normalizar_descricao(coluna: str) -> "pl.Expr":
 
 
 def natural_sort_key(value: str | None) -> list[Any]:
+    """Gera chave de ordenacao natural que separa trechos numericos."""
     text = "" if value is None else str(value)
-    return [
-        int(part) if part.isdigit() else part.lower()
-        for part in re.split(r"(\d+)", text)
-    ]
+    return [int(part) if part.isdigit() else part.lower() for part in re.split(r"(\d+)", text)]
 
 
 def _normalizar_nome_coluna(column_name: str | None) -> str:
+    """Normaliza o nome de coluna para comparacoes internas."""
     return "" if column_name is None else str(column_name).strip().lower()
 
 
 def is_year_column_name(column_name: str | None) -> bool:
+    """Indica se uma coluna representa ano para fins de formatacao."""
     nome = _normalizar_nome_coluna(column_name)
     if not nome:
         return False
@@ -123,6 +125,7 @@ def is_year_column_name(column_name: str | None) -> bool:
 
 
 def _formatar_numero_br(valor: numbers.Real | Decimal, casas_decimais: int) -> str:
+    """Formata numero usando separadores brasileiros."""
     if isinstance(valor, Decimal):
         numero = float(valor)
     else:
@@ -132,12 +135,14 @@ def _formatar_numero_br(valor: numbers.Real | Decimal, casas_decimais: int) -> s
 
 
 def _formatar_data(valor: date | datetime) -> str:
+    """Formata data ou datetime no padrao brasileiro."""
     if isinstance(valor, datetime):
         return valor.strftime("%d/%m/%Y %H:%M:%S")
     return valor.strftime("%d/%m/%Y")
 
 
 def _parse_data_iso(texto: str) -> datetime | date | None:
+    """Converte texto ISO em date ou datetime quando possivel."""
     texto = texto.strip()
     if not texto:
         return None
@@ -160,6 +165,7 @@ def _parse_data_iso(texto: str) -> datetime | date | None:
 
 
 def display_cell(value: Any, column_name: str | None = None) -> str:
+    """Formata um valor para exibicao tabular na interface e relatorios."""
     if value is None:
         return ""
 
@@ -172,9 +178,7 @@ def display_cell(value: Any, column_name: str | None = None) -> str:
 
     if isinstance(value, (list, tuple)):
         # Join elements, recursively calling display_cell for each
-        return ", ".join(
-            display_cell(v, column_name=column_name) for v in value if v is not None
-        )
+        return ", ".join(display_cell(v, column_name=column_name) for v in value if v is not None)
 
     if isinstance(value, bool):
         return "true" if value else "false"

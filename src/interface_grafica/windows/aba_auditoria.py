@@ -398,5 +398,11 @@ class AuditoriaWindowMixin:
         self.nfe_entrada_table.horizontalHeader().setContextMenuPolicy(
             Qt.CustomContextMenu
         )
+        self.nfe_entrada_table.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.nfe_entrada_table.customContextMenuRequested.connect(
+            lambda pos: self._abrir_menu_contexto_celula(
+                "nfe_entrada", self.nfe_entrada_table, pos
+            )
+        )
         layout.addWidget(self.nfe_entrada_table, 1)
         return tab

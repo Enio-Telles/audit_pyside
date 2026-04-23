@@ -129,6 +129,21 @@ class MainWindowSignalWiringRelatoriosMixin:
                 "aba_periodos", self.aba_periodos_table, pos
             )
         )
+        self.aba_periodos_table.horizontalHeader().sectionMoved.connect(
+            lambda *_: self._salvar_preferencias_tabela(
+                "aba_periodos", self.aba_periodos_table, self.aba_periodos_model
+            )
+        )
+        self.aba_periodos_table.horizontalHeader().sectionResized.connect(
+            lambda *_: self._salvar_preferencias_tabela(
+                "aba_periodos", self.aba_periodos_table, self.aba_periodos_model
+            )
+        )
+        self.aba_periodos_table.horizontalHeader().sortIndicatorChanged.connect(
+            lambda _index, _order: self._salvar_preferencias_tabela(
+                "aba_periodos", self.aba_periodos_table, self.aba_periodos_model
+            )
+        )
         self.anual_filter_id.currentTextChanged.connect(lambda _value: self._schedule_anual_filters())
         self.anual_filter_desc.textChanged.connect(lambda _value: self._schedule_anual_filters())
         self.anual_filter_ano.currentIndexChanged.connect(

@@ -108,9 +108,7 @@ def gerar_aba_produtos_selecionados(cnpj: str, pasta_cnpj: Path | None = None) -
     if df_m.is_empty() and df_a.is_empty() and df_mov.is_empty():
         return False
 
-    rprint(
-        f"[bold cyan]Gerando aba_produtos_selecionados para CNPJ: {cnpj}[/bold cyan]"
-    )
+    rprint(f"[bold cyan]Gerando aba_produtos_selecionados para CNPJ: {cnpj}[/bold cyan]")
     df_master = gerar_produtos_selecionados_dataframe(df_m, df_a, df_mov)
 
     saida = pasta_analises / f"aba_produtos_selecionados_{cnpj}.parquet"

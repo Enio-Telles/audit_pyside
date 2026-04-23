@@ -1,4 +1,4 @@
-﻿"""
+"""
 c176_xml.py
 
 Objetivo:
@@ -40,11 +40,7 @@ except ImportError as e:
 
 def _norm_unid_expr(col: str) -> pl.Expr:
     return (
-        pl.col(col)
-        .cast(pl.Utf8, strict=False)
-        .fill_null("")
-        .str.strip_chars()
-        .str.to_uppercase()
+        pl.col(col).cast(pl.Utf8, strict=False).fill_null("").str.strip_chars().str.to_uppercase()
     )
 
 
@@ -54,11 +50,7 @@ def _to_float_expr(col: str) -> pl.Expr:
 
 def _norm_text_expr(col: str) -> pl.Expr:
     return (
-        pl.col(col)
-        .cast(pl.Utf8, strict=False)
-        .fill_null("")
-        .str.strip_chars()
-        .str.to_uppercase()
+        pl.col(col).cast(pl.Utf8, strict=False).fill_null("").str.strip_chars().str.to_uppercase()
     )
 
 
@@ -127,9 +119,7 @@ def gerar_c176_xml(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
 
     if df_c176.is_empty():
         rprint("[yellow]Arquivo c176 esta vazio.[/yellow]")
-        return salvar_para_parquet(
-            pl.DataFrame(), pasta_analises, f"c176_xml_{cnpj}.parquet"
-        )
+        return salvar_para_parquet(pl.DataFrame(), pasta_analises, f"c176_xml_{cnpj}.parquet")
 
     df_saida_ref = (
         df_saida.select(
@@ -148,10 +138,7 @@ def gerar_c176_xml(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         .with_columns(
             [
                 pl.col("num_item").cast(pl.Int64, strict=False).alias("num_item"),
-                pl.col("cod_item")
-                .cast(pl.Utf8, strict=False)
-                .str.strip_chars()
-                .alias("cod_item"),
+                pl.col("cod_item").cast(pl.Utf8, strict=False).str.strip_chars().alias("cod_item"),
                 pl.col("cod_ncm")
                 .cast(pl.Utf8, strict=False)
                 .str.strip_chars()
@@ -170,13 +157,8 @@ def gerar_c176_xml(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
     df_c176_base = (
         df_c176.with_columns(
             [
-                pl.col("num_item_saida")
-                .cast(pl.Int64, strict=False)
-                .alias("num_item_saida"),
-                pl.col("cod_item")
-                .cast(pl.Utf8, strict=False)
-                .str.strip_chars()
-                .alias("cod_item"),
+                pl.col("num_item_saida").cast(pl.Int64, strict=False).alias("num_item_saida"),
+                pl.col("cod_item").cast(pl.Utf8, strict=False).str.strip_chars().alias("cod_item"),
                 pl.col("c176_num_item_ult_e_declarado")
                 .cast(pl.Int64, strict=False)
                 .alias("__item_entrada_xml"),
@@ -226,32 +208,25 @@ def gerar_c176_xml(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         )
         .with_columns(
             [
-                pl.coalesce(
-                    [pl.col("unid_ref_saida"), pl.col("unid_saida_norm")]
-                ).alias("unid_ref"),
+                pl.coalesce([pl.col("unid_ref_saida"), pl.col("unid_saida_norm")]).alias(
+                    "unid_ref"
+                ),
                 pl.col("fator_saida").fill_null(1.0).alias("fator_saida"),
             ]
         )
         .with_columns(
             [
-                (pl.col("qtd_item_saida") * pl.col("fator_saida")).alias(
-                    "qtd_saida_unid_ref"
-                ),
+                (pl.col("qtd_item_saida") * pl.col("fator_saida")).alias("qtd_saida_unid_ref"),
                 pl.when(pl.col("fator_saida") > 0)
                 .then(_to_float_expr("vl_unit_bc_st_entrada") / pl.col("fator_saida"))
                 .otherwise(_to_float_expr("vl_unit_bc_st_entrada"))
                 .alias("vl_unit_bc_st_entrada_unid_ref"),
                 pl.when(pl.col("fator_saida") > 0)
-                .then(
-                    _to_float_expr("vl_unit_icms_proprio_entrada")
-                    / pl.col("fator_saida")
-                )
+                .then(_to_float_expr("vl_unit_icms_proprio_entrada") / pl.col("fator_saida"))
                 .otherwise(_to_float_expr("vl_unit_icms_proprio_entrada"))
                 .alias("vl_unit_icms_proprio_entrada_unid_ref"),
                 pl.when(pl.col("fator_saida") > 0)
-                .then(
-                    _to_float_expr("vl_unit_ressarcimento_st") / pl.col("fator_saida")
-                )
+                .then(_to_float_expr("vl_unit_ressarcimento_st") / pl.col("fator_saida"))
                 .otherwise(_to_float_expr("vl_unit_ressarcimento_st"))
                 .alias("vl_unit_ressarcimento_st_unid_ref"),
             ]
@@ -288,10 +263,7 @@ def gerar_c176_xml(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
                 .cast(pl.Utf8, strict=False)
                 .str.strip_chars()
                 .alias("prod_cprod"),
-                pl.col("prod_ncm")
-                .cast(pl.Utf8, strict=False)
-                .str.strip_chars()
-                .alias("prod_ncm"),
+                pl.col("prod_ncm").cast(pl.Utf8, strict=False).str.strip_chars().alias("prod_ncm"),
                 pl.col("prod_cest")
                 .cast(pl.Utf8, strict=False)
                 .str.strip_chars()
@@ -353,10 +325,7 @@ def gerar_c176_xml(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
                 .fill_null(False)
                 .alias("ind_match_cod_item"),
                 (
-                    pl.col("prod_ncm")
-                    .cast(pl.Utf8, strict=False)
-                    .fill_null("")
-                    .str.strip_chars()
+                    pl.col("prod_ncm").cast(pl.Utf8, strict=False).fill_null("").str.strip_chars()
                     == pl.col("cod_ncm_saida_agr")
                     .cast(pl.Utf8, strict=False)
                     .fill_null("")
@@ -365,10 +334,7 @@ def gerar_c176_xml(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
                 .fill_null(False)
                 .alias("ind_match_ncm"),
                 (
-                    pl.col("prod_cest")
-                    .cast(pl.Utf8, strict=False)
-                    .fill_null("")
-                    .str.strip_chars()
+                    pl.col("prod_cest").cast(pl.Utf8, strict=False).fill_null("").str.strip_chars()
                     == pl.col("cest_saida_agr")
                     .cast(pl.Utf8, strict=False)
                     .fill_null("")
@@ -401,24 +367,15 @@ def gerar_c176_xml(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
                     pl.when(pl.col("ind_match_item_declarado"))
                     .then(pl.lit(1000))
                     .otherwise(pl.lit(0))
-                    + pl.when(pl.col("ind_match_ncm"))
-                    .then(pl.lit(300))
-                    .otherwise(pl.lit(0))
-                    + pl.when(pl.col("ind_match_cest"))
-                    .then(pl.lit(250))
-                    .otherwise(pl.lit(0))
-                    + pl.when(pl.col("ind_match_desc_saida"))
-                    .then(pl.lit(150))
-                    .otherwise(pl.lit(0))
+                    + pl.when(pl.col("ind_match_ncm")).then(pl.lit(300)).otherwise(pl.lit(0))
+                    + pl.when(pl.col("ind_match_cest")).then(pl.lit(250)).otherwise(pl.lit(0))
+                    + pl.when(pl.col("ind_match_desc_saida")).then(pl.lit(150)).otherwise(pl.lit(0))
                     + pl.when(pl.col("ind_match_desc_padrao"))
                     .then(pl.lit(100))
                     .otherwise(pl.lit(0))
                     + pl.when(pl.col("qtd_entrada_xml") == pl.col("qtd_item_saida"))
                     .then(pl.lit(80))
-                    .when(
-                        (pl.col("qtd_entrada_xml") - pl.col("qtd_item_saida")).abs()
-                        <= 1
-                    )
+                    .when((pl.col("qtd_entrada_xml") - pl.col("qtd_item_saida")).abs() <= 1)
                     .then(pl.lit(30))
                     .otherwise(pl.lit(0))
                 ).alias("score_vinculo_entrada"),
@@ -445,9 +402,7 @@ def gerar_c176_xml(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
             descending=[False, False, False, False, True, True, False, False],
             nulls_last=True,
         )
-        .with_columns(
-            pl.int_range(0, pl.len()).over(chaves_particao).alias("__rank_vinculo")
-        )
+        .with_columns(pl.int_range(0, pl.len()).over(chaves_particao).alias("__rank_vinculo"))
         .filter(pl.col("__rank_vinculo") == 0)
         .join(
             df_fatores_ref.select(

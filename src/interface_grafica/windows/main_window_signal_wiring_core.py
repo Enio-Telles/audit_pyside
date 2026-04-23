@@ -279,7 +279,7 @@ class MainWindowSignalWiringCoreMixin:
             lambda: self._destacar_tabela("conversao")
         )
         self.btn_recalcular_fatores.clicked.connect(
-            lambda: self.recalcular_derivados_conversao()
+            self.recalcular_derivados_conversao
         )
         self.btn_apply_conversao_profile.clicked.connect(
             lambda: self._aplicar_perfil_tabela(

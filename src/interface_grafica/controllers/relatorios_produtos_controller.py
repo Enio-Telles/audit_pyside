@@ -37,8 +37,16 @@ class RelatoriosProdutosControllerMixin:
         )
 
         def _finalizar_carga_produtos_sel(
-            df: pl.DataFrame, uniques: dict | None = None
-        ):
+            df: pl.DataFrame | None, uniques: dict | None = None
+        ) -> None:
+            if df is None:
+                self.produtos_selecionados_model.set_dataframe(pl.DataFrame())
+                self._produtos_selecionados_df = pl.DataFrame()
+                self.lbl_produtos_sel_status.setText(
+                    "Tabela de produtos selecionados nao encontrada para este CNPJ."
+                )
+                self._atualizar_titulo_aba_produtos_selecionados()
+                return
             self._produtos_selecionados_df = df
             self._reset_table_resize_flag("produtos_selecionados")
 

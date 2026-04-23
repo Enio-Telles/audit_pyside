@@ -1,7 +1,15 @@
 from pathlib import Path
 
+import pytest
+
+pytestmark = pytest.mark.gui
+
+try:
+    from PySide6.QtWidgets import QApplication, QMessageBox
+except ImportError as exc:
+    pytest.skip(f"PySide6 indisponivel neste ambiente: {exc}", allow_module_level=True)
+
 from interface_grafica.ui.main_window import MainWindow
-from PySide6.QtWidgets import QApplication, QMessageBox
 
 
 def ensure_qapp():
@@ -35,17 +43,17 @@ def test_click_reverter_mapa_manual_calls_service(monkeypatch, tmp_path):
 
     # Monkeypatch no diálogo para selecionar o item (retorna nome do arquivo e True)
     monkeypatch.setattr(
-        "interface_grafica.ui.main_window.QInputDialog.getItem",
+        "interface_grafica.controllers.agregacao_controller.QInputDialog.getItem",
         lambda *args, **kwargs: (Path(snapshots[0]).name, True),
     )
 
     # Força confirmação positiva
     monkeypatch.setattr(
-        "interface_grafica.ui.main_window.QMessageBox.question",
+        "interface_grafica.controllers.agregacao_controller.QMessageBox.question",
         lambda *args, **kwargs: QMessageBox.StandardButton.Yes,
     )
     monkeypatch.setattr(
-        "interface_grafica.ui.main_window.QMessageBox.information",
+        "interface_grafica.controllers.agregacao_controller.QMessageBox.information",
         lambda *args, **kwargs: QMessageBox.StandardButton.Ok,
     )
 

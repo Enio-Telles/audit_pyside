@@ -1,7 +1,25 @@
 import sys
-from unittest.mock import patch, MagicMock
+from types import ModuleType
+from unittest.mock import MagicMock, patch
 
-import app
+
+qtwidgets_stub = ModuleType("PySide6.QtWidgets")
+qtwidgets_stub.QApplication = MagicMock(name="QApplication")
+
+main_window_stub = ModuleType("interface_grafica.ui.main_window")
+main_window_stub.MainWindow = MagicMock(name="MainWindow")
+windows_main_window_stub = ModuleType("interface_grafica.windows.main_window")
+windows_main_window_stub.MainWindow = main_window_stub.MainWindow
+
+sys.modules.setdefault("PySide6", ModuleType("PySide6"))
+sys.modules["PySide6.QtWidgets"] = qtwidgets_stub
+sys.modules.setdefault("interface_grafica", ModuleType("interface_grafica"))
+sys.modules.setdefault("interface_grafica.ui", ModuleType("interface_grafica.ui"))
+sys.modules.setdefault("interface_grafica.windows", ModuleType("interface_grafica.windows"))
+sys.modules["interface_grafica.ui.main_window"] = main_window_stub
+sys.modules["interface_grafica.windows.main_window"] = windows_main_window_stub
+
+import app  # noqa: E402
 
 
 @patch("app.QApplication")

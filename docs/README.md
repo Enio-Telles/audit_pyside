@@ -5,7 +5,7 @@ Sempre que um documento for criado, movido ou removido, este índice deve ser at
 
 O projeto é uma **aplicação desktop Python/PySide6** com pipeline analítico-fiscal.
 Para regras de agente e convenções de desenvolvimento, veja [`AGENTS.md`](../AGENTS.md) na raiz.
-A decisão sobre o futuro do backend FastAPI está em discussão — veja [ADR-001](adr/0001-futuro-backend-fastapi.md) quando disponível.
+O backend FastAPI foi removido em 2026-04-22 — veja [ADR-001](adr/0001-futuro-backend-fastapi.md) e o [anexo de auditoria](adr/0001-annex-consumers-audit.md).
 
 ---
 
@@ -15,7 +15,6 @@ A decisão sobre o futuro do backend FastAPI está em discussão — veja [ADR-0
 |---|---|---|---|
 | Pipeline (raw → marts) | `src/transformacao/` | [`src/transformacao/AGENTS.md`](../src/transformacao/AGENTS.md) | [Catálogo de tabelas](tabelas/README.md) |
 | Interface PySide6 | `src/interface_grafica/` | [`src/interface_grafica/AGENTS.md`](../src/interface_grafica/AGENTS.md) | — |
-| Backend FastAPI (stub) | `backend/` | [`backend/AGENTS.md`](../backend/AGENTS.md) | [ADR-001](adr/0001-futuro-backend-fastapi.md) |
 | SQL / extração | `sql/` | `AGENTS.md` (raiz) | [scripts_usage.md](scripts_usage.md) |
 | Testes | `tests/` | `AGENTS.md` (raiz) | — |
 | Documentação | `docs/` | `AGENTS.md` (raiz) | Este arquivo |
@@ -75,7 +74,7 @@ A decisão sobre o futuro do backend FastAPI está em discussão — veja [ADR-0
 |---|---|
 | [PLAN.md](PLAN.md) | Plano de execução P0–P5 (fonte de verdade do roadmap) |
 | [plano_q.md](plano_q.md) | Plano de melhorias da qualidade dos dados |
-| [adr/0001-futuro-backend-fastapi.md](adr/0001-futuro-backend-fastapi.md) | ADR-001: decisão sobre o futuro do backend FastAPI *(a criar em P1-03)* |
+| [ADR-001](adr/0001-futuro-backend-fastapi.md) | Decisão sobre o futuro do backend FastAPI |
 
 > **Gap de documentação:**
 > - `TODO`: `docs/plano_melhorias_backend_frontend_arquitetura.md` — consolidar a partir
@@ -88,6 +87,7 @@ A decisão sobre o futuro do backend FastAPI está em discussão — veja [ADR-0
 | [scripts_usage.md](scripts_usage.md) | Como usar os scripts em `scripts/` (generate_parquet_references, generate_output_samples, etc.) |
 | [codex_usage.md](codex_usage.md) | Como usar o Codex com este repositório |
 | [operational/snapshots_mapa_manual.md](operational/snapshots_mapa_manual.md) | Runbook de snapshots do mapa manual |
+| [branch_consolidation_2026-04-23.md](branch_consolidation_2026-04-23.md) | Registro da consolidação de branches em `main` |
 | [branch_cleanup.md](branch_cleanup.md) | Procedimento de limpeza de branches |
 | [PR_followups.md](PR_followups.md) | Follow-ups e débitos técnicos de PRs anteriores |
 
@@ -134,8 +134,18 @@ Antes de contribuir em uma área, leia o AGENTS.md correspondente:
 
 - **Pipeline / transformação** → [`src/transformacao/AGENTS.md`](../src/transformacao/AGENTS.md)
 - **GUI PySide6** → [`src/interface_grafica/AGENTS.md`](../src/interface_grafica/AGENTS.md)
-- **Backend FastAPI** → [`backend/AGENTS.md`](../backend/AGENTS.md)
 - **Qualquer outra área** → [`AGENTS.md`](../AGENTS.md) (raiz)
+
+## Transição
+
+| Origem anterior | Situação em P1-01 | Destino canônico atual |
+|---|---|---|
+| `.agent.md` | Removido | [`AGENTS.md`](../AGENTS.md) |
+| `docs/AGENTS.md` | Removido | [`AGENTS.md`](../AGENTS.md) |
+| `tests/AGENTS.md` | Removido | [`AGENTS.md`](../AGENTS.md) |
+| Escopo de pipeline | Mantido como escopo canônico | [`src/transformacao/AGENTS.md`](../src/transformacao/AGENTS.md) |
+| Escopo de GUI PySide6 | Mantido como escopo canônico | [`src/interface_grafica/AGENTS.md`](../src/interface_grafica/AGENTS.md) |
+| Backend stub | Removido em P2 (ADR-001 Opção B) | [`AGENTS.md`](../AGENTS.md) + [ADR-001](adr/0001-futuro-backend-fastapi.md) |
 
 ### Regras de PR
 
@@ -160,8 +170,8 @@ Antes de contribuir em uma área, leia o AGENTS.md correspondente:
 | P1-01 | Consolidação de AGENTS.md (11 → 4) | ✅ Concluído (PR atual) |
 | P1-02 | Índice mestre `docs/README.md` | ✅ Concluído (PR atual) |
 | P1-03 | ADR-001 draft (futuro do backend) | ✅ Concluído (PR atual) |
-| P1-04/05/06 | pyproject+uv, ruff+mypy+pre-commit, CI | Aguarda Codex |
-| P2 | Backend / API (depende do ADR-001) | Bloqueado por ADR-001 |
+| P1-04/05/06 | pyproject+uv, ruff+mypy+pre-commit, CI | Concluído (PR atual) |
+| P2 | Remoção do backend FastAPI (ADR-001 Opção B) | Em andamento (PR atual) |
 | P3 | Decomposição de `main_window.py` | Planejado |
 | P4 | Multi-tenant / autenticação | Não iniciado |
 | P5 | Performance e escalabilidade | Não iniciado |

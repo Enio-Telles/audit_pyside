@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+from contextlib import suppress
+from typing import Any
+
 import polars as pl
 from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
@@ -41,8 +45,9 @@ class DetachedTableWindow(QMainWindow):
         layout.setContentsMargins(8, 8, 8, 8)
 
         self.lbl_titulo = QLabel(titulo)
+        self.lbl_titulo.setObjectName("detachedTableTitle")
         self.lbl_titulo.setStyleSheet(
-            "QLabel { font-weight: bold; color: #f8fafc; background: #1f2a44; "
+            "QLabel { font-weight: bold; color: #f8fafc; "
             "border: 1px solid #334155; border-radius: 4px; padding: 6px 10px; }"
         )
         layout.addWidget(self.lbl_titulo)
@@ -102,7 +107,7 @@ class DetachedTableWindow(QMainWindow):
         self._on_source_model_reset = self._refresh_from_source
         self._on_source_layout_changed = self._refresh_from_source
 
-        def _on_source_data_changed_handler(*_args):
+        def _on_source_data_changed_handler(*_args: Any) -> None:
             self._refresh_from_source()
 
         self._on_source_data_changed = _on_source_data_changed_handler
@@ -182,18 +187,12 @@ class DetachedTableWindow(QMainWindow):
         self.filter_column.setCurrentIndex(0)
         self.apply_filters()
 
-    def closeEvent(self, event) -> None:
-        try:
+    def closeEvent(self, event: QCloseEvent) -> None:
+        with suppress(RuntimeError, TypeError):
             self._source_model.modelReset.disconnect(self._on_source_model_reset)
-        except Exception:
-            pass
-        try:
+        with suppress(RuntimeError, TypeError):
             self._source_model.layoutChanged.disconnect(self._on_source_layout_changed)
-        except Exception:
-            pass
-        try:
+        with suppress(RuntimeError, TypeError):
             self._source_model.dataChanged.disconnect(self._on_source_data_changed)
-        except Exception:
-            pass
         self.closed.emit(self._contexto)
         super().closeEvent(event)

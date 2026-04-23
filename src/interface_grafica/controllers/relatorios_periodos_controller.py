@@ -30,7 +30,16 @@ class RelatoriosPeriodosControllerMixin:
             self._reprocessar_periodos_auto(cnpj)
             return
 
-        def _finalizar_carga_periodos(df: pl.DataFrame, uniques: dict | None = None):
+        def _finalizar_carga_periodos(
+            df: pl.DataFrame | None, uniques: dict | None = None
+        ) -> None:
+            if df is None:
+                self.aba_periodos_model.set_dataframe(pl.DataFrame())
+                self._aba_periodos_df = pl.DataFrame()
+                self._aba_periodos_file_path = None
+                self.lbl_aba_periodos_status.setText("Tabela periodos nao encontrada.")
+                self._atualizar_titulo_aba_periodos()
+                return
             self._aba_periodos_df = df
             self._aba_periodos_file_path = caminho
             self._reset_table_resize_flag("aba_periodos")
@@ -199,7 +208,15 @@ class RelatoriosPeriodosControllerMixin:
             self.atualizar_aba_produtos_selecionados()
             return
 
-        def _finalizar_carga_anual(df: pl.DataFrame, uniques: dict | None = None):
+        def _finalizar_carga_anual(
+            df: pl.DataFrame | None, uniques: dict | None = None
+        ) -> None:
+            if df is None:
+                self.aba_anual_model.set_dataframe(pl.DataFrame())
+                self._aba_anual_df = pl.DataFrame()
+                self.lbl_aba_anual_status.setText("Tabela anual nao encontrada.")
+                self._atualizar_titulo_aba_anual()
+                return
             self._aba_anual_df = df
             self._aba_anual_file_path = path
             self._reset_table_resize_flag("aba_anual")
@@ -248,7 +265,15 @@ class RelatoriosPeriodosControllerMixin:
             self.atualizar_aba_produtos_selecionados()
             return
 
-        def _finalizar_carga_mensal(df: pl.DataFrame, uniques: dict | None = None):
+        def _finalizar_carga_mensal(
+            df: pl.DataFrame | None, uniques: dict | None = None
+        ) -> None:
+            if df is None:
+                self.aba_mensal_model.set_dataframe(pl.DataFrame())
+                self._aba_mensal_df = pl.DataFrame()
+                self.lbl_aba_mensal_status.setText("Tabela mensal nao encontrada.")
+                self._atualizar_titulo_aba_mensal()
+                return
             self._aba_mensal_df = df
             self._aba_mensal_file_path = path
             self._reset_table_resize_flag("aba_mensal")
