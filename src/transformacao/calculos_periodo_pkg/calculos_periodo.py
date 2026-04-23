@@ -1,11 +1,12 @@
-import sys
 import re
+import sys
 from pathlib import Path
-from utilitarios.project_paths import PROJECT_ROOT, TRACEBACK_PATH
 from time import perf_counter
 
 import polars as pl
 from rich import print as rprint
+
+from utilitarios.project_paths import PROJECT_ROOT
 
 ROOT_DIR = PROJECT_ROOT
 SRC_DIR = ROOT_DIR / "src"
@@ -516,9 +517,8 @@ if __name__ == "__main__":
         else:
             c = input("CNPJ: ")
             gerar_calculos_periodos(c)
-    except Exception:
-        import traceback
+    except Exception as e:
+        from transformacao.auxiliares.logs import setup_logging
 
-        with open(TRACEBACK_PATH, "w", encoding="utf-8") as f:
-            traceback.print_exc(file=f)
+        setup_logging().error("Erro na geracao de calculos por periodo", exc_info=e)
         raise

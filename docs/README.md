@@ -87,6 +87,7 @@ O backend FastAPI foi removido em 2026-04-22 — veja [ADR-001](adr/0001-futuro-
 | [scripts_usage.md](scripts_usage.md) | Como usar os scripts em `scripts/` (generate_parquet_references, generate_output_samples, etc.) |
 | [codex_usage.md](codex_usage.md) | Como usar o Codex com este repositório |
 | [operational/snapshots_mapa_manual.md](operational/snapshots_mapa_manual.md) | Runbook de snapshots do mapa manual |
+| [branch_consolidation_2026-04-23.md](branch_consolidation_2026-04-23.md) | Registro da consolidação de branches em `main` |
 | [branch_cleanup.md](branch_cleanup.md) | Procedimento de limpeza de branches |
 | [PR_followups.md](PR_followups.md) | Follow-ups e débitos técnicos de PRs anteriores |
 
