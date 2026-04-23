@@ -5,7 +5,7 @@ import re
 import threading
 from dataclasses import dataclass
 from decimal import Decimal
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Callable, Iterable, Sequence
 
 import polars as pl
@@ -24,6 +24,46 @@ MAX_WORKERS_PADRAO = 5
 _thread_local = threading.local()
 
 
+def _looks_like_windows_path(path: Path) -> bool:
+    texto = str(path)
+    return "\\" in texto or bool(PureWindowsPath(texto).drive)
+
+
+def _relative_sql_path(caminho: Path, raiz_sql: Path) -> Path:
+    """Calcula caminho relativo mesmo quando a SQL usa sintaxe Windows no Linux."""
+    try:
+        return caminho.relative_to(raiz_sql)
+    except ValueError:
+        if not (_looks_like_windows_path(caminho) or _looks_like_windows_path(raiz_sql)):
+            raise
+
+    caminho_win = PureWindowsPath(str(caminho))
+    raiz_win = PureWindowsPath(str(raiz_sql))
+    try:
+        rel_win = caminho_win.relative_to(raiz_win)
+    except ValueError:
+        # Fallback: normalize slashes and try a case-insensitive prefix match
+        caminho_norm = str(caminho).replace("\\", "/")
+        raiz_norm = str(raiz_sql).replace("\\", "/")
+        # Strip trailing slashes for consistent comparison
+        raiz_norm_stripped = raiz_norm.rstrip("/")
+        if caminho_norm.lower().startswith(raiz_norm_stripped.lower() + "/"):
+            rel_str = caminho_norm[len(raiz_norm_stripped) + 1 :]
+            # Use PurePosixPath to split parts reliably and return a Path
+            from pathlib import PurePosixPath
+
+            return Path(*PurePosixPath(rel_str).parts)
+        raise ValueError(f"{str(caminho)!r} is not in the subpath of {str(raiz_sql)!r}") from None
+    return Path(*rel_win.parts)
+
+
+def _sql_stem(caminho: Path) -> str:
+    """Retorna o stem de uma SQL mesmo quando o caminho usa barras Windows."""
+    if _looks_like_windows_path(caminho):
+        return PureWindowsPath(str(caminho)).stem
+    return caminho.stem
+
+
 @dataclass(frozen=True)
 class ConsultaSql:
     """Representa uma consulta SQL junto com a raiz usada para calcular a saida."""
@@ -37,7 +77,7 @@ class ConsultaSql:
 
     @property
     def caminho_relativo(self) -> Path:
-        return self.caminho.relative_to(self.raiz_sql)
+        return _relative_sql_path(self.caminho, self.raiz_sql)
 
 
 @dataclass
@@ -165,7 +205,7 @@ def obter_caminho_saida_parquet(
         else consulta.caminho
     )
 
-    caminho_relativo = caminho_path.relative_to(consulta.raiz_sql)
+    caminho_relativo = _relative_sql_path(caminho_path, consulta.raiz_sql)
     if (
         caminho_relativo.parts
         and caminho_relativo.parts[0].lower() == "arquivos_parquet"
@@ -175,7 +215,7 @@ def obter_caminho_saida_parquet(
             if len(caminho_relativo.parts) > 1
             else Path()
         )
-    nome_arquivo = f"{caminho_path.stem}_{cnpj_limpo}.parquet"
+    nome_arquivo = f"{_sql_stem(caminho_path)}_{cnpj_limpo}.parquet"
     return pasta_saida_base / caminho_relativo.parent / nome_arquivo
 
 
@@ -331,7 +371,7 @@ def _formatar_rotulo_consulta(consulta: ConsultaSql) -> str:
         if not isinstance(consulta.caminho, Path)
         else consulta.caminho
     )
-    return str(caminho.relative_to(consulta.raiz_sql)).replace("\\", "/")
+    return str(_relative_sql_path(caminho, consulta.raiz_sql)).replace("\\", "/")
 
 
 def _extrair_comandos_pre_sql(sql_texto: str) -> tuple[list[str], str]:
