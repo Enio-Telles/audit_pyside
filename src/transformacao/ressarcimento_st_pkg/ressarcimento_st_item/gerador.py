@@ -67,16 +67,12 @@ def _normalizar_base_c176(df: pl.DataFrame) -> pl.DataFrame:
         expr_ano_ref("periodo_efd"),
         pl.col("cnpj").cast(pl.Utf8, strict=False),
         pl.col("num_item_saida").cast(pl.Int64, strict=False),
-        pl.col("cod_item_ref_saida")
-        .cast(pl.Utf8, strict=False)
-        .alias("cod_item_saida"),
+        pl.col("cod_item_ref_saida").cast(pl.Utf8, strict=False).alias("cod_item_saida"),
         pl.col("id_agrupado").cast(pl.Utf8, strict=False),
         pl.col("descr_padrao").cast(pl.Utf8, strict=False),
         pl.col("unid_ref").cast(pl.Utf8, strict=False),
         pl.col("fator_saida").cast(pl.Float64, strict=False),
-        pl.col("fator_entrada_xml")
-        .cast(pl.Float64, strict=False)
-        .alias("fator_entrada"),
+        pl.col("fator_entrada_xml").cast(pl.Float64, strict=False).alias("fator_entrada"),
         pl.col("qtd_saida_unid_ref").cast(pl.Float64, strict=False),
         pl.col("qtd_entrada_xml").cast(pl.Float64, strict=False),
         pl.col("qtd_entrada_xml_unid_ref").cast(pl.Float64, strict=False),
@@ -113,15 +109,11 @@ def _normalizar_base_c176(df: pl.DataFrame) -> pl.DataFrame:
 
 def gerar_ressarcimento_st_item(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
     cnpj_limpo = "".join(filter(str.isdigit, cnpj))
-    caminho_c176 = caminho_produtos(
-        cnpj_limpo, f"c176_xml_{cnpj_limpo}.parquet", pasta_cnpj
-    )
+    caminho_c176 = caminho_produtos(cnpj_limpo, f"c176_xml_{cnpj_limpo}.parquet", pasta_cnpj)
     caminho_credito = caminho_analise(
         cnpj_limpo, f"credito_icms_item_{cnpj_limpo}.parquet", pasta_cnpj
     )
-    caminho_st = caminho_oracle(
-        cnpj_limpo, f"10_st_calc_ate_2022_{cnpj_limpo}.parquet", pasta_cnpj
-    )
+    caminho_st = caminho_oracle(cnpj_limpo, f"10_st_calc_ate_2022_{cnpj_limpo}.parquet", pasta_cnpj)
     caminho_fronteira_simples = caminho_oracle(
         cnpj_limpo, f"11_fronteira_item_simples_{cnpj_limpo}.parquet", pasta_cnpj
     )
@@ -135,9 +127,7 @@ def gerar_ressarcimento_st_item(cnpj: str, pasta_cnpj: Path | None = None) -> bo
     df_base = _normalizar_base_c176(ler_parquet_opcional(caminho_c176))
     if df_base.is_empty():
         ok_item = salvar_df(alinhar_schema(pl.DataFrame(), SCHEMA_ITEM), caminho_saida)
-        ok_val = salvar_df(
-            alinhar_schema(pl.DataFrame(), SCHEMA_ITEM), caminho_validacoes
-        )
+        ok_val = salvar_df(alinhar_schema(pl.DataFrame(), SCHEMA_ITEM), caminho_validacoes)
         return ok_item and ok_val
 
     chaves_join = ["chave_nfe_ultima_entrada", "prod_nitem_entrada"]
@@ -165,9 +155,7 @@ def gerar_ressarcimento_st_item(cnpj: str, pasta_cnpj: Path | None = None) -> bo
             how="left",
         )
         .join(
-            df_fronteira_simples.select(
-                chaves_join + ["fronteira_valor_icms_total_item"]
-            ),
+            df_fronteira_simples.select(chaves_join + ["fronteira_valor_icms_total_item"]),
             on=chaves_join,
             how="left",
         )
@@ -180,10 +168,7 @@ def gerar_ressarcimento_st_item(cnpj: str, pasta_cnpj: Path | None = None) -> bo
             .otherwise(None)
             .alias("vl_unit_st_calc_unid_ref"),
             pl.when(pl.col("qtd_entrada_xml_unid_ref") > 0)
-            .then(
-                pl.col("fronteira_valor_icms_total_item")
-                / pl.col("qtd_entrada_xml_unid_ref")
-            )
+            .then(pl.col("fronteira_valor_icms_total_item") / pl.col("qtd_entrada_xml_unid_ref"))
             .otherwise(None)
             .alias("vl_unit_st_fronteira_unid_ref"),
             (
@@ -202,9 +187,7 @@ def gerar_ressarcimento_st_item(cnpj: str, pasta_cnpj: Path | None = None) -> bo
                 * pl.coalesce([pl.col("qtd_saida_unid_ref"), pl.lit(0.0)])
             ).alias("vl_st_fronteira_total_considerado"),
             pl.col("calc_st_total_item").is_not_null().alias("possui_st_calc_ate_2022"),
-            pl.col("fronteira_valor_icms_total_item")
-            .is_not_null()
-            .alias("possui_fronteira"),
+            pl.col("fronteira_valor_icms_total_item").is_not_null().alias("possui_fronteira"),
             (
                 pl.col("chave_nfe_ultima_entrada").is_not_null()
                 & (pl.col("chave_nfe_ultima_entrada") != "")

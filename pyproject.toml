@@ -53,9 +53,15 @@ addopts = ["-m", "not oracle and not gui"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+# P1-05 starts the lint/format gate on the fiscal pipeline first. Expanding this
+# include list to GUI/scripts/tests belongs in focused cleanup PRs to avoid
+# mixing repository-wide formatting with the CI/pre-commit bootstrap.
+include = ["src/transformacao/**/*.py"]
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
-ignore = ["E501", "RUF012", "RUF001", "RUF002", "RUF003", "RUF005", "RUF013", "F401", "F403", "F841", "SIM105", "SIM108", "SIM117", "SIM118", "UP038", "B007", "SIM102", "E741", "B008", "B904", "UP035"]
+# Transitional debt from legacy pipeline/GUI modules. Keep these ignores explicit while P1
+# only establishes the lint gate; shrink them in focused cleanup PRs.
+ignore = ["E501", "E402", "RUF012", "RUF001", "RUF002", "RUF003", "RUF005", "RUF013", "RUF022", "RUF059", "F401", "F403", "F841", "SIM105", "SIM108", "SIM117", "SIM118", "B007", "SIM102", "E741", "B008", "B904", "UP035", "UP037", "I001", "UP006", "UP007", "UP015", "UP045", "RUF100"]
 
 [tool.ruff.format]
 quote-style = "double"
@@ -73,6 +79,16 @@ warn_return_any = false
 warn_unused_ignores = true
 ignore_missing_imports = true
 disable_error_code = ["var-annotated"]
+exclude = [
+    "src/transformacao/01_item_unidades.py",
+    "src/transformacao/tabelas_base/enriquecimento_fontes.py",
+    "src/transformacao/ressarcimento_st_pkg/ressarcimento_st_mensal/gerador.py",
+    "src/transformacao/ressarcimento_st_pkg/ressarcimento_st_conciliacao/gerador.py",
+    "src/transformacao/rastreabilidade_produtos/fatores_conversao.py",
+    "src/transformacao/movimentacao_estoque_pkg/movimentacao_estoque.py",
+    "src/transformacao/movimentacao_estoque_pkg/co_sefin_class.py",
+    "src/transformacao/movimentacao_estoque_pkg/c170_xml.py",
+]
 
 [[tool.mypy.overrides]]
 module = "interface_grafica.ui.main_window"

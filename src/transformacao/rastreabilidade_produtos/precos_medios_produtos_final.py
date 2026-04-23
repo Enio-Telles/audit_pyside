@@ -1,4 +1,4 @@
-﻿"""
+"""
 precos_medios_produtos_final.py
 
 Objetivo: Calcular preco medio por produto agrupado/unidade a partir da base final.
@@ -68,9 +68,7 @@ def calcular_precos_medios_produtos_final(
             .select(["descricao_normalizada", "id_agrupado", "descr_padrao"])
             .with_columns(
                 [
-                    pl.col("descricao_normalizada")
-                    .cast(pl.Utf8, strict=False)
-                    .fill_null(""),
+                    pl.col("descricao_normalizada").cast(pl.Utf8, strict=False).fill_null(""),
                     pl.col("id_agrupado").cast(pl.Utf8, strict=False),
                     pl.col("descr_padrao").cast(pl.Utf8, strict=False),
                 ]
@@ -88,9 +86,7 @@ def calcular_precos_medios_produtos_final(
         )
 
     df_precos = (
-        df_link.filter(
-            pl.col("id_agrupado").is_not_null() & pl.col("unid").is_not_null()
-        )
+        df_link.filter(pl.col("id_agrupado").is_not_null() & pl.col("unid").is_not_null())
         .group_by(["id_agrupado", "descr_padrao", "unid"])
         .agg(
             [
@@ -98,9 +94,7 @@ def calcular_precos_medios_produtos_final(
                 pl.col("qtd_compras").sum().alias("qtd_compras_total"),
                 pl.col("vendas").sum().alias("vendas_total"),
                 pl.col("qtd_vendas").sum().alias("qtd_vendas_total"),
-                (pl.col("qtd_compras").sum() + pl.col("qtd_vendas").sum()).alias(
-                    "qtd_mov_total"
-                ),
+                (pl.col("qtd_compras").sum() + pl.col("qtd_vendas").sum()).alias("qtd_mov_total"),
             ]
         )
         .with_columns(
@@ -117,9 +111,9 @@ def calcular_precos_medios_produtos_final(
         )
         .with_columns(
             [
-                pl.coalesce(
-                    [pl.col("preco_medio_compra"), pl.col("preco_medio_venda")]
-                ).alias("preco_medio_base"),
+                pl.coalesce([pl.col("preco_medio_compra"), pl.col("preco_medio_venda")]).alias(
+                    "preco_medio_base"
+                ),
                 pl.when(pl.col("preco_medio_compra").is_not_null())
                 .then(pl.lit("COMPRA"))
                 .when(pl.col("preco_medio_venda").is_not_null())

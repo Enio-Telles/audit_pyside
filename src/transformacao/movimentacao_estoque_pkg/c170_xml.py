@@ -98,19 +98,30 @@ def _get_desc_similarity_expr() -> pl.Expr:
         .when(pl.col("Descr_item_c170_norm") == pl.col("Descr_item_xml_norm"))
         .then(1.0)
         .otherwise(
-            pl.col("Descr_item_c170_norm").str.split(" ")
-            .list.eval(pl.element().filter(pl.element() != "")).list.unique()
+            pl.col("Descr_item_c170_norm")
+            .str.split(" ")
+            .list.eval(pl.element().filter(pl.element() != ""))
+            .list.unique()
             .list.set_intersection(
-                pl.col("Descr_item_xml_norm").str.split(" ")
-                .list.eval(pl.element().filter(pl.element() != "")).list.unique()
+                pl.col("Descr_item_xml_norm")
+                .str.split(" ")
+                .list.eval(pl.element().filter(pl.element() != ""))
+                .list.unique()
             )
-            .list.len().cast(pl.Float64)
+            .list.len()
+            .cast(pl.Float64)
             / pl.max_horizontal(
-                pl.col("Descr_item_c170_norm").str.split(" ")
-                .list.eval(pl.element().filter(pl.element() != "")).list.unique().list.len(),
-                pl.col("Descr_item_xml_norm").str.split(" ")
-                .list.eval(pl.element().filter(pl.element() != "")).list.unique().list.len(),
-                1
+                pl.col("Descr_item_c170_norm")
+                .str.split(" ")
+                .list.eval(pl.element().filter(pl.element() != ""))
+                .list.unique()
+                .list.len(),
+                pl.col("Descr_item_xml_norm")
+                .str.split(" ")
+                .list.eval(pl.element().filter(pl.element() != ""))
+                .list.unique()
+                .list.len(),
+                1,
             ).cast(pl.Float64)
         )
     ).alias("desc_similarity")
@@ -164,9 +175,7 @@ def _build_cst_xml(df: pl.DataFrame | pl.LazyFrame, columns: list[str]) -> pl.Ex
 def _prepare_xml_candidates(
     df: pl.DataFrame | pl.LazyFrame, fonte: str
 ) -> pl.DataFrame | pl.LazyFrame:
-    columns = (
-        df.collect_schema().names() if isinstance(df, pl.LazyFrame) else df.columns
-    )
+    columns = df.collect_schema().names() if isinstance(df, pl.LazyFrame) else df.columns
 
     def col_or_null(name: str, dtype=pl.Utf8):
         if name in columns:
@@ -226,9 +235,7 @@ def _prepare_xml_candidates(
         col_or_null("ide_serie").alias("Ser_xml"),
         col_or_null("nnf").alias("num_nfe_xml"),
         col_or_null("dhemi").alias("Dt_doc_xml"),
-        pl.coalesce([col_or_null("dhsaient"), col_or_null("dhemi")]).alias(
-            "Dt_e_s_xml"
-        ),
+        pl.coalesce([col_or_null("dhsaient"), col_or_null("dhemi")]).alias("Dt_e_s_xml"),
         col_or_null("co_uf_emit").alias("co_uf_emit_xml"),
         col_or_null("co_uf_dest").alias("co_uf_dest_xml"),
         col_or_null("co_finnfe").alias("finnfe_xml"),
@@ -294,19 +301,14 @@ def gerar_c170_xml(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
     df_nfce_agr_lazy = pl.scan_parquet(arq_nfce_agr)
 
     if df_c170_lazy.select(pl.len()).collect().item() == 0:
-        return salvar_para_parquet(
-            pl.DataFrame(), pasta_brutos, f"c170_xml_{cnpj}.parquet"
-        )
+        return salvar_para_parquet(pl.DataFrame(), pasta_brutos, f"c170_xml_{cnpj}.parquet")
 
     df_c170_base = (
         df_c170_lazy.with_row_index("__rowid__")
         .with_columns(
             [
                 _to_int_expr("num_item", "num_item"),
-                pl.col("cod_item")
-                .cast(pl.Utf8, strict=False)
-                .str.strip_chars()
-                .alias("cod_item"),
+                pl.col("cod_item").cast(pl.Utf8, strict=False).str.strip_chars().alias("cod_item"),
             ]
         )
         .join(
@@ -332,15 +334,10 @@ def gerar_c170_xml(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         )
         .with_columns(
             [
-                pl.col("ind_oper")
-                .cast(pl.Utf8, strict=False)
-                .alias("Tipo_operacao_c170"),
+                pl.col("ind_oper").cast(pl.Utf8, strict=False).alias("Tipo_operacao_c170"),
                 pl.lit(None, pl.Int64).alias("nsu_c170"),
                 pl.col("chv_nfe").cast(pl.Utf8, strict=False).alias("Chv_nfe"),
-                pl.col("chv_nfe")
-                .cast(pl.Utf8, strict=False)
-                .str.slice(20, 2)
-                .alias("mod_c170"),
+                pl.col("chv_nfe").cast(pl.Utf8, strict=False).str.slice(20, 2).alias("mod_c170"),
                 pl.col("ser").cast(pl.Utf8, strict=False).alias("Ser_c170"),
                 pl.col("num_doc").cast(pl.Utf8, strict=False).alias("num_nfe_c170"),
                 pl.col("dt_doc").alias("Dt_doc_c170"),
@@ -351,12 +348,8 @@ def gerar_c170_xml(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
                 _clean_digits_expr("cod_ncm", "Ncm_c170"),
                 _clean_digits_expr("cest", "Cest_c170"),
                 pl.col("tipo_item").cast(pl.Utf8, strict=False).alias("Tipo_item_c170"),
-                pl.col("descr_item")
-                .cast(pl.Utf8, strict=False)
-                .alias("Descr_item_c170"),
-                pl.col("descr_compl")
-                .cast(pl.Utf8, strict=False)
-                .alias("Descr_compl_c170"),
+                pl.col("descr_item").cast(pl.Utf8, strict=False).alias("Descr_item_c170"),
+                pl.col("descr_compl").cast(pl.Utf8, strict=False).alias("Descr_compl_c170"),
                 pl.col("cfop").cast(pl.Utf8, strict=False).alias("Cfop_c170"),
                 pl.col("cst_icms").cast(pl.Utf8, strict=False).alias("Cst_c170"),
                 _to_float_expr("qtd", "Qtd_c170"),
@@ -420,11 +413,9 @@ def gerar_c170_xml(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
                 )
                 .fill_null(False)
                 .alias("ind_match_gtin"),
-                                _get_desc_similarity_expr(),
+                _get_desc_similarity_expr(),
                 (pl.col("Qtd_c170") - pl.col("Qtd_xml")).abs().alias("diff_qtd"),
-                (pl.col("Vl_item_c170") - pl.col("Vl_item_xml"))
-                .abs()
-                .alias("diff_vl_total"),
+                (pl.col("Vl_item_c170") - pl.col("Vl_item_xml")).abs().alias("diff_vl_total"),
                 pl.when((pl.col("Qtd_c170") > 0) & (pl.col("Qtd_xml") > 0))
                 .then(
                     (
@@ -446,15 +437,9 @@ def gerar_c170_xml(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
                 .over(chaves_particao)
                 .alias("existe_match_id_agrupado"),
                 (
-                    pl.when(pl.col("ind_match_ncm"))
-                    .then(pl.lit(300))
-                    .otherwise(pl.lit(0))
-                    + pl.when(pl.col("ind_match_cest"))
-                    .then(pl.lit(250))
-                    .otherwise(pl.lit(0))
-                    + pl.when(pl.col("ind_match_gtin"))
-                    .then(pl.lit(220))
-                    .otherwise(pl.lit(0))
+                    pl.when(pl.col("ind_match_ncm")).then(pl.lit(300)).otherwise(pl.lit(0))
+                    + pl.when(pl.col("ind_match_cest")).then(pl.lit(250)).otherwise(pl.lit(0))
+                    + pl.when(pl.col("ind_match_gtin")).then(pl.lit(220)).otherwise(pl.lit(0))
                     + pl.when(pl.col("desc_similarity") >= 0.98)
                     .then(pl.lit(200))
                     .when(pl.col("desc_similarity") >= 0.75)
@@ -472,9 +457,7 @@ def gerar_c170_xml(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
                     .when(pl.col("diff_vl_unit") <= 0.01)
                     .then(pl.lit(100))
                     .otherwise(pl.lit(0))
-                    + pl.when(pl.col("ind_match_num_item"))
-                    .then(pl.lit(80))
-                    .otherwise(pl.lit(0))
+                    + pl.when(pl.col("ind_match_num_item")).then(pl.lit(80)).otherwise(pl.lit(0))
                 ).alias("score_vinculo_xml"),
             ]
         )
@@ -499,9 +482,7 @@ def gerar_c170_xml(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
             descending=[False, True, True, True, False, False, False],
             nulls_last=True,
         )
-        .with_columns(
-            pl.int_range(0, pl.len()).over(chaves_particao).alias("__rank_match")
-        )
+        .with_columns(pl.int_range(0, pl.len()).over(chaves_particao).alias("__rank_match"))
         .filter(pl.col("__rank_match") == 0)
         .with_columns(
             [
@@ -522,69 +503,45 @@ def gerar_c170_xml(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
 
     df_final = df_match.select(
         [
-            pl.coalesce(
-                [pl.col("Tipo_operacao_xml"), pl.col("Tipo_operacao_c170")]
-            ).alias("Tipo_operacao"),
+            pl.coalesce([pl.col("Tipo_operacao_xml"), pl.col("Tipo_operacao_c170")]).alias(
+                "Tipo_operacao"
+            ),
             pl.col("nsu_xml").alias("nsu"),
             pl.col("Chv_nfe").alias("Chv_nfe"),
             pl.coalesce([pl.col("mod_xml"), pl.col("mod_c170")]).alias("mod"),
             pl.coalesce([pl.col("Ser_xml"), pl.col("Ser_c170")]).alias("Ser"),
-            pl.coalesce([pl.col("num_nfe_xml"), pl.col("num_nfe_c170")]).alias(
-                "num_nfe"
-            ),
+            pl.coalesce([pl.col("num_nfe_xml"), pl.col("num_nfe_c170")]).alias("num_nfe"),
             pl.coalesce([pl.col("Dt_doc_xml"), pl.col("Dt_doc_c170")]).alias("Dt_doc"),
             pl.coalesce([pl.col("Dt_e_s_xml"), pl.col("Dt_e_s_c170")]).alias("Dt_e_s"),
-            pl.coalesce([pl.col("Num_item_xml"), pl.col("Num_item_c170")]).alias(
-                "Num_item"
-            ),
+            pl.coalesce([pl.col("Num_item_xml"), pl.col("Num_item_c170")]).alias("Num_item"),
             pl.coalesce([pl.col("finnfe_xml"), pl.lit(None, pl.Utf8)]).alias("finnfe"),
-            pl.coalesce(
-                [pl.col("co_uf_emit_xml"), pl.col("Chv_nfe").str.slice(0, 2)]
-            ).alias("co_uf_emit"),
+            pl.coalesce([pl.col("co_uf_emit_xml"), pl.col("Chv_nfe").str.slice(0, 2)]).alias(
+                "co_uf_emit"
+            ),
             pl.col("co_uf_dest_xml").alias("co_uf_dest"),
-            pl.coalesce([pl.col("Cod_item_xml"), pl.col("Cod_item_c170")]).alias(
-                "Cod_item"
-            ),
-            pl.coalesce([pl.col("Cod_barra_xml"), pl.col("Cod_barra_c170")]).alias(
-                "Cod_barra"
-            ),
+            pl.coalesce([pl.col("Cod_item_xml"), pl.col("Cod_item_c170")]).alias("Cod_item"),
+            pl.coalesce([pl.col("Cod_barra_xml"), pl.col("Cod_barra_c170")]).alias("Cod_barra"),
             pl.coalesce([pl.col("Ncm_xml"), pl.col("Ncm_c170")]).alias("Ncm"),
             pl.coalesce([pl.col("Cest_xml"), pl.col("Cest_c170")]).alias("Cest"),
             pl.col("Tipo_item_c170").alias("Tipo_item"),
-            pl.coalesce([pl.col("Descr_item_xml"), pl.col("Descr_item_c170")]).alias(
-                "Descr_item"
-            ),
+            pl.coalesce([pl.col("Descr_item_xml"), pl.col("Descr_item_c170")]).alias("Descr_item"),
             pl.col("Descr_compl_c170").alias("Descr_compl"),
             pl.coalesce([pl.col("Cfop_xml"), pl.col("Cfop_c170")]).alias("Cfop"),
             pl.coalesce([pl.col("cst_xml"), pl.col("Cst_c170")]).alias("Cst"),
             pl.coalesce([pl.col("Qtd_xml"), pl.col("Qtd_c170")]).alias("Qtd"),
             pl.coalesce([pl.col("Unid_xml"), pl.col("Unid_c170")]).alias("Unid"),
-            pl.coalesce([pl.col("Vl_item_xml"), pl.col("Vl_item_c170")]).alias(
-                "Vl_item"
-            ),
+            pl.coalesce([pl.col("Vl_item_xml"), pl.col("Vl_item_c170")]).alias("Vl_item"),
             pl.col("vl_desc_c170").alias("vl_desc"),
-            pl.coalesce([pl.col("Aliq_icms_xml"), pl.col("Aliq_icms_c170")]).alias(
-                "Aliq_icms"
+            pl.coalesce([pl.col("Aliq_icms_xml"), pl.col("Aliq_icms_c170")]).alias("Aliq_icms"),
+            pl.coalesce([pl.col("Vl_bc_icms_xml"), pl.col("Vl_bc_icms_c170")]).alias("Vl_bc_icms"),
+            pl.coalesce([pl.col("Vl_icms_xml"), pl.col("Vl_icms_c170")]).alias("Vl_icms"),
+            pl.coalesce([pl.col("vl_icms_st_xml"), pl.col("vl_icms_st_c170")]).alias("vl_icms_st"),
+            pl.coalesce([pl.col("vl_bc_icms_st_xml"), pl.col("vl_bc_icms_st_c170")]).alias(
+                "vl_bc_icms_st"
             ),
-            pl.coalesce([pl.col("Vl_bc_icms_xml"), pl.col("Vl_bc_icms_c170")]).alias(
-                "Vl_bc_icms"
-            ),
-            pl.coalesce([pl.col("Vl_icms_xml"), pl.col("Vl_icms_c170")]).alias(
-                "Vl_icms"
-            ),
-            pl.coalesce([pl.col("vl_icms_st_xml"), pl.col("vl_icms_st_c170")]).alias(
-                "vl_icms_st"
-            ),
-            pl.coalesce(
-                [pl.col("vl_bc_icms_st_xml"), pl.col("vl_bc_icms_st_c170")]
-            ).alias("vl_bc_icms_st"),
-            pl.coalesce([pl.col("aliq_st_xml"), pl.col("aliq_st_c170")]).alias(
-                "aliq_st"
-            ),
+            pl.coalesce([pl.col("aliq_st_xml"), pl.col("aliq_st_c170")]).alias("aliq_st"),
             pl.col("id_agrupado"),
-            pl.coalesce([pl.col("co_sefin_agr_xml"), pl.col("co_sefin_agr")]).alias(
-                "co_sefin_agr"
-            ),
+            pl.coalesce([pl.col("co_sefin_agr_xml"), pl.col("co_sefin_agr")]).alias("co_sefin_agr"),
             pl.col("score_vinculo_xml"),
             pl.col("desc_similarity"),
             pl.col("diff_qtd"),
@@ -611,9 +568,7 @@ def gerar_c170_xml(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
     )
 
     # T01: Finalizar computação Lazy e salvar resultados
-    return salvar_para_parquet(
-        df_final.collect(), pasta_brutos, f"c170_xml_{cnpj}.parquet"
-    )
+    return salvar_para_parquet(df_final.collect(), pasta_brutos, f"c170_xml_{cnpj}.parquet")
 
 
 if __name__ == "__main__":

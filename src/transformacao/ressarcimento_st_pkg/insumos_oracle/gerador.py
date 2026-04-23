@@ -103,9 +103,7 @@ def _normalizar_st_material(df: pl.DataFrame) -> pl.DataFrame:
         return alinhar_schema(pl.DataFrame(), SCHEMA_ST_MATERIAL)
 
     convertido = df.select(
-        pl.col("chave_acesso")
-        .cast(pl.Utf8, strict=False)
-        .alias("chave_nfe_ultima_entrada"),
+        pl.col("chave_acesso").cast(pl.Utf8, strict=False).alias("chave_nfe_ultima_entrada"),
         pl.col("prod_nitem").cast(pl.Int64, strict=False).alias("prod_nitem_entrada"),
         pl.coalesce(
             [
@@ -116,9 +114,7 @@ def _normalizar_st_material(df: pl.DataFrame) -> pl.DataFrame:
         ).alias("calc_st_total_item"),
         pl.col("icms_vbcst").cast(pl.Float64, strict=False).alias("icms_vbcst"),
         pl.col("icms_vicmsst").cast(pl.Float64, strict=False).alias("icms_vicmsst"),
-        pl.col("icms_vicmsstret")
-        .cast(pl.Float64, strict=False)
-        .alias("icms_vicmsstret"),
+        pl.col("icms_vicmsstret").cast(pl.Float64, strict=False).alias("icms_vicmsstret"),
     )
     return alinhar_schema(convertido, SCHEMA_ST_MATERIAL)
 
@@ -131,27 +127,17 @@ def _normalizar_fronteira_simples(df: pl.DataFrame) -> pl.DataFrame:
         return alinhar_schema(pl.DataFrame(), SCHEMA_FRONTEIRA_SIMPLES)
 
     convertido = df.select(
-        pl.col("chave_acesso")
-        .cast(pl.Utf8, strict=False)
-        .alias("chave_nfe_ultima_entrada"),
+        pl.col("chave_acesso").cast(pl.Utf8, strict=False).alias("chave_nfe_ultima_entrada"),
         pl.col("num_item").cast(pl.Int64, strict=False).alias("prod_nitem_entrada"),
-        pl.col("tipo_operacao")
-        .cast(pl.Utf8, strict=False)
-        .alias("fronteira_tipo_operacao"),
-        pl.col("chave_acesso")
-        .cast(pl.Utf8, strict=False)
-        .alias("fronteira_chave_acesso"),
+        pl.col("tipo_operacao").cast(pl.Utf8, strict=False).alias("fronteira_tipo_operacao"),
+        pl.col("chave_acesso").cast(pl.Utf8, strict=False).alias("fronteira_chave_acesso"),
         pl.col("num_item").cast(pl.Int64, strict=False).alias("fronteira_num_item"),
         pl.col("cod_item").cast(pl.Utf8, strict=False).alias("fronteira_cod_item"),
         pl.col("desc_item").cast(pl.Utf8, strict=False).alias("fronteira_desc_item"),
         pl.col("ncm").cast(pl.Utf8, strict=False).alias("fronteira_ncm"),
         pl.col("cest").cast(pl.Utf8, strict=False).alias("fronteira_cest"),
-        pl.col("qtd_comercial")
-        .cast(pl.Float64, strict=False)
-        .alias("fronteira_qtd_comercial"),
-        pl.col("valor_produto")
-        .cast(pl.Float64, strict=False)
-        .alias("fronteira_valor_produto"),
+        pl.col("qtd_comercial").cast(pl.Float64, strict=False).alias("fronteira_qtd_comercial"),
+        pl.col("valor_produto").cast(pl.Float64, strict=False).alias("fronteira_valor_produto"),
         pl.col("bc_icms_st_destacado")
         .cast(pl.Float64, strict=False)
         .alias("fronteira_bc_icms_st_destacado"),
@@ -184,42 +170,20 @@ def _normalizar_fronteira_completo(df: pl.DataFrame) -> pl.DataFrame:
         pl.lit(None).cast(pl.Int64).alias("fronteira_qtd_guias"),
         pl.col("guia").cast(pl.Utf8, strict=False).alias("fronteira_guia_exemplo"),
         pl.col("receita").cast(pl.Utf8, strict=False).alias("fronteira_receita"),
-        pl.col("valor_devido")
-        .cast(pl.Float64, strict=False)
-        .alias("fronteira_valor_devido"),
-        pl.col("valor_pago")
-        .cast(pl.Float64, strict=False)
-        .alias("fronteira_valor_pago"),
+        pl.col("valor_devido").cast(pl.Float64, strict=False).alias("fronteira_valor_devido"),
+        pl.col("valor_pago").cast(pl.Float64, strict=False).alias("fronteira_valor_pago"),
         pl.col("situação").cast(pl.Utf8, strict=False).alias("fronteira_situacao"),
         pl.col("co_sefin").cast(pl.Utf8, strict=False).alias("fronteira_co_sefin_lanc"),
-        pl.col("nome_co_sefin")
-        .cast(pl.Utf8, strict=False)
-        .alias("fronteira_nome_co_sefin"),
-        pl.col("vl_merc")
-        .cast(pl.Float64, strict=False)
-        .alias("fronteira_vl_merc_item"),
-        pl.col("vl_bc_merc")
-        .cast(pl.Float64, strict=False)
-        .alias("fronteira_vl_bc_merc_item"),
+        pl.col("nome_co_sefin").cast(pl.Utf8, strict=False).alias("fronteira_nome_co_sefin"),
+        pl.col("vl_merc").cast(pl.Float64, strict=False).alias("fronteira_vl_merc_item"),
+        pl.col("vl_bc_merc").cast(pl.Float64, strict=False).alias("fronteira_vl_bc_merc_item"),
         pl.col("aliq").cast(pl.Float64, strict=False).alias("fronteira_aliq_item"),
-        pl.col("vl_tot_deb")
-        .cast(pl.Float64, strict=False)
-        .alias("fronteira_vl_tot_debito_item"),
-        pl.col("vl_tot_cred")
-        .cast(pl.Float64, strict=False)
-        .alias("fronteira_vl_credito_rateio"),
-        pl.col("vl_icms")
-        .cast(pl.Float64, strict=False)
-        .alias("fronteira_vl_icms_recolher"),
-        pl.col("it_in_produto_st")
-        .cast(pl.Utf8, strict=False)
-        .alias("fronteira_ind_produto_st"),
-        pl.col("it_in_cest_st")
-        .cast(pl.Utf8, strict=False)
-        .alias("fronteira_ind_cest_st"),
-        pl.col("it_pc_interna")
-        .cast(pl.Float64, strict=False)
-        .alias("fronteira_pc_interna_merc"),
+        pl.col("vl_tot_deb").cast(pl.Float64, strict=False).alias("fronteira_vl_tot_debito_item"),
+        pl.col("vl_tot_cred").cast(pl.Float64, strict=False).alias("fronteira_vl_credito_rateio"),
+        pl.col("vl_icms").cast(pl.Float64, strict=False).alias("fronteira_vl_icms_recolher"),
+        pl.col("it_in_produto_st").cast(pl.Utf8, strict=False).alias("fronteira_ind_produto_st"),
+        pl.col("it_in_cest_st").cast(pl.Utf8, strict=False).alias("fronteira_ind_cest_st"),
+        pl.col("it_pc_interna").cast(pl.Float64, strict=False).alias("fronteira_pc_interna_merc"),
     )
     return alinhar_schema(convertido, SCHEMA_FRONTEIRA_COMPLETO)
 
@@ -249,9 +213,7 @@ def gerar_st_material_ate_2022(cnpj: str, pasta_cnpj: Path | None = None) -> boo
     )
     legado = caminho_bruto(cnpj_limpo, f"nfe_dados_st_{cnpj_limpo}.parquet", pasta_cnpj)
     if not legado.exists():
-        legado = caminho_bruto(
-            cnpj_limpo, f"Nfe_dados_ST_{cnpj_limpo}.parquet", pasta_cnpj
-        )
+        legado = caminho_bruto(cnpj_limpo, f"Nfe_dados_ST_{cnpj_limpo}.parquet", pasta_cnpj)
 
     df_fonte = ler_parquet_opcional(
         caminho_saida if caminho_saida.exists() else legado, SCHEMA_ST_MATERIAL
@@ -269,9 +231,7 @@ def gerar_fronteira_item(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         cnpj_limpo, f"12_fronteira_item_completo_{cnpj_limpo}.parquet", pasta_cnpj
     )
 
-    legado_simples = caminho_bruto(
-        cnpj_limpo, f"fronteira_{cnpj_limpo}.parquet", pasta_cnpj
-    )
+    legado_simples = caminho_bruto(cnpj_limpo, f"fronteira_{cnpj_limpo}.parquet", pasta_cnpj)
     legado_completo = caminho_bruto(
         cnpj_limpo, f"fronteira_completo_{cnpj_limpo}.parquet", pasta_cnpj
     )
@@ -294,9 +254,7 @@ def gerar_fronteira_item(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
     return ok_simples and ok_completo
 
 
-def gerar_insumos_oracle_ressarcimento(
-    cnpj: str, pasta_cnpj: Path | None = None
-) -> bool:
+def gerar_insumos_oracle_ressarcimento(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
     ok_vigencia = gerar_vigencia_sefin(cnpj, pasta_cnpj)
     ok_rateio = gerar_rateio_frete_cte(cnpj, pasta_cnpj)
     ok_st = gerar_st_material_ate_2022(cnpj, pasta_cnpj)

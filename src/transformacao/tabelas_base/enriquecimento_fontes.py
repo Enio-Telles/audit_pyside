@@ -1,4 +1,4 @@
-﻿"""
+"""
 enriquecimento_fontes.py
 
 Objetivo: Materializar as regras de rastreabilidade na pratica sem destruir origens.
@@ -54,9 +54,7 @@ def gerar_enriquecimento(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
                 "[yellow]fontes_produtos falhou; tentando prosseguir com *_agr existentes...[/yellow]"
             )
     except ImportError:
-        rprint(
-            "[yellow]fontes_produtos indisponivel; usando *_agr existentes.[/yellow]"
-        )
+        rprint("[yellow]fontes_produtos indisponivel; usando *_agr existentes.[/yellow]")
 
     if not arq_fator.exists():
         rprint(
@@ -114,9 +112,9 @@ def gerar_enriquecimento(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
                     "qtd_padronizada"
                 ),
                 (
-                    (
-                        pl.col(col_valor_unitario).cast(pl.Float64) / pl.col("fator")
-                    ).alias("vuncom_padronizado")
+                    (pl.col(col_valor_unitario).cast(pl.Float64) / pl.col("fator")).alias(
+                        "vuncom_padronizado"
+                    )
                     if col_valor_unitario and col_valor_unitario in df_join.columns
                     else pl.lit(None).alias("vuncom_padronizado")
                 ),
@@ -124,9 +122,7 @@ def gerar_enriquecimento(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         )
         return df_join
 
-    def processar_fonte_agr(
-        prefix: str, col_ucom: str, col_qcom: str, col_vuncom: str = None
-    ):
+    def processar_fonte_agr(prefix: str, col_ucom: str, col_qcom: str, col_vuncom: str = None):
         """Processa uma fonte a partir do *_agr correspondente."""
         arq_agr = pasta_brutos / f"{prefix}_agr_{cnpj}.parquet"
         if not arq_agr.exists():
@@ -148,35 +144,25 @@ def gerar_enriquecimento(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
             return True
 
         df_enr = enriquecer_a_partir_agr(df_agr, col_ucom, col_qcom, col_vuncom)
-        return salvar_para_parquet(
-            df_enr, pasta_analises, f"{prefix}_enriquecido_{cnpj}.parquet"
-        )
+        return salvar_para_parquet(df_enr, pasta_analises, f"{prefix}_enriquecido_{cnpj}.parquet")
 
     # NFe
-    if list(pasta_brutos.glob("nfe_agr_*.parquet")) or list(
-        pasta_brutos.glob("NFe_*.parquet")
-    ):
+    if list(pasta_brutos.glob("nfe_agr_*.parquet")) or list(pasta_brutos.glob("NFe_*.parquet")):
         sucesso &= processar_fonte_agr("nfe", "prod_ucom", "prod_qcom", "prod_vuncom")
 
     # NFCe
-    if list(pasta_brutos.glob("nfce_agr_*.parquet")) or list(
-        pasta_brutos.glob("NFCe_*.parquet")
-    ):
+    if list(pasta_brutos.glob("nfce_agr_*.parquet")) or list(pasta_brutos.glob("NFCe_*.parquet")):
         sucesso &= processar_fonte_agr("nfce", "prod_ucom", "prod_qcom", "prod_vuncom")
 
     # C170
-    if list(pasta_brutos.glob("c170_agr_*.parquet")) or list(
-        pasta_brutos.glob("c170*.parquet")
-    ):
+    if list(pasta_brutos.glob("c170_agr_*.parquet")) or list(pasta_brutos.glob("c170*.parquet")):
         sucesso &= processar_fonte_agr("c170", "unid", "qtd", None)
 
     # Bloco H
     if list(pasta_brutos.glob("bloco_h_agr_*.parquet")) or list(
         pasta_brutos.glob("bloco_h*.parquet")
     ):
-        sucesso &= processar_fonte_agr(
-            "bloco_h", "unidade_medida", "quantidade", "valor_unitario"
-        )
+        sucesso &= processar_fonte_agr("bloco_h", "unidade_medida", "quantidade", "valor_unitario")
 
     return sucesso
 

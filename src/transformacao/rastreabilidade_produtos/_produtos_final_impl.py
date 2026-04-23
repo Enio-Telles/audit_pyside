@@ -115,25 +115,24 @@ def _construir_tabela_ponte(df_descricoes: pl.DataFrame) -> pl.DataFrame:
             "A tabela ponte terá codigo_fonte=None em todas as linhas. "
             "O vínculo de fontes usará apenas descricao_normalizada (fallback).[/yellow]"
         )
-        return (
-            df_descricoes
-            .select([
+        return df_descricoes.select(
+            [
                 pl.col("id_descricao").alias("chave_produto"),
                 "id_agrupado",
                 pl.lit(None, dtype=pl.Utf8).alias("codigo_fonte"),
                 "descricao_normalizada",
-            ])
-            .unique()
-        )
+            ]
+        ).unique()
 
     return (
-        df_descricoes
-        .select([
-            pl.col("id_descricao").alias("chave_produto"),
-            "id_agrupado",
-            "descricao_normalizada",
-            pl.col("lista_codigo_fonte").alias("codigo_fonte"),
-        ])
+        df_descricoes.select(
+            [
+                pl.col("id_descricao").alias("chave_produto"),
+                "id_agrupado",
+                "descricao_normalizada",
+                pl.col("lista_codigo_fonte").alias("codigo_fonte"),
+            ]
+        )
         .explode("codigo_fonte")
         .with_columns(pl.col("codigo_fonte").cast(pl.Utf8, strict=False))
         .unique()
@@ -157,7 +156,9 @@ def _registrar_auditoria_mapa_manual(
     if not cols_join:
         return
 
-    df_existentes = df_descricoes.select([c for c in ["id_descricao", "descricao_normalizada"] if c in df_descricoes.columns]).unique()
+    df_existentes = df_descricoes.select(
+        [c for c in ["id_descricao", "descricao_normalizada"] if c in df_descricoes.columns]
+    ).unique()
     df_auditoria = df_manual.join(df_existentes, on=cols_join, how="anti")
     if df_auditoria.is_empty():
         return
@@ -173,11 +174,13 @@ def _aplicar_agrupamento_automatico(df_descricoes: pl.DataFrame) -> pl.DataFrame
     # Reuse `id_agrupado_base` if already materialized in `descricao_produtos`.
     cols = df_descricoes.columns if hasattr(df_descricoes, "columns") else []
     if "id_agrupado_base" in cols:
-        return df_descricoes.with_columns([
-            pl.lit("automatico_descricao_normalizada").alias("criterio_agrupamento"),
-            pl.lit("automatico").alias("origem_agrupamento"),
-            pl.col("id_agrupado_base").alias("id_agrupado"),
-        ])
+        return df_descricoes.with_columns(
+            [
+                pl.lit("automatico_descricao_normalizada").alias("criterio_agrupamento"),
+                pl.lit("automatico").alias("origem_agrupamento"),
+                pl.col("id_agrupado_base").alias("id_agrupado"),
+            ]
+        )
 
     return df_descricoes.with_columns(
         [
@@ -188,7 +191,9 @@ def _aplicar_agrupamento_automatico(df_descricoes: pl.DataFrame) -> pl.DataFrame
     ).with_columns(pl.col("id_agrupado_base").alias("id_agrupado"))
 
 
-def _aplicar_agrupamento_manual(df_descricoes: pl.DataFrame, pasta_analises: Path, cnpj: str) -> pl.DataFrame:
+def _aplicar_agrupamento_manual(
+    df_descricoes: pl.DataFrame, pasta_analises: Path, cnpj: str
+) -> pl.DataFrame:
     """
     Prioriza o mapeamento manual se existir.
 
@@ -203,43 +208,54 @@ def _aplicar_agrupamento_manual(df_descricoes: pl.DataFrame, pasta_analises: Pat
 
     try:
         df_manual_raw = pl.read_parquet(caminho_manual)
-        colunas_validas = [c for c in ["id_descricao", "descricao_normalizada", "id_agrupado"] if c in df_manual_raw.columns]
+        colunas_validas = [
+            c
+            for c in ["id_descricao", "descricao_normalizada", "id_agrupado"]
+            if c in df_manual_raw.columns
+        ]
         if "id_agrupado" not in colunas_validas:
-            rprint(f"[yellow]Mapa manual ignorado: {caminho_manual.name} sem coluna id_agrupado.[/yellow]")
+            rprint(
+                f"[yellow]Mapa manual ignorado: {caminho_manual.name} sem coluna id_agrupado.[/yellow]"
+            )
             return df_descricoes
 
-        df_manual = df_manual_raw.select(colunas_validas).with_columns(
-            pl.col("id_agrupado").cast(pl.Utf8, strict=False).alias("id_agrupado_manual")
-        ).drop("id_agrupado")
+        df_manual = (
+            df_manual_raw.select(colunas_validas)
+            .with_columns(
+                pl.col("id_agrupado").cast(pl.Utf8, strict=False).alias("id_agrupado_manual")
+            )
+            .drop("id_agrupado")
+        )
         _registrar_auditoria_mapa_manual(df_manual, df_descricoes, pasta_analises, cnpj)
 
         df_result = df_descricoes
         if "id_descricao" in df_manual.columns:
             df_manual_id = (
-                df_manual
-                .filter(pl.col("id_descricao").is_not_null())
+                df_manual.filter(pl.col("id_descricao").is_not_null())
                 .select(["id_descricao", "id_agrupado_manual"])
                 .unique(subset=["id_descricao"], keep="last")
             )
             df_result = df_result.join(df_manual_id, on="id_descricao", how="left")
         else:
-            df_result = df_result.with_columns(pl.lit(None, dtype=pl.Utf8).alias("id_agrupado_manual"))
+            df_result = df_result.with_columns(
+                pl.lit(None, dtype=pl.Utf8).alias("id_agrupado_manual")
+            )
 
         if "descricao_normalizada" in df_manual.columns:
             df_manual_desc = (
-                df_manual
-                .filter(pl.col("descricao_normalizada").is_not_null())
+                df_manual.filter(pl.col("descricao_normalizada").is_not_null())
                 .select(["descricao_normalizada", "id_agrupado_manual"])
                 .rename({"id_agrupado_manual": "id_agrupado_manual_desc"})
                 .unique(subset=["descricao_normalizada"], keep="last")
             )
             df_result = df_result.join(df_manual_desc, on="descricao_normalizada", how="left")
         else:
-            df_result = df_result.with_columns(pl.lit(None, dtype=pl.Utf8).alias("id_agrupado_manual_desc"))
+            df_result = df_result.with_columns(
+                pl.lit(None, dtype=pl.Utf8).alias("id_agrupado_manual_desc")
+            )
 
         return (
-            df_result
-            .with_columns(
+            df_result.with_columns(
                 pl.coalesce(
                     [
                         pl.col("id_agrupado_manual"),
@@ -251,13 +267,15 @@ def _aplicar_agrupamento_manual(df_descricoes: pl.DataFrame, pasta_analises: Pat
             .with_columns(
                 [
                     pl.when(
-                        pl.col("id_agrupado_manual").is_not_null() | pl.col("id_agrupado_manual_desc").is_not_null()
+                        pl.col("id_agrupado_manual").is_not_null()
+                        | pl.col("id_agrupado_manual_desc").is_not_null()
                     )
                     .then(pl.lit("manual"))
                     .otherwise(pl.col("criterio_agrupamento"))
                     .alias("criterio_agrupamento"),
                     pl.when(
-                        pl.col("id_agrupado_manual").is_not_null() | pl.col("id_agrupado_manual_desc").is_not_null()
+                        pl.col("id_agrupado_manual").is_not_null()
+                        | pl.col("id_agrupado_manual_desc").is_not_null()
                     )
                     .then(pl.lit("manual"))
                     .otherwise(pl.col("origem_agrupamento"))
@@ -271,7 +289,9 @@ def _aplicar_agrupamento_manual(df_descricoes: pl.DataFrame, pasta_analises: Pat
         return df_descricoes
 
 
-def _aplicar_heuristica_agrupamento(df_descricoes: pl.DataFrame, pasta_analises: Path, cnpj: str) -> pl.DataFrame:
+def _aplicar_heuristica_agrupamento(
+    df_descricoes: pl.DataFrame, pasta_analises: Path, cnpj: str
+) -> pl.DataFrame:
     """
     Pipeline de agrupamento.
 
@@ -340,13 +360,27 @@ def produtos_agrupados(cnpj: str, pasta_cnpj: Path | None = None, versao: int = 
     try:
         logger.debug("polars version: %s", getattr(pl, "__version__", "unknown"))
         logger.debug("polars module file: %s", getattr(pl, "__file__", "builtin or unknown"))
-        logger.debug("df_descricoes type: %s; class: %s", type(df_descricoes), getattr(df_descricoes, "__class__", None))
-        logger.debug("df_item_unid type: %s; class: %s", type(df_item_unid), getattr(df_item_unid, "__class__", None))
+        logger.debug(
+            "df_descricoes type: %s; class: %s",
+            type(df_descricoes),
+            getattr(df_descricoes, "__class__", None),
+        )
+        logger.debug(
+            "df_item_unid type: %s; class: %s",
+            type(df_item_unid),
+            getattr(df_item_unid, "__class__", None),
+        )
         for name, var in [("df_descricoes", df_descricoes), ("df_item_unid", df_item_unid)]:
             has_agg = hasattr(var, "agg")
             has_group_by = hasattr(var, "group_by")
             has_groupby = hasattr(var, "groupby")
-            logger.debug("%s attributes -> agg: %s, group_by: %s, groupby: %s", name, has_agg, has_group_by, has_groupby)
+            logger.debug(
+                "%s attributes -> agg: %s, group_by: %s, groupby: %s",
+                name,
+                has_agg,
+                has_group_by,
+                has_groupby,
+            )
     except Exception:
         logger.debug("introspection helper failed")
 
@@ -404,7 +438,9 @@ def produtos_agrupados(cnpj: str, pasta_cnpj: Path | None = None, versao: int = 
         "lista_codigo_fonte",
     ]:
         if col not in df_descricoes.columns:
-            df_descricoes = df_descricoes.with_columns(pl.lit([]).cast(pl.List(pl.String)).alias(col))
+            df_descricoes = df_descricoes.with_columns(
+                pl.lit([]).cast(pl.List(pl.String)).alias(col)
+            )
 
     df_descricoes = df_descricoes.with_columns(
         [
@@ -425,39 +461,31 @@ def produtos_agrupados(cnpj: str, pasta_cnpj: Path | None = None, versao: int = 
 
     df_descricoes = _aplicar_heuristica_agrupamento(df_descricoes, pasta_analises, cnpj)
 
-    df_item_unid_norm = (
-        df_item_unid
-        .filter(pl.col("descricao").is_not_null())
-        .with_columns(expr_normalizar_descricao("descricao").alias("descricao_normalizada_item"))
+    df_item_unid_norm = df_item_unid.filter(pl.col("descricao").is_not_null()).with_columns(
+        expr_normalizar_descricao("descricao").alias("descricao_normalizada_item")
     )
 
-    df_item_com_grupo = (
-        df_item_unid_norm
-        .join(
-            df_descricoes.select(["descricao_normalizada", "id_agrupado"]).unique(subset=["descricao_normalizada"]),
-            left_on="descricao_normalizada_item",
-            right_on="descricao_normalizada",
-            how="left",
-        )
+    df_item_com_grupo = df_item_unid_norm.join(
+        df_descricoes.select(["descricao_normalizada", "id_agrupado"]).unique(
+            subset=["descricao_normalizada"]
+        ),
+        left_on="descricao_normalizada_item",
+        right_on="descricao_normalizada",
+        how="left",
     )
 
-    df_padrao = (
-        df_item_com_grupo
-        .group_by("id_agrupado")
-        .agg(
-            [
-                pl.col("descricao").first().alias("descr_padrao"),
-                get_moda_expr("ncm").alias("ncm_padrao"),
-                get_moda_expr("cest").alias("cest_padrao"),
-                get_moda_expr("gtin").alias("gtin_padrao"),
-                get_moda_expr("co_sefin_item").alias("co_sefin_padrao"),
-            ]
-        )
+    df_padrao = df_item_com_grupo.group_by("id_agrupado").agg(
+        [
+            pl.col("descricao").first().alias("descr_padrao"),
+            get_moda_expr("ncm").alias("ncm_padrao"),
+            get_moda_expr("cest").alias("cest_padrao"),
+            get_moda_expr("gtin").alias("gtin_padrao"),
+            get_moda_expr("co_sefin_item").alias("co_sefin_padrao"),
+        ]
     )
 
     df_mestra = (
-        df_descricoes
-        .group_by("id_agrupado")
+        df_descricoes.group_by("id_agrupado")
         .agg(
             [
                 pl.col("id_descricao").drop_nulls().unique().sort().alias("lista_chave_produto"),
@@ -470,7 +498,11 @@ def produtos_agrupados(cnpj: str, pasta_cnpj: Path | None = None, versao: int = 
                 _agrupar_lista_lista("lista_co_sefin", "lista_co_sefin"),
                 _agrupar_lista_lista("lista_unid", "lista_unidades"),
                 _agrupar_lista_lista("fontes", "fontes"),
-                pl.col("id_agrupado_base").drop_nulls().unique().sort().alias("ids_origem_agrupamento"),
+                pl.col("id_agrupado_base")
+                .drop_nulls()
+                .unique()
+                .sort()
+                .alias("ids_origem_agrupamento"),
                 pl.when(pl.col("origem_agrupamento").cast(pl.Utf8, strict=False) == "manual")
                 .then(pl.lit("manual"))
                 .otherwise(pl.lit("automatico_descricao_normalizada"))
@@ -486,12 +518,16 @@ def produtos_agrupados(cnpj: str, pasta_cnpj: Path | None = None, versao: int = 
         .join(df_padrao, on="id_agrupado", how="left")
         .with_columns(
             [
-                pl.coalesce([pl.col("descr_padrao"), pl.col("lista_descricoes").list.first()]).alias("descr_padrao"),
+                pl.coalesce(
+                    [pl.col("descr_padrao"), pl.col("lista_descricoes").list.first()]
+                ).alias("descr_padrao"),
                 pl.lit(versao).cast(pl.Int64).alias("versao_agrupamento"),
                 (pl.col("lista_co_sefin").list.len() > 1).alias("co_sefin_divergentes"),
             ]
         )
-        .with_columns(pl.col("lista_chave_produto").list.len().cast(pl.Int64).alias("qtd_descricoes_grupo"))
+        .with_columns(
+            pl.col("lista_chave_produto").list.len().cast(pl.Int64).alias("qtd_descricoes_grupo")
+        )
         .select(
             [
                 pl.col("id_agrupado").cast(pl.String),
@@ -530,13 +566,14 @@ def produtos_agrupados(cnpj: str, pasta_cnpj: Path | None = None, versao: int = 
     )
 
     ok_mestra = salvar_para_parquet(df_mestra, pasta_analises, f"produtos_agrupados_{cnpj}.parquet")
-    ok_ponte = salvar_para_parquet(df_ponte_agregacao, pasta_analises, f"map_produto_agrupado_{cnpj}.parquet")
+    ok_ponte = salvar_para_parquet(
+        df_ponte_agregacao, pasta_analises, f"map_produto_agrupado_{cnpj}.parquet"
+    )
     if not (ok_mestra and ok_ponte):
         return False
 
     df_mapeamento = (
-        df_mestra
-        .select(
+        df_mestra.select(
             [
                 "id_agrupado",
                 "lista_chave_produto",
@@ -559,14 +596,19 @@ def produtos_agrupados(cnpj: str, pasta_cnpj: Path | None = None, versao: int = 
     )
 
     df_final = (
-        df_descricoes
-        .join(df_mapeamento, on="id_descricao", how="left")
+        df_descricoes.join(df_mapeamento, on="id_descricao", how="left")
         .with_columns(
             [
                 pl.coalesce([pl.col("descr_padrao"), pl.col("descricao")]).alias("descricao_final"),
-                pl.coalesce([pl.col("ncm_padrao"), pl.col("lista_ncm").list.first()]).alias("ncm_final"),
-                pl.coalesce([pl.col("cest_padrao"), pl.col("lista_cest").list.first()]).alias("cest_final"),
-                pl.coalesce([pl.col("gtin_padrao"), pl.col("lista_gtin").list.first()]).alias("gtin_final"),
+                pl.coalesce([pl.col("ncm_padrao"), pl.col("lista_ncm").list.first()]).alias(
+                    "ncm_final"
+                ),
+                pl.coalesce([pl.col("cest_padrao"), pl.col("lista_cest").list.first()]).alias(
+                    "cest_final"
+                ),
+                pl.coalesce([pl.col("gtin_padrao"), pl.col("lista_gtin").list.first()]).alias(
+                    "gtin_final"
+                ),
                 pl.coalesce(
                     [
                         pl.col("co_sefin_padrao"),
@@ -574,7 +616,9 @@ def produtos_agrupados(cnpj: str, pasta_cnpj: Path | None = None, versao: int = 
                         pl.col("lista_co_sefin").list.first(),
                     ]
                 ).alias("co_sefin_final"),
-                pl.coalesce([pl.col("lista_unidades_agr").list.first(), pl.col("lista_unid").list.first()]).alias("unid_ref_sugerida"),
+                pl.coalesce(
+                    [pl.col("lista_unidades_agr").list.first(), pl.col("lista_unid").list.first()]
+                ).alias("unid_ref_sugerida"),
             ]
         )
         .sort(["id_agrupado", "id_descricao"], nulls_last=True)

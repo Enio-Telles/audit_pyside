@@ -97,9 +97,7 @@ def gerar_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
 
         df_grouped = df_grouped.with_columns(
             pl.col("codigo_fonte").alias("chave_produto"),
-            pl.col("codigo_fonte").alias(
-                "chave_item"
-            ),  # Mantido para compatibilidade temporaria
+            pl.col("codigo_fonte").alias("chave_item"),  # Mantido para compatibilidade temporaria
         )
 
         list_cols = [c for c in df_grouped.columns if c.startswith("lista_")]
@@ -123,9 +121,7 @@ def gerar_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         return True
 
     except Exception as exc:
-        ERR_CONSOLE.print(
-            f"[red]Erro fatal no processamento de produtos para {cnpj}:[/red] {exc}"
-        )
+        ERR_CONSOLE.print(f"[red]Erro fatal no processamento de produtos para {cnpj}:[/red] {exc}")
         raise
 
 

@@ -78,9 +78,7 @@ def descricao_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
             return False
 
     if not arq_item_unid.exists() or not arq_itens.exists():
-        rprint(
-            "[red]Arquivos base para descricao_produtos nao foram encontrados.[/red]"
-        )
+        rprint("[red]Arquivos base para descricao_produtos nao foram encontrados.[/red]")
         return False
 
     rprint(f"[bold cyan]Gerando descricao_produtos para CNPJ: {cnpj}[/bold cyan]")
@@ -109,9 +107,7 @@ def descricao_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
                     pl.lit([]).cast(pl.List(pl.String)).alias(col)
                 )
             else:
-                lf_item_unid = lf_item_unid.with_columns(
-                    pl.lit(None, pl.String).alias(col)
-                )
+                lf_item_unid = lf_item_unid.with_columns(pl.lit(None, pl.String).alias(col))
 
     lf_item_unid = lf_item_unid.with_columns(_normalizar_descricao_expr("descricao"))
 
@@ -137,12 +133,8 @@ def descricao_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         ]
     )
     # Join LazyFrames
-    lf_descricoes = lf_descricoes.join(
-        lf_lista_ids, on="descricao_normalizada", how="left"
-    )
-    lf_descricoes = lf_descricoes.sort(
-        ["descricao_normalizada", "descricao"], nulls_last=True
-    )
+    lf_descricoes = lf_descricoes.join(lf_lista_ids, on="descricao_normalizada", how="left")
+    lf_descricoes = lf_descricoes.sort(["descricao_normalizada", "descricao"], nulls_last=True)
     lf_descricoes = lf_descricoes.with_row_count("seq", offset=1)
     lf_descricoes = lf_descricoes.with_columns(
         pl.format("id_descricao_{}", pl.col("seq")).alias("id_descricao")
@@ -171,9 +163,7 @@ def descricao_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
     if df_descricoes.is_empty():
         rprint("[yellow]Arquivo descricao_produtos resultou vazio.[/yellow]")
         return False
-    return salvar_para_parquet(
-        df_descricoes, pasta_analises, f"descricao_produtos_{cnpj}.parquet"
-    )
+    return salvar_para_parquet(df_descricoes, pasta_analises, f"descricao_produtos_{cnpj}.parquet")
 
 
 def gerar_descricao_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:

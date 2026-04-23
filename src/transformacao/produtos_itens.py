@@ -1,4 +1,4 @@
-﻿"""
+"""
 produtos_itens.py
 
 Gera tabela de itens vinculados ao cadastro de produtos.
