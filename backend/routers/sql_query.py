@@ -24,8 +24,10 @@ def _safe_value(v: Any) -> Any:
         return None
     if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
         return None
-    if isinstance(v, list):
+    if isinstance(v, (list, tuple)):
         return [_safe_value(x) for x in v]
+    if isinstance(v, dict):
+        return {k: _safe_value(val) for k, val in v.items()}
     return v
 
 
@@ -49,7 +51,7 @@ def execute_sql(req: SqlRequest):
         sql = SqlService.read_sql(req.sql_id)
         svc = SqlService()
         result = svc.executar_sql(sql, params=req.params, cnpj=req.cnpj)
-        rows = [_safe_value(dict(row)) for row in (result or [])]
+        rows = [_safe_value(row) for row in (result or [])]
         return {"rows": rows, "count": len(rows)}
     except Exception as exc:
         raise HTTPException(500, "Erro interno ao executar SQL.") from exc
