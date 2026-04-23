@@ -22,7 +22,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           # Install system libraries required by PySide6 (libEGL / OpenGL)
-          sudo apt-get update && sudo apt-get install -y libegl1-mesa libgl1-mesa-dri libxrender1 libx11-xcb1 libxcb-xinerama0 libxkbcommon0
+          sudo apt-get update && sudo apt-get install -y libegl1 libgl1-mesa-dri libxrender1 libx11-xcb1 libxcb-xinerama0 libxkbcommon0
           # Ensure a Qt binding is available for pytest-qt on the runner
           pip install PySide6
           pip install pytest-qt
