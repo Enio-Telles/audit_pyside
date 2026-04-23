@@ -1,0 +1,76 @@
+QWidget {
+    background: #111315;
+    color: #f3f4f6;
+}
+
+QMainWindow, QSplitter, QScrollArea, QTabWidget::pane {
+    background: #111315;
+}
+
+QLabel {
+    color: #e5e7eb;
+}
+
+QPushButton {
+    background: #1f2937;
+    color: #f9fafb;
+    border: 1px solid #334155;
+    border-radius: 4px;
+    padding: 6px 10px;
+}
+
+QPushButton:hover {
+    background: #283548;
+}
+
+QPushButton:pressed {
+    background: #17202d;
+}
+
+QPushButton:disabled {
+    color: #6b7280;
+    border-color: #374151;
+}
+
+QLineEdit,
+QPlainTextEdit,
+QComboBox,
+QDateEdit,
+QListWidget,
+QTreeWidget,
+QTableView {
+    background: #181c20;
+    color: #f9fafb;
+    border: 1px solid #334155;
+    selection-background-color: #1e40af;
+    selection-color: #ffffff;
+}
+
+QHeaderView::section {
+    background: #0f172a;
+    color: #f8fafc;
+    border: 1px solid #334155;
+    padding: 6px 8px;
+    font-weight: bold;
+}
+
+QMenu {
+    background: #111827;
+    color: #f9fafb;
+    border: 1px solid #334155;
+}
+
+QMenu::item:selected {
+    background: #1e40af;
+}
+
+QStatusBar {
+    background: #101827;
+    color: #dbeafe;
+}
+
+QToolTip {
+    background: #0f172a;
+    color: #f8fafc;
+    border: 1px solid #334155;
+}

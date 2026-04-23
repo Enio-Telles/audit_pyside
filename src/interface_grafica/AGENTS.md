@@ -13,20 +13,22 @@ Ela não é e nunca deve se tornar a fonte principal da regra fiscal ou analíti
 
 ---
 
-## Estado atual — atenção P3
+## Estrutura atual
 
 | Arquivo | Linhas | Status |
 |---|---|---|
-| `src/interface_grafica/ui/main_window.py` | ~10 366 | **Marcado para decomposição em P3** |
+| `src/interface_grafica/windows/main_window.py` | < 800 | Orquestração da janela principal |
+| `src/interface_grafica/windows/aba_*.py` | < 800 cada | Construção das abas e widgets da GUI |
+| `src/interface_grafica/windows/main_window_*.py` | < 800 cada | Suporte compartilhado da janela principal |
+| `src/interface_grafica/controllers/*.py` | < 800 cada | Lógica extraída por domínio |
+| `src/interface_grafica/themes/noir.qss` | — | Tema "High-Contrast Noir" carregado pela janela principal |
 | `src/interface_grafica/ui/main_window_safe.py` | — | Herda `BaseMainWindow`; adiciona shutdown seguro de workers |
+| `src/interface_grafica/ui/main_window.py` | shim | Compatibilidade de import para `app.py`, testes e monkeypatches |
 
-**P3 decompõe `main_window.py` em:**
-- `ui/windows/` — janelas e diálogos
-- `ui/controllers/` — lógica de coordenação
-- `ui/widgets/` — componentes reutilizáveis
-
-Até a decomposição: **não adicione novas lógicas de negócio a `main_window.py`**.
-Extraia qualquer nova lógica para um serviço ou controller antes de integrar à janela.
+Ao evoluir a janela principal:
+- concentre nova orquestração em `windows/main_window.py`
+- extraia comportamento compartilhado para `windows/main_window_*.py`, `controllers/` ou `widgets/`
+- preserve `ui/main_window.py` apenas como camada fina de compatibilidade
 
 ---
 
@@ -45,8 +47,9 @@ Extraia qualquer nova lógica para um serviço ou controller antes de integrar �
 - Não carregue datasets pesados sem necessidade (lazy load via serviços).
 - Sinalize progresso, erro e status de forma clara ao usuário.
 
-### Tema visual (QSS inline)
-A aplicação usa paleta escura aplicada via `setStyleSheet` inline (estilo "High-Contrast Noir"):
+### Tema visual (High-Contrast Noir)
+A aplicação usa a paleta escura "High-Contrast Noir", com QSS base em `src/interface_grafica/themes/noir.qss`
+e estilos pontuais inline nas abas/componentes que ainda precisam de ajustes locais:
 
 | Uso | Cor |
 |---|---|
@@ -89,7 +92,7 @@ Não introduza estilos que contradizem o tema escuro atual.
 - Bloquear a thread principal com I/O ou processamento pesado.
 - Expor exceções brutas ao usuário (Information Disclosure).
 - Criar novos cálculos de `q_conv` ou `id_agrupado` na camada de interface.
-- Adicionar mais lógica a `main_window.py` sem extrair para serviço/controller primeiro.
+- Adicionar mais lógica a `windows/main_window.py` sem extrair para serviço/controller, `windows/main_window_*.py` ou `widgets/` antes.
 
 ---
 

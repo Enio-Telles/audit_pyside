@@ -3,7 +3,7 @@ import re
 
 
 def _ler_main_window() -> str:
-    caminho = Path("src/interface_grafica/ui/main_window.py")
+    caminho = Path("src/interface_grafica/windows/main_window_profile_presets.py")
     return caminho.read_text(encoding="utf-8")
 
 
