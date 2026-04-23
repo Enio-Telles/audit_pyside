@@ -25,7 +25,7 @@ jobs:
           sudo apt-get update && sudo apt-get install -y libegl1 libgl1-mesa-dri libxrender1 libx11-xcb1 libxcb-xinerama0 libxkbcommon0
           # Ensure a Qt binding is available for pytest-qt on the runner
           # Install light test/runtime deps needed by the GUI smoke test
-          pip install polars pandas python-dotenv pytest-mock oracledb
+          pip install polars pandas python-dotenv pytest-mock oracledb rich
           pip install PySide6
           pip install pytest-qt pytest-cov
 
