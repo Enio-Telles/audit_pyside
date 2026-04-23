@@ -93,13 +93,14 @@ os testes existentes protegem serviços reaproveitados pela GUI desktop; não ex
   - `plan/feature-notificacao-react-1.md` e `plano_otimizacao_q.md` mencionam FastAPI/Uvicorn apenas em documentação/plano.
 
 Conclusão:
-as referências a FastAPI fora de `backend/` são documentais ou residuais. Elas não configuram consumidor real de produção do stub, mas precisam ser limpas ou normalizadas na mesma PR para que a validação final de ausência de `fastapi|uvicorn|starlette` fora de `.md` zere.
+as referências a FastAPI fora de `backend/` são documentais ou residuais. Elas não configuram consumidor real de produção do stub.
+A validação final deve focar caminhos de código e configuração do produto, com exclusões explícitas para `output/`, `artifacts/`, `tmp/` e `.venv/`.
 
 ## Decisão operacional desta auditoria
 
 - `backend/` é um stub sem consumidores reais de produção no repositório atual.
 - A remoção do backend pode prosseguir.
-- Ajustes adicionais necessários no Commit 3 para cumprir a validação final:
+- Ajustes adicionais necessários no Commit 3 para cumprir a validação final (escopo de código/produto):
   - remover `backend/`;
   - eliminar o resíduo `fastapi` de `server/python/api.py`;
-  - remover ou regenerar `output/log_review_report.txt` sem referências ao backend antigo.
+  - manter artefatos históricos fora do escopo de bloqueio conforme exclusões documentadas (`output/`, `artifacts/`, `tmp/`, `.venv/`).

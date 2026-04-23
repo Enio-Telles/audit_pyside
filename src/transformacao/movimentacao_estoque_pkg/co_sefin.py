@@ -1,4 +1,4 @@
-﻿"""
+"""
 co_sefin.py
 
 Script para inferir o codigo co_sefin_inferido com base no NCM e CEST
@@ -28,12 +28,7 @@ except ImportError as e:
 
 
 def _limpar_expr(coluna: str) -> pl.Expr:
-    return (
-        pl.col(coluna)
-        .cast(pl.String, strict=False)
-        .str.replace_all(r"\.", "")
-        .str.strip_chars()
-    )
+    return pl.col(coluna).cast(pl.String, strict=False).str.replace_all(r"\.", "").str.strip_chars()
 
 
 def _resolver_ref(nome_arquivo: str) -> Path:

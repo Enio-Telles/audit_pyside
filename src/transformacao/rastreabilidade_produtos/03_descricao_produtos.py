@@ -1,4 +1,4 @@
-﻿"""
+"""
 03_descricao_produtos.py
 
 Objetivo: Gerar a tabela consolidada de descricoes normalizadas e unicas.
@@ -93,9 +93,7 @@ def descricao_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
             return False
 
     if not arq_item_unid.exists() or not arq_itens.exists():
-        rprint(
-            "[red]Arquivos base para descricao_produtos nao foram encontrados.[/red]"
-        )
+        rprint("[red]Arquivos base para descricao_produtos nao foram encontrados.[/red]")
         return False
 
     rprint(f"[bold cyan]Gerando descricao_produtos para CNPJ: {cnpj}[/bold cyan]")
@@ -144,9 +142,7 @@ def descricao_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
                     pl.lit([]).cast(pl.List(pl.String)).alias(col)
                 )
             else:
-                df_item_unid = df_item_unid.with_columns(
-                    pl.lit(None, pl.String).alias(col)
-                )
+                df_item_unid = df_item_unid.with_columns(pl.lit(None, pl.String).alias(col))
 
     df_item_unid = df_item_unid.with_columns(
         expr_normalizar_descricao("descricao").alias("descricao_normalizada")
@@ -211,9 +207,7 @@ def descricao_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         )
     )
 
-    return salvar_para_parquet(
-        df_descricoes, pasta_analises, f"descricao_produtos_{cnpj}.parquet"
-    )
+    return salvar_para_parquet(df_descricoes, pasta_analises, f"descricao_produtos_{cnpj}.parquet")
 
 
 def gerar_descricao_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:

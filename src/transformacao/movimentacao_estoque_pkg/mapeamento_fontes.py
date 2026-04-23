@@ -79,20 +79,14 @@ def parse_expression(expr_str: str, col_alias: str) -> pl.Expr:
 
     # NCM/CEST cleanup
     if expr_str in ["cod_ncm", "prod_ncm", "cest", "prod_cest"]:
-        return (
-            pl.col(expr_str).cast(pl.String).str.replace_all(r"\D", "").alias(col_alias)
-        )
+        return pl.col(expr_str).cast(pl.String).str.replace_all(r"\D", "").alias(col_alias)
 
     # Complex: Cst
     if expr_str == "icms_orig & icms_cst ou icms_csosn":
         return (
             pl.when(pl.col("icms_cst").is_not_null())
-            .then(
-                pl.concat_str([pl.col("icms_orig"), pl.col("icms_cst")], separator="")
-            )
-            .otherwise(
-                pl.concat_str([pl.col("icms_orig"), pl.col("icms_csosn")], separator="")
-            )
+            .then(pl.concat_str([pl.col("icms_orig"), pl.col("icms_cst")], separator=""))
+            .otherwise(pl.concat_str([pl.col("icms_orig"), pl.col("icms_csosn")], separator=""))
             .alias(col_alias)
         )
 
@@ -103,8 +97,7 @@ def parse_expression(expr_str: str, col_alias: str) -> pl.Expr:
     # Complex: Valores matemÃ¡ticos (Vl_item em C170 ou Nfe)
     if expr_str == "vl_item-vl_desc":
         return (
-            pl.col("vl_item").cast(pl.Float64)
-            - pl.col("vl_desc").cast(pl.Float64).fill_null(0)
+            pl.col("vl_item").cast(pl.Float64) - pl.col("vl_desc").cast(pl.Float64).fill_null(0)
         ).alias(col_alias)
 
     if expr_str == "prod_vprod+prod_vfrete+prod_vseg+prod_voutro-prod_vdesc":
@@ -142,10 +135,7 @@ def carregar_flags_cfop() -> pl.DataFrame:
     if arq_cfop.exists():
         df_cfop_raw = pl.read_parquet(arq_cfop)
         exprs = [
-            pl.col("co_cfop")
-            .cast(pl.Utf8, strict=False)
-            .str.replace_all(r"\D", "")
-            .alias("Cfop"),
+            pl.col("co_cfop").cast(pl.Utf8, strict=False).str.replace_all(r"\D", "").alias("Cfop"),
         ]
         for col in ["excluir_estoque", "dev_simples"]:
             if col in df_cfop_raw.columns:
@@ -162,10 +152,7 @@ def carregar_flags_cfop() -> pl.DataFrame:
     if arq_cfop_bi.exists():
         df_cfop_bi_raw = pl.read_parquet(arq_cfop_bi)
         exprs = [
-            pl.col("co_cfop")
-            .cast(pl.Utf8, strict=False)
-            .str.replace_all(r"\D", "")
-            .alias("Cfop"),
+            pl.col("co_cfop").cast(pl.Utf8, strict=False).str.replace_all(r"\D", "").alias("Cfop"),
         ]
         for col in ["dev_venda", "dev_compra", "dev_ent_simples"]:
             if col in df_cfop_bi_raw.columns:

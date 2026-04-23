@@ -1,3 +1,3 @@
 from transformacao.calculos_anuais_pkg.calculos_anuais import (
-	gerar_calculos_anuais as gerar_calculos_anuais,
+    gerar_calculos_anuais as gerar_calculos_anuais,
 )

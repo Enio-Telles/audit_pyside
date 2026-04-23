@@ -48,9 +48,7 @@ def pasta_analises_ressarcimento(cnpj: str, pasta_cnpj: Path | None = None) -> P
     return caminho
 
 
-def caminho_produtos(
-    cnpj: str, nome_arquivo: str, pasta_cnpj: Path | None = None
-) -> Path:
+def caminho_produtos(cnpj: str, nome_arquivo: str, pasta_cnpj: Path | None = None) -> Path:
     return pasta_produtos(cnpj, pasta_cnpj) / nome_arquivo
 
 
@@ -58,24 +56,17 @@ def caminho_bruto(cnpj: str, nome_arquivo: str, pasta_cnpj: Path | None = None) 
     return pasta_brutos(cnpj, pasta_cnpj) / nome_arquivo
 
 
-def caminho_oracle(
-    cnpj: str, nome_arquivo: str, pasta_cnpj: Path | None = None
-) -> Path:
+def caminho_oracle(cnpj: str, nome_arquivo: str, pasta_cnpj: Path | None = None) -> Path:
     return pasta_oracle_ressarcimento(cnpj, pasta_cnpj) / nome_arquivo
 
 
-def caminho_analise(
-    cnpj: str, nome_arquivo: str, pasta_cnpj: Path | None = None
-) -> Path:
+def caminho_analise(cnpj: str, nome_arquivo: str, pasta_cnpj: Path | None = None) -> Path:
     return pasta_analises_ressarcimento(cnpj, pasta_cnpj) / nome_arquivo
 
 
 def dataframe_vazio(schema: dict[str, pl.DataType]) -> pl.DataFrame:
     return pl.DataFrame(
-        {
-            nome: pl.Series(name=nome, values=[], dtype=tipo)
-            for nome, tipo in schema.items()
-        }
+        {nome: pl.Series(name=nome, values=[], dtype=tipo) for nome, tipo in schema.items()}
     )
 
 
@@ -100,10 +91,7 @@ def alinhar_schema(df: pl.DataFrame, schema: dict[str, pl.DataType]) -> pl.DataF
             resultado = resultado.with_columns(pl.lit(None).cast(tipo).alias(nome))
 
     return resultado.select(
-        [
-            pl.col(nome).cast(tipo, strict=False).alias(nome)
-            for nome, tipo in schema.items()
-        ]
+        [pl.col(nome).cast(tipo, strict=False).alias(nome) for nome, tipo in schema.items()]
     )
 
 
@@ -113,10 +101,7 @@ def salvar_df(df: pl.DataFrame, caminho: Path) -> bool:
 
 def expr_mes_ref(coluna_periodo: str = "periodo_efd") -> pl.Expr:
     return (
-        (
-            pl.col(coluna_periodo).cast(pl.Utf8, strict=False).str.replace("/", "-")
-            + pl.lit("-01")
-        )
+        (pl.col(coluna_periodo).cast(pl.Utf8, strict=False).str.replace("/", "-") + pl.lit("-01"))
         .str.strptime(pl.Date, "%Y-%m-%d", strict=False)
         .alias("mes_ref")
     )

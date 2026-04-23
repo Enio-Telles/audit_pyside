@@ -40,10 +40,7 @@ def _resumo_e111(df: pl.DataFrame) -> pl.DataFrame:
         )
 
     base = df.with_columns(
-        (
-            pl.col("periodo_efd").cast(pl.Utf8, strict=False).str.replace("/", "-")
-            + pl.lit("-01")
-        )
+        (pl.col("periodo_efd").cast(pl.Utf8, strict=False).str.replace("/", "-") + pl.lit("-01"))
         .str.strptime(pl.Date, "%Y-%m-%d", strict=False)
         .alias("mes_ref"),
         pl.col("codigo_ajuste").cast(pl.Utf8, strict=False),
@@ -80,9 +77,7 @@ def gerar_ressarcimento_st_mensal(cnpj: str, pasta_cnpj: Path | None = None) -> 
     )
     caminho_e111 = caminho_bruto(cnpj_limpo, f"e111_{cnpj_limpo}.parquet", pasta_cnpj)
     if not caminho_e111.exists():
-        caminho_e111 = caminho_bruto(
-            cnpj_limpo, f"E111_{cnpj_limpo}.parquet", pasta_cnpj
-        )
+        caminho_e111 = caminho_bruto(cnpj_limpo, f"E111_{cnpj_limpo}.parquet", pasta_cnpj)
     caminho_saida = caminho_analise(
         cnpj_limpo, f"ressarcimento_st_mensal_{cnpj_limpo}.parquet", pasta_cnpj
     )
@@ -93,41 +88,37 @@ def gerar_ressarcimento_st_mensal(cnpj: str, pasta_cnpj: Path | None = None) -> 
 
     resumo_item = df_item.group_by("mes_ref").agg(
         pl.len().alias("qtd_itens_c176"),
-        pl.sum(
-            pl.coalesce([pl.col("vl_st_decl_total_considerado"), pl.lit(0.0)])
-        ).alias("vl_st_decl_total_mes"),
-        pl.sum(
-            pl.coalesce([pl.col("vl_st_calc_total_considerado"), pl.lit(0.0)])
-        ).alias("vl_st_calc_total_mes"),
-        pl.sum(
-            pl.coalesce([pl.col("vl_st_fronteira_total_considerado"), pl.lit(0.0)])
-        ).alias("vl_st_fronteira_total_mes"),
+        pl.sum(pl.coalesce([pl.col("vl_st_decl_total_considerado"), pl.lit(0.0)])).alias(
+            "vl_st_decl_total_mes"
+        ),
+        pl.sum(pl.coalesce([pl.col("vl_st_calc_total_considerado"), pl.lit(0.0)])).alias(
+            "vl_st_calc_total_mes"
+        ),
+        pl.sum(pl.coalesce([pl.col("vl_st_fronteira_total_considerado"), pl.lit(0.0)])).alias(
+            "vl_st_fronteira_total_mes"
+        ),
     )
     resumo_e111 = _resumo_e111(ler_parquet_opcional(caminho_e111))
 
     df_saida = (
         resumo_item.join(resumo_e111, on="mes_ref", how="left")
         .with_columns(
-            pl.coalesce([pl.col("vl_e111_st_mes"), pl.lit(0.0)]).alias(
-                "vl_e111_st_mes"
-            ),
+            pl.coalesce([pl.col("vl_e111_st_mes"), pl.lit(0.0)]).alias("vl_e111_st_mes"),
             pl.coalesce([pl.col("vl_e111_st_extemporaneo_mes"), pl.lit(0.0)]).alias(
                 "vl_e111_st_extemporaneo_mes"
             ),
         )
         .with_columns(
-            (pl.col("vl_st_decl_total_mes") - pl.col("vl_e111_st_mes")).alias(
-                "dif_c176_st_x_e111"
-            ),
+            (pl.col("vl_st_decl_total_mes") - pl.col("vl_e111_st_mes")).alias("dif_c176_st_x_e111"),
             (pl.col("vl_st_calc_total_mes") - pl.col("vl_st_decl_total_mes")).alias(
                 "dif_calc_st_x_c176"
             ),
-            (
-                pl.col("vl_st_fronteira_total_mes") - pl.col("vl_st_decl_total_mes")
-            ).alias("dif_fronteira_st_x_c176"),
-            (
-                pl.col("vl_st_fronteira_total_mes") - pl.col("vl_st_calc_total_mes")
-            ).alias("dif_fronteira_st_x_calc"),
+            (pl.col("vl_st_fronteira_total_mes") - pl.col("vl_st_decl_total_mes")).alias(
+                "dif_fronteira_st_x_c176"
+            ),
+            (pl.col("vl_st_fronteira_total_mes") - pl.col("vl_st_calc_total_mes")).alias(
+                "dif_fronteira_st_x_calc"
+            ),
         )
         .sort("mes_ref")
     )

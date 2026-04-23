@@ -69,9 +69,7 @@ def _carregar_referencia_st_anual(df_anual: pl.DataFrame) -> pl.DataFrame:
     # T01: Migrado para scan_parquet (Lazy)
     df_aux = (
         pl.scan_parquet(caminho_aux)
-        .select(
-            ["it_co_sefin", "it_da_inicio", "it_da_final", "it_pc_interna", "it_in_st"]
-        )
+        .select(["it_co_sefin", "it_da_inicio", "it_da_final", "it_pc_interna", "it_in_st"])
         .with_columns(
             [
                 pl.col("it_co_sefin").cast(pl.Utf8, strict=False).alias("it_co_sefin"),
@@ -83,9 +81,7 @@ def _carregar_referencia_st_anual(df_anual: pl.DataFrame) -> pl.DataFrame:
                 .cast(pl.Utf8, strict=False)
                 .str.strptime(pl.Date, "%Y%m%d", strict=False)
                 .alias("da_final"),
-                pl.col("it_pc_interna")
-                .cast(pl.Float64, strict=False)
-                .alias("it_pc_interna"),
+                pl.col("it_pc_interna").cast(pl.Float64, strict=False).alias("it_pc_interna"),
                 pl.col("it_in_st")
                 .cast(pl.Utf8, strict=False)
                 .fill_null("")
@@ -100,20 +96,12 @@ def _carregar_referencia_st_anual(df_anual: pl.DataFrame) -> pl.DataFrame:
         df_chaves.lazy()
         .join(df_aux, left_on="co_sefin_agr", right_on="it_co_sefin", how="left")
         .filter(
-            (
-                pl.col("da_inicio").is_null()
-                | (pl.col("da_inicio") <= pl.col("__ano_fim__"))
-            )
-            & (
-                pl.col("da_final").is_null()
-                | (pl.col("da_final") >= pl.col("__ano_ini__"))
-            )
+            (pl.col("da_inicio").is_null() | (pl.col("da_inicio") <= pl.col("__ano_fim__")))
+            & (pl.col("da_final").is_null() | (pl.col("da_final") >= pl.col("__ano_ini__")))
         )
         .with_columns(
             [
-                pl.max_horizontal([pl.col("da_inicio"), pl.col("__ano_ini__")]).alias(
-                    "vig_ini"
-                ),
+                pl.max_horizontal([pl.col("da_inicio"), pl.col("__ano_ini__")]).alias("vig_ini"),
                 pl.min_horizontal(
                     [
                         pl.coalesce([pl.col("da_final"), pl.col("__ano_fim__")]),
@@ -228,9 +216,7 @@ def calcular_aba_anual_dataframe(
             pl.lit(0.0),
         ]
     )
-    q_conv_fisica_expr = (
-        pl.col("q_conv_fisica").cast(pl.Float64, strict=False).fill_null(0.0)
-    )
+    q_conv_fisica_expr = pl.col("q_conv_fisica").cast(pl.Float64, strict=False).fill_null(0.0)
     q_conv_positiva_expr = q_conv_fisica_expr > 0
     entrada_valida_media_expr = (
         pl.col("Tipo_operacao").str.starts_with("1 - ENTRADA")
@@ -277,9 +263,7 @@ def calcular_aba_anual_dataframe(
                 .alias("saidas"),
                 pl.when(pl.col("Tipo_operacao").str.starts_with("3 - ESTOQUE FINAL"))
                 .then(
-                    pl.col("__qtd_decl_final_audit__")
-                    .cast(pl.Float64, strict=False)
-                    .fill_null(0.0)
+                    pl.col("__qtd_decl_final_audit__").cast(pl.Float64, strict=False).fill_null(0.0)
                 )
                 .otherwise(0.0)
                 .sum()
@@ -365,9 +349,9 @@ def calcular_aba_anual_dataframe(
 
     df_anual = df_anual.with_columns(
         [
-            pl.coalesce(
-                [pl.col("__aliq_ref__"), pl.col("aliq_interna_mov"), pl.lit(0.0)]
-            ).alias("aliq_interna"),
+            pl.coalesce([pl.col("__aliq_ref__"), pl.col("aliq_interna_mov"), pl.lit(0.0)]).alias(
+                "aliq_interna"
+            ),
             pl.col("__tem_st_ano__").fill_null(False).alias("__tem_st_ano__"),
             pl.col("ST").fill_null("").alias("ST"),
             # O PMS anual exibido na tabela e o mesmo PMS usado no calculo do ICMS.
@@ -376,9 +360,7 @@ def calcular_aba_anual_dataframe(
         ]
     )
 
-    aliq_factor = (
-        pl.col("aliq_interna").cast(pl.Float64, strict=False).fill_null(0.0) / 100.0
-    )
+    aliq_factor = pl.col("aliq_interna").cast(pl.Float64, strict=False).fill_null(0.0) / 100.0
     base_saida = (
         pl.when(pl.col("__pms_icms__") > 0)
         .then(pl.col("saidas_desacob") * pl.col("__pms_icms__"))
@@ -418,12 +400,8 @@ def calcular_aba_anual_dataframe(
         "ICMS_estoque_desac",
         "aliq_interna",
     ]
-    exprs_arredondamento = [
-        pl.col(c).round(4) for c in cols_qtd if c in df_anual.columns
-    ]
-    exprs_arredondamento += [
-        pl.col(c).round(2) for c in cols_valor if c in df_anual.columns
-    ]
+    exprs_arredondamento = [pl.col(c).round(4) for c in cols_qtd if c in df_anual.columns]
+    exprs_arredondamento += [pl.col(c).round(2) for c in cols_valor if c in df_anual.columns]
     df_anual = df_anual.with_columns(exprs_arredondamento)
 
     return df_anual.select(
@@ -467,9 +445,7 @@ def gerar_calculos_anuais(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         rprint(f"[red]Arquivo necessario nao encontrado:[/red] {arq_mov_estoque}")
         return False
 
-    rprint(
-        f"\n[bold cyan]Gerando calculos_anuais (Aba Anual) para CNPJ: {cnpj}[/bold cyan]"
-    )
+    rprint(f"\n[bold cyan]Gerando calculos_anuais (Aba Anual) para CNPJ: {cnpj}[/bold cyan]")
     # T01: scan_parquet para permitir otimização do Polars
     lf = pl.scan_parquet(arq_mov_estoque)
 
@@ -495,9 +471,7 @@ def gerar_calculos_anuais(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         status="ok" if ok else "error",
     )
     if ok:
-        rprint(
-            f"[green]Sucesso! {df_result.height} registros salvos na aba anual.[/green]"
-        )
+        rprint(f"[green]Sucesso! {df_result.height} registros salvos na aba anual.[/green]")
     registrar_evento_performance(
         "calculos_anuais.total",
         perf_counter() - inicio_total,

@@ -2,9 +2,15 @@ import sys
 from pathlib import Path
 
 import pytest
-from PySide6.QtWidgets import QApplication, QMessageBox
 
-from interface_grafica.ui.main_window import MainWindow
+pytestmark = pytest.mark.gui
+
+try:
+    from PySide6.QtWidgets import QApplication, QMessageBox
+except ImportError as exc:
+    pytest.skip(f"PySide6 indisponivel neste ambiente: {exc}", allow_module_level=True)
+
+from interface_grafica.windows.main_window import MainWindow
 
 
 def ensure_qapp():

@@ -13,20 +13,30 @@ Ela não é e nunca deve se tornar a fonte principal da regra fiscal ou analíti
 
 ---
 
-## Estado atual — atenção P3
+## Estado atual - P3
 
-| Arquivo | Linhas | Status |
-|---|---|---|
-| `src/interface_grafica/ui/main_window.py` | ~10 366 | **Marcado para decomposição em P3** |
-| `src/interface_grafica/ui/main_window_safe.py` | — | Herda `BaseMainWindow`; adiciona shutdown seguro de workers |
+| Arquivo | Status |
+|---|---|
+| `src/interface_grafica/windows/main_window.py` | Ponto canonico de importacao de `MainWindow` |
+| `src/interface_grafica/ui/main_window.py` | Implementacao legada em transicao; ainda concentra callbacks e builders restantes |
+| `src/interface_grafica/ui/main_window_safe.py` | Herda `BaseMainWindow`; adiciona shutdown seguro de workers |
 
-**P3 decompõe `main_window.py` em:**
-- `ui/windows/` — janelas e diálogos
-- `ui/controllers/` — lógica de coordenação
-- `ui/widgets/` — componentes reutilizáveis
+Estrutura alvo em uso:
 
-Até a decomposição: **não adicione novas lógicas de negócio a `main_window.py`**.
-Extraia qualquer nova lógica para um serviço ou controller antes de integrar à janela.
+- `windows/` - janelas e construtores de abas PySide6.
+- `controllers/` - logica de coordenacao quando extraida do legado.
+- `widgets/` - componentes reutilizaveis, delegates e janelas auxiliares.
+- `themes/` - QSS e assets de tema.
+
+Construtores ja extraidos:
+
+- `windows/aba_relatorios.py` - aba Estoque/relatorios e parte das subtabs.
+- `windows/aba_agregacao.py` - construcao visual da aba Agregacao.
+- `windows/aba_auditoria.py` - construcao visual da aba Consulta SQL/Auditoria.
+- `windows/aba_importacao.py` - construcao visual de Conversao e NFe Entrada.
+
+Durante a transicao: **nao adicione novas logicas de negocio a `ui/main_window.py`**.
+Extraia qualquer nova logica para servico, controller ou modulo de janela antes de integrar.
 
 ---
 

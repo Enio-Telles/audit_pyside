@@ -4,7 +4,7 @@ from typing import Iterable
 
 from PySide6.QtCore import QThread, QTimer
 
-from interface_grafica.ui.main_window import MainWindow as BaseMainWindow
+from interface_grafica.windows.main_window import MainWindow as BaseMainWindow
 
 
 class SafeMainWindow(BaseMainWindow):
