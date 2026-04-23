@@ -82,6 +82,7 @@ from interface_grafica.ui.dialogs import (
     DialogoSelecaoTabelas,
 )
 from interface_grafica.windows.aba_agregacao import AbaAgregacao
+from interface_grafica.windows.aba_auditoria import AbaAuditoria
 from interface_grafica.windows.aba_relatorios import AbaRelatorios
 from utilitarios.text import (
     display_cell,
@@ -1186,109 +1187,7 @@ class MainWindow(QMainWindow):
     # Aba Consulta SQL
     # ------------------------------------------------------------------
     def _build_tab_sql_query(self) -> QWidget:
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
-
-        # --- Linha superior: seletor de SQL + botAes ---
-        top_bar = QHBoxLayout()
-        top_bar.addWidget(QLabel("SQL:"))
-        self.sql_combo = QComboBox()
-        self.sql_combo.setMinimumWidth(300)
-        top_bar.addWidget(self.sql_combo, 1)
-        self.btn_sql_execute = QPushButton("Executar Consulta")
-        self.btn_sql_execute.setStyleSheet(
-            "QPushButton { font-weight: bold; padding: 6px 16px; }"
-        )
-        self.btn_sql_export = QPushButton("Exportar Excel")
-        self.btn_sql_destacar = self._criar_botao_destacar()
-        top_bar.addWidget(self.btn_sql_execute)
-        top_bar.addWidget(self.btn_sql_export)
-        top_bar.addWidget(self.btn_sql_destacar)
-        layout.addLayout(top_bar)
-
-        # --- Splitter: SQL + parametros (esquerda) | resultados (direita) ---
-        splitter = QSplitter(Qt.Vertical)
-
-        # Parte superior: SQL + parametros
-        upper_widget = QWidget()
-        upper_layout = QHBoxLayout(upper_widget)
-        upper_layout.setContentsMargins(0, 0, 0, 0)
-
-        # Visualizador SQL
-        sql_group = QGroupBox("Texto SQL")
-        sql_group_layout = QVBoxLayout(sql_group)
-        self.sql_text_view = QPlainTextEdit()
-        self.sql_text_view.setReadOnly(True)
-        self.sql_text_view.setStyleSheet(
-            "QPlainTextEdit { font-family: 'Consolas', 'Courier New', monospace; "
-            "font-size: 12px; background: #1e1e2e; color: #cdd6f4; "
-            "border: 1px solid #45475a; border-radius: 4px; padding: 8px; }"
-        )
-        self.sql_text_view.setMinimumHeight(120)
-        sql_group_layout.addWidget(self.sql_text_view)
-        upper_layout.addWidget(sql_group, 3)
-
-        # Painel de parametros
-        param_group = QGroupBox("Parametros")
-        param_outer_layout = QVBoxLayout(param_group)
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        self.sql_param_container = QWidget()
-        self.sql_param_form = QFormLayout(self.sql_param_container)
-        self.sql_param_form.setFieldGrowthPolicy(QFormLayout.ExpandingFieldsGrow)
-        scroll.setWidget(self.sql_param_container)
-        param_outer_layout.addWidget(scroll)
-        upper_layout.addWidget(param_group, 1)
-
-        splitter.addWidget(upper_widget)
-
-        # Parte inferior: resultados
-        result_widget = QWidget()
-        result_layout = QVBoxLayout(result_widget)
-        result_layout.setContentsMargins(0, 0, 0, 0)
-
-        # Status
-        self.sql_status_label = QLabel("Selecione um SQL e clique em Executar.")
-        self.sql_status_label.setStyleSheet(
-            "QLabel { padding: 4px 8px; background: #f0f4ff; border-radius: 4px; "
-            "border: 1px solid #d0d8e8; color: #334155; font-weight: bold; }"
-        )
-        result_layout.addWidget(self.sql_status_label)
-
-        # Filtro rApido nos resultados
-        sql_filter_bar = QHBoxLayout()
-        self.sql_result_search = QLineEdit()
-        self.sql_result_search.setPlaceholderText("Buscar nos resultados...")
-        sql_filter_bar.addWidget(self.sql_result_search)
-        self.sql_result_page_label = QLabel("")
-        self.btn_sql_prev = QPushButton("< Anterior")
-        self.btn_sql_next = QPushButton("Proxima >")
-        sql_filter_bar.addWidget(self.btn_sql_prev)
-        sql_filter_bar.addWidget(self.sql_result_page_label)
-        sql_filter_bar.addWidget(self.btn_sql_next)
-        result_layout.addLayout(sql_filter_bar)
-
-        # Tabela de resultados
-        self.sql_result_table = QTableView()
-        self.sql_result_table.setModel(self.sql_result_model)
-        self.sql_result_table.setSelectionBehavior(QAbstractItemView.SelectItems)
-        self.sql_result_table.setSelectionMode(QAbstractItemView.ExtendedSelection)
-        self.sql_result_table.setAlternatingRowColors(True)
-        self.sql_result_table.setSortingEnabled(False)
-        self.sql_result_table.setWordWrap(True)
-        self.sql_result_table.verticalHeader().setDefaultSectionSize(60)
-        self.sql_result_table.horizontalHeader().setMinimumSectionSize(40)
-        self.sql_result_table.horizontalHeader().setDefaultSectionSize(200)
-        self.sql_result_table.horizontalHeader().setMaximumSectionSize(400)
-        self.sql_result_table.horizontalHeader().setStretchLastSection(True)
-        self.sql_result_table.setStyleSheet("QTableView::item { padding: 4px 2px; }")
-        result_layout.addWidget(self.sql_result_table, 1)
-
-        splitter.addWidget(result_widget)
-        splitter.setSizes([280, 500])
-
-        layout.addWidget(splitter, 1)
-        return tab
+        return AbaAuditoria(self).root
 
     def _build_tab_conversao(self) -> QWidget:
         tab = QWidget()
