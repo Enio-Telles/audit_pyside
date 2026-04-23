@@ -26,6 +26,8 @@ def _safe_value(v: Any) -> Any:
         return None
     if isinstance(v, list):
         return [_safe_value(x) for x in v]
+    if isinstance(v, dict):
+        return {k: _safe_value(val) for k, val in v.items()}
     return v
 
 
