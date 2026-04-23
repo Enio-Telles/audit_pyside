@@ -2,14 +2,13 @@
 
 | Campo | Valor |
 |---|---|
-| **Status** | Proposed |
+| **Status** | Accepted |
 | **Data** | 2026-04-22 |
-| **Deciders** | `<!-- TODO: preencher com nomes/usernames dos decisores -->` |
+| **Decision date** | 2026-04-22 |
+| **Deciders** | Enio Carstens Telles (owner) |
 | **PR de origem** | chore/p1-consolidacao-docs |
 
-> ⚠️ **O P2 inteiro depende da decisão deste ADR.**
-> Nenhuma expansão do backend deve ocorrer até que uma opção seja escolhida e este ADR
-> seja atualizado para Status: **Accepted**.
+> **Status final:** ADR aceito em 2026-04-22. O P2 executa a Opção B registrada abaixo.
 
 ---
 
@@ -126,37 +125,46 @@ Os testes cobrem `ServicoAgregacao` (lógica de negócio), não as rotas HTTP.
 
 ---
 
-## Consequências da decisão
+## Decisão
 
-`<!-- TODO: preencher após a escolha ser feita -->`
-
-- **Se Opção A:** Definir contratos OpenAPI estáveis antes de implementar. Escolher estratégia de auth (JWT/OAuth2). Garantir precisão de Float64 na serialização JSON de q_conv/q_conv_fisica.
-- **Se Opção B:** Deletar `backend/` em PR separado. Atualizar `backend/AGENTS.md` e este ADR. Arquivar testes de rota.
-- **Se Opção C:** Definir quais rotas de leitura sobrevivem. Documentar contrato de leitura. Remover rotas de escrita.
+Opção B — Remover o backend FastAPI e manter pipeline + GUI desktop como única superfície.
 
 ---
 
-## Recomendação do autor do draft
+## Consequences (Option B)
 
-> **Esta é uma sugestão do Claude — a decisão final é exclusivamente do mantenedor humano.**
+- O que foi removido:
+  - diretório `backend/` inteiro, incluindo o stub FastAPI e os roteadores `aggregation.py` e `sql_query.py`;
+  - mapeamento `/backend` em `.claude/agent-index.md`;
+  - referências operacionais ao backend vivo em `AGENTS.md` e `docs/README.md`;
+  - resíduos não-Markdown com `fastapi|uvicorn|starlette` no checkout final, incluindo o artefato `output/log_review_report.txt`;
+  - observação sobre dependências: não havia entradas ativas de FastAPI/Uvicorn/Starlette nos manifestos atuais (`requirements.txt`, `requirements-dev.txt`, `pyproject.toml`), então não houve remoção de pacote nesses arquivos.
+- O que continua:
+  - pipeline Python/Polars em `src/transformacao/` como fonte de verdade da regra analítica e fiscal;
+  - GUI desktop PySide6 em `src/interface_grafica/` como única superfície operacional do produto;
+  - serviços Python locais (`ServicoAgregacao`, `SqlService` e demais serviços já consumidos pela GUI) sem camada HTTP intermediária.
+- Evidência usada para a decisão:
+  - anexo de auditoria de consumidores: [0001-annex-consumers-audit.md](0001-annex-consumers-audit.md).
+- Riscos aceitos:
+  - o produto deixa de oferecer API HTTP local para integrações externas imediatas;
+  - se existir consumidor externo fora deste repositório apontando para `localhost:8000`, esse impacto passa a ser risco aceito desta decisão;
+  - uma necessidade futura de multi-tenant, web ou integrações HTTP versionadas exigirá novo ADR e uma nova camada de backend desenhada do zero, com autenticação e contratos explícitos.
+- Reversibilidade:
+  - baixa no curto prazo, porque a volta exigiria `git revert` dos commits P2 e restauração intencional da superfície HTTP;
+  - ainda assim, o rollback é tecnicamente viável pelo histórico Git e pela preservação dos serviços Python que já existiam fora do backend.
 
-Com base no estado atual (nenhum cliente HTTP real, GUI como única superfície, P4 multi-tenant ainda distante), a recomendação é **Opção B** com uma ressalva estratégica:
+---
 
-- **Curto prazo**: remover o backend (`backend/`) para reduzir custo de manutenção e complexidade. Os serviços `ServicoAgregacao` e `SqlService` sobrevivem em `src/interface_grafica/services/` e continuam testados.
-- **Quando P4 (multi-tenant) for iniciado**: recriar o backend com contratos bem definidos, autenticação desde o início, e separação clara de serviços.
+## Decisão final registrada
 
-A Opção C é aceitável se houver uma necessidade concreta de leitura por cliente externo no curto prazo (ex.: dashboard Power BI lendo a tabela agrupada). Nesse caso, documente o cliente antes de manter as rotas de leitura.
-
-A Opção A aumenta a carga de manutenção do P2 sem valor imediato, dado que nenhum cliente HTTP existe hoje.
+O mantenedor registrou a Opção B como decisão final com base na ausência de consumidores reais do `backend/` no repositório, no custo de manutenção duplicado da camada HTTP e no foco atual do produto em pipeline local + GUI desktop.
 
 ---
 
 ## Referências
 
-- `backend/routers/aggregation.py`
-- `backend/routers/sql_query.py`
-- `backend/AGENTS.md`
 - `src/interface_grafica/services/aggregation_service.py`
 - `src/interface_grafica/services/sql_service.py`
+- `docs/adr/0001-annex-consumers-audit.md`
 - `docs/PLAN.md` — roadmap P0–P5
 - `.jules/bolt.md` e `.jules/sentinel.md` — lições de segurança SQL/Info Disclosure

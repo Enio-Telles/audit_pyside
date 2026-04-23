@@ -33,6 +33,7 @@ Extraia qualquer nova lógica para um serviço ou controller antes de integrar �
 ## Regras específicas
 
 ### Separação de responsabilidades
+
 - **Não concentre cálculo fiscal pesado na camada de interface.**
 - Nenhuma regra fiscal nova deve ser implementada na GUI — sempre delegue a `src/transformacao/`.
 - Evite handlers longos (`on_click_*`); extraia lógica para serviços ou workers.
@@ -40,12 +41,14 @@ Extraia qualquer nova lógica para um serviço ou controller antes de integrar �
 - Mantenha telas, ações e mensagens com nomes claros em português.
 
 ### Workers e performance
+
 - Não bloqueie a UI em tarefas longas.
 - Use `QThread` / worker pattern para qualquer operação de I/O ou pipeline demorado.
 - Não carregue datasets pesados sem necessidade (lazy load via serviços).
 - Sinalize progresso, erro e status de forma clara ao usuário.
 
 ### Tema visual (QSS inline)
+
 A aplicação usa paleta escura aplicada via `setStyleSheet` inline (estilo "High-Contrast Noir"):
 
 | Uso | Cor |
@@ -59,12 +62,14 @@ Ao adicionar novos elementos visuais, respeite esta paleta para manter consistê
 Não introduza estilos que contradizem o tema escuro atual.
 
 ### Contratos com o pipeline
+
 - A GUI deve consumir saídas **estáveis** do pipeline (`src/transformacao/`).
 - Em inconsistências entre dados e tela, ajuste a fonte correta no pipeline; não mascare na GUI.
 - Preserve as 5 chaves invariantes (`id_agrupado`, `id_agregado`, `__qtd_decl_final_audit__`,
   `q_conv`, `q_conv_fisica`) ao exibir ou editar dados.
 
 ### UX esperada
+
 - Priorize operação real sobre visual.
 - Destaque rastreabilidade (origem do dado, período, CNPJ).
 - Facilite revisão de ajustes manuais.

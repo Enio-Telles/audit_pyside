@@ -13,8 +13,8 @@ isso explicitamente para uma área já existente no código.
 | Raiz / transversal | `AGENTS.md` (este) | Claude, Codex, Copilot |
 | Pipeline de transformação | `src/transformacao/AGENTS.md` | Claude, Codex |
 | Interface gráfica PySide6 | `src/interface_grafica/AGENTS.md` | Claude, Copilot |
-| API FastAPI (backend stub) | `backend/AGENTS.md` | Claude |
 
+> **Backend:** removido (ADR-001 Opção B, 2026-04-22). Pipeline + GUI desktop são a única superfície.
 > **Regra de precedência:** em caso de conflito, este arquivo prevalece sobre os escopados.
 > Os arquivos escopados aprofundam; nunca contradizem este.
 
@@ -44,7 +44,6 @@ Atue como agente técnico de implementação, revisão e planejamento com foco e
 | Testes | `tests/` | pytest — corretude fiscal, schema, regressão |
 | SQL | `sql/` | Scripts de extração SQL (nunca inline no Python) |
 | Documentação | `docs/` | Docs técnicos, ADRs, runbooks, referências |
-| Backend API | `backend/` | Stub FastAPI — ver ADR-001 para decisão de futuro |
 
 Entrypoints:
 - `app.py` — lançador padrão (`MainWindow`) — importado por `tests/test_app.py`
