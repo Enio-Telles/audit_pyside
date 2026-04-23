@@ -118,11 +118,57 @@ windows/
 
 ## Marcos
 
-- M0 inventario: iniciado.
-- M1 scaffold: pendente.
-- M2 relatorios: pendente.
-- M3 agregacao: pendente.
-- M4 auditoria: pendente.
-- M5 importacao: pendente.
-- M6 cleanup main_window: pendente.
-- M7 AGENTS: pendente.
+- M0 inventario: concluido.
+- M1 scaffold: concluido.
+- M2 relatorios: concluido.
+- M3 agregacao: concluido.
+- M4 auditoria: concluido.
+- M5 importacao: concluido.
+- M6 cleanup main_window: parcial.
+- M7 AGENTS: concluido.
+
+## Estrutura apos M7
+
+```text
+src/interface_grafica/
+  controllers/__init__.py
+  widgets/__init__.py
+  themes/__init__.py
+  themes/noir.qss
+  windows/__init__.py
+  windows/main_window.py
+  windows/aba_relatorios.py
+  windows/aba_agregacao.py
+  windows/aba_auditoria.py
+  windows/aba_importacao.py
+  ui/main_window.py
+```
+
+## Linha por arquivo apos M7
+
+```text
+aba_agregacao.py: 180
+aba_auditoria.py: 105
+aba_importacao.py: 205
+aba_relatorios.py: 314
+windows/main_window.py: 8
+ui/main_window.py: 9093
+```
+
+## Validacao estrutural
+
+| Marco | Widgets antes | Sinais antes | Widgets depois | Sinais depois | Resultado |
+|---|---:|---:|---:|---:|---|
+| M2 relatorios | 404 | 280 | 457 | 280 | ok |
+| M3 agregacao | 402 | 280 | 463 | 280 | ok |
+| M4 auditoria | 370 | 276 | 469 | 280 | ok |
+| M5 importacao | 353 | 276 | 478 | 280 | ok |
+
+## BLOCKED
+
+BLOCKED: o gate "main_window.py final < 800 linhas" ainda nao foi cumprido para
+`src/interface_grafica/ui/main_window.py`, que permanece com 9093 linhas. A PR
+deve ficar em draft ate que os callbacks, workers, delegates, preferencias de
+tabela e subtabs restantes sejam movidos para modulos menores sem alterar
+comportamento. O ponto canonico `src/interface_grafica/windows/main_window.py`
+tem 8 linhas, mas o legado ainda existe como implementacao transitoria.
