@@ -24,7 +24,7 @@ def find_py_files(root: Path) -> list[Path]:
 
 def check_file(path: Path) -> list[str]:
     try:
-        src = path.read_text(encoding="utf-8")
+        src = path.read_text(encoding="utf-8-sig")
     except Exception:
         return [f"{path}: unreadable"]
     try:
