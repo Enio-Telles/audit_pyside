@@ -81,6 +81,7 @@ from interface_grafica.ui.dialogs import (
     DialogoSelecaoConsultas,
     DialogoSelecaoTabelas,
 )
+from interface_grafica.windows.aba_relatorios import AbaRelatorios
 from utilitarios.text import (
     display_cell,
     is_year_column_name,
@@ -1717,34 +1718,7 @@ class MainWindow(QMainWindow):
         return tab
 
     def _build_tab_estoque(self) -> QWidget:
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
-        self.estoque_tabs = QTabWidget()
-
-        self.tab_mov_estoque = self._build_tab_mov_estoque()
-        self.estoque_tabs.addTab(self.tab_mov_estoque, "Tabela mov_estoque")
-
-        self.tab_aba_mensal = self._build_tab_aba_mensal()
-        self.estoque_tabs.addTab(self.tab_aba_mensal, "Tabela mensal")
-
-        self.tab_aba_anual = self._build_tab_aba_anual()
-        self.estoque_tabs.addTab(self.tab_aba_anual, "Tabela anual")
-        self.tab_aba_periodos = self._build_tab_aba_periodos()
-        self.estoque_tabs.addTab(self.tab_aba_periodos, "Tabela períodos")
-
-        self.tab_resumo_global = self._build_tab_resumo_global()
-        self.estoque_tabs.addTab(self.tab_resumo_global, "Resumo Global")
-
-        self.tab_produtos_selecionados = self._build_tab_produtos_selecionados()
-        self.estoque_tabs.addTab(
-            self.tab_produtos_selecionados, "Produtos selecionados"
-        )
-
-        self.tab_id_agrupados = self._build_tab_id_agrupados()
-        self.estoque_tabs.addTab(self.tab_id_agrupados, "id_agrupados")
-
-        layout.addWidget(self.estoque_tabs)
-        return tab
+        return AbaRelatorios(self).root
 
     def _build_tab_produtos_selecionados(self) -> QWidget:
         tab = QWidget()
