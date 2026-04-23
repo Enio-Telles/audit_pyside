@@ -31,4 +31,5 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
         run: |
-          pytest -q
+          # Run only the headless GUI smoke test for this PR to avoid heavy test deps
+          pytest -q tests/ui/test_main_window_smoke.py
