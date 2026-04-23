@@ -27,11 +27,17 @@ jobs:
           # Install light test/runtime deps needed by the GUI smoke test
           pip install polars pandas python-dotenv pytest-mock
           pip install PySide6
-          pip install pytest-qt
+          pip install pytest-qt pytest-cov
 
       - name: Run tests (headless Qt)
         env:
           QT_QPA_PLATFORM: offscreen
         run: |
           # Run only the headless GUI smoke test for this PR to avoid heavy test deps
-          pytest -q tests/ui/test_main_window_smoke.py
+          pytest -q --cov=src --cov-report=xml:coverage.xml tests/ui/test_main_window_smoke.py
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.xml
