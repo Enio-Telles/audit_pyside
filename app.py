@@ -22,10 +22,12 @@ if str(UTILITARIOS_DIR) not in sys.path:
     sys.path.insert(0, str(UTILITARIOS_DIR))
 
 from PySide6.QtWidgets import QApplication  # noqa: E402
+from interface_grafica.logging_setup import configure_structlog  # noqa: E402
 from interface_grafica.windows.main_window import MainWindow  # noqa: E402
 
 
 def main() -> int:
+    configure_structlog()
     app = QApplication(sys.argv)
     app.setApplicationName("Fiscal Parquet Analyzer (Refatorado)")
     window = MainWindow()

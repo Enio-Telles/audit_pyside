@@ -3,6 +3,10 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import structlog
+
+log = structlog.get_logger(__name__)
+
 import polars as pl
 from PySide6.QtWidgets import QInputDialog, QMessageBox
 
@@ -759,6 +763,6 @@ class AgregacaoControllerMixin:
                 self._load_aggregation_table()
         except FileNotFoundError as e:
             self.status.showMessage(f"Aviso: {e!s}")
-            print(f"Aviso Agregacao: {e}")
+            log.warning("agregacao.tabela_editavel.nao_encontrada", error=str(e))
         except Exception as e:
             self.show_error("Erro ao carregar agregacao", str(e))

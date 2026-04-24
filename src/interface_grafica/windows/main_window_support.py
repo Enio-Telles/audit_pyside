@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-import logging
 
+import structlog
 import polars as pl
 from interface_grafica.config import CNPJ_ROOT
 from interface_grafica.models.table_model import PolarsTableModel
@@ -12,7 +12,7 @@ from PySide6.QtCore import QThread, Qt, QTimer
 from PySide6.QtGui import QGuiApplication, QKeySequence, QShortcut
 from PySide6.QtWidgets import QMenu, QMessageBox, QPushButton, QTableView
 
-logger = logging.getLogger(__name__)
+log = structlog.get_logger(__name__)
 
 
 class MainWindowSupportMixin:
@@ -118,9 +118,10 @@ class MainWindowSupportMixin:
                     )
                     dfs.append(df)
             except Exception:
-                logger.exception(
-                    "Falha ao carregar parquet enriquecido para Fio de Ouro: %s",
-                    arq,
+                log.exception(
+                    "main_window.fio_ouro.parquet_falhou",
+                    arq=str(arq),
+                    exc_info=True,
                 )
 
         if not dfs:

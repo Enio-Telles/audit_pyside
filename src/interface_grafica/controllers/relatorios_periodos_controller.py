@@ -2,6 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import structlog
+
+log = structlog.get_logger(__name__)
+
 import polars as pl
 from PySide6.QtWidgets import QFileDialog, QMessageBox
 
@@ -75,7 +79,7 @@ class RelatoriosPeriodosControllerMixin:
 
                 return bool(gerar_calculos_periodos(cnpj))
             except Exception as e:
-                print(f"Erro ao gerar períodos: {e}")
+                log.error("relatorios_periodos.gerar.falhou", error=str(e))
                 return False
 
         def on_finished(success):
