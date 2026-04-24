@@ -53,7 +53,7 @@ jobs:
       - name: Install dependencies
         run: uv sync
 
-            - name: Pytest with coverage
+      - name: Pytest with coverage
         # gui_smoke runs in the dedicated ubuntu smoke job to keep coverage isolated.
         # Coverage ratchet: baseline was 20.37% on 2026-04-23; fail if coverage drops below 25%.
         run: >
