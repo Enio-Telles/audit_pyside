@@ -11,9 +11,11 @@ from PySide6.QtWidgets import QFileDialog, QMessageBox
 
 from interface_grafica.config import CNPJ_ROOT
 from interface_grafica.controllers.workers import ServiceTaskWorker
+from interface_grafica.utils.safe_slot import safe_slot
 
 
 class RelatoriosPeriodosControllerMixin:
+    @safe_slot
     def atualizar_aba_periodos(self) -> None:
         cnpj = self.state.current_cnpj
         if not cnpj:
@@ -191,6 +193,7 @@ class RelatoriosPeriodosControllerMixin:
             )
         except Exception as e:
             QMessageBox.critical(self, "Erro", f"Erro ao exportar: {e}")
+    @safe_slot
     def atualizar_aba_anual(self) -> None:
         cnpj = self.state.current_cnpj
         if not cnpj:
@@ -248,6 +251,7 @@ class RelatoriosPeriodosControllerMixin:
             "Carregando Anual",
             unique_cols=["id_agrupado"],
         )
+    @safe_slot
     def atualizar_aba_mensal(self) -> None:
         cnpj = self.state.current_cnpj
         if not cnpj:
