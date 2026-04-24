@@ -249,6 +249,7 @@ def executar_pipeline_completo(
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         cnpj_alvo = sys.argv[1]
+        log.info("orquestrador.start", target_cnpj=cnpj_alvo)
         executar_pipeline_completo(
             cnpj_alvo, tabelas_selecionadas=["tb_documentos", "item_unidades", "itens"]
         )

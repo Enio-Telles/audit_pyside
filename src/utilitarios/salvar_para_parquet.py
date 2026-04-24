@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import Optional, Dict, Any
 
 import polars as pl
 import pyarrow as pa
@@ -13,9 +14,9 @@ logger = logging.getLogger(__name__)
 def salvar_para_parquet(
     df,
     caminho_saida: Path,
-    nome_arquivo: str = None,
-    schema=None,
-    metadata: dict = None,
+    nome_arquivo: Optional[str] = None,
+    schema: Optional[pa.Schema] = None,
+    metadata: Optional[Dict[str, Any]] = None,
 ) -> bool:
     """
     Exporta um DataFrame ou LazyFrame do Polars para Parquet.

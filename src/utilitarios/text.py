@@ -6,7 +6,10 @@ import math
 import numbers
 import re
 import unicodedata
-from typing import Any
+from typing import Any, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import polars as pl
 
 STOPWORDS = {
     "A",

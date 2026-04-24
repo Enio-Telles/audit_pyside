@@ -181,7 +181,7 @@ def descricao_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         )
         .join(df_lista_ids, on="descricao_normalizada", how="left")
         .sort(["descricao_normalizada", "descricao"], nulls_last=True)
-        .with_row_count("seq", offset=1)
+        .with_row_index("seq", offset=1)
         .with_columns(pl.format("id_descricao_{}", pl.col("seq")).alias("id_descricao"))
         .drop("seq")
         .with_columns(_gerar_id_agrupado_automatico_expr())

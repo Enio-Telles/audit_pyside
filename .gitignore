@@ -37,3 +37,10 @@ tmp/__pycache__
 
 # uv
 .venv/
+
+# Scratch / audit artefacts (not committed)
+scratch/
+docstring_audit*.txt
+missing_docstrings.txt
+gh_runs.txt
+latest_run.json
