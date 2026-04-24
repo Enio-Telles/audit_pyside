@@ -1,16 +1,16 @@
 from __future__ import annotations
 
-import logging
 import inspect
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+import structlog
 from PySide6.QtCore import QThread, Signal
 
 from interface_grafica.services.pipeline_funcoes_service import ServicoPipelineCompleto
 
-logger = logging.getLogger(__name__)
+log = structlog.get_logger(__name__)
 
 
 class PipelineWorker(QThread):
@@ -82,9 +82,9 @@ class ServiceTaskWorker(QThread):
                 ):
                     call_kwargs["progresso"] = self.progress.emit
             except Exception:
-                logger.debug(
-                    "Falha ao inspecionar assinatura do worker %s",
-                    getattr(self.func, "__name__", repr(self.func)),
+                log.debug(
+                    "worker.assinatura.inspecao_falhou",
+                    func=getattr(self.func, "__name__", repr(self.func)),
                     exc_info=True,
                 )
             resultado = self.func(*self.args, **call_kwargs)
