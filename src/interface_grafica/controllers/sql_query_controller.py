@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import re
+
 import polars as pl
 
 from interface_grafica.services.query_worker import QueryWorker
 from interface_grafica.services.sql_service import ParamInfo, WIDGET_DATE
+from interface_grafica.utils.safe_slot import safe_slot
+from interface_grafica.utils.validators import validate_cnpj, validate_date_range
 from PySide6.QtCore import QDate
 from PySide6.QtWidgets import QDateEdit, QLabel, QLineEdit
 
@@ -75,6 +79,7 @@ class SqlQueryControllerMixin:
             else:
                 values[name] = ""
         return values
+    @safe_slot
     def _execute_sql_query(self) -> None:
         """Executa a consulta SQL em thread separada."""
         if not self._sql_current_sql:
@@ -85,6 +90,11 @@ class SqlQueryControllerMixin:
             return
 
         values = self._collect_param_values()
+        try:
+            self._validate_sql_param_values(values)
+        except ValueError as exc:
+            self.show_error("Parametros invalidos", str(exc))
+            return
         binds = self.sql_service.build_binds(self._sql_current_sql, values)
 
         self.btn_sql_execute.setEnabled(False)
@@ -98,6 +108,47 @@ class SqlQueryControllerMixin:
         self.query_worker.failed.connect(self._on_query_failed)
         self._registrar_limpeza_worker("query_worker", self.query_worker)
         self.query_worker.start()
+    def _validate_sql_param_values(self, values: dict[str, str]) -> None:
+        normalized_names = {name.lower(): name for name in values}
+        for name, value in list(values.items()):
+            if value and "cnpj" in name.lower():
+                values[name] = validate_cnpj(value)
+
+        starts: dict[tuple[str, ...], str] = {}
+        ends: dict[tuple[str, ...], str] = {}
+        for key, original in normalized_names.items():
+            role, group = self._sql_date_param_role(key)
+            if role == "start":
+                starts[group] = original
+            elif role == "end":
+                ends[group] = original
+
+        for group in starts.keys() & ends.keys():
+            start_key = starts[group]
+            end_key = ends[group]
+            if values.get(start_key) and values.get(end_key):
+                validate_date_range(values[start_key], values[end_key])
+
+    @staticmethod
+    def _sql_date_param_role(name: str) -> tuple[str | None, tuple[str, ...]]:
+        tokens = [token for token in re.split(r"[^a-z0-9]+", name.lower()) if token]
+        if not tokens:
+            return None, ()
+
+        for index, token in enumerate(tokens):
+            if token in {"inicio", "start"}:
+                return "start", tuple(tokens[:index] + tokens[index + 1 :])
+            if token in {"fim", "end"}:
+                return "end", tuple(tokens[:index] + tokens[index + 1 :])
+
+        for index in range(len(tokens) - 1):
+            pair = f"{tokens[index]}_{tokens[index + 1]}"
+            if pair in {"data_ini", "dt_ini"}:
+                return "start", tuple(tokens[:index] + tokens[index + 2 :])
+            if pair in {"data_fim", "dt_fim"}:
+                return "end", tuple(tokens[:index] + tokens[index + 2 :])
+        return None, ()
+
     def _on_query_finished(self, df: pl.DataFrame) -> None:
         """Callback quando a consulta Oracle finaliza com sucesso."""
         self.btn_sql_execute.setEnabled(True)
