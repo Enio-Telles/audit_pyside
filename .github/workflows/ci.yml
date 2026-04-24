@@ -55,14 +55,14 @@ jobs:
 
       - name: Pytest with coverage
         # gui_smoke requires pytest-qt + Qt system libs; runs in uv-quality.yml only.
-        # Baseline coverage: 20% (measured 2026-04-23). Fail if coverage drops below 19%.
+        # Coverage ratchet: baseline was 20.37% on 2026-04-23; fail if coverage drops below 25%.
         run: >
           uv run pytest -q
           -m "not gui_smoke"
           --cov=src
           --cov-report=xml
           --cov-report=term
-          --cov-fail-under=19
+          --cov-fail-under=25
 
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
