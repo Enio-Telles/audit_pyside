@@ -53,9 +53,23 @@ jobs:
       - name: Install dependencies
         run: uv sync
 
-      - name: Pytest
-        # gui_smoke requires pytest-qt + Qt system libs; runs in uv-quality.yml only
-        run: uv run pytest -q -m "not gui_smoke"
+      - name: Pytest with coverage
+        # gui_smoke requires pytest-qt + Qt system libs; runs in uv-quality.yml only.
+        # Baseline coverage: 20% (measured 2026-04-23). Fail if coverage drops below 19%.
+        run: >
+          uv run pytest -q
+          -m "not gui_smoke"
+          --cov=src
+          --cov-report=xml
+          --cov-report=term
+          --cov-fail-under=19
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-xml
+          path: coverage.xml
+        if: always()
 
   test-windows:
     name: Test Windows
@@ -76,5 +90,6 @@ jobs:
         run: uv sync
 
       - name: Pytest
-        # gui_smoke requires pytest-qt + Qt system libs; runs in uv-quality.yml only
+        # gui_smoke requires pytest-qt + Qt system libs; runs in uv-quality.yml only.
+        # No coverage on Windows to keep the job fast; coverage is collected on ubuntu.
         run: uv run pytest -q -m "not oracle and not gui and not gui_smoke"
