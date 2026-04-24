@@ -116,6 +116,55 @@ O backend FastAPI foi removido em 2026-04-22 — veja [ADR-001](adr/0001-futuro-
 
 ---
 
+## Build do executável (PyInstaller)
+
+O empacotamento usa **PyInstaller 6+** via `audit_pyside.spec` na raiz do repositório.
+O spec gera uma distribuição **one-dir** (`dist/FiscalParquetAnalyzer/`) pronta para distribuição Windows.
+
+### Pré-requisitos
+
+```bash
+# Instalar dependências de desenvolvimento (inclui pyinstaller)
+uv sync --all-extras
+```
+
+### Comando de build
+
+```bash
+uv run pyinstaller audit_pyside.spec
+```
+
+O executável final estará em `dist/FiscalParquetAnalyzer/FiscalParquetAnalyzer.exe`.
+
+### Estrutura de runtime esperada
+
+O bundle **não** inclui dados externos. Antes de executar, posicione ao lado do diretório `FiscalParquetAnalyzer/`:
+
+```text
+FiscalParquetAnalyzer/   ← gerado pelo build
+dados/                   ← dados Parquet e referências
+sql/                     ← scripts SQL de extração
+workspace/               ← estado da aplicação (criado automaticamente)
+.env                     ← credenciais Oracle (não commitar)
+```
+
+### Notas de path resolution
+
+O módulo `src/utilitarios/project_paths.py` deriva `PROJECT_ROOT` de `Path(__file__).parents[2]`.
+Dentro do bundle one-dir, `PROJECT_ROOT` aponta para `sys._MEIPASS` (diretório de extração temporário).
+Para instalações portáteis, mantenha `dados/`, `sql/`, `workspace/` e `.env` no mesmo diretório que
+o executável, ou defina as variáveis de ambiente `DATA_ROOT` e `SQL_ROOT` antes do lançamento.
+
+### Solução de problemas comuns
+
+| Sintoma | Causa provável | Solução |
+|---|---|---|
+| `ModuleNotFoundError: polars` | Hook polars não detectado | Adicionar `polars._utils.udfs` em `hiddenimports` no spec |
+| Tema não carrega (janela sem estilo) | QSS não incluído no bundle | Verificar entrada `datas` no spec |
+| `oracledb` falha ao conectar | Biblioteca nativa faltando | Usar modo thin (padrão); modo thick requer DLL do Oracle Client |
+
+---
+
 ## Como contribuir
 
 ### Nomenclatura de branches
