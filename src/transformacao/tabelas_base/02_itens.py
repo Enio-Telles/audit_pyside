@@ -32,6 +32,17 @@ except ImportError as e:
 
 
 def _normalizar_descricao_expr(col: str) -> pl.Expr:
+    """Returns a Polars expression that normalizes a description column.
+
+    Converts to uppercase, replaces accented characters with ASCII equivalents,
+    collapses whitespace, and aliases the result to ``'descricao_normalizada'``.
+
+    Args:
+        col: Column name containing the raw description.
+
+    Returns:
+        Polars expression aliased to ``'descricao_normalizada'``.
+    """
     return (
         pl.col(col)
         .cast(pl.Utf8, strict=False)
@@ -51,6 +62,15 @@ def _normalizar_descricao_expr(col: str) -> pl.Expr:
 
 
 def _agg_list(col: str, alias: str) -> pl.Expr:
+    """Returns a Polars aggregation expression for unique, sorted, non-null strings.
+
+    Args:
+        col: Column name to aggregate.
+        alias: Output column name.
+
+    Returns:
+        Polars expression collecting distinct non-empty values as a sorted list.
+    """
     return (
         pl.col(col)
         .cast(pl.String, strict=False)
@@ -64,6 +84,25 @@ def _agg_list(col: str, alias: str) -> pl.Expr:
 
 
 def itens(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
+    """Generates the consolidated ``itens`` table from ``item_unidades``.
+
+    Groups ``item_unidades_{cnpj}.parquet`` by normalized description,
+    picks the richest representative row per group, and writes
+    ``analises/produtos/itens_{cnpj}.parquet``.
+
+    Args:
+        cnpj: CPF or CNPJ string (11 or 14 digits).
+        pasta_cnpj: Root directory for this CNPJ's data.  Defaults to
+            ``CNPJ_ROOT / cnpj``.
+
+    Returns:
+        ``True`` on success, ``False`` if ``item_unidades`` could not be
+        generated or the result is empty.
+
+    Raises:
+        ValueError: If ``cnpj`` does not have 11 or 14 digits after stripping
+            non-digits.
+    """
     cnpj = re.sub(r"\D", "", cnpj or "")
     if len(cnpj) not in {11, 14}:
         raise ValueError("CPF/CNPJ invalido.")
@@ -211,6 +250,15 @@ def itens(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
 
 
 def gerar_itens(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
+    """Entry-point alias for :func:`itens`.
+
+    Args:
+        cnpj: CPF or CNPJ string (11 or 14 digits).
+        pasta_cnpj: Override for the CNPJ root data directory.
+
+    Returns:
+        ``True`` on success, ``False`` otherwise.
+    """
     return itens(cnpj, pasta_cnpj)
 
 
