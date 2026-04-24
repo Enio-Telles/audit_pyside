@@ -7,6 +7,8 @@ from PySide6.QtWidgets import QFileDialog, QMessageBox
 
 from interface_grafica.config import CNPJ_ROOT
 from interface_grafica.controllers.workers import ServiceTaskWorker
+from interface_grafica.utils.safe_slot import safe_slot
+from interface_grafica.utils.validators import validate_cnpj, validate_path_exists
 
 
 class ConversaoControllerMixin:
@@ -806,14 +808,25 @@ class ConversaoControllerMixin:
             )
         except Exception as e:
             QMessageBox.critical(self, "Erro", f"Erro ao exportar: {e}")
+    @safe_slot
     def importar_conversao_excel(self) -> None:
         """Importa fatores de conversao do Excel, sobrescrevendo o Parquet."""
         cnpj = self.state.current_cnpj
         if not cnpj:
             return
+        try:
+            cnpj = validate_cnpj(cnpj)
+        except ValueError as exc:
+            QMessageBox.warning(self, "CNPJ invalido", str(exc))
+            return
 
         path, _ = QFileDialog.getOpenFileName(self, "Abrir Excel", "", "Excel (*.xlsx)")
         if not path:
+            return
+        try:
+            path = validate_path_exists(path)
+        except ValueError as exc:
+            QMessageBox.warning(self, "Arquivo invalido", str(exc))
             return
 
         try:
