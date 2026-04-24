@@ -75,7 +75,6 @@ def test_main_window_smoke(qtbot):
                 for i in range(tab.count()):
                     tab.setCurrentIndex(i)
                     qtbot.wait(50)
-                    QApplication.processEvents()
                     assert win.isVisible()
 
             win.close()
