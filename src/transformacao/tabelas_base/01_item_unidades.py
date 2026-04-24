@@ -105,6 +105,7 @@ def _inferir_co_sefin(df: pl.DataFrame) -> pl.DataFrame:
         DataFrame with ``co_sefin_item`` column added and join helper columns
         removed.
     """
+
     def _candidatos_ref_dir() -> list[Path]:
         """Returns candidate base directories for CO_SEFIN reference files."""
         return [
