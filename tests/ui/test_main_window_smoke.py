@@ -35,12 +35,17 @@ def test_main_window_smoke(qtbot):
         # Import shim
         from interface_grafica.ui.main_window import MainWindow as MainWindowShim
 
-        # Try canonical import used in different repo states; fall back if missing
+        # Try canonical import used in different repo states; treat SystemExit
+        # (raised by accidental sys.exit() in import-time code) as import failure
         try:
             from interface_grafica.windows.main_window import MainWindow as MainWindowCanonical
+        except SystemExit:
+            MainWindowCanonical = None
         except Exception:
             try:
                 from interface_grafica.ui.main_window_impl import MainWindow as MainWindowCanonical
+            except SystemExit:
+                MainWindowCanonical = None
             except Exception:
                 MainWindowCanonical = None
 
