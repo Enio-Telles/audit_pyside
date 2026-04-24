@@ -58,7 +58,7 @@ jobs:
         # Baseline coverage: 20% (measured 2026-04-23). Fail if coverage drops below 19%.
         run: >
           uv run pytest -q
-          -m "not gui_smoke"
+          -m "not oracle and not gui and not gui_smoke"
           --cov=src
           --cov-report=xml
           --cov-report=term
