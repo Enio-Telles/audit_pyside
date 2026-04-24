@@ -16,7 +16,7 @@ from typing import Callable
 import structlog
 from rich import print as rprint
 
-logger = structlog.get_logger(__name__)
+log = structlog.get_logger(__name__)
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 SRC_DIR = ROOT_DIR / "src"
