@@ -47,6 +47,7 @@ testpaths = ["tests"]
 markers = [
     "oracle: tests that require Oracle database connection",
     "gui: tests that require PySide6 GUI (display server)",
+    "gui_smoke: headless GUI smoke tests",
     "slow: tests that are slow to run",
 ]
 addopts = ["-m", "not oracle and not gui"]
