@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import structlog
 
@@ -11,8 +12,14 @@ import polars as pl
 from PySide6.QtWidgets import QInputDialog, QMessageBox
 
 from interface_grafica.services.parquet_service import FilterCondition
+from interface_grafica.utils.retry import retry_on_io
 from interface_grafica.utils.safe_slot import safe_slot
 from utilitarios.text import remove_accents
+
+if TYPE_CHECKING:
+    from PySide6.QtWidgets import QTableView
+
+    from interface_grafica.models.table_model import PolarsTableModel
 
 
 class AgregacaoControllerMixin:
@@ -201,6 +208,7 @@ class AgregacaoControllerMixin:
                 "Restaurado",
                 f"Snapshot {name} restaurado. Reprocessamento nao iniciado (worker ocupado).",
             )
+    @retry_on_io()
     def _load_aggregation_table(self) -> None:
         cnpj = self.state.current_cnpj
         if not cnpj:

@@ -2,10 +2,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import polars as pl
 from interface_grafica.config import CONSULTAS_ROOT
 from PySide6.QtWidgets import QFileDialog
 
 from interface_grafica.ui.dialogs import ColumnSelectorDialog
+from interface_grafica.utils.retry import retry_on_io
 
 
 class ConsultaControllerMixin:
@@ -66,6 +68,7 @@ class ConsultaControllerMixin:
             f"{f.column} {f.operator} {f.value}".strip()
             for f in self.state.filters or []
         )
+    @retry_on_io()
     def _dataset_for_export(self, mode: str) -> pl.DataFrame:
         if self.state.current_file is None:
             raise ValueError("Nenhum arquivo selecionado.")
