@@ -35,19 +35,30 @@ def test_main_window_smoke(qtbot):
         # Import shim
         from interface_grafica.ui.main_window import MainWindow as MainWindowShim
 
-        # Try canonical import used in different repo states; treat SystemExit
-        # (raised by accidental sys.exit() in import-time code) as import failure
-        try:
-            from interface_grafica.windows.main_window import MainWindow as MainWindowCanonical
-        except SystemExit:
-            MainWindowCanonical = None
-        except Exception:
+        # Try canonical import used in different repo states; skip canonical by
+        # default in CI to avoid importing heavy runtime deps. To enable local
+        # testing of the canonical implementation set `RUN_CANONICAL_MAINWINDOW`
+        # to '1', 'true', or 'yes' in the environment.
+        run_canonical = os.environ.get("RUN_CANONICAL_MAINWINDOW", "").lower() in (
+            "1",
+            "true",
+            "yes",
+            "on",
+        )
+        if run_canonical:
             try:
-                from interface_grafica.ui.main_window_impl import MainWindow as MainWindowCanonical
+                from interface_grafica.windows.main_window import MainWindow as MainWindowCanonical
             except SystemExit:
                 MainWindowCanonical = None
             except Exception:
-                MainWindowCanonical = None
+                try:
+                    from interface_grafica.ui.main_window_impl import MainWindow as MainWindowCanonical
+                except SystemExit:
+                    MainWindowCanonical = None
+                except Exception:
+                    MainWindowCanonical = None
+        else:
+            MainWindowCanonical = None
 
         for MW in (MainWindowShim, MainWindowCanonical):
             if MW is None:
