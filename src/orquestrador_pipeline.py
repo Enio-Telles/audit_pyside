@@ -15,9 +15,6 @@ from typing import Callable
 
 import structlog
 from rich import print as rprint
-import structlog
-
-log = structlog.get_logger(__name__)
 
 log = structlog.get_logger(__name__)
 
