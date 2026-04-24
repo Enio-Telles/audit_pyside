@@ -34,6 +34,21 @@ except ImportError as e:
 
 
 def gerar_enriquecimento(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
+    """Enriches product data with conversion factors and traceability metadata.
+
+    Delegates to ``fontes_produtos.gerar_fontes_produtos`` to build the
+    ``*_agr`` layer (containing ``id_agrupado``, ``codigo_fonte``,
+    ``id_linha_origem``), then joins ``fatores_conversao`` to compute
+    ``q_conv`` and ``q_conv_fisica`` and saves Gold-layer Parquets.
+
+    Args:
+        cnpj: CNPJ string (digits only or formatted).
+        pasta_cnpj: Root directory for this CNPJ's data.  Defaults to
+            ``CNPJ_ROOT / cnpj``.
+
+    Returns:
+        ``True`` if the ``*_agr`` step succeeded, ``False`` otherwise.
+    """
     cnpj = re.sub(r"\D", "", cnpj)
     if pasta_cnpj is None:
         pasta_cnpj = CNPJ_ROOT / cnpj
