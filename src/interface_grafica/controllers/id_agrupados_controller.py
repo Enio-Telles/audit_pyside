@@ -40,7 +40,7 @@ class IdAgrupadosControllerMixin:
                 self.lbl_id_agrupados_status.setText(
                     "Tabela id_agrupados nao encontrada para este CNPJ."
                 )
-                self._atualizar_titulo_id_agrupados()
+                self._atualizar_titulo_aba_id_agrupados()
                 return
             self._id_agrupados_df = df
             self._id_agrupados_file_path = path

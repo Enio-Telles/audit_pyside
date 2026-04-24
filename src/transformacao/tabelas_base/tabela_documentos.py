@@ -39,6 +39,7 @@ def gerar_tabela_documentos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
     try:
         # 1. Carregar Fontes
         def _ler(prefix):
+            """Loads the first Parquet file matching ``prefix`` in the raw directory."""
             paths = list(arq_dir.glob(f"{prefix}*.parquet"))
             if not paths:
                 return pl.DataFrame()

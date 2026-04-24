@@ -8,9 +8,19 @@ from PySide6.QtWidgets import QLabel, QLineEdit, QMessageBox, QPushButton
 from interface_grafica.controllers.workers import PipelineWorker
 from interface_grafica.ui.dialogs import DialogoSelecaoConsultas, DialogoSelecaoTabelas
 from interface_grafica.services.pipeline_funcoes_service import ResultadoPipeline
+from interface_grafica.utils.safe_slot import safe_slot
+from interface_grafica.utils.validators import validate_cnpj
 
 
 class ImportacaoControllerMixin:
+    def _validar_cpf_cnpj_pipeline(self, value: str) -> str:
+        digits = self.servico_pipeline_funcoes.servico_extracao.sanitizar_cnpj(value)
+        if len(digits) == 14:
+            return validate_cnpj(digits)
+        if len(digits) == 11:
+            return digits
+        raise ValueError("Informe um CPF com 11 digitos ou um CNPJ com 14 digitos.")
+
     def _verificar_conexoes(self) -> None:
         """Testa ambas as conexões Oracle e atualiza o painel de status no topo da aba."""
         if not hasattr(self, "_cfg_host"):
@@ -186,12 +196,11 @@ class ImportacaoControllerMixin:
             if matches:
                 self.cnpj_list.setCurrentItem(matches[0])
 
+    @safe_slot
     def run_pipeline_for_input(self) -> None:
         try:
-            cnpj = self.servico_pipeline_funcoes.servico_extracao.sanitizar_cnpj(
-                self.cnpj_input.text()
-            )
-        except Exception as exc:
+            cnpj = self._validar_cpf_cnpj_pipeline(self.cnpj_input.text())
+        except ValueError as exc:
             self.show_error("CPF/CNPJ invalido", str(exc))
             return
 
@@ -272,10 +281,16 @@ class ImportacaoControllerMixin:
         self.status.showMessage("Falha na execucao do pipeline.")
         self.show_error("Falha nao pipeline", message)
 
+    @safe_slot
     def extrair_tabelas_brutas(self) -> None:
         """Executa apenas a extracao SQL (fase 1 do pipeline)."""
         cnpj = self._obter_cnpj_valido()
         if not cnpj:
+            return
+        try:
+            cnpj = self._validar_cpf_cnpj_pipeline(cnpj)
+        except ValueError as exc:
+            self.show_error("CPF/CNPJ invalido", str(exc))
             return
 
         consultas_disp = (
@@ -335,9 +350,15 @@ class ImportacaoControllerMixin:
         self.status.showMessage("Falha na extracao.")
         self.show_error("Falha na extracao", message)
 
+    @safe_slot
     def extrair_dados_nfe_entrada(self) -> None:
         cnpj = self._obter_cnpj_valido()
         if not cnpj:
+            return
+        try:
+            cnpj = self._validar_cpf_cnpj_pipeline(cnpj)
+        except ValueError as exc:
+            self.show_error("CPF/CNPJ invalido", str(exc))
             return
         if self.pipeline_worker is not None and self.pipeline_worker.isRunning():
             self.show_error(
@@ -428,10 +449,16 @@ class ImportacaoControllerMixin:
         self.status.showMessage("Falha na extracao da NFe Entrada.")
         self.show_error("Falha na NFe Entrada", message)
 
+    @safe_slot
     def executar_processamento(self) -> None:
         """Executa apenas a geracao de tabelas (fase 2 do pipeline)."""
         cnpj = self._obter_cnpj_valido()
         if not cnpj:
+            return
+        try:
+            cnpj = self._validar_cpf_cnpj_pipeline(cnpj)
+        except ValueError as exc:
+            self.show_error("CPF/CNPJ invalido", str(exc))
             return
 
         tabelas_disp = self.servico_pipeline_funcoes.servico_tabelas.listar_tabelas()

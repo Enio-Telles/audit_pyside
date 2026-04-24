@@ -2,12 +2,24 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+import structlog
+
+log = structlog.get_logger(__name__)
 
 import polars as pl
 from PySide6.QtWidgets import QInputDialog, QMessageBox
 
 from interface_grafica.services.parquet_service import FilterCondition
+from interface_grafica.utils.retry import retry_on_io
+from interface_grafica.utils.safe_slot import safe_slot
 from utilitarios.text import remove_accents
+
+if TYPE_CHECKING:
+    from PySide6.QtWidgets import QTableView
+
+    from interface_grafica.models.table_model import PolarsTableModel
 
 
 class AgregacaoControllerMixin:
@@ -60,6 +72,7 @@ class AgregacaoControllerMixin:
             vistos.add(valor)
             ids.append(valor)
         return ids
+    @safe_slot
     def reverter_agregacao(self) -> None:
         if not self.state.current_cnpj:
             self.show_error(
@@ -195,6 +208,7 @@ class AgregacaoControllerMixin:
                 "Restaurado",
                 f"Snapshot {name} restaurado. Reprocessamento nao iniciado (worker ocupado).",
             )
+    @retry_on_io()
     def _load_aggregation_table(self) -> None:
         cnpj = self.state.current_cnpj
         if not cnpj:
@@ -654,6 +668,7 @@ class AgregacaoControllerMixin:
         self._aggregation_results_relational_mode = None
         cnpj = self.state.current_cnpj or ""
         self.recarregar_historico_agregacao(cnpj)
+    @safe_slot
     def reprocessar_agregacao(self) -> None:
         cnpj = self.state.current_cnpj
         if not cnpj:
@@ -759,6 +774,6 @@ class AgregacaoControllerMixin:
                 self._load_aggregation_table()
         except FileNotFoundError as e:
             self.status.showMessage(f"Aviso: {e!s}")
-            print(f"Aviso Agregacao: {e}")
+            log.warning("agregacao.tabela_editavel.nao_encontrada", error=str(e))
         except Exception as e:
             self.show_error("Erro ao carregar agregacao", str(e))

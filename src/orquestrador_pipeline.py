@@ -13,8 +13,11 @@ import sys
 from pathlib import Path
 from typing import Callable
 
+import structlog
 from rich import print as rprint
 import structlog
+
+log = structlog.get_logger(__name__)
 
 log = structlog.get_logger(__name__)
 
@@ -159,6 +162,7 @@ def executar_pipeline_completo(
         rprint(f"[red]Erro:[/red] CNPJ invalido: {cnpj}")
         return False
 
+    log.info("orquestrador.pipeline.iniciado", cnpj=cnpj)
     rprint(f"\n[bold green]Iniciando pipeline para CNPJ: {cnpj}[/bold green]")
     sucesso_global = True
 
@@ -232,10 +236,12 @@ def executar_pipeline_completo(
                 sucesso_global = False
 
     if sucesso_global:
+        log.info("orquestrador.pipeline.sucesso", cnpj=cnpj)
         rprint(
             f"\n[bold green]Pipeline finalizado com sucesso para {cnpj}![/bold green]\n"
         )
     else:
+        log.info("orquestrador.pipeline.falha_parcial", cnpj=cnpj)
         rprint(
             f"\n[bold yellow]Pipeline finalizado com avisos/falhas parciais para {cnpj}.[/bold yellow]\n"
         )

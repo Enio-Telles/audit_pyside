@@ -6,26 +6,44 @@ from PySide6.QtCore import QDate, Qt
 from PySide6.QtWidgets import QMessageBox
 
 from interface_grafica.config import CNPJ_ROOT
+from interface_grafica.utils.safe_slot import safe_slot
+from interface_grafica.utils.validators import validate_cnpj, validate_path_exists
 
 
 class AuditoriaControllerMixin:
+    @safe_slot
     def atualizar_aba_mov_estoque(self) -> None:
+        def _limpar_estoque_status(message: str) -> None:
+            self.mov_estoque_model.set_dataframe(pl.DataFrame())
+            self._mov_estoque_df = pl.DataFrame()
+            self.lbl_mov_estoque_status.setText(message)
+            self._atualizar_titulo_aba_mov_estoque()
+            self.atualizar_aba_produtos_selecionados()
+
         cnpj = self.state.current_cnpj
         if not cnpj:
             self._atualizar_titulo_aba_mov_estoque()
+            return
+        try:
+            cnpj = validate_cnpj(cnpj)
+        except ValueError as exc:
+            _limpar_estoque_status("CNPJ invalido para carregar mov_estoque.")
+            self.show_error("CNPJ invalido", str(exc))
             return
 
         path = (
             CNPJ_ROOT / cnpj / "analises" / "produtos" / f"mov_estoque_{cnpj}.parquet"
         )
         if not path.exists():
-            self.mov_estoque_model.set_dataframe(pl.DataFrame())
-            self._mov_estoque_df = pl.DataFrame()
-            self.lbl_mov_estoque_status.setText(
+            _limpar_estoque_status(
                 "Arquivo 'mov_estoque' nao encontrado para este CNPJ."
             )
-            self._atualizar_titulo_aba_mov_estoque()
-            self.atualizar_aba_produtos_selecionados()
+            return
+        try:
+            path = validate_path_exists(path)
+        except ValueError as exc:
+            _limpar_estoque_status("Arquivo 'mov_estoque' invalido para este CNPJ.")
+            self.show_error("Arquivo de estoque invalido", str(exc))
             return
 
         def _finalizar_carga_estoque(
