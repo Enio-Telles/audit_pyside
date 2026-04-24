@@ -11,6 +11,7 @@ import polars as pl
 from PySide6.QtWidgets import QInputDialog, QMessageBox
 
 from interface_grafica.services.parquet_service import FilterCondition
+from interface_grafica.utils.safe_slot import safe_slot
 from utilitarios.text import remove_accents
 
 
@@ -64,6 +65,7 @@ class AgregacaoControllerMixin:
             vistos.add(valor)
             ids.append(valor)
         return ids
+    @safe_slot
     def reverter_agregacao(self) -> None:
         if not self.state.current_cnpj:
             self.show_error(
@@ -658,6 +660,7 @@ class AgregacaoControllerMixin:
         self._aggregation_results_relational_mode = None
         cnpj = self.state.current_cnpj or ""
         self.recarregar_historico_agregacao(cnpj)
+    @safe_slot
     def reprocessar_agregacao(self) -> None:
         cnpj = self.state.current_cnpj
         if not cnpj:
