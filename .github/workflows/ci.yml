@@ -53,12 +53,12 @@ jobs:
       - name: Install dependencies
         run: uv sync
 
-      - name: Pytest with coverage
-        # gui_smoke requires pytest-qt + Qt system libs; runs in uv-quality.yml only.
+            - name: Pytest with coverage
+        # gui_smoke runs in the dedicated ubuntu smoke job to keep coverage isolated.
         # Coverage ratchet: baseline was 20.37% on 2026-04-23; fail if coverage drops below 25%.
         run: >
           uv run pytest -q
-          -m "not gui_smoke"
+          -m "not oracle and not gui and not gui_smoke"
           --cov=src
           --cov-report=xml
           --cov-report=term
@@ -70,6 +70,40 @@ jobs:
           name: coverage-xml
           path: coverage.xml
         if: always()
+
+  test-gui-smoke:
+    name: Test GUI Smoke (ubuntu)
+    runs-on: ubuntu-latest
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Qt system libraries
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y --no-install-recommends \
+            libegl1 libgl1-mesa-dri libxkbcommon0 libdbus-1-3 \
+            libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 \
+            libxcb-render-util0 libxcb-shape0 libxcb-xinerama0 libxcb-xkb1 \
+            libxkbcommon-x11-0 libfontconfig1 libfreetype6
+
+      - name: Install dependencies
+        run: |
+          uv sync --group dev
+          uv pip install pytest-qt
+
+      - name: Run GUI smoke test
+        run: uv run pytest -q -m gui_smoke tests/ui/test_main_window_smoke.py
 
   test-windows:
     name: Test Windows
@@ -90,6 +124,6 @@ jobs:
         run: uv sync
 
       - name: Pytest
-        # gui_smoke requires pytest-qt + Qt system libs; runs in uv-quality.yml only.
+        # gui_smoke runs in the dedicated ubuntu smoke job to avoid flaky Windows Qt headless runs.
         # No coverage on Windows to keep the job fast; coverage is collected on ubuntu.
         run: uv run pytest -q -m "not oracle and not gui and not gui_smoke"
