@@ -54,7 +54,8 @@ jobs:
         run: uv sync
 
       - name: Pytest
-        run: uv run pytest -q
+        # gui_smoke requires pytest-qt + Qt system libs; runs in uv-quality.yml only
+        run: uv run pytest -q -m "not gui_smoke"
 
   test-windows:
     name: Test Windows
@@ -75,4 +76,5 @@ jobs:
         run: uv sync
 
       - name: Pytest
-        run: uv run pytest -q -m "not oracle and not gui"
+        # gui_smoke requires pytest-qt + Qt system libs; runs in uv-quality.yml only
+        run: uv run pytest -q -m "not oracle and not gui and not gui_smoke"
