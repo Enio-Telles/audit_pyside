@@ -185,7 +185,7 @@ def itens(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
             ]
         )
         .sort(["descricao_normalizada", "descricao"], nulls_last=True)
-        .with_row_count("seq", offset=1)
+        .with_row_index("seq", offset=1)
         .with_columns(pl.format("id_item_{}", pl.col("seq")).alias("id_item"))
         .drop("seq", "__score", strict=False)
         .select(

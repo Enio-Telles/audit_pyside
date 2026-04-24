@@ -161,11 +161,10 @@ def gerar_eventos_estoque(df_mov: pl.DataFrame) -> pl.DataFrame:
     pares_sem_31_12 = anos_ativos.join(movimentos_31_12, on=["id_agrupado", "__ano__"], how="anti")
 
     df_gerado_final = pl.DataFrame()
-    tem_pares = (
-        (pares_sem_31_12.select(pl.len()).collect().item() > 0)
-        if isinstance(pares_sem_31_12, pl.LazyFrame)
-        else (not pares_sem_31_12.is_empty())
-    )
+    if isinstance(pares_sem_31_12, pl.LazyFrame):
+        tem_pares = pares_sem_31_12.select(pl.len()).collect().item() > 0
+    else:
+        tem_pares = not pares_sem_31_12.is_empty()
     if tem_pares:
         df_gerado_final = (
             pares_sem_31_12.join(produtos_unicos, on="id_agrupado", how="left")
@@ -273,11 +272,10 @@ def gerar_eventos_estoque(df_mov: pl.DataFrame) -> pl.DataFrame:
     tem_01_01 = pl.concat([iniciais_deriv_01_01, inv_01_01_base]).unique()
     pares_sem_01_01 = anos_ativos.join(tem_01_01, on=["id_agrupado", "__ano__"], how="anti")
 
-    tem_pares_01 = (
-        (pares_sem_01_01.select(pl.len()).collect().item() > 0)
-        if isinstance(pares_sem_01_01, pl.LazyFrame)
-        else (not pares_sem_01_01.is_empty())
-    )
+    if isinstance(pares_sem_01_01, pl.LazyFrame):
+        tem_pares_01 = pares_sem_01_01.select(pl.len()).collect().item() > 0
+    else:
+        tem_pares_01 = not pares_sem_01_01.is_empty()
     if tem_pares_01:
         df_gerado_inicial = (
             pares_sem_01_01.join(produtos_unicos, on="id_agrupado", how="left")

@@ -14,6 +14,9 @@ from pathlib import Path
 from typing import Callable
 
 from rich import print as rprint
+import structlog
+
+log = structlog.get_logger(__name__)
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 SRC_DIR = ROOT_DIR / "src"
@@ -243,6 +246,7 @@ def executar_pipeline_completo(
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         cnpj_alvo = sys.argv[1]
+        log.info("orquestrador.start", target_cnpj=cnpj_alvo)
         executar_pipeline_completo(
             cnpj_alvo, tabelas_selecionadas=["tb_documentos", "item_unidades", "itens"]
         )
