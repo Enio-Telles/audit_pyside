@@ -16,6 +16,7 @@ import polars as pl
 from PySide6.QtCore import QThread, Signal
 from rich import print as rprint
 
+from interface_grafica.utils.retry import retry_on_io
 from transformacao.auxiliares.logs import log_exception
 from utilitarios.perf_monitor import registrar_evento_performance
 from utilitarios.project_paths import ENV_PATH
@@ -52,6 +53,7 @@ def _iter_env_candidates() -> list[Path]:
     return ordered
 
 
+@retry_on_io()
 def _conectar_oracle_fallback():
     """Conexao Oracle standalone caso o import falhe."""
     try:
