@@ -69,7 +69,7 @@ def safe_value(val: Any) -> Any:
 
 
 def sanitize_cnpj(cnpj: str | None) -> str:
-    """Remove caracteres não numéricos e valida tamanho do CNPJ."""
+    """Remove caracteres não numéricos do CNPJ."""
     if cnpj is None:
         return ""
     limpo = re.sub(r"\D", "", str(cnpj))
