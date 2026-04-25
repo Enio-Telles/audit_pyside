@@ -21,6 +21,14 @@ UTILITARIOS_DIR = SRC_DIR / "utilitarios"
 if str(UTILITARIOS_DIR) not in sys.path:
     sys.path.insert(0, str(UTILITARIOS_DIR))
 
+# Bundle smoke-test mode: verify imports without launching the GUI.
+# Used by .github/workflows/bundle-smoke.yml — exits 0 if the bundle is healthy.
+if "--smoke" in sys.argv:
+    from utilitarios.project_paths import PROJECT_ROOT  # noqa: F401
+
+    print("smoke-ok")
+    sys.exit(0)
+
 from PySide6.QtWidgets import QApplication  # noqa: E402
 from interface_grafica.logging_setup import configure_structlog  # noqa: E402
 from interface_grafica.windows.main_window import MainWindow  # noqa: E402
