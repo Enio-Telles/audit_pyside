@@ -82,7 +82,16 @@ def gerar_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         )
 
         def _agg_list(col: str, suffix: str | None = None) -> pl.Expr:
-            """Agrega valores únicos e ordenados de *col* em lista nomeada ``lista_{col}``."""
+            """Agrega valores únicos e ordenados de *col* em lista nomeada ``lista_{suffix or col}``.
+
+            Args:
+                col: Nome da coluna a agregar.
+                suffix: Quando fornecido, o alias da lista resultante é ``lista_{suffix}``
+                    em vez de ``lista_{col}``.
+
+            Returns:
+                Expressão Polars que produz uma lista ordenada e deduplicada.
+            """
             target_alias = f"lista_{col}" if suffix is None else f"lista_{suffix}"
             return (
                 pl.col(col)

@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 from typing import Sequence
 
+import oracledb
 import polars as pl
 from rich import print as rprint
 
@@ -14,7 +15,7 @@ logger = logging.getLogger(__name__)
 thread_local = threading.local()
 
 
-def close_thread_connection():
+def close_thread_connection() -> None:
     """Fecha e libera a conexão Oracle do thread local corrente, se existir."""
     if hasattr(thread_local, "conexao"):
         if thread_local.conexao:
@@ -25,7 +26,7 @@ def close_thread_connection():
         thread_local.conexao = None
 
 
-def get_thread_connection():
+def get_thread_connection() -> oracledb.Connection | None:
     """Retorna (ou cria) a conexão Oracle do thread local corrente.
 
     Returns:
@@ -81,8 +82,12 @@ from .extracao_oracle_eficiente import (
 
 
 def processar_arquivo(
-    arq_sql, cnpj_limpo, data_limite_input, consultas_dir, pasta_saida
-):
+    arq_sql: Path | str,
+    cnpj_limpo: str,
+    data_limite_input: str | None,
+    consultas_dir: Path | str,
+    pasta_saida: Path,
+) -> bool:
     """Executa um arquivo SQL Oracle e salva o resultado como Parquet.
 
     Args:
@@ -123,7 +128,7 @@ def processar_arquivo(
             cursor.prepare(sql_txt)
             nomes_binds = cursor.bindnames()
 
-            binds = {}
+            binds: dict[str, str | None] = {}
             tem_bind_cnpj = False
             for b in nomes_binds:
                 b_upper = b.upper()
