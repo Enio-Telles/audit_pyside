@@ -116,6 +116,136 @@ O backend FastAPI foi removido em 2026-04-22 — veja [ADR-001](adr/0001-futuro-
 
 ---
 
+## Build do executável (PyInstaller)
+
+O empacotamento usa **PyInstaller 6+** via `audit_pyside.spec` na raiz do repositório.
+O spec gera uma distribuição **one-dir** (`dist/FiscalParquetAnalyzer/`) pronta para distribuição Windows.
+
+### Pré-requisitos
+
+```bash
+# Instalar dependências de desenvolvimento (inclui pyinstaller)
+uv sync --all-extras
+```
+
+### Comando de build
+
+```bash
+uv run pyinstaller audit_pyside.spec --clean --noconfirm
+# Output: dist/FiscalParquetAnalyzer/FiscalParquetAnalyzer.exe (Windows)
+#         dist/FiscalParquetAnalyzer/FiscalParquetAnalyzer     (Linux/macOS)
+```
+
+O executável final estará em `dist/FiscalParquetAnalyzer/FiscalParquetAnalyzer.exe`.
+
+### Como testar o bundle
+
+```bash
+# Windows
+./dist/FiscalParquetAnalyzer/FiscalParquetAnalyzer.exe
+
+# Linux/macOS (headless smoke test)
+AUDIT_LOG_JSON=1 ./dist/FiscalParquetAnalyzer/FiscalParquetAnalyzer 2>&1 | head -20
+
+# Verificar ausência de ImportError/FileNotFoundError na saída de erro
+```
+
+### Transição para o executável
+
+**Pré-requisitos:**
+
+- Python 3.11+ e `uv` instalados no sistema alvo de build.
+- `uv sync --group dev` para instalar o PyInstaller e demais dependências de dev.
+- Sistema operacional do build deve coincidir com o alvo (bundle Windows não roda em Linux).
+
+**Passos:**
+
+1. Clone o repositório e sincronize as dependências:
+
+   ```bash
+   git clone https://github.com/Enio-Telles/audit_pyside.git
+   cd audit_pyside
+   uv sync --group dev
+   ```
+
+2. Gere o bundle:
+
+   ```bash
+   uv run pyinstaller audit_pyside.spec --clean --noconfirm
+   ```
+
+3. Copie os diretórios de runtime para ao lado do diretório gerado:
+
+   ```bash
+   cp -r dados/ sql/ workspace/ .env dist/FiscalParquetAnalyzer/
+   ```
+
+4. Execute e valide que a GUI abre e a conexão Oracle funciona.
+
+> **Nota:** UPX está explicitamente **desabilitado** no spec (`upx=False`). Em alguns ambientes,
+> UPX comprimido interage mal com as DLLs do PySide6/Qt e causa falhas na inicialização ou
+> falsos-positivos em antivírus.
+
+### Rollback
+
+Para voltar a executar via Python diretamente:
+
+```bash
+# Sem bundle — modo de desenvolvimento
+uv run python app.py
+```
+
+Se o bundle falhar ao iniciar (`ImportError`, `FileNotFoundError`, ou janela vazia):
+
+1. Limpe artefatos de build anteriores:
+
+   ```bash
+   rm -rf build/ dist/ __pycache__/
+   ```
+
+2. Rebuild com flag de depuração:
+
+   ```bash
+   uv run pyinstaller audit_pyside.spec --clean --noconfirm --debug all
+   ```
+
+3. Analise o log de boot para o módulo faltante e adicione em `hiddenimports` ou `datas` no [audit_pyside.spec](../audit_pyside.spec).
+
+**Quando NÃO usar o bundle:**
+
+- Durante desenvolvimento ativo em `src/transformacao/` (o bundle é snapshot estático).
+- Ao depurar exceções fiscais (use `uv run python app.py` para traceback completo).
+- Ao alterar SQLs em `sql/` sem rebuild.
+
+### Estrutura de runtime esperada
+
+O bundle **não** inclui dados externos. Antes de executar, posicione ao lado do diretório `FiscalParquetAnalyzer/`:
+
+```text
+FiscalParquetAnalyzer/   ← gerado pelo build
+dados/                   ← dados Parquet e referências
+sql/                     ← scripts SQL de extração
+workspace/               ← estado da aplicação (criado automaticamente)
+.env                     ← credenciais Oracle (não commitar)
+```
+
+### Notas de path resolution
+
+O módulo `src/utilitarios/project_paths.py` deriva `PROJECT_ROOT` de `Path(__file__).parents[2]`.
+Dentro do bundle one-dir, `PROJECT_ROOT` aponta para `sys._MEIPASS` (diretório de extração temporário).
+Para instalações portáteis, mantenha `dados/`, `sql/`, `workspace/` e `.env` no mesmo diretório que
+o executável, ou defina as variáveis de ambiente `DATA_ROOT` e `SQL_ROOT` antes do lançamento.
+
+### Solução de problemas comuns
+
+| Sintoma | Causa provável | Solução |
+|---|---|---|
+| `ModuleNotFoundError: polars` | Hook polars não detectado | Adicionar `polars._utils.udfs` em `hiddenimports` no spec |
+| Tema não carrega (janela sem estilo) | QSS não incluído no bundle | Verificar entrada `datas` no spec |
+| `oracledb` falha ao conectar | Biblioteca nativa faltando | Usar modo thin (padrão); modo thick requer DLL do Oracle Client |
+
+---
+
 ## Como contribuir
 
 ### Nomenclatura de branches
