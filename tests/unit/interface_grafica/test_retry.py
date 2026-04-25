@@ -50,3 +50,22 @@ def test_retry_on_io_logs_exhaustion_and_reraises_last_exception() -> None:
         "error",
     ]
     assert entries[-1]["attempts"] == 3
+
+
+def test_retry_on_io_invalid_max_attempts() -> None:
+    with pytest.raises(ValueError, match="maior ou igual a 1"):
+        retry_on_io(max_attempts=0)
+
+
+def test_retry_on_io_sleeps_between_attempts() -> None:
+    calls = {"count": 0}
+
+    @retry_on_io(max_attempts=2, backoff_seconds=(0.001,), exceptions=(OSError,))
+    def flaky() -> str:
+        calls["count"] += 1
+        if calls["count"] < 2:
+            raise OSError("temporario")
+        return "ok"
+
+    assert flaky() == "ok"
+    assert calls["count"] == 2

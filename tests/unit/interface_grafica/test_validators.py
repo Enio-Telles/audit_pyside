@@ -72,6 +72,7 @@ def test_validate_date_range_ptbr() -> None:
     assert s == date(2024, 1, 1)
     assert e == date(2024, 12, 31)
 
+
 def test_validate_date_range_inverted() -> None:
     with pytest.raises(ValueError, match="anterior ou igual"):
         validate_date_range("2024-12-31", "2024-01-01")
@@ -80,3 +81,32 @@ def test_validate_date_range_inverted() -> None:
 def test_validate_date_range_invalid_format() -> None:
     with pytest.raises(ValueError, match="Formato de data invalido"):
         validate_date_range("nao-e-data", "2024-01-01")
+
+
+def test_validate_path_exists_no_read_permission(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    f = tmp_path / "arquivo.parquet"
+    f.write_bytes(b"dados")
+    monkeypatch.setattr(
+        "interface_grafica.utils.validators.os.access",
+        lambda p, mode: False,
+    )
+    with pytest.raises(ValueError, match="Sem permissao"):
+        validate_path_exists(f)
+
+
+def test_validate_path_exists_directory(tmp_path: Path) -> None:
+    result = validate_path_exists(tmp_path)
+    assert result == tmp_path
+
+
+def test_validate_path_exists_directory_oserror(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def _raise_oserror(self):
+        raise OSError("simulated permission error")
+
+    monkeypatch.setattr(Path, "iterdir", _raise_oserror)
+    with pytest.raises(ValueError, match="Sem permissao"):
+        validate_path_exists(tmp_path)
