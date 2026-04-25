@@ -18,7 +18,7 @@ import argparse
 import subprocess
 import sys
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 
 
 # Branches que nunca devem ser deletadas, independente de qualquer argumento.
@@ -37,7 +37,7 @@ class BranchInfo:
 
     def __post_init__(self) -> None:
         if self.last_commit_date is not None:
-            now = datetime.now(tz=timezone.utc)
+            now = datetime.now(tz=UTC)
             delta = now - self.last_commit_date
             self.age_days = delta.days
 
@@ -140,12 +140,12 @@ def collect_branches(
             merged=is_merged,
         )
 
-        if min_age_days > 0 and info.age_days is not None and info.age_days < min_age_days:
+        if min_age_days > 0 and (info.age_days is None or info.age_days < min_age_days):
             continue
 
         results.append(info)
 
-    results.sort(key=lambda b: (b.last_commit_date or datetime.min.replace(tzinfo=timezone.utc)))
+    results.sort(key=lambda b: (b.last_commit_date or datetime.min.replace(tzinfo=UTC)))
     return results
 
 
@@ -170,10 +170,9 @@ def print_dry_run(branches: list[BranchInfo], remote: str) -> None:
     print("  Comandos para execução manual:")
     print()
     for b in branches:
-        print(f"  git push {remote} --delete {b.short_name}")
+        print(f"  git push {remote} --delete {b.short_name!r}")
     print()
-    print("  Para executar automaticamente:")
-    print(f"  uv run python scripts/cleanup_stale_branches.py --execute")
+    print("  Para executar automaticamente (reaplique os mesmos filtros com --execute):")
     print(f"{'-' * 72}\n")
 
 
@@ -262,6 +261,13 @@ def main() -> int:
         try:
             fetch_remote(args.remote)
         except subprocess.CalledProcessError:
+            if args.execute:
+                print(
+                    "Erro: git fetch falhou em modo --execute. "
+                    "Use --no-fetch para prosseguir com referências locais.",
+                    file=sys.stderr,
+                )
+                return 1
             print("Aviso: git fetch falhou. Continuando com referências locais.", file=sys.stderr)
 
     branches = collect_branches(
