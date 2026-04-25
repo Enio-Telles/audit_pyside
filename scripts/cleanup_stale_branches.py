@@ -3,7 +3,7 @@
 Modo padrão: --dry-run (apenas imprime comandos, não executa).
 Modo real:   --execute (requer confirmação explícita).
 
-Proteções hard-coded: 'main' e 'master' nunca são tocadas.
+Proteções hard-coded: 'main', 'master' e 'develop' nunca são tocadas.
 
 Uso:
     uv run python scripts/cleanup_stale_branches.py
@@ -22,7 +22,10 @@ from datetime import datetime, timezone, UTC
 
 
 # Branches que nunca devem ser deletadas, independente de qualquer argumento.
-PROTECTED = frozenset({"main", "master"})
+# Inclui 'develop' pois é convenção amplamente usada em outros repos que podem
+# reutilizar este script — melhor proteger preventivamente do que ter de
+# adicioná-la manualmente depois de um acidente.
+PROTECTED = frozenset({"main", "master", "develop"})
 
 
 @dataclass
@@ -93,6 +96,20 @@ def get_branch_date(branch_ref: str) -> datetime | None:
     return None
 
 
+def _check_base_reachable(remote: str, base: str, branch_ref: str) -> bool:
+    """Verifica se ``remote/base`` é alcançável como ancestral de *branch_ref*.
+
+    Usa ``git merge-base`` para confirmar que o histórico da base é acessível
+    localmente. Retorna False (e não lança exceção) se o comando falhar —
+    tipicamente quando o remote não foi fetchado recentemente.
+    """
+    try:
+        _run(["git", "merge-base", f"{remote}/{base}", branch_ref], check=True)
+        return True
+    except subprocess.CalledProcessError:
+        return False
+
+
 def collect_branches(
     remote: str,
     base: str,
@@ -125,6 +142,13 @@ def collect_branches(
         short_name = full_name.removeprefix(prefix)
 
         if short_name in PROTECTED:
+            continue
+
+        if not _check_base_reachable(remote, base, full_name):
+            print(
+                f"Aviso: branch {short_name!r} ignorada — base {remote}/{base} não alcançável.",
+                file=sys.stderr,
+            )
             continue
 
         is_merged = full_name in merged
