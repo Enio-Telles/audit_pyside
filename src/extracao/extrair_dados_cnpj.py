@@ -15,6 +15,7 @@ thread_local = threading.local()
 
 
 def close_thread_connection():
+    """Fecha e libera a conexão Oracle do thread local corrente, se existir."""
     if hasattr(thread_local, "conexao"):
         if thread_local.conexao:
             try:
@@ -25,6 +26,11 @@ def close_thread_connection():
 
 
 def get_thread_connection():
+    """Retorna (ou cria) a conexão Oracle do thread local corrente.
+
+    Returns:
+        Objeto de conexão Oracle ou None se a conexão falhar.
+    """
     if not hasattr(thread_local, "conexao"):
         # Cria uma nova conexão para esta thread
         # Usa o nome `conectar` importado de utilitarios.conectar_oracle para permitir
@@ -77,6 +83,18 @@ from .extracao_oracle_eficiente import (
 def processar_arquivo(
     arq_sql, cnpj_limpo, data_limite_input, consultas_dir, pasta_saida
 ):
+    """Executa um arquivo SQL Oracle e salva o resultado como Parquet.
+
+    Args:
+        arq_sql: Caminho do arquivo ``.sql`` a executar.
+        cnpj_limpo: CNPJ somente dígitos, usado como bind ``:CNPJ`` na query.
+        data_limite_input: Data limite de processamento (bind opcional ``DATA_LIMITE_PROCESSAMENTO``).
+        consultas_dir: Diretório raiz das consultas (usado para calcular caminho relativo de saída).
+        pasta_saida: Pasta onde o Parquet resultante será gravado.
+
+    Returns:
+        True em caso de sucesso ou query sem dados; False em caso de erro.
+    """
     # Garantir que arq_sql e consultas_dir sejam Path (podem vir como str do catalogo)
     arq_sql = Path(arq_sql) if not isinstance(arq_sql, Path) else arq_sql
     consultas_dir = (
@@ -162,6 +180,16 @@ def extrair_dados(
     data_limite_input: str | None = None,
     consultas_selecionadas: Sequence[Path | str] | None = None,
 ) -> bool:
+    """Extrai dados do Oracle para um CNPJ e grava resultados em Parquet.
+
+    Args:
+        cnpj_input: CNPJ do contribuinte (com ou sem formatação).
+        data_limite_input: Data limite de processamento no formato ``DD/MM/YYYY``.
+        consultas_selecionadas: Caminhos específicos de arquivos SQL; usa todos disponíveis quando None.
+
+    Returns:
+        True se todas as consultas forem executadas com sucesso; False em caso de falha.
+    """
     if not validar_cnpj(cnpj_input):
         rprint(f"[red]Erro:[/red] CNPJ '{cnpj_input}' invalido!")
         return False
@@ -197,6 +225,7 @@ def extrair_dados(
 
 
 def main() -> None:
+    """Ponto de entrada CLI para extração de dados Oracle por CNPJ."""
     data_limite_arg = None
     if len(sys.argv) > 1:
         cnpj_arg = sys.argv[1]
