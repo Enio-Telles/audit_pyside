@@ -56,14 +56,14 @@ jobs:
       - name: Pytest with coverage
         # gui_smoke runs in the dedicated ubuntu smoke job to keep coverage isolated.
         # main_window_impl.py (~4500 stmts, 0%) is omitted via [tool.coverage.run].
-        # Coverage ratchet: baseline ~28.9% after omit (2026-04-24); gate at 25% for headroom.
+        # Coverage ratchet: 29% after P5 merges (2026-04-25); gate at 27% (2pp headroom).
         run: >
           uv run pytest -q
           -m "not oracle and not gui and not gui_smoke"
           --cov=src
           --cov-report=xml
           --cov-report=term
-          --cov-fail-under=25
+          --cov-fail-under=27
 
       - name: Upload coverage report
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
