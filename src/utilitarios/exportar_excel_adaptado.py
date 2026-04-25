@@ -42,10 +42,12 @@ from utilitarios.text import is_year_column_name
 
 
 def _is_empty_df(df: Any) -> bool:
+    """Retorna True se o DataFrame (Polars ou Pandas) não contém linhas."""
     return df.height == 0 if hasattr(df, "height") else df.empty
 
 
 def _to_pandas(df: Any) -> pd.DataFrame:
+    """Converte um DataFrame Polars, Pandas ou sequência para ``pd.DataFrame``."""
     if hasattr(df, "to_pandas"):
         return df.to_pandas()
     if isinstance(df, pd.DataFrame):
@@ -54,6 +56,7 @@ def _to_pandas(df: Any) -> pd.DataFrame:
 
 
 def _sanitize_sheet_name(nome: str) -> str:
+    """Remove caracteres proibidos pelo Excel e trunca para 31 caracteres."""
     proibidos = set(r"[]:*?/\\")
     nome = "".join("_" if c in proibidos else c for c in str(nome))
     nome = nome.strip() or "Dados"
@@ -61,6 +64,7 @@ def _sanitize_sheet_name(nome: str) -> str:
 
 
 def _serializar_valor(v: Any) -> Any:
+    """Converte listas/tuplas/conjuntos em string delimitada por ``|``; retorna demais valores intactos."""
     if isinstance(v, (list, tuple, set)):
         itens = [str(x) for x in v if x is not None and str(x) != ""]
         return " | ".join(itens)
@@ -68,6 +72,7 @@ def _serializar_valor(v: Any) -> Any:
 
 
 def _serializar_listas(df_pd: pd.DataFrame) -> pd.DataFrame:
+    """Aplica ``_serializar_valor`` em todas as colunas do DataFrame Pandas."""
     df_pd = df_pd.copy()
     for col in df_pd.columns:
         df_pd[col] = df_pd[col].map(_serializar_valor)
@@ -75,6 +80,7 @@ def _serializar_listas(df_pd: pd.DataFrame) -> pd.DataFrame:
 
 
 def _normalizar_objetos(df_pd: pd.DataFrame) -> pd.DataFrame:
+    """Preenche ``NaN`` com ``""`` nas colunas de tipo ``object`` para evitar erros no XlsxWriter."""
     df_pd = df_pd.copy()
     for col in df_pd.columns:
         if pd.api.types.is_object_dtype(df_pd[col]):
@@ -83,6 +89,7 @@ def _normalizar_objetos(df_pd: pd.DataFrame) -> pd.DataFrame:
 
 
 def _colunas_lower(df_pd: pd.DataFrame) -> set[str]:
+    """Retorna o conjunto de nomes de colunas em minúsculas sem espaços para matching case-insensitive."""
     return {str(c).strip().lower() for c in df_pd.columns}
 
 
@@ -92,6 +99,15 @@ def _colunas_lower(df_pd: pd.DataFrame) -> set[str]:
 
 
 def _detectar_preset(nome_base: str, df_pd: pd.DataFrame) -> str:
+    """Detecta o preset de formatação Excel com base no nome da tabela e nas colunas presentes.
+
+    Args:
+        nome_base: Nome base da aba ou dataset (ex.: ``"c170_xml"``, ``"aba_mensal"``).
+        df_pd: DataFrame Pandas cujas colunas auxiliam a identificação.
+
+    Returns:
+        Chave do preset (ex.: ``"c170_xml"``, ``"generico"``).
+    """
     nome = str(nome_base).strip().lower()
     cols = _colunas_lower(df_pd)
 

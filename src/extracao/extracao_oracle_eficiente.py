@@ -25,6 +25,7 @@ _thread_local = threading.local()
 
 
 def _looks_like_windows_path(path: Path) -> bool:
+    """Retorna True quando o caminho contém barras invertidas ou letra de unidade Windows."""
     texto = str(path)
     return "\\" in texto or bool(PureWindowsPath(texto).drive)
 
@@ -60,12 +61,14 @@ class ConsultaSql:
     caminho: Path
     raiz_sql: Path
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
+        """Normaliza ``caminho`` para Path, aceitando str do catálogo SQL."""
         # Garante que caminho seja sempre Path (pode vir como str do catalogo)
         object.__setattr__(self, "caminho", Path(self.caminho))
 
     @property
     def caminho_relativo(self) -> Path:
+        """Caminho da consulta relativo à raiz SQL associada."""
         return _relative_sql_path(self.caminho, self.raiz_sql)
 
 
@@ -88,6 +91,7 @@ def listar_diretorios_sql_padrao() -> list[Path]:
 
 
 def _deduplicar_preservando_ordem(caminhos: Iterable[Path]) -> list[Path]:
+    """Remove caminhos duplicados preservando a ordem de aparecimento."""
     vistos: set[str] = set()
     resultado: list[Path] = []
     for caminho in caminhos:
@@ -102,6 +106,7 @@ def _deduplicar_preservando_ordem(caminhos: Iterable[Path]) -> list[Path]:
 def _normalizar_diretorios_sql(
     diretorios_sql: Sequence[Path | str] | Path | str | None = None,
 ) -> list[Path]:
+    """Converte a entrada heterogênea de diretórios SQL em lista de Path sem duplicatas."""
     if diretorios_sql is None:
         return listar_diretorios_sql_padrao()
 
@@ -112,6 +117,7 @@ def _normalizar_diretorios_sql(
 
 
 def _resolver_raiz_sql(caminho_sql: Path, diretorios_sql: Sequence[Path]) -> Path:
+    """Retorna a raiz SQL que contém o caminho, ou o diretório pai como fallback."""
     caminho_resolvido = caminho_sql.resolve() if caminho_sql.exists() else caminho_sql
     for raiz in diretorios_sql:
         try:
@@ -198,12 +204,14 @@ def obter_caminho_saida_parquet(
 
 
 def _obter_conexao_thread():
+    """Retorna a conexão Oracle da thread local, criando-a se necessário."""
     if not hasattr(_thread_local, "conexao") or _thread_local.conexao is None:
         _thread_local.conexao = conectar()
     return _thread_local.conexao
 
 
 def fechar_conexao_thread() -> None:
+    """Fecha e libera a conexão Oracle armazenada no armazenamento local da thread atual."""
     conexao = getattr(_thread_local, "conexao", None)
     if conexao is None:
         return
@@ -218,6 +226,17 @@ def fechar_conexao_thread() -> None:
 def _montar_binds_cursor(
     cursor, cnpj_limpo: str, data_limite_input: str | None
 ) -> tuple[dict[str, str | None], bool]:
+    """Monta o dicionário de binds para o cursor Oracle.
+
+    Args:
+        cursor: Cursor Oracle com ``bindnames()`` disponível.
+        cnpj_limpo: CNPJ sem formatação (14 dígitos).
+        data_limite_input: Data limite no formato ``YYYY-MM-DD`` ou ``None``.
+
+    Returns:
+        Tupla ``(binds, tem_bind_cnpj)`` onde ``tem_bind_cnpj`` indica se o SQL
+        possui o bind ``:CNPJ`` obrigatório.
+    """
     binds: dict[str, str | None] = {}
     tem_bind_cnpj = False
     aliases_padrao: dict[str, str | None] = {
@@ -242,6 +261,15 @@ def _montar_binds_cursor(
 def _normalizar_valores_coluna(
     valores: list[object | None], forcar_texto: bool = False
 ) -> list[object | None]:
+    """Homogeniza os tipos de uma coluna para evitar erros de schema misto no Polars.
+
+    Args:
+        valores: Lista de valores brutos retornados pelo cursor Oracle.
+        forcar_texto: Quando ``True``, converte todos os valores para ``str``.
+
+    Returns:
+        Lista com tipos homogêneos compatíveis com ``pl.DataFrame``.
+    """
     if forcar_texto:
         return [None if valor is None else str(valor) for valor in valores]
 
@@ -261,6 +289,17 @@ def _criar_dataframe_lote(
     schema_polars: dict[str, pl.DataType] | None = None,
     forcar_texto: bool = False,
 ) -> pl.DataFrame:
+    """Constrói um DataFrame Polars a partir de um lote de tuplas do cursor Oracle.
+
+    Args:
+        lote: Linhas retornadas por ``cursor.fetchmany()``.
+        colunas: Nomes de colunas na mesma ordem que as tuplas.
+        schema_polars: Schema Polars a aplicar via ``cast``; ``None`` para inferência.
+        forcar_texto: Converte todas as colunas para ``Utf8`` antes de criar o DataFrame.
+
+    Returns:
+        DataFrame Polars com os dados do lote.
+    """
     try:
         if forcar_texto:
             raise TypeError("Modo texto solicitado.")
@@ -280,6 +319,7 @@ def _criar_dataframe_lote(
 
 
 def _escrever_dataframe_vazio(colunas: list[str], arquivo_saida: Path) -> None:
+    """Grava um Parquet vazio preservando o schema de colunas quando a consulta retorna zero linhas."""
     pl.DataFrame({coluna: [] for coluna in colunas}).write_parquet(
         arquivo_saida, compression="snappy"
     )
@@ -341,12 +381,22 @@ def _gravar_cursor_em_parquet(
 
 
 def _formatar_rotulo_consulta(consulta: ConsultaSql) -> str:
+    """Formata o rótulo legível da consulta usando separadores Unix, independente do SO."""
     # Garantir que caminho seja Path
     caminho = Path(consulta.caminho) if not isinstance(consulta.caminho, Path) else consulta.caminho
     return str(_relative_sql_path(caminho, consulta.raiz_sql)).replace("\\", "/")
 
 
 def _extrair_comandos_pre_sql(sql_texto: str) -> tuple[list[str], str]:
+    """Separa diretivas ``-- PRE:`` do texto SQL principal.
+
+    Args:
+        sql_texto: Texto completo do arquivo SQL.
+
+    Returns:
+        Tupla ``(comandos_pre, sql_limpo)`` onde ``comandos_pre`` é a lista de
+        comandos a executar antes da consulta e ``sql_limpo`` é o SQL sem as linhas PRE.
+    """
     comandos_pre: list[str] = []
     linhas_sql: list[str] = []
 
