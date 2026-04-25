@@ -28,10 +28,26 @@ OUT_CONSOLE = Console(stderr=False)
 
 
 def _remover_acentos(text: str | None) -> str | None:
+    """Remove acentos de uma string; retorna None para entrada None ou vazia."""
     return remove_accents(text) if text else None
 
 
 def gerar_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
+    """Gera a tabela de produtos únicos reportados pelas fontes.
+
+    Lê ``produtos_unidades_{cnpj}.parquet``, agrupa por ``codigo_fonte`` e produz
+    ``produtos_{cnpj}.parquet`` em ``analises/produtos``.
+
+    Args:
+        cnpj: CNPJ do contribuinte (com ou sem formatação).
+        pasta_cnpj: Pasta raiz do CNPJ; usa o padrão global quando None.
+
+    Returns:
+        True em caso de sucesso.
+
+    Raises:
+        RuntimeError: Se a gravação do Parquet falhar.
+    """
     cnpj = re.sub(r"\D", "", cnpj)
     if pasta_cnpj is None:
         pasta_cnpj = CNPJ_ROOT / cnpj
@@ -66,6 +82,16 @@ def gerar_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         )
 
         def _agg_list(col: str, suffix: str | None = None) -> pl.Expr:
+            """Agrega valores únicos e ordenados de *col* em lista nomeada ``lista_{suffix or col}``.
+
+            Args:
+                col: Nome da coluna a agregar.
+                suffix: Quando fornecido, o alias da lista resultante é ``lista_{suffix}``
+                    em vez de ``lista_{col}``.
+
+            Returns:
+                Expressão Polars que produz uma lista ordenada e deduplicada.
+            """
             target_alias = f"lista_{col}" if suffix is None else f"lista_{suffix}"
             return (
                 pl.col(col)

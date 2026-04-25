@@ -39,10 +39,12 @@ except ImportError as e:
 
 
 def _normalizar_descricao_expr(col: str) -> pl.Expr:
+    """Retorna expressão Polars que normaliza a coluna de descrição para 'descricao_normalizada'."""
     return expr_normalizar_descricao(col).alias("descricao_normalizada")
 
 
 def _agg_list(col: str, alias: str) -> pl.Expr:
+    """Agrega valores únicos e ordenados de *col* em uma List, expondo-os sob *alias*."""
     return (
         pl.col(col)
         .cast(pl.String, strict=False)
@@ -56,6 +58,19 @@ def _agg_list(col: str, alias: str) -> pl.Expr:
 
 
 def descricao_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
+    """Gera a tabela consolidada de descrições normalizadas e únicas.
+
+    Lê ``item_unidades_{cnpj}.parquet`` e ``itens_{cnpj}.parquet``, agrega por
+    ``descricao_normalizada`` e produz ``descricao_produtos_{cnpj}.parquet`` em
+    ``analises/produtos``.
+
+    Args:
+        cnpj: CPF (11 dígitos) ou CNPJ (14 dígitos) do contribuinte.
+        pasta_cnpj: Pasta raiz do CNPJ; usa o padrão global quando None.
+
+    Returns:
+        True em caso de sucesso; False se a geração falhar ou inputs estiverem ausentes.
+    """
     cnpj = re.sub(r"\D", "", cnpj or "")
     if len(cnpj) not in {11, 14}:
         raise ValueError("CPF/CNPJ invalido.")
@@ -167,6 +182,7 @@ def descricao_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
 
 
 def gerar_descricao_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
+    """Alias público para ``descricao_produtos``; ponto de entrada usado pelo orquestrador."""
     return descricao_produtos(cnpj, pasta_cnpj)
 
 
