@@ -23,10 +23,10 @@ if str(UTILITARIOS_DIR) not in sys.path:
 
 # Bundle smoke-test mode: verify imports without launching the GUI.
 # Used by .github/workflows/bundle-smoke.yml — exits 0 if the bundle is healthy.
-if "--smoke" in sys.argv:
+if __name__ == "__main__" and "--smoke" in sys.argv:
     from utilitarios.project_paths import PROJECT_ROOT  # noqa: F401
 
-    print("smoke-ok")
+    print("smoke-ok", flush=True)
     sys.exit(0)
 
 from PySide6.QtWidgets import QApplication  # noqa: E402
