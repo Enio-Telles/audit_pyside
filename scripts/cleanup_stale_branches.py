@@ -200,12 +200,15 @@ def print_dry_run(branches: list[BranchInfo], remote: str) -> None:
     print(f"{'-' * 72}\n")
 
 
-def execute_deletions(branches: list[BranchInfo], remote: str, _yes: bool = False) -> int:
+def execute_deletions(
+    branches: list[BranchInfo], remote: str, skip_confirmation: bool = False
+) -> int:
     """Deleta as branches remotas após confirmação.
 
     Args:
         branches: Branches a deletar.
         remote: Nome do remote.
+        skip_confirmation: Se True, pula a confirmação interativa (útil em CI).
 
     Returns:
         Número de branches deletadas com sucesso.
@@ -219,7 +222,7 @@ def execute_deletions(branches: list[BranchInfo], remote: str, _yes: bool = Fals
     for b in branches:
         print(f"  - {b.short_name}")
 
-    if not _yes:
+    if not skip_confirmation:
         confirm = input("\nConfirma a deleção? Digite 'sim' para continuar: ").strip().lower()
         if confirm != "sim":
             print("Operação cancelada.")
@@ -308,7 +311,7 @@ def main() -> int:
     )
 
     if args.execute:
-        execute_deletions(branches, remote=args.remote, _yes=args.yes)
+        execute_deletions(branches, remote=args.remote, skip_confirmation=args.yes)
     else:
         print_dry_run(branches, remote=args.remote)
 
