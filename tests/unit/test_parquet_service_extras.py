@@ -172,6 +172,8 @@ def test_load_dataset_cache_hit(tmp_path: Path) -> None:
     r1 = svc.load_dataset(p)
     r2 = svc.load_dataset(p)
     assert r1.shape == r2.shape == (3, 1)
+    # Both calls should have resolved to a single cache entry.
+    assert len(svc._dataset_cache) == 1
 
 
 # ---------------------------------------------------------------------------

@@ -56,7 +56,7 @@ jobs:
       - name: Pytest with coverage
         # gui_smoke runs in the dedicated ubuntu smoke job to keep coverage isolated.
         # main_window_impl.py (~4500 stmts, 0%) is omitted via [tool.coverage.run].
-        # Coverage ratchet: 29% after P5 merges (2026-04-25); gate at 27% (2pp headroom).
+        # Coverage ratchet: 30.82% after P6-02 (2026-04-25); gate at 29% (~1.8pp headroom).
         run: >
           uv run pytest -q
           -m "not oracle and not gui and not gui_smoke"

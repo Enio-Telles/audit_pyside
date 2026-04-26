@@ -93,8 +93,9 @@ def test_compute_preco_unit_no_preco_col_returns_unchanged() -> None:
 def test_compute_is_devolucao_with_finnfe_4() -> None:
     df = pl.DataFrame({"finnfe": ["4", "1", None]})
     result = MovimentacaoService.compute_is_devolucao(df)
-    assert result["__is_devolucao__"][0] is True
-    assert result["__is_devolucao__"][1] is False
+    assert result["__is_devolucao__"][0] == True  # noqa: E712
+    assert result["__is_devolucao__"][1] == False  # noqa: E712
+    assert not result["__is_devolucao__"][2]
 
 
 # ---------------------------------------------------------------------------
@@ -108,15 +109,15 @@ def test_mark_valid_for_average_without_excluir_estoque() -> None:
     )
     result = MovimentacaoService.mark_valid_for_average(df)
     assert "__is_valida_media__" in result.columns
-    assert result["__is_valida_media__"][0] is True
-    assert result["__is_valida_media__"][1] is False
+    assert result["__is_valida_media__"][0] == True  # noqa: E712
+    assert result["__is_valida_media__"][1] == False  # noqa: E712
 
 
 def test_mark_valid_for_average_without_q_conv_fisica() -> None:
     df = pl.DataFrame({"__is_devolucao__": [False]})
     result = MovimentacaoService.mark_valid_for_average(df)
     assert "__is_valida_media__" in result.columns
-    assert result["__is_valida_media__"][0] is False
+    assert result["__is_valida_media__"][0] == False  # noqa: E712
 
 
 # ---------------------------------------------------------------------------
@@ -229,6 +230,8 @@ def test_compute_preco_unit_ja_tem_coluna() -> None:
 
 
 def test_apply_neutralizations_com_emitente_serie() -> None:
+    # Rows that share emit_cnpj_cpf, num_doc, Num_item and Serie — documents the
+    # column is created and contains boolean values when these fields are present.
     df = pl.DataFrame(
         {
             "Num_item": ["1", "2"],
@@ -239,6 +242,7 @@ def test_apply_neutralizations_com_emitente_serie() -> None:
     )
     result = MovimentacaoService.apply_neutralizations(df)
     assert "__is_neutralizada__" in result.columns
+    assert result["__is_neutralizada__"].dtype == pl.Boolean
 
 
 # ---------------------------------------------------------------------------

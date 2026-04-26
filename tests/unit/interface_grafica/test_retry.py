@@ -57,7 +57,10 @@ def test_retry_on_io_invalid_max_attempts() -> None:
         retry_on_io(max_attempts=0)
 
 
-def test_retry_on_io_sleeps_between_attempts() -> None:
+def test_retry_on_io_sleeps_between_attempts(monkeypatch) -> None:
+    sleeps: list[float] = []
+    monkeypatch.setattr("interface_grafica.utils.retry.sleep", lambda s: sleeps.append(s))
+
     calls = {"count": 0}
 
     @retry_on_io(max_attempts=2, backoff_seconds=(0.001,), exceptions=(OSError,))
@@ -69,3 +72,4 @@ def test_retry_on_io_sleeps_between_attempts() -> None:
 
     assert flaky() == "ok"
     assert calls["count"] == 2
+    assert sleeps == [0.001]

@@ -63,13 +63,18 @@ def test_set_value_and_get_value(tmp_path: Path) -> None:
 
 
 def test_save_exception_swallowed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    svc = SelectionPersistenceService(file_path=tmp_path / "sel.json")
+    file_path = tmp_path / "sel.json"
+    svc = SelectionPersistenceService(file_path=file_path)
+    svc.set_value("k", "v")
+    cache_before = dict(svc._cache)
 
     def _fail_write(self, *args, **kwargs):
         raise OSError("disk full")
 
     monkeypatch.setattr(Path, "write_text", _fail_write)
     svc._save()
+    # In-memory cache must not be corrupted by the failed write.
+    assert svc._cache == cache_before
 
 
 def test_migrate_legacy_changes_value(tmp_path: Path) -> None:
@@ -80,7 +85,8 @@ def test_migrate_legacy_changes_value(tmp_path: Path) -> None:
     )
     svc = SelectionPersistenceService(file_path=f)
     result = svc.get_selections("ultimas_consultas")
-    assert isinstance(result, list)
+    # Nonexistent IDs are dropped during migration — result must be an empty list.
+    assert result == []
 
 
 def test_migrate_legacy_no_change(tmp_path: Path) -> None:

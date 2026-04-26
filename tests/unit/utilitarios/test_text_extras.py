@@ -38,11 +38,15 @@ def test_display_cell_to_list_success() -> None:
 
 def test_display_cell_to_list_exception_falls_through() -> None:
     class BrokenList:
+        def __str__(self) -> str:
+            return "<broken>"
+
         def to_list(self):
             raise RuntimeError("broken")
 
-    result = display_cell(BrokenList())
-    assert isinstance(result, str)
+    instance = BrokenList()
+    result = display_cell(instance)
+    assert result == str(instance)
 
 
 def test_display_cell_decimal_nan_returns_empty() -> None:
