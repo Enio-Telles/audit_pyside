@@ -77,7 +77,7 @@ def test_excepthook_logs_and_delegates(monkeypatch):
     assert len(logged) == 1
     assert logged[0]["event"] == "gui.unhandled_exception"
     assert logged[0]["exc_type"] == "ValueError"
-    assert "boom" in logged[0]["traceback"]
+    assert logged[0]["exc_info"] == (ValueError, exc, tb)
     assert delegate_calls == [(ValueError, exc, tb)]
 
 

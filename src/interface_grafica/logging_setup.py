@@ -15,7 +15,6 @@ from __future__ import annotations
 import logging
 import os
 import sys
-import traceback
 import types
 
 import structlog
@@ -84,13 +83,16 @@ def install_fallback_hooks() -> None:
         if issubclass(exc_type, KeyboardInterrupt):
             _original_excepthook(exc_type, exc_value, exc_tb)
             return
-        tb_str = "".join(traceback.format_exception(exc_type, exc_value, exc_tb))
-        _logger.critical(
-            "gui.unhandled_exception",
-            exc_type=exc_type.__name__,
-            traceback=tb_str,
-        )
-        _original_excepthook(exc_type, exc_value, exc_tb)
+        try:
+            _logger.critical(
+                "gui.unhandled_exception",
+                exc_type=exc_type.__name__,
+                exc_info=(exc_type, exc_value, exc_tb),
+            )
+        except Exception:
+            pass
+        finally:
+            _original_excepthook(exc_type, exc_value, exc_tb)
 
     sys.excepthook = _structlog_excepthook
 
@@ -123,6 +125,7 @@ def _try_install_qt_message_handler() -> None:
         getattr(_logger, level)(
             "qt.message",
             message=message,
+            category=getattr(context, "category", None),
             file=getattr(context, "file", None),
             line=getattr(context, "line", None),
             function=getattr(context, "function", None),
