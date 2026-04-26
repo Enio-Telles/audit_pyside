@@ -169,7 +169,7 @@ def collect_branches(
 
         results.append(info)
 
-    results.sort(key=lambda b: (b.last_commit_date or datetime.min.replace(tzinfo=UTC)))
+    results.sort(key=lambda b: b.last_commit_date or datetime.min.replace(tzinfo=UTC))
     return results
 
 
@@ -183,7 +183,7 @@ def print_dry_run(branches: list[BranchInfo], remote: str) -> None:
     print(f"  DRY-RUN: {len(branches)} branch(es) candidata(s) à remoção")
     print(f"{'-' * 72}")
     print(f"  {'Branch':<50} {'Último commit':<20} {'Merged'}")
-    print(f"  {'-'*50} {'-'*20} {'-'*6}")
+    print(f"  {'-' * 50} {'-' * 20} {'-' * 6}")
 
     for b in branches:
         date_str = b.last_commit_date.strftime("%Y-%m-%d") if b.last_commit_date else "desconhecida"
@@ -200,12 +200,15 @@ def print_dry_run(branches: list[BranchInfo], remote: str) -> None:
     print(f"{'-' * 72}\n")
 
 
-def execute_deletions(branches: list[BranchInfo], remote: str) -> int:
+def execute_deletions(
+    branches: list[BranchInfo], remote: str, skip_confirmation: bool = False
+) -> int:
     """Deleta as branches remotas após confirmação.
 
     Args:
         branches: Branches a deletar.
         remote: Nome do remote.
+        skip_confirmation: Se True, pula a confirmação interativa (útil em CI).
 
     Returns:
         Número de branches deletadas com sucesso.
@@ -219,10 +222,11 @@ def execute_deletions(branches: list[BranchInfo], remote: str) -> int:
     for b in branches:
         print(f"  - {b.short_name}")
 
-    confirm = input("\nConfirma a deleção? Digite 'sim' para continuar: ").strip().lower()
-    if confirm != "sim":
-        print("Operação cancelada.")
-        return 0
+    if not skip_confirmation:
+        confirm = input("\nConfirma a deleção? Digite 'sim' para continuar: ").strip().lower()
+        if confirm != "sim":
+            print("Operação cancelada.")
+            return 0
 
     deleted = 0
     for b in branches:
@@ -273,6 +277,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Executar deleções (requer confirmação interativa). Sem esta flag: dry-run.",
     )
+    p.add_argument(
+        "--yes",
+        action="store_true",
+        help="Pular confirmação interativa (útil em CI/CD). Requer --execute.",
+    )
     return p
 
 
@@ -302,7 +311,7 @@ def main() -> int:
     )
 
     if args.execute:
-        execute_deletions(branches, remote=args.remote)
+        execute_deletions(branches, remote=args.remote, skip_confirmation=args.yes)
     else:
         print_dry_run(branches, remote=args.remote)
 
