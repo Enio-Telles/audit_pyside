@@ -3,7 +3,7 @@ from __future__ import annotations
 from structlog.testing import capture_logs
 
 from interface_grafica.utils import safe_slot as safe_slot_module
-from interface_grafica.utils.safe_slot import safe_slot
+from interface_grafica.utils.safe_slot import _resolve_dialog_parent, safe_slot
 
 
 def test_safe_slot_logs_and_swallows_exception(monkeypatch) -> None:
@@ -52,3 +52,20 @@ def test_safe_slot_uses_widget_like_parent(monkeypatch) -> None:
 
     assert result is None
     assert calls == [(widget, "Erro inesperado", "falha com parent")]
+
+
+def test_resolve_dialog_parent_is_widget_raises_returns_none() -> None:
+    class DummyRaising:
+        def isWidgetType(self) -> bool:
+            raise RuntimeError("boom")
+
+    result = _resolve_dialog_parent((DummyRaising(),))
+    assert result is None
+
+
+def test_resolve_dialog_parent_not_callable_returns_none() -> None:
+    class DummyNonCallable:
+        isWidgetType = "not a function"
+
+    result = _resolve_dialog_parent((DummyNonCallable(),))
+    assert result is None
