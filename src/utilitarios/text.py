@@ -52,11 +52,12 @@ def normalize_text(text: str | None) -> str:
 
 
 def normalize_desc(text: str | None) -> str:
-    """Normaliza descricoes fiscais preservando pontuacao e semantica textual.
+    """Normaliza descricoes fiscais preservando pontuacao especifica.
 
     Regras aplicadas:
     - remover acentos;
     - converter para maiusculas;
+    - manter apenas letras, numeros, espacos e pontuacao -.,#!
     - remover espacos no inicio e no fim;
     - reduzir espacos internos consecutivos para um unico espaco.
     """
@@ -64,9 +65,8 @@ def normalize_desc(text: str | None) -> str:
         return ""
     t = remove_accents(str(text)) or ""
     t = t.upper()
-    # Normalize hyphens and common connector punctuation into spaces
-    # but preserve periods (e.g. "PROD. A") as tests expect.
-    t = re.sub(r"[-/–—_\\]+", " ", t)
+    # Manter apenas A-Z, 0-9, espacos e -.,#!
+    t = re.sub(r"[^A-Z0-9\s\-\.\,\#\!]", " ", t)
     t = re.sub(r"\s+", " ", t).strip()
     return t
 
@@ -74,14 +74,11 @@ def normalize_desc(text: str | None) -> str:
 def expr_normalizar_descricao(coluna: str) -> "pl.Expr":
     """Expressao Polars unificada para normalizacao de descricoes.
 
-    A igualdade textual considera apenas:
-    - remocao de acentos;
-    - caixa alta;
-    - trim;
-    - colapso de espacos consecutivos.
-
-    Caracteres de pontuacao sao preservados para evitar agregacoes mais amplas
-    do que o criterio textual solicitado.
+    Regras (solicitadas pelo usuario):
+    - Colocar tudo em maiusculo;
+    - Tirar acentos;
+    - Tirar espacos duplicados e excedentes (trim + collapse);
+    - Manter pontuacao: -.,#! (remover outras ou trocar por espaco).
     """
     import polars as pl
 
@@ -92,6 +89,7 @@ def expr_normalizar_descricao(coluna: str) -> "pl.Expr":
             pl.col(coluna)
             .cast(pl.Utf8, strict=False)
             .str.to_uppercase()
+            # Remocao de acentos (manual para performance em Polars 1.x)
             .str.replace_all(r"[ÁÀÃÂÄ]", "A")
             .str.replace_all(r"[ÉÈÊË]", "E")
             .str.replace_all(r"[ÍÌÎÏ]", "I")
@@ -99,7 +97,11 @@ def expr_normalizar_descricao(coluna: str) -> "pl.Expr":
             .str.replace_all(r"[ÚÙÛÜ]", "U")
             .str.replace_all(r"Ç", "C")
             .str.replace_all(r"Ñ", "N")
+            # Substituir qualquer caractere que NÃO seja A-Z, 0-9, espaco ou -.,#! por espaco
+            .str.replace_all(r"[^A-Z0-9\s\-\.\,\#\!]", " ")
+            # Colapsar espacos duplicados
             .str.replace_all(r"\s+", " ")
+            # Trim
             .str.strip_chars()
         )
     )
