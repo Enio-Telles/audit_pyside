@@ -170,8 +170,7 @@ class ServicoAgregacao:
             # Remove do cache se corrompido
             if cnpj is not None and path in self._global_df_cache[cnpj]:
                 del self._global_df_cache[cnpj][path]
-            if path in cache:
-                del cache[path]
+            cache.pop(path, None)
             # Tenta reprocessar automaticamente se permitido
             if tentar_reprocessar:
                 if progresso:
@@ -2230,62 +2229,93 @@ class ServicoAgregacao:
         )
         df_base_mapped = df_base.join(df_mapping, on="descricao_normalizada")
 
-        # Partition df_base by group for efficient access
-        dict_base_parts = df_base_mapped.partition_by("id_agrupado", as_dict=True)
-
-        # Optimized: Indexed dictionaries for O(1) lookups
-        dict_aggr = {row["id_agrupado"]: row for row in df_aggr_lists.to_dicts()}
-        dict_fallback = {
-            row["id_agrupado"]: row["descr_fallback"] for row in df_fallback.to_dicts()
-        }
-
-        registros = []
-        for row in df_agrup.to_dicts():
-            id_grp = row["id_agrupado"]
-
-            # Use pre-filtered DataFrame from dictionary — check with is_empty() to avoid DataFrame ambiguity in boolean context
-            df_base_filtered_raw = dict_base_parts.get((id_grp,))
-            if df_base_filtered_raw is None or df_base_filtered_raw.is_empty():
-                df_base_filtered = df_base.filter(pl.lit(False))
-            else:
-                df_base_filtered = df_base_filtered_raw
-
-            padrao = calcular_atributos_padrao(df_base_filtered)
-
-            # Retrieve pre-calculated vectorized values using O(1) dictionary lookups
-            aggr_info = dict_aggr.get(id_grp, {})
-            descr_fallback = dict_fallback.get(id_grp)
-
-            row["descr_padrao"] = (
-                padrao.get("descr_padrao") or row.get("descr_padrao") or descr_fallback
+        def expr_mode(col):
+            return (
+                pl.col(col).cast(pl.Utf8, strict=False).fill_null("").str.strip_chars().replace("", None).drop_nulls()
+                .mode().first()
             )
-            row["ncm_padrao"] = padrao.get("ncm_padrao")
-            row["cest_padrao"] = padrao.get("cest_padrao")
-            row["gtin_padrao"] = padrao.get("gtin_padrao")
 
-            row["lista_ncm"] = aggr_info.get("lista_ncm") or self._coletar_lista_coluna(
-                df_base_filtered, "ncm"
+        # Optimized: Vectorized standard modes
+        df_padrao = df_base_mapped.group_by("id_agrupado").agg([
+            expr_mode("ncm").alias("ncm_padrao"),
+            expr_mode("cest").alias("cest_padrao"),
+            expr_mode("gtin").alias("gtin_padrao"),
+            expr_mode("co_sefin_item").alias("co_sefin_padrao")
+        ])
+
+        # Optimized: Vectorized descriptions tie-breaker
+        df_descs = (
+            df_base_mapped.with_columns(
+                pl.col("descricao").cast(pl.Utf8, strict=False).fill_null("").str.strip_chars().alias("descricao")
             )
-            row["lista_cest"] = aggr_info.get(
-                "lista_cest"
-            ) or self._coletar_lista_coluna(df_base_filtered, "cest")
-            row["lista_gtin"] = aggr_info.get(
-                "lista_gtin"
-            ) or self._coletar_lista_coluna(df_base_filtered, "gtin")
-            row["lista_descricoes"] = aggr_info.get(
-                "lista_descricoes"
-            ) or self._coletar_lista_coluna(df_base_filtered, "descricao")
-            row["lista_desc_compl"] = aggr_info.get("lista_desc_compl", [])
-            row["co_sefin_padrao"] = padrao.get("co_sefin_padrao")
+            .filter(pl.col("descricao") != "")
+            .group_by(["id_agrupado", "descricao", "ncm", "cest", "gtin"])
+            .agg(pl.len().alias("count"))
+            .with_columns(
+                filled=(
+                    pl.when(pl.col("ncm").is_not_null() & (pl.col("ncm") != "")).then(1).otherwise(0)
+                    + pl.when(pl.col("cest").is_not_null() & (pl.col("cest") != "")).then(1).otherwise(0)
+                    + pl.when(pl.col("gtin").is_not_null() & (pl.col("gtin") != "")).then(1).otherwise(0)
+                ),
+                len_desc=pl.col("descricao").str.len_chars(),
+            )
+            .sort(["id_agrupado", "count", "filled", "len_desc"], descending=[False, True, True, True])
+            .group_by("id_agrupado")
+            .agg(pl.col("descricao").first().alias("descr_padrao_calculado"))
+        )
 
-            row["lista_co_sefin"] = aggr_info.get("lista_co_sefin", [])
-            row["co_sefin_agr"] = aggr_info.get("co_sefin_agr", "")
-            row["co_sefin_divergentes"] = aggr_info.get("co_sefin_divergentes", False)
-            row["lista_unidades"] = aggr_info.get("lista_unidades", [])
+        df_padrao = df_padrao.join(df_descs, on="id_agrupado", how="left")
 
-            registros.append(row)
+        def _agg_list_col(col: str, alias: str) -> pl.Expr:
+            return (
+                pl.col(col)
+                .cast(pl.String, strict=False)
+                .str.strip_chars()
+                .replace("", None)
+                .drop_nulls()
+                .unique()
+                .sort()
+                .alias(alias)
+            )
 
-        df_novo = pl.DataFrame(registros, schema=df_agrup.schema)
+        # Fallback collections for when aggr lists are missing
+        df_base_collections = df_base_mapped.group_by("id_agrupado").agg([
+            _agg_list_col("ncm", "lista_ncm_base"),
+            _agg_list_col("cest", "lista_cest_base"),
+            _agg_list_col("gtin", "lista_gtin_base"),
+            _agg_list_col("descricao", "lista_descricoes_base"),
+        ])
+
+        # Drop conflicting pattern columns from df_agrup before join to prevent suffix issues
+        cols_to_drop = [c for c in ["ncm_padrao", "cest_padrao", "gtin_padrao", "co_sefin_padrao"] if c in df_agrup.columns]
+        df_agrup_clean = df_agrup.drop(cols_to_drop, strict=False)
+
+        # Drop aggr lists from df_agrup as well to overwrite them cleanly
+        cols_to_drop_lists = [c for c in ["lista_ncm", "lista_cest", "lista_gtin", "lista_descricoes", "lista_desc_compl", "lista_co_sefin", "co_sefin_agr", "co_sefin_divergentes", "lista_unidades"] if c in df_agrup_clean.columns]
+        df_agrup_clean = df_agrup_clean.drop(cols_to_drop_lists, strict=False)
+
+        # Vectorized merge
+        df_novo = (
+            df_agrup_clean
+            .join(df_aggr_lists, on="id_agrupado", how="left")
+            .join(df_fallback, on="id_agrupado", how="left")
+            .join(df_padrao, on="id_agrupado", how="left")
+            .join(df_base_collections, on="id_agrupado", how="left")
+            .with_columns([
+                pl.coalesce([pl.col("descr_padrao_calculado"), pl.col("descr_padrao"), pl.col("descr_fallback")]).alias("descr_padrao"),
+                pl.coalesce([pl.col("lista_ncm"), pl.col("lista_ncm_base")]).fill_null(pl.lit([]).cast(pl.List(pl.Utf8))).alias("lista_ncm"),
+                pl.coalesce([pl.col("lista_cest"), pl.col("lista_cest_base")]).fill_null(pl.lit([]).cast(pl.List(pl.Utf8))).alias("lista_cest"),
+                pl.coalesce([pl.col("lista_gtin"), pl.col("lista_gtin_base")]).fill_null(pl.lit([]).cast(pl.List(pl.Utf8))).alias("lista_gtin"),
+                pl.coalesce([pl.col("lista_descricoes"), pl.col("lista_descricoes_base")]).fill_null(pl.lit([]).cast(pl.List(pl.Utf8))).alias("lista_descricoes"),
+                pl.col("lista_desc_compl").fill_null(pl.lit([]).cast(pl.List(pl.Utf8))),
+                pl.col("lista_co_sefin").fill_null(pl.lit([]).cast(pl.List(pl.Utf8))),
+                pl.col("co_sefin_agr").fill_null(""),
+                pl.col("co_sefin_divergentes").fill_null(False),
+                pl.col("lista_unidades").fill_null(pl.lit([]).cast(pl.List(pl.Utf8))),
+            ])
+            .drop(["descr_fallback", "descr_padrao_calculado", "lista_ncm_base", "lista_cest_base", "lista_gtin_base", "lista_descricoes_base"], strict=False)
+            .select(df_agrup.columns) # preserve column order and schema
+        )
         df_novo.drop("lista_chave_produto", strict=False).write_parquet(path_agrup)
         contexto_base = {"cnpj": cnpj, "fluxo": "recalcular_todos_padroes"}
         if reprocessar_referencias:

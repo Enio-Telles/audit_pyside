@@ -1,4 +1,11 @@
-1. Modify `src/utilitarios/codigo_fonte.py` to replace `map_elements` in `expr_normalizar_codigo_fonte` with a native Polars expression using `str.extract_groups` and string methods. This eliminates the GIL bottleneck and provides a massive speedup for data ingestion pipelines.
-2. Run `test_perf.py` or unit tests to verify the behavior is identical to the original Python function.
-3. Call `pre_commit_instructions` to ensure testing, verification, review, and reflection are done.
-4. Submit the pull request with a descriptive title and message according to Bolt's persona.
+1. **Refactor aggregation loop in `AggregationService`**
+   - The method `recalcular_todos_padroes` in `src/interface_grafica/services/aggregation_service.py` iterates row-by-row over dictionaries to merge aggregated group properties into `df_agrup`.
+   - This involves partitioning a dataframe into tens of thousands of dictionaries (`df_base_mapped.partition_by(...)`), mapping lists, and executing logic in Python space which takes several seconds on larger datasets.
+   - We will replace the manual `for` loop and `partition_by` logic with native Polars `join` operations combined with `with_columns`, resulting in significant speedups by using Rust backend aggregations.
+
+2. **Pre-commit tasks**
+   - Verify changes with pytest (`pnpm test` equivalent/`pytest`).
+   - Run linter checks to ensure compliance with conventions.
+
+3. **Submit the PR**
+   - Create PR using the Bolt title conventions (⚡ Bolt: [...]) and requested template.
