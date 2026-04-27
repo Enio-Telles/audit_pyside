@@ -1196,13 +1196,15 @@ def calcular_fatores_conversao(cnpj: str, pasta_cnpj: Path | None = None) -> boo
     )
 
     # Log fallback summary — one event per non-"preco" fator_origem value.
+    # df_fatores was already deduplicated via .unique() so the count reflects
+    # distinct (id_agrupado, unid) combinations, not raw source rows.
     if "fator_origem" in df_fatores.columns:
         for row in df_fatores.group_by("fator_origem").agg(pl.len().alias("n")).to_dicts():
             if row["fator_origem"] != "preco":
                 log.info(
                     "fatores_conversao.fallback",
                     motivo=row["fator_origem"],
-                    n_linhas=row["n"],
+                    n_combinacoes=row["n"],
                     cnpj=cnpj,
                 )
 

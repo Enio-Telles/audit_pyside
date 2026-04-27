@@ -98,6 +98,7 @@ try:
 except ImportError:
     # Fallback caso esteja rodando fora do PYTHONPATH padrão do projeto
     import sys
+
     sys.path.append(str(Path(__file__).resolve().parents[2]))
     from utilitarios.codigo_fonte import expr_gerar_codigo_fonte
 
@@ -192,7 +193,9 @@ def construir_c170_tipado(cnpj: str) -> pl.LazyFrame:
             pl.coalesce(
                 [
                     pl.col("codigo_fonte"),
-                    expr_gerar_codigo_fonte(pl.col("cnpj"), pl.col("cod_item"), pl.col("descr_item")),
+                    expr_gerar_codigo_fonte(
+                        pl.col("cnpj"), pl.col("cod_item"), pl.col("descr_item")
+                    ),
                 ]
             ).alias("codigo_fonte")
         )
@@ -275,7 +278,9 @@ def construir_h010_tipado(cnpj: str) -> pl.LazyFrame:
             pl.coalesce(
                 [
                     pl.col("codigo_fonte"),
-                    expr_gerar_codigo_fonte(pl.col("cnpj"), pl.col("cod_item"), pl.col("descr_item")),
+                    expr_gerar_codigo_fonte(
+                        pl.col("cnpj"), pl.col("cod_item"), pl.col("descr_item")
+                    ),
                 ]
             ).alias("codigo_fonte")
         )

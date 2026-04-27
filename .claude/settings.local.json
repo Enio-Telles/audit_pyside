@@ -12,7 +12,8 @@
       "Bash(cp 'C:/Users/eniot/Downloads/audit_pyside_patch_bundle \\(2\\)/tests/test_movimentacao_estoque_eventos.py' c:/audit_pyside/tests/test_movimentacao_estoque_eventos.py)",
       "Bash(cp 'C:/Users/eniot/Downloads/audit_pyside_patch_bundle \\(2\\)/docs/agregacao_produtos_canonico.md' c:/audit_pyside/docs/agregacao_produtos_canonico.md)",
       "Bash(cp 'C:/Users/eniot/Downloads/audit_pyside_patch_bundle \\(2\\)/docs/conversao_unidades.md' c:/audit_pyside/docs/conversao_unidades.md)",
-      "Bash(cp 'C:/Users/eniot/Downloads/audit_pyside_patch_bundle \\(2\\)/docs/mov_estoque.md' c:/audit_pyside/docs/mov_estoque.md)"
+      "Bash(cp 'C:/Users/eniot/Downloads/audit_pyside_patch_bundle \\(2\\)/docs/mov_estoque.md' c:/audit_pyside/docs/mov_estoque.md)",
+      "Bash(uv run *)"
     ]
   }
 }

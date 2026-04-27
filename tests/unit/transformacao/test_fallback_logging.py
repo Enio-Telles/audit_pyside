@@ -8,43 +8,32 @@ No Oracle, no real Parquet data, no GUI.
 """
 from __future__ import annotations
 
-import sys
 from pathlib import Path
-
-_SRC = Path(__file__).parent.parent.parent.parent / "src"
-if str(_SRC) not in sys.path:
-    sys.path.insert(0, str(_SRC))
-
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import polars as pl
 import pytest
 import structlog
 from structlog.testing import capture_logs
 
+import transformacao.movimentacao_estoque_pkg.movimentacao_estoque as _me
+import transformacao.rastreabilidade_produtos.fatores_conversao as _fc
 from transformacao.rastreabilidade_produtos.fatores_conversao import calcular_fatores_conversao
 
 
 @pytest.fixture(autouse=True)
-def _reset_structlog_cache():
-    """Clear structlog's per-proxy bind cache before each test.
+def _reset_structlog_cache(monkeypatch):
+    """Replace module-level log proxies with fresh instances before each test.
 
     When configure_structlog() runs earlier in the suite with
     cache_logger_on_first_use=True, BoundLoggerLazyProxy stores a finalised
     bind() on itself as an instance attribute.  capture_logs() patches the
-    global processor list but cannot reach already-cached loggers.  Deleting
-    the cached attribute forces re-evaluation on the next log call so
-    capture_logs() intercepts correctly regardless of suite order.
+    global processor list but cannot reach already-cached loggers.  Replacing
+    the proxy with a fresh get_logger() call gives each test an uncached proxy
+    that capture_logs() can intercept correctly, regardless of suite order.
     """
-    import transformacao.rastreabilidade_produtos.fatores_conversao as _fc
-    import transformacao.movimentacao_estoque_pkg.movimentacao_estoque as _me
-
-    for proxy in (_fc.log, _me.log):
-        try:
-            del proxy.bind  # type: ignore[attr-defined]
-        except AttributeError:
-            pass
-    yield
+    monkeypatch.setattr(_fc, "log", structlog.get_logger(_fc.__name__))
+    monkeypatch.setattr(_me, "log", structlog.get_logger(_me.__name__))
 
 
 # ---------------------------------------------------------------------------
@@ -147,23 +136,23 @@ def test_fatores_conversao_sem_preco_emite_fallback_sem_preco(tmp_path: Path) ->
 
 
 def test_fatores_conversao_fallback_evento_tem_campos_obrigatorios(tmp_path: Path) -> None:
-    """Each fallback event must include: event, motivo, n_linhas, cnpj."""
+    """Each fallback event must include: event, motivo, n_combinacoes, cnpj."""
     cnpj = "33333333000191"
     pasta_cnpj = _preparar_contexto_sem_preco(tmp_path, cnpj)
 
     with capture_logs() as entries:
         calcular_fatores_conversao(cnpj, pasta_cnpj=pasta_cnpj)
 
-    for evt in entries:
-        if evt.get("event") == "fatores_conversao.fallback":
-            assert "motivo" in evt
-            assert "n_linhas" in evt
-            assert "cnpj" in evt
-            assert evt["n_linhas"] > 0
-            break
-    else:
-        # No fallback emitted — test still passes (dataset may have produced "preco")
-        pass
+    fallback_events = [e for e in entries if e.get("event") == "fatores_conversao.fallback"]
+    assert fallback_events, (
+        "Expected at least one fatores_conversao.fallback event to be emitted, "
+        "but none was found. Check that the dataset forces fator_origem != 'preco'."
+    )
+    for evt in fallback_events:
+        assert "motivo" in evt, f"Missing 'motivo' in event: {evt}"
+        assert "n_combinacoes" in evt, f"Missing 'n_combinacoes' in event: {evt}"
+        assert "cnpj" in evt, f"Missing 'cnpj' in event: {evt}"
+        assert evt["n_combinacoes"] > 0, f"n_combinacoes must be > 0, got: {evt}"
 
 
 # ---------------------------------------------------------------------------
@@ -171,38 +160,131 @@ def test_fatores_conversao_fallback_evento_tem_campos_obrigatorios(tmp_path: Pat
 # ---------------------------------------------------------------------------
 
 
-def test_mov_estoque_fallback_emitido_quando_apply_conversion_factors_falha() -> None:
-    """When apply_conversion_factors raises, a 'mov_estoque.fallback' event is emitted."""
-    import transformacao.movimentacao_estoque_pkg.movimentacao_estoque as _mod
+def _preparar_contexto_mov_estoque(tmp_path: Path, cnpj: str) -> Path:
+    """Create the minimal Parquet environment for gerar_movimentacao_estoque.
 
-    with patch.object(
-        _mod,
-        "log",
-        wraps=_mod.log,
-    ) as mock_log:
-        fake_exc = RuntimeError("fator ausente simulado")
+    Provides:
+    - produtos_final_{cnpj}.parquet  (required schema)
+    - fatores_conversao_{cnpj}.parquet  (required schema)
+    - c170_{cnpj}.parquet  (one row, so df_parts is non-empty)
 
-        captured: list[dict] = []
+    The c170 row has all mapping keys from map_estoque.json as null/empty so
+    the pipeline can build df_mov and reach the apply_conversion_factors call.
+    """
+    pasta_cnpj = tmp_path / cnpj
+    pasta_analises = pasta_cnpj / "analises" / "produtos"
+    pasta_brutos = pasta_cnpj / "arquivos_parquet"
+    pasta_analises.mkdir(parents=True, exist_ok=True)
+    pasta_brutos.mkdir(parents=True, exist_ok=True)
 
-        def _warn(event, **kw):
-            captured.append({"event": event, **kw})
+    pl.DataFrame(
+        {
+            "id_agrupado": ["AGR_T"],
+            "descricao_normalizada": ["PRODUTO T"],
+            "descr_padrao": ["Produto T"],
+            "ncm_padrao": ["00000000"],
+            "cest_padrao": [None],
+            "descricao_final": ["Produto T"],
+            "co_sefin_final": [None],
+            "unid_ref_sugerida": ["UN"],
+        }
+    ).write_parquet(pasta_analises / f"produtos_final_{cnpj}.parquet")
 
-        mock_log.warning = _warn
+    pl.DataFrame(
+        {
+            "id_agrupado": ["AGR_T"],
+            "unid": ["UN"],
+            "unid_ref": ["UN"],
+            "fator": [1.0],
+            "fator_origem": ["preco"],
+        }
+    ).write_parquet(pasta_analises / f"fatores_conversao_{cnpj}.parquet")
 
-        # Invoke the except branch directly by calling the internal path
+    # Minimal c170 row — all required mapping columns present (null values ok)
+    pl.DataFrame(
+        {
+            "ind_oper": ["1"],
+            "cod_item": [None],
+            "descr_item": [None],
+            "unid": ["UN"],
+            "qtd": [1.0],
+            "vl_item": [0.0],
+            "vl_desc": [0.0],
+            "cfop": [None],
+            "cst_icms": [None],
+            "aliq_icms": [None],
+            "vl_icms": [None],
+            "aliq_st": [None],
+            "vl_bc_icms_st": [None],
+            "vl_icms_st": [None],
+            "vl_bc_icms": [None],
+            "cest": [None],
+            "cod_ncm": [None],
+            "nsu": [None],
+            "num_doc": [None],
+            "num_item": [None],
+            "ser": [None],
+            "dt_doc": [None],
+            "dt_e_s": [None],
+            "tipo_item": [None],
+            "descr_compl": [None],
+            "it_in_st": [None],
+            "it_in_combustivel": [None],
+            "it_in_isento_icms": [None],
+            "it_in_mva_ajustado": [None],
+            "it_in_pmpf": [None],
+            "it_in_reducao_credito": [None],
+            "it_pc_interna": [None],
+            "it_pc_mva": [None],
+            "it_pc_reducao": [None],
+            "cod_barra": [None],
+            "chv_nfe": pl.Series([""], dtype=pl.String),
+            "co_sefin_agr": [None],
+            "id_agrupado": ["AGR_T"],
+        }
+    ).write_parquet(pasta_brutos / f"c170_{cnpj}.parquet")
+
+    return pasta_cnpj
+
+
+def test_mov_estoque_fallback_emitido_quando_apply_conversion_factors_falha(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """When apply_conversion_factors raises, 'mov_estoque.fallback' is emitted.
+
+    Exercises the real production path: gerar_movimentacao_estoque reaches the
+    try/except around MovimentacaoService.apply_conversion_factors, which raises,
+    triggering the structured log.warning call.
+    """
+    cnpj = "99999999000191"
+    pasta_cnpj = _preparar_contexto_mov_estoque(tmp_path, cnpj)
+
+    # Patch apply_conversion_factors to raise so the except branch is reached.
+    monkeypatch.setattr(
+        _me.MovimentacaoService,
+        "apply_conversion_factors",
+        staticmethod(lambda df, df_prod_final=None: (_ for _ in ()).throw(
+            RuntimeError("fator ausente simulado")
+        )),
+    )
+
+    # Patch salvar_para_parquet to avoid touching the filesystem after the test.
+    monkeypatch.setattr(_me, "salvar_para_parquet", lambda *a, **kw: True)
+
+    with capture_logs() as entries:
         try:
-            raise fake_exc
-        except Exception as exc:
-            _mod.log.warning(
-                "mov_estoque.fallback",
-                motivo="apply_conversion_factors_falhou",
-                exc_type=type(exc).__name__,
-                cnpj="99999999000191",
-            )
+            _me.gerar_movimentacao_estoque(cnpj, pasta_cnpj=pasta_cnpj)
+        except Exception:
+            # Subsequent DataFrame operations may fail on minimal test data;
+            # the mov_estoque.fallback log.warning was already emitted before
+            # the ComputeError propagates from later stages.
+            pass
 
-    assert len(captured) == 1
-    evt = captured[0]
-    assert evt["event"] == "mov_estoque.fallback"
+    fallback_events = [e for e in entries if e.get("event") == "mov_estoque.fallback"]
+    assert len(fallback_events) == 1, (
+        f"Expected exactly 1 mov_estoque.fallback event, got: {fallback_events}"
+    )
+    evt = fallback_events[0]
     assert evt["motivo"] == "apply_conversion_factors_falhou"
     assert evt["exc_type"] == "RuntimeError"
-    assert evt["cnpj"] == "99999999000191"
+    assert evt["cnpj"] == cnpj
