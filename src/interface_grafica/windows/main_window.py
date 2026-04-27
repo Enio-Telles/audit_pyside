@@ -16,6 +16,7 @@ from interface_grafica.controllers.relatorios_produtos_controller import Relator
 from interface_grafica.controllers.relatorios_resumo_controller import RelatoriosResumoControllerMixin
 from interface_grafica.controllers.relatorios_style_controller import RelatoriosStyleControllerMixin
 from interface_grafica.controllers.shared_state import ViewState
+from interface_grafica.controllers.similaridade_descricao_controller import SimilaridadeDescricaoControllerMixin
 from interface_grafica.controllers.sql_query_controller import SqlQueryControllerMixin
 from interface_grafica.controllers.workers import PipelineWorker, ServiceTaskWorker
 from interface_grafica.models.table_model import PolarsTableModel
@@ -61,6 +62,7 @@ class MainWindow(
     RelatoriosWindowMixin,
     SqlQueryControllerMixin,
     ConversaoControllerMixin,
+    SimilaridadeDescricaoControllerMixin,
     AgregacaoControllerMixin,
     ConsultaControllerMixin,
     IdAgrupadosControllerMixin,
@@ -169,6 +171,7 @@ class MainWindow(
         self._closing_after_workers = False
 
         self._build_ui()
+        self._install_similarity_controls()
         self._connect_signals()
         self._setup_copy_shortcut()
         self._refresh_profile_combos()
