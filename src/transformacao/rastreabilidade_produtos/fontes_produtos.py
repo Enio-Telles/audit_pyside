@@ -178,6 +178,19 @@ def _anexar_id_agrupado_por_codigo_ou_descricao(
     pasta_analises: "Path | None" = None,
     cnpj: str | None = None,
 ) -> pl.DataFrame:
+    # 1. Gerar codigo_fonte de 3 partes para o dado de origem (se possivel/necessario)
+    col_cod = (
+        "cod_item"
+        if "cod_item" in df_src.columns
+        else ("prod_cprod" if "prod_cprod" in df_src.columns else None)
+    )
+    if col_cod and col_desc:
+        df_src = df_src.with_columns(
+            expr_gerar_codigo_fonte(pl.lit(cnpj), pl.col(col_cod), pl.col(col_desc)).alias(
+                "codigo_fonte"
+            )
+        )
+
     df_base = df_src.with_columns(_normalizar_descricao_expr(col_desc))
 
     df_mapa_codigo_raw = df_mapa.filter(

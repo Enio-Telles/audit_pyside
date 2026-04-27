@@ -612,6 +612,8 @@ class ServicoAgregacao:
             "lista_gtin",
             "lista_descricoes",
             "lista_desc_compl",
+            "lista_codigo_fonte",
+            "lista_codigos",
             "ids_origem_agrupamento",
             "lista_itens_agrupados",
         ]:
@@ -739,6 +741,8 @@ class ServicoAgregacao:
             "lista_gtin",
             "lista_descricoes",
             "lista_desc_compl",
+            "lista_codigo_fonte",
+            "lista_codigos",
             "ids_origem_agrupamento",
             "lista_itens_agrupados",
         }
@@ -1277,6 +1281,8 @@ class ServicoAgregacao:
                     "descricao_normalizada",
                     "descricao",
                     "lista_desc_compl",
+                    "lista_codigo_fonte",
+                    "lista_codigos",
                     "lista_ncm",
                     "lista_cest",
                     "lista_gtin",
@@ -1364,6 +1370,8 @@ class ServicoAgregacao:
             df_prod_sel, "descricao"
         ) or self._coletar_lista_coluna(df_base_filtered, "descricao")
         lista_desc_compl = self._coletar_lista_coluna(df_prod_sel, "lista_desc_compl")
+        lista_codigo_fonte = self._coletar_lista_coluna(df_prod_sel, "lista_codigo_fonte")
+        lista_codigos = self._coletar_lista_coluna(df_prod_sel, "lista_codigos")
         lista_itens_agrupados = (
             self._coletar_lista_coluna(df_prod_sel, "descricao") or lista_descricoes
         )
@@ -1389,6 +1397,8 @@ class ServicoAgregacao:
             "lista_gtin": lista_gtin,
             "lista_descricoes": lista_descricoes,
             "lista_desc_compl": lista_desc_compl,
+            "lista_codigo_fonte": lista_codigo_fonte,
+            "lista_codigos": lista_codigos,
             "ids_origem_agrupamento": ids_origem_agrupamento,
             "lista_itens_agrupados": lista_itens_agrupados,
             "lista_co_sefin": lista_sefin,

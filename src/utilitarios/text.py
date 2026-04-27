@@ -68,29 +68,30 @@ def normalize_desc(text: str | None) -> str:
         return ""
     t = remove_accents(str(text)) or ""
     t = t.upper()
-    # Manter apenas A-Z, 0-9, espacos e -.,#!
-    t = re.sub(r"[^A-Z0-9\s\-\.\,\#\!]", " ", t)
+    # Manter apenas A-Z, 0-9, espacos e -.;#@$
+    t = re.sub(r"[^A-Z0-9\s\-\.\;\#\@\$]", " ", t)
     t = re.sub(r"\s+", " ", t).strip()
     return t
 
 
-def expr_normalizar_descricao(coluna: str) -> "pl.Expr":
+def expr_normalizar_descricao(coluna: str | pl.Expr) -> pl.Expr:
     """Expressao Polars unificada para normalizacao de descricoes.
 
     Regras (solicitadas pelo usuario):
     - Colocar tudo em maiusculo;
     - Tirar acentos;
     - Tirar espacos duplicados e excedentes (trim + collapse);
-    - Manter pontuacao: -.,#! (remover outras ou trocar por espaco).
+    - Manter pontuacao: -.;#@$ (remover outras ou trocar por espaco).
     """
     import polars as pl
 
+    col = pl.col(coluna) if isinstance(coluna, str) else coluna
+
     return (
-        pl.when(pl.col(coluna).is_null())
+        pl.when(col.is_null())
         .then(pl.lit(""))
         .otherwise(
-            pl.col(coluna)
-            .cast(pl.Utf8, strict=False)
+            col.cast(pl.Utf8, strict=False)
             .str.to_uppercase()
             # Remocao de acentos (manual para performance em Polars 1.x)
             .str.replace_all(r"[ÁÀÃÂÄ]", "A")
@@ -100,8 +101,8 @@ def expr_normalizar_descricao(coluna: str) -> "pl.Expr":
             .str.replace_all(r"[ÚÙÛÜ]", "U")
             .str.replace_all(r"Ç", "C")
             .str.replace_all(r"Ñ", "N")
-            # Substituir qualquer caractere que NÃO seja A-Z, 0-9, espaco ou -.,#! por espaco
-            .str.replace_all(r"[^A-Z0-9\s\-\.\,\#\!]", " ")
+            # Substituir qualquer caractere que NÃO seja A-Z, 0-9, espaco ou -.;#@$ por espaco
+            .str.replace_all(r"[^A-Z0-9\s\-\.\;\#\@\$]", " ")
             # Colapsar espacos duplicados
             .str.replace_all(r"\s+", " ")
             # Trim

@@ -34,7 +34,6 @@ SELECT
     d.nsu, -- NSU do documento/processamento no ambiente de origem (campo interno do BI)
     d.chave_acesso, -- Chave de acesso da NF-e (44 dígitos)
     d.prod_nitem, -- nItem: número sequencial do item no detalhamento da NF-e
-    d.co_emitente || '|' || d.prod_cprod AS codigo_fonte, -- Nova chave de produto fonte
     d.ide_co_cuf, -- cUF: código da UF do emitente do documento fiscal
     d.ide_co_indpag, -- indPag: indicador da forma de pagamento (campo excluído do leiaute 4.0)
     d.ide_co_mod, -- mod: código do modelo do documento fiscal (55=NF-e, 65=NFC-e)

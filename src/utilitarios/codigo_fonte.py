@@ -86,12 +86,17 @@ def expr_normalizar_codigo_fonte(col: str, alias: str = "codigo_fonte") -> pl.Ex
 
 
 def expr_gerar_codigo_fonte(
-    col_cnpj: str, col_codigo: str, col_descricao: str | None = None, alias: str = "codigo_fonte"
+    col_cnpj: str | pl.Expr, col_codigo: str | pl.Expr, col_descricao: str | pl.Expr | None = None, alias: str = "codigo_fonte"
 ) -> pl.Expr:
     """Cria expressao Polars para gerar codigo de fonte a partir de CNPJ, codigo e descricao."""
-    cnpj_expr = pl.col(col_cnpj).cast(pl.Utf8).fill_null("").str.replace_all(r"\D", "")
+    def _to_expr(c):
+        if isinstance(c, str):
+            return pl.col(c)
+        return c
+
+    cnpj_expr = _to_expr(col_cnpj).cast(pl.Utf8).fill_null("").str.replace_all(r"\D", "")
     cod_expr = (
-        pl.col(col_codigo)
+        _to_expr(col_codigo)
         .cast(pl.Utf8)
         .fill_null("")
         .str.strip_chars()
@@ -109,7 +114,7 @@ def expr_gerar_codigo_fonte(
     if col_descricao is not None:
         from utilitarios.text import expr_normalizar_descricao
 
-        desc_norm_expr = expr_normalizar_descricao(col_descricao)
+        desc_norm_expr = expr_normalizar_descricao(_to_expr(col_descricao))
         return (
             pl.when(desc_norm_expr != "")
             .then(pl.concat_str([base_expr, pl.lit("|"), desc_norm_expr]))
