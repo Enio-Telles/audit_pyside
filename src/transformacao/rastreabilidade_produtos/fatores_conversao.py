@@ -1204,7 +1204,8 @@ def calcular_fatores_conversao(cnpj: str, pasta_cnpj: Path | None = None) -> boo
                 log.info(
                     "fatores_conversao.fallback",
                     motivo=row["fator_origem"],
-                    n_combinacoes=row["n"],
+                    fator_origem=row["fator_origem"],
+                    n_linhas=row["n"],
                     cnpj=cnpj,
                 )
 

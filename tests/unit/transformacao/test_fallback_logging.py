@@ -136,7 +136,7 @@ def test_fatores_conversao_sem_preco_emite_fallback_sem_preco(tmp_path: Path) ->
 
 
 def test_fatores_conversao_fallback_evento_tem_campos_obrigatorios(tmp_path: Path) -> None:
-    """Each fallback event must include: event, motivo, n_combinacoes, cnpj."""
+    """Each fallback event must include: event, motivo, n_linhas, cnpj."""
     cnpj = "33333333000191"
     pasta_cnpj = _preparar_contexto_sem_preco(tmp_path, cnpj)
 
@@ -150,9 +150,9 @@ def test_fatores_conversao_fallback_evento_tem_campos_obrigatorios(tmp_path: Pat
     )
     for evt in fallback_events:
         assert "motivo" in evt, f"Missing 'motivo' in event: {evt}"
-        assert "n_combinacoes" in evt, f"Missing 'n_combinacoes' in event: {evt}"
+        assert "n_linhas" in evt, f"Missing 'n_linhas' in event: {evt}"
         assert "cnpj" in evt, f"Missing 'cnpj' in event: {evt}"
-        assert evt["n_combinacoes"] > 0, f"n_combinacoes must be > 0, got: {evt}"
+        assert evt["n_linhas"] > 0, f"n_linhas must be > 0, got: {evt}"
 
 
 # ---------------------------------------------------------------------------
