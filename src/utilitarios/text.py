@@ -38,9 +38,7 @@ STOPWORDS = {
 # devem preservar exatamente esta pontuacao, alem de letras, numeros e espacos.
 # Nao criar normalizadores paralelos para descricao fiscal.
 PONTUACAO_DESCRICAO_NORMALIZADA = r"-%$#@!.,}{][\\/;"
-REGEX_DESCRICAO_NORMALIZADA = (
-    r"[^A-Z0-9\s" + re.escape(PONTUACAO_DESCRICAO_NORMALIZADA) + r"]"
-)
+REGEX_DESCRICAO_NORMALIZADA = r"[^A-Z0-9\s\-%\$#@!\.,}{\]\[\\/;]"
 
 
 def remove_accents(text: str | None) -> str | None:
