@@ -34,6 +34,14 @@ STOPWORDS = {
     "UMA",
 }
 
+# Regra canonica de descricao fiscal: normalize_desc() e expr_normalizar_descricao()
+# devem preservar exatamente esta pontuacao, alem de letras, numeros e espacos.
+# Nao criar normalizadores paralelos para descricao fiscal.
+PONTUACAO_DESCRICAO_NORMALIZADA = r"-%$#@!.,}{][\\/;"
+REGEX_DESCRICAO_NORMALIZADA = (
+    r"[^A-Z0-9\s" + re.escape(PONTUACAO_DESCRICAO_NORMALIZADA) + r"]"
+)
+
 
 def remove_accents(text: str | None) -> str | None:
     """Remove acentos de um texto preservando `None`."""
@@ -55,34 +63,28 @@ def normalize_text(text: str | None) -> str:
 
 
 def normalize_desc(text: str | None) -> str:
-    """Normaliza descricoes fiscais preservando pontuacao especifica.
+    """Normalizacao canonica de descricao fiscal.
 
     Regras aplicadas:
     - remover acentos;
     - converter para maiusculas;
-    - manter apenas letras, numeros, espacos e pontuacao -.,#!
+    - manter letras, numeros, espacos e pontuacao -%$#@!.,}{][\\/;
+    - substituir os demais caracteres por espaco;
     - remover espacos no inicio e no fim;
-    - reduzir espacos internos consecutivos para um unico espaco.
+    - reduzir espacos internos consecutivos para um unico espaco;
+    - nao remover stopwords.
     """
     if text is None:
         return ""
     t = remove_accents(str(text)) or ""
     t = t.upper()
-    # Manter apenas A-Z, 0-9, espacos e -.;#@$
-    t = re.sub(r"[^A-Z0-9\s\-\.\;\#\@\$]", " ", t)
+    t = re.sub(REGEX_DESCRICAO_NORMALIZADA, " ", t)
     t = re.sub(r"\s+", " ", t).strip()
     return t
 
 
 def expr_normalizar_descricao(coluna: str | pl.Expr) -> pl.Expr:
-    """Expressao Polars unificada para normalizacao de descricoes.
-
-    Regras (solicitadas pelo usuario):
-    - Colocar tudo em maiusculo;
-    - Tirar acentos;
-    - Tirar espacos duplicados e excedentes (trim + collapse);
-    - Manter pontuacao: -.;#@$ (remover outras ou trocar por espaco).
-    """
+    """Expressao Polars equivalente a normalize_desc()."""
     import polars as pl
 
     col = pl.col(coluna) if isinstance(coluna, str) else coluna
@@ -101,11 +103,10 @@ def expr_normalizar_descricao(coluna: str | pl.Expr) -> pl.Expr:
             .str.replace_all(r"[ÚÙÛÜ]", "U")
             .str.replace_all(r"Ç", "C")
             .str.replace_all(r"Ñ", "N")
-            # Substituir qualquer caractere que NÃO seja A-Z, 0-9, espaco ou -.;#@$ por espaco
-            .str.replace_all(r"[^A-Z0-9\s\-\.\;\#\@\$]", " ")
-            # Colapsar espacos duplicados
+            # Substituir qualquer caractere que NAO seja letra, numero, espaco
+            # ou a pontuacao canonica de descricao por espaco.
+            .str.replace_all(REGEX_DESCRICAO_NORMALIZADA, " ")
             .str.replace_all(r"\s+", " ")
-            # Trim
             .str.strip_chars()
         )
     )
