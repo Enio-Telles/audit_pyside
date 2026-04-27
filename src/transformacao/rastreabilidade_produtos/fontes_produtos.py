@@ -52,22 +52,6 @@ except ImportError as e:
 
 
 def _normalizar_descricao_expr(col: str) -> pl.Expr:
-    return (
-        pl.col(col)
-        .cast(pl.Utf8, strict=False)
-        .fill_null("")
-        .str.to_uppercase()
-        .str.replace_all(r"[ÁÀÂÃÄ]", "A")
-        .str.replace_all(r"[ÉÈÊË]", "E")
-        .str.replace_all(r"[ÍÌÎÏ]", "I")
-        .str.replace_all(r"[ÓÒÔÕÖ]", "O")
-        .str.replace_all(r"[ÚÙÛÜ]", "U")
-        .str.replace_all(r"Ç", "C")
-        .str.replace_all(r"Ñ", "N")
-        .str.strip_chars()
-        .str.replace_all(r"\s+", " ")
-        .alias("__descricao_normalizada__")
-    )
     return expr_normalizar_descricao(col).alias("__descricao_normalizada__")
 
 
@@ -125,27 +109,38 @@ def _construir_mapas(df_mapa: pl.DataFrame) -> tuple[pl.DataFrame, pl.DataFrame,
     return df_codigo_unico, df_desc_unico, df_desc_ambiguo
 
 
-def _preservar_colunas_rastreabilidade(df_src: pl.DataFrame) -> list[pl.Expr]:
+def _preservar_colunas_rastreabilidade(df_src: pl.DataFrame, fonte: str | None = None) -> list[pl.Expr]:
     exprs: list[pl.Expr] = []
     if "codigo_fonte" not in df_src.columns:
         col_codigo = None
-        for cand in ["codigo_produto", "codigo_produto_original", "cod_item"]:
+        for cand in ["codigo_produto", "codigo_produto_original", "cod_item", "prod_cprod"]:
             if cand in df_src.columns:
                 col_codigo = cand
                 break
 
-        if "cnpj" in df_src.columns and col_codigo:
-            exprs.append(
-                pl.concat_str(
-                    [
-                        pl.col("cnpj").cast(pl.Utf8, strict=False),
-                        pl.lit("|"),
-                        pl.col(col_codigo).cast(pl.Utf8, strict=False),
-                    ]
-                ).alias("codigo_fonte")
-            )
-        elif col_codigo:
-            exprs.append(pl.col(col_codigo).cast(pl.Utf8, strict=False).alias("codigo_fonte"))
+        col_desc = None
+        if fonte:
+            col_desc = _detectar_coluna_descricao(df_src, fonte)
+        else:
+            for cand in ["prod_xprod", "descricao", "descr_item", "descricao_produto"]:
+                if cand in df_src.columns:
+                    col_desc = cand
+                    break
+
+        col_cnpj = "cnpj" if "cnpj" in df_src.columns else "__cnpj_ref__" if "__cnpj_ref__" in df_src.columns else None
+
+        if col_codigo:
+            # Se tivermos CNPJ e Descricao, geramos o codigo_fonte completo de 3 partes
+            if col_cnpj and col_desc:
+                exprs.append(
+                    expr_gerar_codigo_fonte(col_cnpj, col_codigo, col_desc).alias("codigo_fonte")
+                )
+            elif col_cnpj:
+                exprs.append(
+                    expr_gerar_codigo_fonte(col_cnpj, col_codigo).alias("codigo_fonte")
+                )
+            else:
+                exprs.append(pl.col(col_codigo).cast(pl.Utf8, strict=False).alias("codigo_fonte"))
 
     if "id_linha_origem" in df_src.columns:
         exprs.append(pl.col("id_linha_origem").cast(pl.Utf8, strict=False))
@@ -353,7 +348,7 @@ def gerar_fontes_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
             rprint(f"[yellow]Fonte {fonte} ignorada: sem coluna de descricao reconhecida.[/yellow]")
             continue
 
-        exprs_rastreabilidade = _preservar_colunas_rastreabilidade(df_src)
+        exprs_rastreabilidade = _preservar_colunas_rastreabilidade(df_src, fonte=fonte)
         if exprs_rastreabilidade:
             df_src = df_src.with_columns(exprs_rastreabilidade)
 

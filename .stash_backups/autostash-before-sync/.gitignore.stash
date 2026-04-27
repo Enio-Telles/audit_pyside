@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+env/
+venv/
+ENV/
+
+# Data (CRITICAL: Private tax data)
+CNPJ/
+**/CNPJ/
+*.parquet
+*.xlsx
+*.csv
+*.sql
+!sql/**/*.sql
+!sql/**/*.SQL
+
+# IDE
+.vscode/
+.idea/
+
+# System
+.DS_Store
+Thumbs.db
+.env
+
+# Logs
+logs/
+*.log
+workspace/
+audit_pyside/
+tmp/
+artifacts/
+tmp/__pycache__
+
+# uv
+.venv/

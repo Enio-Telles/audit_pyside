@@ -34,25 +34,25 @@ from rich import print as rprint
 
 ROOT_DIR = PROJECT_ROOT
 SRC_DIR = ROOT_DIR / "src"
-UTILITARIOS_DIR = SRC_DIR / "utilitarios"
 DADOS_DIR = ROOT_DIR / "dados"
 CNPJ_ROOT = DADOS_DIR / "CNPJ"
 REFS_DIR = DADOS_DIR / "referencias"
 
-if str(UTILITARIOS_DIR) not in sys.path:
-    sys.path.insert(0, str(UTILITARIOS_DIR))
 
 try:
-    from salvar_para_parquet import salvar_para_parquet
-    from encontrar_arquivo_cnpj import encontrar_arquivo
-    from text import expr_normalizar_descricao
-    from codigo_fonte import expr_gerar_codigo_fonte
+    from utilitarios.salvar_para_parquet import salvar_para_parquet
+    from utilitarios.encontrar_arquivo_cnpj import encontrar_arquivo
 except ImportError as e:
     rprint(f"[red]Erro ao importar modulos utilitarios:[/red] {e}")
     sys.exit(1)
 
 
 def _candidatos_cfop_bi() -> list[Path]:
+    """Returns candidate file paths for the CFOP classification reference.
+
+    Returns:
+        List of Path candidates for cfop_bi.parquet, checked in order.
+    """
     return [
         REFS_DIR / "referencias" / "cfop" / "cfop_bi.parquet",
         REFS_DIR / "cfop" / "cfop_bi.parquet",
@@ -61,6 +61,13 @@ def _candidatos_cfop_bi() -> list[Path]:
 
 
 def _carregar_cfops_mercantis() -> pl.DataFrame | None:
+    """Loads mercantile CFOP codes from the reference Parquet file.
+
+    Returns:
+        DataFrame with columns ``co_cfop`` and ``operacao_mercantil`` filtered
+        to rows where ``operacao_mercantil == 'X'``, or ``None`` if the
+        reference file is absent or lacks the required columns.
+    """
     caminho = next((p for p in _candidatos_cfop_bi() if p.exists()), None)
     if caminho is None:
         return None
@@ -85,7 +92,22 @@ def _carregar_cfops_mercantis() -> pl.DataFrame | None:
 
 
 def _inferir_co_sefin(df: pl.DataFrame) -> pl.DataFrame:
+    """Infers ``co_sefin_item`` by joining against SEFIN reference tables.
+
+    Attempts three lookups in priority order: CEST+NCM combined, CEST only,
+    NCM only.  If no reference file is found, the column is populated with
+    ``None``.
+
+    Args:
+        df: Input DataFrame containing at least ``ncm`` and ``cest`` columns.
+
+    Returns:
+        DataFrame with ``co_sefin_item`` column added and join helper columns
+        removed.
+    """
+
     def _candidatos_ref_dir() -> list[Path]:
+        """Returns candidate base directories for CO_SEFIN reference files."""
         return [
             REFS_DIR / "referencias" / "CO_SEFIN",
             REFS_DIR / "CO_SEFIN",
@@ -93,6 +115,14 @@ def _inferir_co_sefin(df: pl.DataFrame) -> pl.DataFrame:
         ]
 
     def _resolver_ref(nome_arquivo: str) -> Path | None:
+        """Resolves a reference file path from the CO_SEFIN candidate directories.
+
+        Args:
+            nome_arquivo: Filename to look for (e.g. ``sitafe_cest_ncm.parquet``).
+
+        Returns:
+            First existing Path, or ``None`` if not found in any candidate.
+        """
         for base in _candidatos_ref_dir():
             p = base / nome_arquivo
             if p.exists():
@@ -106,6 +136,14 @@ def _inferir_co_sefin(df: pl.DataFrame) -> pl.DataFrame:
         return df.with_columns(pl.lit(None, pl.String).alias("co_sefin_item"))
 
     def _limpar_expr(col: str) -> pl.Expr:
+        """Returns a Polars expression that strips all non-digit characters from a column.
+
+        Args:
+            col: Column name to clean.
+
+        Returns:
+            Polars expression producing a stripped numeric string.
+        """
         return (
             pl.col(col).cast(pl.String, strict=False).str.replace_all(r"\D", "").str.strip_chars()
         )
@@ -161,6 +199,19 @@ def _inferir_co_sefin(df: pl.DataFrame) -> pl.DataFrame:
 
 
 def _resolver_arquivo_base(pasta_cnpj: Path, prefixo: str, cnpj: str) -> Path | None:
+    """Finds a raw Parquet file for the given CNPJ by prefix.
+
+    Searches ``pasta_cnpj/arquivos_parquet/`` first, then ``pasta_cnpj/``
+    directly.
+
+    Args:
+        pasta_cnpj: Root directory for the CNPJ's data.
+        prefixo: Filename prefix to search for (e.g. ``'c170'``, ``'nfe'``).
+        cnpj: 14-digit CNPJ string used by the filename locator.
+
+    Returns:
+        Resolved Path if found, otherwise ``None``.
+    """
     pasta_brutos = pasta_cnpj / "arquivos_parquet"
     return encontrar_arquivo(pasta_brutos, prefixo, cnpj) or encontrar_arquivo(
         pasta_cnpj, prefixo, cnpj
@@ -168,18 +219,62 @@ def _resolver_arquivo_base(pasta_cnpj: Path, prefixo: str, cnpj: str) -> Path | 
 
 
 def _normalizar_texto(col: str) -> pl.Expr:
+    """Returns a Polars expression that casts a column to String and strips whitespace.
+
+    Args:
+        col: Column name to normalize.
+
+    Returns:
+        Polars expression producing a trimmed string.
+    """
     return pl.col(col).cast(pl.String, strict=False).str.strip_chars()
 
 
-def _normalizar_descricao_completa(col: str) -> pl.Expr:
-    return expr_normalizar_descricao(col)
+def _agregar_lista_str(col: str, alias: str) -> pl.Expr:
+    """Returns a Polars aggregation expression for unique, sorted, non-null strings.
+
+    Args:
+        col: Column name to aggregate.
+        alias: Output column name.
+
+    Returns:
+        Polars expression that collects distinct non-empty values as a sorted
+        list, aliased to ``alias``.
+    """
+    return (
+        pl.col(col)
+        .cast(pl.String, strict=False)
+        .str.strip_chars()
+        .replace("", None)
+        .drop_nulls()
+        .unique()
+        .sort()
+        .alias(alias)
+    )
 
 
 def _num_expr(col: str) -> pl.Expr:
+    """Returns a Polars expression that casts a column to Float64 with nulls as 0.0.
+
+    Args:
+        col: Column name to cast.
+
+    Returns:
+        Polars expression producing a Float64 column with no nulls.
+    """
     return pl.col(col).cast(pl.Float64, strict=False).fill_null(0.0)
 
 
 def _garantir_colunas(df: pl.DataFrame, colunas: list[str]) -> pl.DataFrame:
+    """Ensures a DataFrame contains all required columns, adding null columns if absent.
+
+    Args:
+        df: Input DataFrame to check.
+        colunas: Column names that must be present.
+
+    Returns:
+        DataFrame with any missing columns added as ``pl.String`` null columns.
+    """
     for coluna in colunas:
         if coluna not in df.columns:
             df = df.with_columns(pl.lit(None, pl.String).alias(coluna))
@@ -187,6 +282,20 @@ def _garantir_colunas(df: pl.DataFrame, colunas: list[str]) -> pl.DataFrame:
 
 
 def _ler_c170(path: Path | None, cfop_mercantil: pl.DataFrame | None) -> pl.DataFrame | None:
+    """Reads the C170 raw Parquet and returns item metadata normalized for aggregation.
+
+    Filters to purchase rows (``ind_oper == '0'``) and optionally joins
+    against mercantile CFOP codes to classify ``compras`` values.
+
+    Args:
+        path: Path to the C170 Parquet file, or ``None``.
+        cfop_mercantil: Reference DataFrame of mercantile CFOPs, or ``None``.
+
+    Returns:
+        DataFrame with columns ``codigo``, ``descricao``, ``ncm``, ``cest``,
+        ``gtin``, ``unid``, ``compras``, ``qtd_compras``, ``vendas``,
+        ``qtd_vendas``, ``fonte``; or ``None`` if the file is absent or empty.
+    """
     if path is None or not path.exists():
         return None
 
@@ -225,46 +334,55 @@ def _ler_c170(path: Path | None, cfop_mercantil: pl.DataFrame | None) -> pl.Data
                 on="co_cfop",
                 how="left",
             ).with_columns(pl.col("__cfop_mercantil__").fill_null(False))
-    # Adia materialização: retorna LazyFrame pronto para ser coletado depois
-    return lf.with_columns(
+
+    df = lf.collect()
+    if df.is_empty():
+        return None
+
+    return df.with_columns(
         [
             _normalizar_texto("cod_item").alias("codigo"),
-            _normalizar_descricao_completa("descr_item").alias("descricao"),
+            _normalizar_texto("descr_item").alias("descricao"),
             (
                 _normalizar_texto("descr_compl").alias("descr_compl")
-                if "descr_compl" in lf.columns
+                if "descr_compl" in df.columns
                 else pl.lit(None, pl.String).alias("descr_compl")
             ),
             (
                 _normalizar_texto("tipo_item").alias("tipo_item")
-                if "tipo_item" in lf.columns
+                if "tipo_item" in df.columns
                 else pl.lit(None, pl.String).alias("tipo_item")
             ),
             (
                 _normalizar_texto("cod_ncm").alias("ncm")
-                if "cod_ncm" in lf.columns
+                if "cod_ncm" in df.columns
                 else pl.lit(None, pl.String).alias("ncm")
             ),
             (
                 _normalizar_texto("cest").alias("cest")
-                if "cest" in lf.columns
+                if "cest" in df.columns
                 else pl.lit(None, pl.String).alias("cest")
             ),
             (
                 _normalizar_texto("cod_barra").alias("gtin")
-                if "cod_barra" in lf.columns
+                if "cod_barra" in df.columns
                 else pl.lit(None, pl.String).alias("gtin")
             ),
             (
                 _normalizar_texto("unid").alias("unid")
-                if "unid" in lf.columns
+                if "unid" in df.columns
                 else pl.lit(None, pl.String).alias("unid")
+            ),
+            (
+                _normalizar_texto("codigo_fonte").alias("codigo_fonte")
+                if "codigo_fonte" in df.columns
+                else pl.lit(None, pl.String).alias("codigo_fonte")
             ),
             pl.when(
                 (pl.col("ind_oper").cast(pl.String) == "0")
                 & (
                     pl.col("__cfop_mercantil__")
-                    if "__cfop_mercantil__" in lf.columns
+                    if "__cfop_mercantil__" in df.columns
                     else pl.lit(True)
                 )
             )
@@ -275,7 +393,7 @@ def _ler_c170(path: Path | None, cfop_mercantil: pl.DataFrame | None) -> pl.Data
                 (pl.col("ind_oper").cast(pl.String) == "0")
                 & (
                     pl.col("__cfop_mercantil__")
-                    if "__cfop_mercantil__" in lf.columns
+                    if "__cfop_mercantil__" in df.columns
                     else pl.lit(True)
                 )
             )
@@ -296,6 +414,7 @@ def _ler_c170(path: Path | None, cfop_mercantil: pl.DataFrame | None) -> pl.Data
             "cest",
             "gtin",
             "unid",
+            "codigo_fonte",
             "compras",
             "qtd_compras",
             "vendas",
@@ -306,6 +425,19 @@ def _ler_c170(path: Path | None, cfop_mercantil: pl.DataFrame | None) -> pl.Data
 
 
 def _ler_bloco_h(path: Path | None) -> pl.DataFrame | None:
+    """Reads the Bloco H raw Parquet and returns inventory item metadata.
+
+    Adapts to varying column naming conventions across EFD extractions using
+    schema introspection.
+
+    Args:
+        path: Path to the Bloco H Parquet file, or ``None``.
+
+    Returns:
+        DataFrame with columns ``codigo``, ``descricao``, ``ncm``, ``cest``,
+        ``gtin``, ``unid``, ``compras``, ``qtd_compras``, ``vendas``,
+        ``qtd_vendas``, ``fonte``; or ``None`` if the file is absent or empty.
+    """
     if path is None or not path.exists():
         return None
 
@@ -313,6 +445,7 @@ def _ler_bloco_h(path: Path | None) -> pl.DataFrame | None:
     schema = pl.read_parquet_schema(path)
 
     def _pick(*candidatas: str) -> str | None:
+        """Returns the first candidate column name that exists in the schema."""
         for coluna in candidatas:
             if coluna in schema:
                 return coluna
@@ -344,11 +477,16 @@ def _ler_bloco_h(path: Path | None) -> pl.DataFrame | None:
         ]
         if c is not None
     ]
-    lf = pl.scan_parquet(path).select(selecionar)
-    return lf.with_columns(
+    if "codigo_fonte" in schema:
+        selecionar.append("codigo_fonte")
+    df = pl.scan_parquet(path).select(selecionar).collect()
+    if df.is_empty():
+        return None
+
+    return df.with_columns(
         [
             _normalizar_texto(col_codigo).alias("codigo"),
-            _normalizar_descricao_completa(col_desc).alias("descricao"),
+            _normalizar_texto(col_desc).alias("descricao"),
             (
                 _normalizar_texto(col_descr_compl).alias("descr_compl")
                 if col_descr_compl
@@ -395,6 +533,7 @@ def _ler_bloco_h(path: Path | None) -> pl.DataFrame | None:
             "cest",
             "gtin",
             "unid",
+            "codigo_fonte",
             "compras",
             "qtd_compras",
             "vendas",
@@ -407,6 +546,23 @@ def _ler_bloco_h(path: Path | None) -> pl.DataFrame | None:
 def _ler_nfe_ou_nfce(
     path: Path | None, cnpj: str, nome_fonte: str, cfop_mercantil: pl.DataFrame | None
 ) -> pl.DataFrame | None:
+    """Reads an NFe or NFCe raw Parquet and returns item-level sales metadata.
+
+    Filters to outbound operations (``tipo_operacao == '1'``) emitted by
+    ``cnpj`` and optionally filters by mercantile CFOP codes.
+
+    Args:
+        path: Path to the NFe/NFCe Parquet file, or ``None``.
+        cnpj: 14-digit CNPJ of the emitter used to identify sales rows.
+        nome_fonte: Source label assigned to the ``fonte`` column
+            (e.g. ``'nfe'`` or ``'nfce'``).
+        cfop_mercantil: Reference DataFrame of mercantile CFOPs, or ``None``.
+
+    Returns:
+        DataFrame with columns ``codigo``, ``descricao``, ``ncm``, ``cest``,
+        ``gtin``, ``unid``, ``compras``, ``qtd_compras``, ``vendas``,
+        ``qtd_vendas``, ``fonte``; or ``None`` if the file is absent or empty.
+    """
     if path is None or not path.exists():
         return None
 
@@ -419,6 +575,7 @@ def _ler_nfe_ou_nfce(
     selecionar = [
         c
         for c in [
+            "codigo_fonte",
             "co_emitente",
             col_tp,
             "prod_cprod",
@@ -470,7 +627,11 @@ def _ler_nfe_ou_nfce(
     else:
         lf_selected = lf_selected.with_columns(pl.lit(True).alias("__cfop_mercantil__"))
 
-    # Adia materialização: retorna LazyFrame pronto para ser coletado depois
+    df = lf_selected.collect()
+
+    if df.is_empty():
+        return None
+
     gtin_expr = (
         pl.coalesce(
             [
@@ -478,38 +639,43 @@ def _ler_nfe_ou_nfce(
                 pl.col("prod_cean").cast(pl.String, strict=False),
             ]
         )
-        if "prod_ceantrib" in lf_selected.columns or "prod_cean" in lf_selected.columns
+        if "prod_ceantrib" in df.columns or "prod_cean" in df.columns
         else pl.lit(None, pl.String)
     )
 
-    return lf_selected.with_columns(
+    return df.with_columns(
         [
             (
                 _normalizar_texto("prod_cprod").alias("codigo")
-                if "prod_cprod" in lf_selected.columns
+                if "prod_cprod" in df.columns
                 else pl.lit(None, pl.String).alias("codigo")
             ),
             (
-                _normalizar_descricao_completa("prod_xprod").alias("descricao")
-                if "prod_xprod" in lf_selected.columns
+                _normalizar_texto("prod_xprod").alias("descricao")
+                if "prod_xprod" in df.columns
                 else pl.lit(None, pl.String).alias("descricao")
+            ),
+            (
+                _normalizar_texto("codigo_fonte").alias("codigo_fonte")
+                if "codigo_fonte" in df.columns
+                else pl.lit(None, pl.String).alias("codigo_fonte")
             ),
             pl.lit(None, pl.String).alias("descr_compl"),
             pl.lit(None, pl.String).alias("tipo_item"),
             (
                 _normalizar_texto("prod_ncm").alias("ncm")
-                if "prod_ncm" in lf_selected.columns
+                if "prod_ncm" in df.columns
                 else pl.lit(None, pl.String).alias("ncm")
             ),
             (
                 _normalizar_texto("prod_cest").alias("cest")
-                if "prod_cest" in lf_selected.columns
+                if "prod_cest" in df.columns
                 else pl.lit(None, pl.String).alias("cest")
             ),
             gtin_expr.alias("gtin"),
             (
                 _normalizar_texto("prod_ucom").alias("unid")
-                if "prod_ucom" in lf_selected.columns
+                if "prod_ucom" in df.columns
                 else pl.lit(None, pl.String).alias("unid")
             ),
             pl.lit(0.0).alias("compras"),
@@ -519,7 +685,7 @@ def _ler_nfe_ou_nfce(
                 & (pl.col("__tipo_digit") == "1")
                 & (
                     pl.col("__cfop_mercantil__")
-                    if "__cfop_mercantil__" in lf_selected.columns
+                    if "__cfop_mercantil__" in df.columns
                     else pl.lit(True)
                 )
             )
@@ -537,7 +703,7 @@ def _ler_nfe_ou_nfce(
                 & (pl.col("__tipo_digit") == "1")
                 & (
                     pl.col("__cfop_mercantil__")
-                    if "__cfop_mercantil__" in lf_selected.columns
+                    if "__cfop_mercantil__" in df.columns
                     else pl.lit(True)
                 )
             )
@@ -556,6 +722,7 @@ def _ler_nfe_ou_nfce(
             "cest",
             "gtin",
             "unid",
+            "codigo_fonte",
             "compras",
             "qtd_compras",
             "vendas",
@@ -566,6 +733,26 @@ def _ler_nfe_ou_nfce(
 
 
 def item_unidades(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
+    """Generates the ``item_unidades`` base table for the given CNPJ.
+
+    Reads C170, Bloco H, NFe, and NFCe Parquet sources, normalizes item
+    metadata, aggregates by ``(codigo, descricao, ncm, cest, gtin, unid)``,
+    infers ``co_sefin_item``, and writes
+    ``analises/produtos/item_unidades_{cnpj}.parquet``.
+
+    Args:
+        cnpj: CPF or CNPJ string (digits only or formatted; 11 or 14 digits).
+        pasta_cnpj: Root directory for this CNPJ's data.  Defaults to
+            ``CNPJ_ROOT / cnpj``.
+
+    Returns:
+        ``True`` on success, ``False`` if no eligible source was found or if
+        the Parquet could not be saved.
+
+    Raises:
+        ValueError: If ``cnpj`` does not have 11 or 14 digits after stripping
+            non-digits.
+    """
     cnpj = re.sub(r"\D", "", cnpj or "")
     if len(cnpj) not in {11, 14}:
         raise ValueError("CPF/CNPJ invalido.")
@@ -582,8 +769,7 @@ def item_unidades(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
 
     cfop_mercantil = _carregar_cfops_mercantis()
 
-    # Coleta todos os fragmentos como LazyFrame, concatena e só materializa no final
-    fragmentos: list[pl.LazyFrame] = []
+    fragmentos: list[pl.DataFrame] = []
     leitores = [
         _ler_c170(_resolver_arquivo_base(pasta_cnpj, "c170", cnpj), cfop_mercantil),
         _ler_bloco_h(_resolver_arquivo_base(pasta_cnpj, "bloco_h", cnpj)),
@@ -597,25 +783,29 @@ def item_unidades(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
             cfop_mercantil,
         ),
     ]
-    fragmentos.extend(lf for lf in leitores if lf is not None)
+
+    fragmentos.extend(df for df in leitores if df is not None and not df.is_empty())
 
     if not fragmentos:
         rprint("[red]Nenhuma fonte elegivel foi encontrada para item_unidades.[/red]")
         return False
 
-    lf_total = pl.concat(fragmentos, how="diagonal_relaxed")
-    lf_total = lf_total.with_columns(
+    df_total = pl.concat(fragmentos, how="diagonal_relaxed")
+    df_total = _garantir_colunas(
+        df_total,
         [
-            pl.col("codigo"),
-            pl.col("descricao"),
-            pl.col("descr_compl"),
-            pl.col("tipo_item"),
-            pl.col("ncm"),
-            pl.col("cest"),
-            pl.col("gtin"),
-            pl.col("unid"),
-        ]
+            "codigo",
+            "descricao",
+            "descr_compl",
+            "tipo_item",
+            "ncm",
+            "cest",
+            "gtin",
+            "unid",
+            "codigo_fonte",
+        ],
     )
+
     chaves_agrupamento = [
         "codigo",
         "descricao",
@@ -626,30 +816,25 @@ def item_unidades(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         "gtin",
         "unid",
     ]
-    lf_grouped = (
-        lf_total.group_by(chaves_agrupamento)
+
+    df_grouped = (
+        df_total.group_by(chaves_agrupamento)
         .agg(
             [
                 pl.col("compras").fill_null(0).sum().alias("compras"),
                 pl.col("qtd_compras").fill_null(0).sum().alias("qtd_compras"),
                 pl.col("vendas").fill_null(0).sum().alias("vendas"),
                 pl.col("qtd_vendas").fill_null(0).sum().alias("qtd_vendas"),
+                _agregar_lista_str("codigo_fonte", "lista_codigo_fonte"),
                 pl.col("fonte").drop_nulls().unique().sort().alias("fontes"),
-                expr_gerar_codigo_fonte(pl.lit(cnpj), pl.col("codigo"), pl.col("descricao"))
-                .alias("codigo_fonte"),
             ]
         )
         .sort(["descricao", "codigo", "unid"], nulls_last=True)
         .with_row_count("seq", offset=1)
-        .with_columns(
-            [
-                pl.format("id_item_unid_{}", pl.col("seq")).alias("id_item_unid"),
-                pl.col("codigo_fonte").map_elements(lambda x: [x] if x else [], return_dtype=pl.List(pl.String)).alias("lista_codigo_fonte"),
-            ]
-        )
+        .with_columns(pl.format("id_item_unid_{}", pl.col("seq")).alias("id_item_unid"))
         .drop("seq")
     )
-    df_grouped = lf_grouped.collect()
+
     df_grouped = _inferir_co_sefin(df_grouped)
     df_grouped = df_grouped.select(
         [
@@ -667,15 +852,25 @@ def item_unidades(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
             "qtd_compras",
             "vendas",
             "qtd_vendas",
-            "fontes",
             "lista_codigo_fonte",
+            "fontes",
         ]
     )
+
     pasta_saida = pasta_cnpj / "analises" / "produtos"
     return salvar_para_parquet(df_grouped, pasta_saida, f"item_unidades_{cnpj}.parquet")
 
 
 def gerar_item_unidades(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
+    """Entry-point alias for :func:`item_unidades`.
+
+    Args:
+        cnpj: CPF or CNPJ string (11 or 14 digits).
+        pasta_cnpj: Override for the CNPJ root data directory.
+
+    Returns:
+        ``True`` on success, ``False`` otherwise.
+    """
     return item_unidades(cnpj, pasta_cnpj)
 
 
