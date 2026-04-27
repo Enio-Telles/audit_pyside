@@ -2302,7 +2302,7 @@ class ServicoAgregacao:
             .join(df_padrao, on="id_agrupado", how="left")
             .join(df_base_collections, on="id_agrupado", how="left")
             .with_columns([
-                pl.coalesce([pl.col("descr_padrao_calculado"), pl.col("descr_padrao"), pl.col("descr_fallback")]).alias("descr_padrao"),
+                pl.coalesce([pl.col("descr_padrao_calculado"), pl.col("descr_padrao").replace("", None), pl.col("descr_fallback")]).alias("descr_padrao"),
                 pl.coalesce([pl.col("lista_ncm"), pl.col("lista_ncm_base")]).fill_null(pl.lit([]).cast(pl.List(pl.Utf8))).alias("lista_ncm"),
                 pl.coalesce([pl.col("lista_cest"), pl.col("lista_cest_base")]).fill_null(pl.lit([]).cast(pl.List(pl.Utf8))).alias("lista_cest"),
                 pl.coalesce([pl.col("lista_gtin"), pl.col("lista_gtin_base")]).fill_null(pl.lit([]).cast(pl.List(pl.Utf8))).alias("lista_gtin"),
