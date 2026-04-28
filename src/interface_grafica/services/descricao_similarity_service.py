@@ -56,10 +56,11 @@ SIM_CONFIG = {
     "cest_weight": 5,
     "gtin_weight": 10,
     "desc_subweights": (0.55, 0.45),
-    "cest_ncm_scale": 1.75,
+    "cest_ncm_scale": 2.5,
     "gtin_scale": 2.0,
     "min_desc_for_id_boost": 50,
     "gtin_min_score": 92,
+    "cest_ncm_min_score": 86,
 }
 @dataclass(frozen=True)
 class _RowSimilarityData:
@@ -261,6 +262,7 @@ def _numero_score(a: _RowSimilarityData, b: _RowSimilarityData) -> int | None:
 
 
 
+
 def _score_composto(a: _RowSimilarityData, b: _RowSimilarityData) -> _ScoreDetalhe:
     score_char = _dice_score(a.desc_norm, b.desc_norm)
     score_tokens = _jaccard_score(set(a.strong_tokens), set(b.strong_tokens))
@@ -304,6 +306,10 @@ def _score_composto(a: _RowSimilarityData, b: _RowSimilarityData) -> _ScoreDetal
     # Configurable GTIN fallback: keep strong behavior for identical GTINs
     if score_gtin == 100 and score_desc >= SIM_CONFIG["min_desc_for_id_boost"]:
         score_final = max(score_final, SIM_CONFIG["gtin_min_score"])
+
+    # Configurable minimum for CEST + NCM match (tunable floor)
+    if score_cest == 100 and (score_ncm == 100 or score_ncm == 70) and score_desc >= SIM_CONFIG["min_desc_for_id_boost"]:
+        score_final = max(score_final, SIM_CONFIG.get("cest_ncm_min_score", 86))
 
     motivos: list[str] = []
     if score_desc >= 90:
