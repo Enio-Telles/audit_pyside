@@ -44,6 +44,10 @@ def apply_similarity_patch() -> None:
                 layout.insertWidget(insert_at, self.btn_ordenar_similaridade_desc)
                 layout.insertWidget(insert_at + 1, self.chk_similarity_ncm_cest)
 
+            self.btn_ordenar_similaridade_desc.clicked.connect(
+                self.ordenar_agregacao_por_similaridade
+            )
+
         return tab
 
     def ordenar_agregacao_por_similaridade(self) -> None:
@@ -76,20 +80,6 @@ def apply_similarity_patch() -> None:
         except Exception as exc:
             self.show_error("Erro ao ordenar por similaridade", str(exc))
 
-    original_connect = AgregacaoControllerMixin.open_editable_aggregation_table
-
-    def open_editable_aggregation_table_com_similaridade(self):
-        original_connect(self)
-        if hasattr(self, "btn_ordenar_similaridade_desc"):
-            try:
-                self.btn_ordenar_similaridade_desc.clicked.disconnect()
-            except Exception:
-                pass
-            self.btn_ordenar_similaridade_desc.clicked.connect(
-                self.ordenar_agregacao_por_similaridade
-            )
-
     AgregacaoWindowMixin._build_tab_agregacao = _build_tab_agregacao_com_similaridade
     AgregacaoControllerMixin.ordenar_agregacao_por_similaridade = ordenar_agregacao_por_similaridade
-    AgregacaoControllerMixin.open_editable_aggregation_table = open_editable_aggregation_table_com_similaridade
     AgregacaoWindowMixin._similarity_patch_applied = True

@@ -37,8 +37,9 @@ STOPWORDS = {
 # Regra canonica de descricao fiscal: normalize_desc() e expr_normalizar_descricao()
 # devem preservar exatamente esta pontuacao, alem de letras, numeros e espacos.
 # Nao criar normalizadores paralelos para descricao fiscal.
-PONTUACAO_DESCRICAO_NORMALIZADA = r"-%$#@!.,}{][\\/;"
-REGEX_DESCRICAO_NORMALIZADA = r"[^A-Z0-9\s\-%\$#@!\.,}{\]\[\\/;]"
+# Hifens (-) e barras (/) sao convertidos para espaco para melhorar agrupamento.
+PONTUACAO_DESCRICAO_NORMALIZADA = r"%$#@!.,}{][\\;"
+REGEX_DESCRICAO_NORMALIZADA = r"[^A-Z0-9\s%\$#@!\.,}{\]\[\\;]"
 
 
 def remove_accents(text: str | None) -> str | None:
@@ -66,7 +67,7 @@ def normalize_desc(text: str | None) -> str:
     Regras aplicadas:
     - remover acentos;
     - converter para maiusculas;
-    - manter letras, numeros, espacos e pontuacao -%$#@!.,}{][\\/;
+    - manter letras, numeros, espacos e pontuacao %$#@!.,}{][\\;
     - substituir os demais caracteres por espaco;
     - remover espacos no inicio e no fim;
     - reduzir espacos internos consecutivos para um unico espaco;

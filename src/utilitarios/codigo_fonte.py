@@ -72,17 +72,52 @@ def normalizar_codigo_fonte(valor: str | None) -> str | None:
 
 def expr_normalizar_codigo_fonte(col: str, alias: str = "codigo_fonte") -> pl.Expr:
     """Cria expressao Polars para normalizar uma coluna de codigo de fonte."""
-    # Nota: A normalizacao de 3 partes em Polars puro e complexa devido ao split.
-    # Por ora, mantemos a compatibilidade com 2 partes ou usamos a lógica expandida.
-    cleaned = (
+    from utilitarios.text import expr_normalizar_descricao
+
+    raw = (
         pl.col(col)
         .cast(pl.Utf8, strict=False)
         .fill_null("")
         .str.strip_chars()
         .str.replace_all(r"\s+", " ")
+        .str.replace_all(r"\s*\|\s*", "|")
     )
 
-    return cleaned.alias(alias)
+    has_pipe = raw.str.contains("|", literal=True)
+    parts = raw.str.split("|")
+
+    cnpj_clean = parts.list.get(0, null_on_oob=True).fill_null("").str.replace_all(r"\D", "")
+    code_clean = (
+        parts.list.get(1, null_on_oob=True)
+        .fill_null("")
+        .str.strip_chars()
+        .str.replace_all(r"\s+", " ")
+    )
+    desc_raw = parts.list.get(2, null_on_oob=True).fill_null("")
+    desc_clean = expr_normalizar_descricao(desc_raw)
+
+    base = (
+        pl.when(code_clean == "")
+        .then(pl.lit(None, dtype=pl.Utf8))
+        .when(cnpj_clean != "")
+        .then(pl.concat_str([cnpj_clean, pl.lit("|"), code_clean]))
+        .otherwise(code_clean)
+    )
+
+    with_desc = (
+        pl.when((desc_clean != "") & base.is_not_null())
+        .then(pl.concat_str([base, pl.lit("|"), desc_clean]))
+        .otherwise(base)
+    )
+
+    return (
+        pl.when(raw == "")
+        .then(pl.lit(None, dtype=pl.Utf8))
+        .when(~has_pipe)
+        .then(raw)
+        .otherwise(with_desc)
+        .alias(alias)
+    )
 
 
 def expr_gerar_codigo_fonte(

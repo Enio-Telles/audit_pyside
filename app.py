@@ -29,18 +29,33 @@ if __name__ == "__main__" and "--smoke" in sys.argv:
     print("smoke-ok", flush=True)
     sys.exit(0)
 
-from PySide6.QtWidgets import QApplication  # noqa: E402
-from interface_grafica.logging_setup import configure_structlog, install_fallback_hooks  # noqa: E402
-from interface_grafica.patches.similaridade_agregacao import apply_similarity_patch  # noqa: E402
 
-apply_similarity_patch()
-
-from interface_grafica.windows.main_window import MainWindow  # noqa: E402
-
+QApplication = None
+MainWindow = None
 
 def main() -> int:
+    global QApplication, MainWindow
+    if QApplication is None:
+        from PySide6.QtWidgets import QApplication as _QApp
+        QApplication = _QApp
+    if MainWindow is None:
+        from interface_grafica.windows.main_window import MainWindow as _MainWindow
+        MainWindow = _MainWindow
+    try:
+        from interface_grafica.logging_setup import configure_structlog, install_fallback_hooks
+    except Exception:
+        def configure_structlog(*a, **kw):
+            return None
+        def install_fallback_hooks(*a, **kw):
+            return None
+    try:
+        from interface_grafica.patches.similaridade_agregacao import apply_similarity_patch
+    except Exception:
+        def apply_similarity_patch(*a, **kw):
+            return None
     configure_structlog()
     install_fallback_hooks()
+    apply_similarity_patch()
     app = QApplication(sys.argv)
     app.setApplicationName("Fiscal Parquet Analyzer (Refatorado)")
     window = MainWindow()

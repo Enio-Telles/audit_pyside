@@ -113,7 +113,7 @@ def construir_reg0200_tipado(cnpj: str) -> pl.LazyFrame:
             pl.col("cod_ncm").cast(pl.Utf8, strict=False),
             pl.col("cest").cast(pl.Utf8, strict=False),
             pl.col("cod_barra").cast(pl.Utf8, strict=False),
-            expr_gerar_codigo_fonte(pl.col("cnpj"), pl.col("cod_item"), pl.col("descr_item")),
+            expr_gerar_codigo_fonte(pl.col("cnpj"), pl.col("cod_item")),
         ]
     )
 
@@ -192,7 +192,7 @@ def construir_c170_tipado(cnpj: str) -> pl.LazyFrame:
             pl.coalesce(
                 [
                     pl.col("codigo_fonte"),
-                    expr_gerar_codigo_fonte(pl.col("cnpj"), pl.col("cod_item"), pl.col("descr_item")),
+                    expr_gerar_codigo_fonte(pl.col("cnpj"), pl.col("cod_item")),
                 ]
             ).alias("codigo_fonte")
         )
@@ -275,7 +275,7 @@ def construir_h010_tipado(cnpj: str) -> pl.LazyFrame:
             pl.coalesce(
                 [
                     pl.col("codigo_fonte"),
-                    expr_gerar_codigo_fonte(pl.col("cnpj"), pl.col("cod_item"), pl.col("descr_item")),
+                    expr_gerar_codigo_fonte(pl.col("cnpj"), pl.col("cod_item")),
                 ]
             ).alias("codigo_fonte")
         )
