@@ -109,7 +109,9 @@ def _construir_mapas(df_mapa: pl.DataFrame) -> tuple[pl.DataFrame, pl.DataFrame,
     return df_codigo_unico, df_desc_unico, df_desc_ambiguo
 
 
-def _preservar_colunas_rastreabilidade(df_src: pl.DataFrame, fonte: str | None = None) -> list[pl.Expr]:
+def _preservar_colunas_rastreabilidade(
+    df_src: pl.DataFrame, fonte: str | None = None
+) -> list[pl.Expr]:
     exprs: list[pl.Expr] = []
     if "codigo_fonte" not in df_src.columns:
         col_codigo = None
@@ -127,7 +129,13 @@ def _preservar_colunas_rastreabilidade(df_src: pl.DataFrame, fonte: str | None =
                     col_desc = cand
                     break
 
-        col_cnpj = "cnpj" if "cnpj" in df_src.columns else "__cnpj_ref__" if "__cnpj_ref__" in df_src.columns else None
+        col_cnpj = (
+            "cnpj"
+            if "cnpj" in df_src.columns
+            else "__cnpj_ref__"
+            if "__cnpj_ref__" in df_src.columns
+            else None
+        )
 
         if col_codigo:
             # Se tivermos CNPJ e Descricao, geramos o codigo_fonte completo de 3 partes
@@ -136,9 +144,7 @@ def _preservar_colunas_rastreabilidade(df_src: pl.DataFrame, fonte: str | None =
                     expr_gerar_codigo_fonte(col_cnpj, col_codigo, col_desc).alias("codigo_fonte")
                 )
             elif col_cnpj:
-                exprs.append(
-                    expr_gerar_codigo_fonte(col_cnpj, col_codigo).alias("codigo_fonte")
-                )
+                exprs.append(expr_gerar_codigo_fonte(col_cnpj, col_codigo).alias("codigo_fonte"))
             else:
                 exprs.append(pl.col(col_codigo).cast(pl.Utf8, strict=False).alias("codigo_fonte"))
 

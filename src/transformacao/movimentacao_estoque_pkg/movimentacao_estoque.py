@@ -4,6 +4,7 @@ import re
 from pathlib import Path
 
 import polars as pl
+import structlog
 from rich import print as rprint
 
 from utilitarios.project_paths import PROJECT_ROOT, TRACEBACK_PATH
@@ -42,6 +43,8 @@ try:
 except ImportError as e:
     rprint(f"[red]Erro ao importar modulos:[/red] {e}")
     sys.exit(1)
+
+log = structlog.get_logger(__name__)
 
 
 def marcar_mov_rep_por_chave_item(df: pl.DataFrame) -> pl.DataFrame:
@@ -843,6 +846,12 @@ def gerar_movimentacao_estoque(cnpj: str, pasta_cnpj: Path | None = None) -> boo
         df_final = MovimentacaoService.apply_conversion_factors(df_final, df_prod_final)
     except Exception as exc:
         rprint(f"[yellow]Aviso: falha ao aplicar fatores de conversao: {exc}[/yellow]")
+        log.warning(
+            "mov_estoque.fallback",
+            motivo="apply_conversion_factors_falhou",
+            exc_type=type(exc).__name__,
+            cnpj=cnpj,
+        )
     linha_neutra_expr = _boolish_expr("excluir_estoque").fill_null(False) | _boolish_expr(
         "mov_rep"
     ).fill_null(False)

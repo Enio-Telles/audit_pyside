@@ -114,8 +114,8 @@ def _agrupar_lista_lista(col_nome: str, alias: str) -> pl.Expr:
 
 def _construir_tabela_ponte(df_descricoes: pl.DataFrame) -> pl.DataFrame:
     colunas_interesse = [
-        "id_agrupado",
-        "descricao_normalizada",
+        pl.col("id_agrupado"),
+        pl.col("descricao_normalizada"),
     ]
 
     if "lista_codigo_fonte" not in df_descricoes.columns:

@@ -635,8 +635,9 @@ def item_unidades(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
                 pl.col("vendas").fill_null(0).sum().alias("vendas"),
                 pl.col("qtd_vendas").fill_null(0).sum().alias("qtd_vendas"),
                 pl.col("fonte").drop_nulls().unique().sort().alias("fontes"),
-                expr_gerar_codigo_fonte(pl.lit(cnpj), pl.col("codigo"), pl.col("descricao"))
-                .alias("codigo_fonte"),
+                expr_gerar_codigo_fonte(pl.lit(cnpj), pl.col("codigo"), pl.col("descricao")).alias(
+                    "codigo_fonte"
+                ),
             ]
         )
         .sort(["descricao", "codigo", "unid"], nulls_last=True)
@@ -644,7 +645,9 @@ def item_unidades(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         .with_columns(
             [
                 pl.format("id_item_unid_{}", pl.col("seq")).alias("id_item_unid"),
-                pl.col("codigo_fonte").map_elements(lambda x: [x] if x else [], return_dtype=pl.List(pl.String)).alias("lista_codigo_fonte"),
+                pl.col("codigo_fonte")
+                .map_elements(lambda x: [x] if x else [], return_dtype=pl.List(pl.String))
+                .alias("lista_codigo_fonte"),
             ]
         )
         .drop("seq")

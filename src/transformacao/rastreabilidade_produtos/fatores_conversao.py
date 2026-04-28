@@ -13,6 +13,7 @@ import sys
 from pathlib import Path
 
 import polars as pl
+import structlog
 from rich import print as rprint
 
 from utilitarios.project_paths import PROJECT_ROOT
@@ -32,6 +33,8 @@ try:
 except ImportError as e:
     rprint(f"[red]Erro ao importar modulos utilitarios:[/red] {e}")
     raise RuntimeError(f"Falha ao importar modulos ETL: {e}") from e
+
+log = structlog.get_logger(__name__)
 
 
 def _normalizar_descricao_expr(col: str) -> pl.Expr:
@@ -1191,6 +1194,20 @@ def calcular_fatores_conversao(cnpj: str, pasta_cnpj: Path | None = None) -> boo
         .unique()
         .sort(["id_agrupado", "unid"])
     )
+
+    # Log fallback summary — one event per non-"preco" fator_origem value.
+    # df_fatores was already deduplicated via .unique() so the count reflects
+    # distinct (id_agrupado, unid) combinations, not raw source rows.
+    if "fator_origem" in df_fatores.columns:
+        for row in df_fatores.group_by("fator_origem").agg(pl.len().alias("n")).to_dicts():
+            if row["fator_origem"] != "preco":
+                log.info(
+                    "fatores_conversao.fallback",
+                    motivo=row["fator_origem"],
+                    fator_origem=row["fator_origem"],
+                    n_linhas=row["n"],
+                    cnpj=cnpj,
+                )
 
     if not df_fatores_existente.is_empty():
         colunas_manual = []
