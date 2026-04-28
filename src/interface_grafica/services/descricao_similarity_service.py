@@ -48,6 +48,19 @@ STOPWORDS_CHAVE = {
 }
 
 
+
+SIM_CONFIG = {
+    "desc_weight": 60,
+    "numeros_weight": 15,
+    "ncm_weight": 10,
+    "cest_weight": 5,
+    "gtin_weight": 10,
+    "desc_subweights": (0.55, 0.45),
+    "cest_ncm_scale": 1.75,
+    "gtin_scale": 2.0,
+    "min_desc_for_id_boost": 50,
+    "gtin_min_score": 92,
+}
 @dataclass(frozen=True)
 class _RowSimilarityData:
     row_pos: int
@@ -247,37 +260,50 @@ def _numero_score(a: _RowSimilarityData, b: _RowSimilarityData) -> int | None:
     return 100 if set(a.numeros) & set(b.numeros) else 0
 
 
+
 def _score_composto(a: _RowSimilarityData, b: _RowSimilarityData) -> _ScoreDetalhe:
     score_char = _dice_score(a.desc_norm, b.desc_norm)
     score_tokens = _jaccard_score(set(a.strong_tokens), set(b.strong_tokens))
-    score_desc = round((score_char * 0.55) + (score_tokens * 0.45))
+    w_char, w_tokens = SIM_CONFIG["desc_subweights"]
+    score_desc = round((score_char * w_char) + (score_tokens * w_tokens))
     score_numeros = _numero_score(a, b)
     score_ncm = _ncm_score(a, b)
     score_cest = _codigo_score(a.cest_partes, b.cest_partes)
     score_gtin = _codigo_score(a.gtin_partes, b.gtin_partes)
 
-    componentes: list[tuple[int, int]] = [(score_desc, 60)]
-    for score, peso in [
-        (score_numeros, 15),
-        (score_ncm, 10),
-        (score_cest, 5),
-        (score_gtin, 10),
+    weight_map = {
+        "desc": SIM_CONFIG["desc_weight"],
+        "numeros": SIM_CONFIG["numeros_weight"],
+        "ncm": SIM_CONFIG["ncm_weight"],
+        "cest": SIM_CONFIG["cest_weight"],
+        "gtin": SIM_CONFIG["gtin_weight"],
+    }
+
+    # Dynamic scaling for identifier matches
+    if score_cest == 100 and (score_ncm == 100 or score_ncm == 70) and score_desc >= SIM_CONFIG["min_desc_for_id_boost"]:
+        weight_map["ncm"] = int(round(weight_map["ncm"] * SIM_CONFIG["cest_ncm_scale"]))
+        weight_map["cest"] = int(round(weight_map["cest"] * SIM_CONFIG["cest_ncm_scale"]))
+
+    if score_gtin == 100 and score_desc >= SIM_CONFIG["min_desc_for_id_boost"]:
+        weight_map["gtin"] = int(round(weight_map["gtin"] * SIM_CONFIG["gtin_scale"]))
+
+    componentes: list[tuple[int, int]] = [(score_desc, weight_map["desc"])]
+    for sc, key in [
+        (score_numeros, "numeros"),
+        (score_ncm, "ncm"),
+        (score_cest, "cest"),
+        (score_gtin, "gtin"),
     ]:
-        if score is not None:
-            componentes.append((score, peso))
+        if sc is not None:
+            componentes.append((sc, weight_map[key]))
 
     soma = sum(score * peso for score, peso in componentes)
     soma_pesos = sum(peso for _score, peso in componentes)
     score_final = round(soma / soma_pesos) if soma_pesos else 0
 
-    # GTIN igual e descricao minimamente relacionada deve aparecer como candidato forte.
-    if score_gtin == 100 and score_desc >= 50:
-        score_final = max(score_final, 92)
-
-    # CEST + NCM4 boost: when CEST equals and NCM equal/4-digit match and description is reasonable,
-    # favor grouping even if description similarity is moderate.
-    if score_cest == 100 and (score_ncm == 100 or score_ncm == 70) and score_desc >= 50:
-        score_final = max(score_final, 86)
+    # Configurable GTIN fallback: keep strong behavior for identical GTINs
+    if score_gtin == 100 and score_desc >= SIM_CONFIG["min_desc_for_id_boost"]:
+        score_final = max(score_final, SIM_CONFIG["gtin_min_score"])
 
     motivos: list[str] = []
     if score_desc >= 90:
@@ -307,7 +333,6 @@ def _score_composto(a: _RowSimilarityData, b: _RowSimilarityData) -> _ScoreDetal
         score_gtin=score_gtin,
         motivos="; ".join(motivos),
     )
-
 
 def _nivel(score: int) -> str:
     if score >= 100:
