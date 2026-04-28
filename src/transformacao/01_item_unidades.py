@@ -644,7 +644,12 @@ def item_unidades(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         .with_columns(
             [
                 pl.format("id_item_unid_{}", pl.col("seq")).alias("id_item_unid"),
-                pl.col("codigo_fonte").map_elements(lambda x: [x] if x else [], return_dtype=pl.List(pl.String)).alias("lista_codigo_fonte"),
+                # Optimization (Bolt): Replaced map_elements (slow Python lambda) with native Polars expressions
+                # (when/then/otherwise and concat_list) to keep execution in Rust and drastically improve speed.
+                pl.when(pl.col("codigo_fonte").is_not_null() & (pl.col("codigo_fonte") != ""))
+                .then(pl.concat_list([pl.col("codigo_fonte")]))
+                .otherwise(pl.lit(pl.Series([[]], dtype=pl.List(pl.String))))
+                .alias("lista_codigo_fonte"),
             ]
         )
         .drop("seq")
