@@ -46,7 +46,6 @@ try:
     from salvar_para_parquet import salvar_para_parquet
     from encontrar_arquivo_cnpj import encontrar_arquivo
     from text import expr_normalizar_descricao
-    from codigo_fonte import expr_gerar_codigo_fonte
 except ImportError as e:
     rprint(f"[red]Erro ao importar modulos utilitarios:[/red] {e}")
     sys.exit(1)
@@ -635,18 +634,11 @@ def item_unidades(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
                 pl.col("vendas").fill_null(0).sum().alias("vendas"),
                 pl.col("qtd_vendas").fill_null(0).sum().alias("qtd_vendas"),
                 pl.col("fonte").drop_nulls().unique().sort().alias("fontes"),
-                expr_gerar_codigo_fonte(pl.lit(cnpj), pl.col("codigo"), pl.col("descricao"))
-                .alias("codigo_fonte"),
             ]
         )
         .sort(["descricao", "codigo", "unid"], nulls_last=True)
         .with_row_count("seq", offset=1)
-        .with_columns(
-            [
-                pl.format("id_item_unid_{}", pl.col("seq")).alias("id_item_unid"),
-                pl.col("codigo_fonte").map_elements(lambda x: [x] if x else [], return_dtype=pl.List(pl.String)).alias("lista_codigo_fonte"),
-            ]
-        )
+        .with_columns(pl.format("id_item_unid_{}", pl.col("seq")).alias("id_item_unid"))
         .drop("seq")
     )
     df_grouped = lf_grouped.collect()
@@ -668,7 +660,6 @@ def item_unidades(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
             "vendas",
             "qtd_vendas",
             "fontes",
-            "lista_codigo_fonte",
         ]
     )
     pasta_saida = pasta_cnpj / "analises" / "produtos"

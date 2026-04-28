@@ -102,6 +102,7 @@ SELECT
     
     -- Dados do Produto (0200)
     h010.codigo_produto_original AS codigo_produto,
+    arq.cnpj || '|' || h010.codigo_produto_original AS codigo_fonte, -- Nova chave de produto fonte
     r0200.descricao_produto,
     r0200.cod_ncm,
     r0200.cest,

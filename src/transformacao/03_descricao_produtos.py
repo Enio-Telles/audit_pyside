@@ -143,7 +143,6 @@ def descricao_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
             _agg_list("co_sefin_item", "lista_co_sefin"),
             _agg_list("gtin", "lista_gtin"),
             _agg_list("unid", "lista_unid"),
-            _agg_list("codigo_fonte", "lista_codigo_fonte"),
             pl.col("fontes").explode().drop_nulls().unique().sort().alias("fontes"),
             _agg_list("id_item_unid", "lista_id_item_unid"),
         ]

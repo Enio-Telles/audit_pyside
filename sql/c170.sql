@@ -120,6 +120,7 @@ WITH
 SELECT
     TO_CHAR(c170.dt_ini, 'YYYY/MM') AS periodo_efd,
     c100.chv_nfe,
+    arq.cnpj || '|' || c170.cod_item AS codigo_fonte, -- Nova chave de produto fonte
     c100.cod_sit,
     c100.cod_sit_desc,
     c100.ind_emit,

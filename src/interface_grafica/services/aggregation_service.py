@@ -611,8 +611,6 @@ class ServicoAgregacao:
             "lista_gtin",
             "lista_descricoes",
             "lista_desc_compl",
-            "lista_codigo_fonte",
-            "lista_codigos",
             "ids_origem_agrupamento",
             "lista_itens_agrupados",
         ]:
@@ -740,8 +738,6 @@ class ServicoAgregacao:
             "lista_gtin",
             "lista_descricoes",
             "lista_desc_compl",
-            "lista_codigo_fonte",
-            "lista_codigos",
             "ids_origem_agrupamento",
             "lista_itens_agrupados",
         }
@@ -1280,8 +1276,6 @@ class ServicoAgregacao:
                     "descricao_normalizada",
                     "descricao",
                     "lista_desc_compl",
-                    "lista_codigo_fonte",
-                    "lista_codigos",
                     "lista_ncm",
                     "lista_cest",
                     "lista_gtin",
@@ -1369,8 +1363,6 @@ class ServicoAgregacao:
             df_prod_sel, "descricao"
         ) or self._coletar_lista_coluna(df_base_filtered, "descricao")
         lista_desc_compl = self._coletar_lista_coluna(df_prod_sel, "lista_desc_compl")
-        lista_codigo_fonte = self._coletar_lista_coluna(df_prod_sel, "lista_codigo_fonte")
-        lista_codigos = self._coletar_lista_coluna(df_prod_sel, "lista_codigos")
         lista_itens_agrupados = (
             self._coletar_lista_coluna(df_prod_sel, "descricao") or lista_descricoes
         )
@@ -1396,8 +1388,6 @@ class ServicoAgregacao:
             "lista_gtin": lista_gtin,
             "lista_descricoes": lista_descricoes,
             "lista_desc_compl": lista_desc_compl,
-            "lista_codigo_fonte": lista_codigo_fonte,
-            "lista_codigos": lista_codigos,
             "ids_origem_agrupamento": ids_origem_agrupamento,
             "lista_itens_agrupados": lista_itens_agrupados,
             "lista_co_sefin": lista_sefin,
@@ -2312,11 +2302,11 @@ class ServicoAgregacao:
             .join(df_padrao, on="id_agrupado", how="left")
             .join(df_base_collections, on="id_agrupado", how="left")
             .with_columns([
-                pl.coalesce([pl.col("descr_padrao_calculado"), pl.col("descr_padrao").replace("", None), pl.col("descr_fallback")]).alias("descr_padrao"),
-                pl.when(pl.col("lista_ncm").list.len() > 0).then(pl.col("lista_ncm")).otherwise(pl.col("lista_ncm_base")).fill_null(pl.lit([]).cast(pl.List(pl.Utf8))).alias("lista_ncm"),
-                pl.when(pl.col("lista_cest").list.len() > 0).then(pl.col("lista_cest")).otherwise(pl.col("lista_cest_base")).fill_null(pl.lit([]).cast(pl.List(pl.Utf8))).alias("lista_cest"),
-                pl.when(pl.col("lista_gtin").list.len() > 0).then(pl.col("lista_gtin")).otherwise(pl.col("lista_gtin_base")).fill_null(pl.lit([]).cast(pl.List(pl.Utf8))).alias("lista_gtin"),
-                pl.when(pl.col("lista_descricoes").list.len() > 0).then(pl.col("lista_descricoes")).otherwise(pl.col("lista_descricoes_base")).fill_null(pl.lit([]).cast(pl.List(pl.Utf8))).alias("lista_descricoes"),
+                pl.coalesce([pl.col("descr_padrao_calculado"), pl.col("descr_padrao"), pl.col("descr_fallback")]).alias("descr_padrao"),
+                pl.coalesce([pl.col("lista_ncm"), pl.col("lista_ncm_base")]).fill_null(pl.lit([]).cast(pl.List(pl.Utf8))).alias("lista_ncm"),
+                pl.coalesce([pl.col("lista_cest"), pl.col("lista_cest_base")]).fill_null(pl.lit([]).cast(pl.List(pl.Utf8))).alias("lista_cest"),
+                pl.coalesce([pl.col("lista_gtin"), pl.col("lista_gtin_base")]).fill_null(pl.lit([]).cast(pl.List(pl.Utf8))).alias("lista_gtin"),
+                pl.coalesce([pl.col("lista_descricoes"), pl.col("lista_descricoes_base")]).fill_null(pl.lit([]).cast(pl.List(pl.Utf8))).alias("lista_descricoes"),
                 pl.col("lista_desc_compl").fill_null(pl.lit([]).cast(pl.List(pl.Utf8))),
                 pl.col("lista_co_sefin").fill_null(pl.lit([]).cast(pl.List(pl.Utf8))),
                 pl.col("co_sefin_agr").fill_null(""),
