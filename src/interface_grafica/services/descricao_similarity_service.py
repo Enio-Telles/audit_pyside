@@ -55,19 +55,6 @@ def _resolver_coluna_descricao(df: pl.DataFrame) -> str | None:
     return _resolver_coluna(df, COLUNAS_DESCRICAO)
 
 
-def _expr_texto_para_normalizacao(coluna: str) -> pl.Expr:
-    expr = pl.col(coluna)
-    dtype = None
-    try:
-        dtype = expr.meta.root_names()
-    except Exception:
-        dtype = None
-    # A decisao real sobre List precisa usar o schema do DataFrame; este helper
-    # recebe apenas o nome e usa cast permissivo. Para listas, o servico cria
-    # uma coluna auxiliar antes de chamar esta funcao.
-    return expr.cast(pl.Utf8, strict=False)
-
-
 def _normalizar_codigo(valor: Any) -> str:
     if valor is None:
         return ""
@@ -120,16 +107,20 @@ def _dice_score(a: str, b: str) -> int:
     return round(200 * len(ga & gb) / (len(ga) + len(gb)))
 
 
+def _partes_codigo(codigo: str) -> set[str]:
+    partes = set(codigo.split("|"))
+    partes.discard("")
+    return partes
+
+
 def _codigo_score(a: str, b: str) -> int | None:
     if not a or not b:
         return None
     if a == b:
         return 100
 
-    sa = set(a.split("|"))
-    sb = set(b.split("|"))
-    sa.discard("")
-    sb.discard("")
+    sa = _partes_codigo(a)
+    sb = _partes_codigo(b)
     if not sa or not sb:
         return None
     if sa & sb:
@@ -137,9 +128,37 @@ def _codigo_score(a: str, b: str) -> int | None:
     return 0
 
 
+def _ncm_score(a: str, b: str) -> int | None:
+    """Pontua NCM completo ou por capitulo/posicao inicial.
+
+    Retorno:
+    - 100: algum NCM completo coincide;
+    - 70: nenhum NCM completo coincide, mas algum par tem os 4 primeiros digitos iguais;
+    - 0: ha NCM dos dois lados, mas sem coincidencia;
+    - None: algum lado nao tem NCM.
+    """
+    if not a or not b:
+        return None
+
+    sa = _partes_codigo(a)
+    sb = _partes_codigo(b)
+    if not sa or not sb:
+        return None
+    if sa & sb:
+        return 100
+
+    prefixos_a = {re.sub(r"\D", "", valor)[:4] for valor in sa}
+    prefixos_b = {re.sub(r"\D", "", valor)[:4] for valor in sb}
+    prefixos_a = {valor for valor in prefixos_a if len(valor) == 4}
+    prefixos_b = {valor for valor in prefixos_b if len(valor) == 4}
+    if prefixos_a and prefixos_b and prefixos_a & prefixos_b:
+        return 70
+    return 0
+
+
 def _score_composto(a: _RowSimilarityData, b: _RowSimilarityData) -> tuple[int, int, int | None, int | None, int | None]:
     score_desc = _dice_score(a.desc_norm, b.desc_norm)
-    score_ncm = _codigo_score(a.ncm_norm, b.ncm_norm)
+    score_ncm = _ncm_score(a.ncm_norm, b.ncm_norm)
     score_cest = _codigo_score(a.cest_norm, b.cest_norm)
     score_gtin = _codigo_score(a.gtin_norm, b.gtin_norm)
 
