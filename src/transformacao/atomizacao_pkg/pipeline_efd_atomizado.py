@@ -93,27 +93,28 @@ def _adicionar_tipagem_periodo_efd(lf: pl.LazyFrame) -> pl.LazyFrame:
     return lf.with_columns(expressoes) if expressoes else lf
 
 
-def _gerar_codigo_fonte(expr_cnpj: pl.Expr, expr_item: pl.Expr) -> pl.Expr:
-    return pl.concat_str(
-        [
-            expr_cnpj.cast(pl.Utf8, strict=False),
-            pl.lit("|"),
-            expr_item.cast(pl.Utf8, strict=False),
-        ]
-    ).alias("codigo_fonte")
+try:
+    from utilitarios.codigo_fonte import expr_gerar_codigo_fonte
+except ImportError:
+    # Fallback caso esteja rodando fora do PYTHONPATH padrão do projeto
+    import sys
+    sys.path.append(str(Path(__file__).resolve().parents[2]))
+    from utilitarios.codigo_fonte import expr_gerar_codigo_fonte
 
 
 def construir_reg0200_tipado(cnpj: str) -> pl.LazyFrame:
     """Tipa a dimensao de produtos 0200 e cria a chave tecnica por CNPJ."""
 
     return _adicionar_tipagem_periodo_efd(carregar_reg0200_bruto(cnpj)).with_columns(
-        pl.col("cod_item").cast(pl.Utf8, strict=False),
-        pl.col("descr_item").cast(pl.Utf8, strict=False),
-        pl.col("tipo_item").cast(pl.Utf8, strict=False),
-        pl.col("cod_ncm").cast(pl.Utf8, strict=False),
-        pl.col("cest").cast(pl.Utf8, strict=False),
-        pl.col("cod_barra").cast(pl.Utf8, strict=False),
-        _gerar_codigo_fonte(pl.col("cnpj"), pl.col("cod_item")),
+        [
+            pl.col("cod_item").cast(pl.Utf8, strict=False),
+            pl.col("descr_item").cast(pl.Utf8, strict=False),
+            pl.col("tipo_item").cast(pl.Utf8, strict=False),
+            pl.col("cod_ncm").cast(pl.Utf8, strict=False),
+            pl.col("cest").cast(pl.Utf8, strict=False),
+            pl.col("cod_barra").cast(pl.Utf8, strict=False),
+            expr_gerar_codigo_fonte(pl.col("cnpj"), pl.col("cod_item"), pl.col("descr_item")),
+        ]
     )
 
 
@@ -191,7 +192,7 @@ def construir_c170_tipado(cnpj: str) -> pl.LazyFrame:
             pl.coalesce(
                 [
                     pl.col("codigo_fonte"),
-                    _gerar_codigo_fonte(pl.col("cnpj"), pl.col("cod_item")),
+                    expr_gerar_codigo_fonte(pl.col("cnpj"), pl.col("cod_item"), pl.col("descr_item")),
                 ]
             ).alias("codigo_fonte")
         )
@@ -274,7 +275,7 @@ def construir_h010_tipado(cnpj: str) -> pl.LazyFrame:
             pl.coalesce(
                 [
                     pl.col("codigo_fonte"),
-                    _gerar_codigo_fonte(pl.col("cnpj"), pl.col("cod_item")),
+                    expr_gerar_codigo_fonte(pl.col("cnpj"), pl.col("cod_item"), pl.col("descr_item")),
                 ]
             ).alias("codigo_fonte")
         )

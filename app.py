@@ -31,6 +31,10 @@ if __name__ == "__main__" and "--smoke" in sys.argv:
 
 from PySide6.QtWidgets import QApplication  # noqa: E402
 from interface_grafica.logging_setup import configure_structlog, install_fallback_hooks  # noqa: E402
+from interface_grafica.patches.similaridade_agregacao import apply_similarity_patch  # noqa: E402
+
+apply_similarity_patch()
+
 from interface_grafica.windows.main_window import MainWindow  # noqa: E402
 
 

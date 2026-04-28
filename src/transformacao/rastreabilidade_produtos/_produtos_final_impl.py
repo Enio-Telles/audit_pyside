@@ -86,8 +86,10 @@ def _agrupar_lista_scalar(col_nome: str, alias: str) -> pl.Expr:
         pl.col(col_nome)
         .cast(pl.Utf8, strict=False)
         .str.strip_chars()
-        .drop_nulls()
-        .filter(pl.col(col_nome).cast(pl.Utf8, strict=False).str.strip_chars() != "")
+        .filter(
+            (pl.col(col_nome).is_not_null())
+            & (pl.col(col_nome).cast(pl.Utf8, strict=False).str.strip_chars() != "")
+        )
         .unique()
         .sort()
         .alias(alias)
@@ -100,8 +102,10 @@ def _agrupar_lista_lista(col_nome: str, alias: str) -> pl.Expr:
         .explode()
         .cast(pl.Utf8, strict=False)
         .str.strip_chars()
-        .drop_nulls()
-        .filter(pl.col(col_nome).explode().cast(pl.Utf8, strict=False).str.strip_chars() != "")
+        .filter(
+            (pl.col(col_nome).explode().is_not_null())
+            & (pl.col(col_nome).explode().cast(pl.Utf8, strict=False).str.strip_chars() != "")
+        )
         .unique()
         .sort()
         .alias(alias)
@@ -109,6 +113,11 @@ def _agrupar_lista_lista(col_nome: str, alias: str) -> pl.Expr:
 
 
 def _construir_tabela_ponte(df_descricoes: pl.DataFrame) -> pl.DataFrame:
+    colunas_interesse = [
+        "id_agrupado",
+        "descricao_normalizada",
+    ]
+
     if "lista_codigo_fonte" not in df_descricoes.columns:
         rprint(
             "[yellow]Aviso: lista_codigo_fonte ausente em descricao_produtos. "
@@ -118,20 +127,18 @@ def _construir_tabela_ponte(df_descricoes: pl.DataFrame) -> pl.DataFrame:
         return df_descricoes.select(
             [
                 pl.col("id_descricao").alias("chave_produto"),
-                "id_agrupado",
                 pl.lit(None, dtype=pl.Utf8).alias("codigo_fonte"),
-                "descricao_normalizada",
             ]
+            + colunas_interesse
         ).unique()
 
     return (
         df_descricoes.select(
             [
                 pl.col("id_descricao").alias("chave_produto"),
-                "id_agrupado",
-                "descricao_normalizada",
                 pl.col("lista_codigo_fonte").alias("codigo_fonte"),
             ]
+            + colunas_interesse
         )
         .explode("codigo_fonte")
         .with_columns(pl.col("codigo_fonte").cast(pl.Utf8, strict=False))
@@ -497,6 +504,7 @@ def produtos_agrupados(cnpj: str, pasta_cnpj: Path | None = None, versao: int = 
                 _agrupar_lista_lista("lista_gtin", "lista_gtin"),
                 _agrupar_lista_lista("lista_co_sefin", "lista_co_sefin"),
                 _agrupar_lista_lista("lista_unid", "lista_unidades"),
+                _agrupar_lista_lista("lista_codigo_fonte", "lista_codigo_fonte"),
                 _agrupar_lista_lista("fontes", "fontes"),
                 pl.col("id_agrupado_base")
                 .drop_nulls()
@@ -544,6 +552,7 @@ def produtos_agrupados(cnpj: str, pasta_cnpj: Path | None = None, versao: int = 
                 pl.col("lista_co_sefin").cast(pl.List(pl.String)),
                 pl.col("co_sefin_padrao").cast(pl.String),
                 pl.col("lista_unidades").cast(pl.List(pl.String)),
+                pl.col("lista_codigo_fonte").cast(pl.List(pl.String)),
                 pl.col("co_sefin_divergentes").cast(pl.Boolean),
                 pl.col("fontes").cast(pl.List(pl.String)),
                 pl.col("ids_origem_agrupamento").cast(pl.List(pl.String)),

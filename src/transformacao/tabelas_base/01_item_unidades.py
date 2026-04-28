@@ -42,6 +42,7 @@ REFS_DIR = DADOS_DIR / "referencias"
 try:
     from utilitarios.salvar_para_parquet import salvar_para_parquet
     from utilitarios.encontrar_arquivo_cnpj import encontrar_arquivo
+    from utilitarios.codigo_fonte import expr_gerar_codigo_fonte
 except ImportError as e:
     rprint(f"[red]Erro ao importar modulos utilitarios:[/red] {e}")
     sys.exit(1)
@@ -218,16 +219,17 @@ def _resolver_arquivo_base(pasta_cnpj: Path, prefixo: str, cnpj: str) -> Path | 
     )
 
 
-def _normalizar_texto(col: str) -> pl.Expr:
+def _normalizar_texto(col: str | pl.Expr) -> pl.Expr:
     """Returns a Polars expression that casts a column to String and strips whitespace.
 
     Args:
-        col: Column name to normalize.
+        col: Column name or expression to normalize.
 
     Returns:
         Polars expression producing a trimmed string.
     """
-    return pl.col(col).cast(pl.String, strict=False).str.strip_chars()
+    expr = pl.col(col) if isinstance(col, str) else col
+    return expr.cast(pl.String, strict=False).str.strip_chars()
 
 
 def _agregar_lista_str(col: str, alias: str) -> pl.Expr:
@@ -253,16 +255,17 @@ def _agregar_lista_str(col: str, alias: str) -> pl.Expr:
     )
 
 
-def _num_expr(col: str) -> pl.Expr:
+def _num_expr(col: str | pl.Expr) -> pl.Expr:
     """Returns a Polars expression that casts a column to Float64 with nulls as 0.0.
 
     Args:
-        col: Column name to cast.
+        col: Column name or expression to cast.
 
     Returns:
         Polars expression producing a Float64 column with no nulls.
     """
-    return pl.col(col).cast(pl.Float64, strict=False).fill_null(0.0)
+    expr = pl.col(col) if isinstance(col, str) else col
+    return expr.cast(pl.Float64, strict=False).fill_null(0.0)
 
 
 def _garantir_colunas(df: pl.DataFrame, colunas: list[str]) -> pl.DataFrame:
@@ -281,14 +284,15 @@ def _garantir_colunas(df: pl.DataFrame, colunas: list[str]) -> pl.DataFrame:
     return df
 
 
-def _ler_c170(path: Path | None, cfop_mercantil: pl.DataFrame | None) -> pl.DataFrame | None:
-    """Reads the C170 raw Parquet and returns item metadata normalized for aggregation.
+def _ler_c170(path: Path | None, cnpj: str, cfop_mercantil: pl.DataFrame | None = None) -> pl.DataFrame | None:
+    """Reads the C170 Parquet file and calculates purchase/sale totals.
 
     Filters to purchase rows (``ind_oper == '0'``) and optionally joins
     against mercantile CFOP codes to classify ``compras`` values.
 
     Args:
         path: Path to the C170 Parquet file, or ``None``.
+        cnpj: 14-digit CNPJ of the emitter used to identify source.
         cfop_mercantil: Reference DataFrame of mercantile CFOPs, or ``None``.
 
     Returns:
@@ -374,9 +378,11 @@ def _ler_c170(path: Path | None, cfop_mercantil: pl.DataFrame | None) -> pl.Data
                 else pl.lit(None, pl.String).alias("unid")
             ),
             (
-                _normalizar_texto("codigo_fonte").alias("codigo_fonte")
-                if "codigo_fonte" in df.columns
-                else pl.lit(None, pl.String).alias("codigo_fonte")
+                expr_gerar_codigo_fonte(
+                    pl.lit(cnpj),
+                    pl.col("cod_item") if "cod_item" in df.columns else pl.col("prod_cprod"),
+                    pl.col("descr_item") if "descr_item" in df.columns else pl.col("prod_xprod")
+                ).alias("codigo_fonte")
             ),
             pl.when(
                 (pl.col("ind_oper").cast(pl.String) == "0")
@@ -424,8 +430,8 @@ def _ler_c170(path: Path | None, cfop_mercantil: pl.DataFrame | None) -> pl.Data
     )
 
 
-def _ler_bloco_h(path: Path | None) -> pl.DataFrame | None:
-    """Reads the Bloco H raw Parquet and returns inventory item metadata.
+def _ler_bloco_h(path: Path | None, cnpj: str) -> pl.DataFrame | None:
+    """Reads the Bloco H Parquet file and prepares the products for grouping.
 
     Adapts to varying column naming conventions across EFD extractions using
     schema introspection.
@@ -506,6 +512,13 @@ def _ler_bloco_h(path: Path | None) -> pl.DataFrame | None:
                 _normalizar_texto(col_cest).alias("cest")
                 if col_cest
                 else pl.lit(None, pl.String).alias("cest")
+            ),
+            (
+                expr_gerar_codigo_fonte(
+                    pl.lit(cnpj),
+                    pl.col(col_codigo),
+                    pl.col(col_desc)
+                ).alias("codigo_fonte")
             ),
             (
                 _normalizar_texto(col_gtin).alias("gtin")
@@ -656,9 +669,11 @@ def _ler_nfe_ou_nfce(
                 else pl.lit(None, pl.String).alias("descricao")
             ),
             (
-                _normalizar_texto("codigo_fonte").alias("codigo_fonte")
-                if "codigo_fonte" in df.columns
-                else pl.lit(None, pl.String).alias("codigo_fonte")
+                expr_gerar_codigo_fonte(
+                    pl.lit(cnpj),
+                    pl.col("prod_cprod"),
+                    pl.col("prod_xprod")
+                ).alias("codigo_fonte")
             ),
             pl.lit(None, pl.String).alias("descr_compl"),
             pl.lit(None, pl.String).alias("tipo_item"),
@@ -771,8 +786,8 @@ def item_unidades(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
 
     fragmentos: list[pl.DataFrame] = []
     leitores = [
-        _ler_c170(_resolver_arquivo_base(pasta_cnpj, "c170", cnpj), cfop_mercantil),
-        _ler_bloco_h(_resolver_arquivo_base(pasta_cnpj, "bloco_h", cnpj)),
+        _ler_c170(_resolver_arquivo_base(pasta_cnpj, "c170", cnpj), cnpj, cfop_mercantil),
+        _ler_bloco_h(_resolver_arquivo_base(pasta_cnpj, "bloco_h", cnpj), cnpj),
         _ler_nfe_ou_nfce(
             _resolver_arquivo_base(pasta_cnpj, "nfe", cnpj), cnpj, "nfe", cfop_mercantil
         ),
