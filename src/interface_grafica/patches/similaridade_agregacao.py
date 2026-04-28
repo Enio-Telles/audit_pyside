@@ -4,7 +4,12 @@ from PySide6.QtWidgets import QCheckBox, QPushButton
 
 
 def apply_similarity_patch() -> None:
-    """Aplica patch incremental para ordenacao por similaridade na aba Agregacao."""
+    """Aplica patch incremental para ordenacao por similaridade na aba Agregacao.
+
+    O patch evita alterar a construcao grande da janela, mas instala controles e
+    metodo de controller de forma idempotente. A acao apenas reordena a tabela e
+    adiciona indicadores; nao executa agrupamento automatico.
+    """
     from interface_grafica.controllers.agregacao_controller import AgregacaoControllerMixin
     from interface_grafica.windows.aba_agregacao import AgregacaoWindowMixin
 
@@ -25,24 +30,25 @@ def apply_similarity_patch() -> None:
             self.chk_similarity_ncm_cest = QCheckBox("Priorizar NCM/CEST")
             self.chk_similarity_ncm_cest.setChecked(True)
             self.chk_similarity_ncm_cest.setToolTip(
-                "Quando marcado, NCM e CEST aproximam os blocos antes da comparacao de descricao."
+                "Quando marcado, NCM e CEST entram na chave de aproximacao dos blocos. "
+                "GTIN continua sendo considerado no score quando existir."
             )
 
-            layout = None
-            try:
-                layout = self.btn_reprocessar_agregacao.parentWidget().layout()
-            except Exception:
-                layout = None
+            # Insere logo apos o botao Reprocessar no mesmo layout horizontal.
+            parent = self.btn_reprocessar_agregacao.parentWidget()
+            layout = parent.layout() if parent is not None else None
+            inserted = False
             if layout is not None:
-                stretch_index = -1
-                for i in range(layout.count()):
-                    item = layout.itemAt(i)
-                    if item is not None and item.spacerItem() is not None:
-                        stretch_index = i
+                for idx in range(layout.count()):
+                    item = layout.itemAt(idx)
+                    if item is not None and item.widget() is self.btn_reprocessar_agregacao:
+                        layout.insertWidget(idx + 1, self.btn_ordenar_similaridade_desc)
+                        layout.insertWidget(idx + 2, self.chk_similarity_ncm_cest)
+                        inserted = True
                         break
-                insert_at = stretch_index if stretch_index >= 0 else layout.count()
-                layout.insertWidget(insert_at, self.btn_ordenar_similaridade_desc)
-                layout.insertWidget(insert_at + 1, self.chk_similarity_ncm_cest)
+            if not inserted and layout is not None:
+                layout.addWidget(self.btn_ordenar_similaridade_desc)
+                layout.addWidget(self.chk_similarity_ncm_cest)
 
         return tab
 
@@ -76,20 +82,8 @@ def apply_similarity_patch() -> None:
         except Exception as exc:
             self.show_error("Erro ao ordenar por similaridade", str(exc))
 
-    original_connect = AgregacaoControllerMixin.open_editable_aggregation_table
-
-    def open_editable_aggregation_table_com_similaridade(self):
-        original_connect(self)
-        if hasattr(self, "btn_ordenar_similaridade_desc"):
-            try:
-                self.btn_ordenar_similaridade_desc.clicked.disconnect()
-            except Exception:
-                pass
-            self.btn_ordenar_similaridade_desc.clicked.connect(
-                self.ordenar_agregacao_por_similaridade
-            )
+    original_connect_signals = AgregacaoWindowMixin._build_tab_agregacao
 
     AgregacaoWindowMixin._build_tab_agregacao = _build_tab_agregacao_com_similaridade
     AgregacaoControllerMixin.ordenar_agregacao_por_similaridade = ordenar_agregacao_por_similaridade
-    AgregacaoControllerMixin.open_editable_aggregation_table = open_editable_aggregation_table_com_similaridade
     AgregacaoWindowMixin._similarity_patch_applied = True
