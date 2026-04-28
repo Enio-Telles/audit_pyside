@@ -82,8 +82,6 @@ def apply_similarity_patch() -> None:
         except Exception as exc:
             self.show_error("Erro ao ordenar por similaridade", str(exc))
 
-    original_connect_signals = AgregacaoWindowMixin._build_tab_agregacao
-
     AgregacaoWindowMixin._build_tab_agregacao = _build_tab_agregacao_com_similaridade
     AgregacaoControllerMixin.ordenar_agregacao_por_similaridade = ordenar_agregacao_por_similaridade
     AgregacaoWindowMixin._similarity_patch_applied = True
