@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from datetime import date, datetime
 from decimal import Decimal
@@ -37,8 +37,8 @@ STOPWORDS = {
 # Regra canonica de descricao fiscal: normalize_desc() e expr_normalizar_descricao()
 # devem preservar exatamente esta pontuacao, alem de letras, numeros e espacos.
 # Nao criar normalizadores paralelos para descricao fiscal.
-PONTUACAO_DESCRICAO_NORMALIZADA = r"%$#@!.,}{\]\[\\;"
-REGEX_DESCRICAO_NORMALIZADA = r"[^A-Z0-9\s%$#@!\.,}{\]\[\\;]"
+PONTUACAO_DESCRICAO_NORMALIZADA = r"-%$#@!.,}{\]\[\\/;"
+REGEX_DESCRICAO_NORMALIZADA = r"[^A-Z0-9\\s\\-\\%$#@!\\.,\\}\\{\\]\\[\\/;]"
 
 
 def remove_accents(text: str | None) -> str | None:
@@ -66,7 +66,8 @@ def normalize_desc(text: str | None) -> str:
     Regras aplicadas:
     - remover acentos;
     - converter para maiusculas;
-    - manter letras, numeros, espacos e pontuacao -%$#@!.,}{][\\/;
+    - manter letras, numeros, espacos e pontuacao -%$#@!.,}{][\/; when spaced;
+    - substituir '-' e '/' por espaco quando estiverem dentro de tokens (adjacentes a alfanumericos);
     - substituir os demais caracteres por espaco;
     - remover espacos no inicio e no fim;
     - reduzir espacos internos consecutivos para um unico espaco;
@@ -76,10 +77,13 @@ def normalize_desc(text: str | None) -> str:
         return ""
     t = remove_accents(str(text)) or ""
     t = t.upper()
-    t = re.sub(REGEX_DESCRICAO_NORMALIZADA, " ", t)
-    t = re.sub(r"\s+", " ", t).strip()
+    # Replace '-' or '/' between word characters with a space
+    t = re.sub(r'(?<=\w)[-/]|[-/](?=\w)', ' ', t)
+    # Allowed characters exactly matching canonical punctuation and alphanumerics
+    allowed = set("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 -%$#@!.,}{][/\;")
+    t = ''.join(ch if ch in allowed else ' ' for ch in t)
+    t = re.sub(r"\s+", ' ', t).strip()
     return t
-
 
 def expr_normalizar_descricao(coluna: str | pl.Expr) -> pl.Expr:
     """Expressao Polars equivalente a normalize_desc()."""
@@ -91,24 +95,9 @@ def expr_normalizar_descricao(coluna: str | pl.Expr) -> pl.Expr:
         pl.when(col.is_null())
         .then(pl.lit(""))
         .otherwise(
-            col.cast(pl.Utf8, strict=False)
-            .str.to_uppercase()
-            # Remocao de acentos (manual para performance em Polars 1.x)
-            .str.replace_all(r"[ÁÀÃÂÄ]", "A")
-            .str.replace_all(r"[ÉÈÊË]", "E")
-            .str.replace_all(r"[ÍÌÎÏ]", "I")
-            .str.replace_all(r"[ÓÒÕÔÖ]", "O")
-            .str.replace_all(r"[ÚÙÛÜ]", "U")
-            .str.replace_all(r"Ç", "C")
-            .str.replace_all(r"Ñ", "N")
-            # Substituir qualquer caractere que NAO seja letra, numero, espaco
-            # ou a pontuacao canonica de descricao por espaco.
-            .str.replace_all(REGEX_DESCRICAO_NORMALIZADA, " ")
-            .str.replace_all(r"\s+", " ")
-            .str.strip_chars()
+            col.cast(pl.Utf8, strict=False).map_elements(lambda s: normalize_desc(re.sub(r'(?<=\w)[-/]|[-/](?=\w)', ' ', s)), return_dtype=pl.Utf8)
         )
     )
-
 
 def natural_sort_key(value: str | None) -> list[Any]:
     """Gera chave de ordenacao natural que separa trechos numericos."""
@@ -220,3 +209,4 @@ def display_cell(value: Any, column_name: str | None = None) -> str:
         return _formatar_numero_br(value, 2)
 
     return str(value)
+
