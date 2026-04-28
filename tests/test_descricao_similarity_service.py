@@ -53,6 +53,25 @@ def test_descricoes_parecidas_com_mesmo_ncm_cest_gtin_recebem_score_alto():
     assert cervejas_iguais["sim_score_gtin"].drop_nulls().max() == 100
 
 
+def test_ncm_com_mesmos_4_primeiros_digitos_recebe_score_parcial():
+    df = pl.DataFrame(
+        {
+            "id_agrupado": ["1", "2"],
+            "descr_padrao": [
+                "BISCOITO RECHEADO CHOCOLATE 100G",
+                "BISCOITO RECHEADO MORANGO 100G",
+            ],
+            "ncm_padrao": ["19053100", "19059090"],
+            "cest_padrao": ["", ""],
+            "gtin_padrao": ["", ""],
+        }
+    )
+
+    out = ordenar_blocos_similaridade_descricao(df)
+
+    assert out["sim_score_ncm"].drop_nulls().to_list() == [70, 70]
+
+
 def test_pode_ignorar_priorizacao_ncm_cest():
     out = ordenar_blocos_similaridade_descricao(_df_base(), usar_ncm_cest=False)
 
