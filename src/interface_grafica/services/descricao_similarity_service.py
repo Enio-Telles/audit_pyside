@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass
@@ -273,6 +273,11 @@ def _score_composto(a: _RowSimilarityData, b: _RowSimilarityData) -> _ScoreDetal
     # GTIN igual e descricao minimamente relacionada deve aparecer como candidato forte.
     if score_gtin == 100 and score_desc >= 50:
         score_final = max(score_final, 92)
+
+    # CEST + NCM4 boost: when CEST equals and NCM equal/4-digit match and description is reasonable,
+    # favor grouping even if description similarity is moderate.
+    if score_cest == 100 and (score_ncm == 100 or score_ncm == 70) and score_desc >= 50:
+        score_final = max(score_final, 86)
 
     motivos: list[str] = []
     if score_desc >= 90:
@@ -612,3 +617,4 @@ def ordenar_blocos_similaridade_descricao(
     )
 
     return work.sort("__sim_sort_idx").drop(["__sim_row_pos", "__sim_sort_idx"], strict=False)
+
