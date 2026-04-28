@@ -284,9 +284,7 @@ def _garantir_colunas(df: pl.DataFrame, colunas: list[str]) -> pl.DataFrame:
     return df
 
 
-def _ler_c170(
-    path: Path | None, cnpj: str, cfop_mercantil: pl.DataFrame | None = None
-) -> pl.DataFrame | None:
+def _ler_c170(path: Path | None, cnpj: str, cfop_mercantil: pl.DataFrame | None = None) -> pl.DataFrame | None:
     """Reads the C170 Parquet file and calculates purchase/sale totals.
 
     Filters to purchase rows (``ind_oper == '0'``) and optionally joins
@@ -383,7 +381,7 @@ def _ler_c170(
                 expr_gerar_codigo_fonte(
                     pl.lit(cnpj),
                     pl.col("cod_item") if "cod_item" in df.columns else pl.col("prod_cprod"),
-                    pl.col("descr_item") if "descr_item" in df.columns else pl.col("prod_xprod"),
+                    pl.col("descr_item") if "descr_item" in df.columns else pl.col("prod_xprod")
                 ).alias("codigo_fonte")
             ),
             pl.when(
@@ -516,9 +514,11 @@ def _ler_bloco_h(path: Path | None, cnpj: str) -> pl.DataFrame | None:
                 else pl.lit(None, pl.String).alias("cest")
             ),
             (
-                expr_gerar_codigo_fonte(pl.lit(cnpj), pl.col(col_codigo), pl.col(col_desc)).alias(
-                    "codigo_fonte"
-                )
+                expr_gerar_codigo_fonte(
+                    pl.lit(cnpj),
+                    pl.col(col_codigo),
+                    pl.col(col_desc)
+                ).alias("codigo_fonte")
             ),
             (
                 _normalizar_texto(col_gtin).alias("gtin")
@@ -670,7 +670,9 @@ def _ler_nfe_ou_nfce(
             ),
             (
                 expr_gerar_codigo_fonte(
-                    pl.lit(cnpj), pl.col("prod_cprod"), pl.col("prod_xprod")
+                    pl.lit(cnpj),
+                    pl.col("prod_cprod"),
+                    pl.col("prod_xprod")
                 ).alias("codigo_fonte")
             ),
             pl.lit(None, pl.String).alias("descr_compl"),
