@@ -6,17 +6,23 @@ from PySide6.QtWidgets import QCheckBox, QPushButton
 def apply_similarity_patch() -> None:
     """Aplica patch incremental para ordenacao por similaridade na aba Agregacao.
 
-    O patch evita alterar a construcao grande da janela, mas instala controles e
-    metodo de controller de forma idempotente. A acao apenas reordena a tabela e
-    adiciona indicadores; nao executa agrupamento automatico.
+    O patch evita alterar a construcao grande da janela, mas instala controles,
+    conexao de sinal e metodo de controller de forma idempotente. A acao apenas
+    reordena a tabela e adiciona indicadores; nao executa agrupamento automatico.
     """
     from interface_grafica.controllers.agregacao_controller import AgregacaoControllerMixin
     from interface_grafica.windows.aba_agregacao import AgregacaoWindowMixin
+    from interface_grafica.windows.main_window_signal_wiring_core import (
+        MainWindowSignalWiringCoreMixin,
+    )
 
     if getattr(AgregacaoWindowMixin, "_similarity_patch_applied", False):
         return
 
     original_build_tab_agregacao = AgregacaoWindowMixin._build_tab_agregacao
+    original_connect_consulta_agregacao = (
+        MainWindowSignalWiringCoreMixin._connect_consulta_agregacao_signals
+    )
 
     def _build_tab_agregacao_com_similaridade(self):
         tab = original_build_tab_agregacao(self)
@@ -34,7 +40,6 @@ def apply_similarity_patch() -> None:
                 "GTIN continua sendo considerado no score quando existir."
             )
 
-            # Insere logo apos o botao Reprocessar no mesmo layout horizontal.
             parent = self.btn_reprocessar_agregacao.parentWidget()
             layout = parent.layout() if parent is not None else None
             inserted = False
@@ -82,6 +87,22 @@ def apply_similarity_patch() -> None:
         except Exception as exc:
             self.show_error("Erro ao ordenar por similaridade", str(exc))
 
+    def _connect_consulta_agregacao_signals_com_similaridade(self) -> None:
+        original_connect_consulta_agregacao(self)
+        if hasattr(self, "btn_ordenar_similaridade_desc"):
+            try:
+                self.btn_ordenar_similaridade_desc.clicked.disconnect(
+                    self.ordenar_agregacao_por_similaridade
+                )
+            except Exception:
+                pass
+            self.btn_ordenar_similaridade_desc.clicked.connect(
+                self.ordenar_agregacao_por_similaridade
+            )
+
     AgregacaoWindowMixin._build_tab_agregacao = _build_tab_agregacao_com_similaridade
     AgregacaoControllerMixin.ordenar_agregacao_por_similaridade = ordenar_agregacao_por_similaridade
+    MainWindowSignalWiringCoreMixin._connect_consulta_agregacao_signals = (
+        _connect_consulta_agregacao_signals_com_similaridade
+    )
     AgregacaoWindowMixin._similarity_patch_applied = True
