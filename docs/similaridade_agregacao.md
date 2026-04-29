@@ -528,3 +528,93 @@ tratar unidades e medidas com regras específicas;
 limitar tamanho máximo de bloco visual;
 gerar relatório de candidatos de agrupamento sem aplicar alterações.
 ```
+
+---
+
+## 19. Metodologia alternativa: particionamento por chaves fiscais
+
+Em paralelo ao metodo composto, o sistema oferece uma metodologia
+nova baseada em particionamento por identificadores fiscais.
+
+### Hierarquia de camadas
+
+| Camada | Chave de particao | Threshold textual |
+|--------|---------------------|---------------------|
+| 0 | GTIN igual | nenhum (bloco automatico) |
+| 1 | NCM + CEST + UNIDADE | Jaccard >= 0.50 |
+| 2 | NCM + UNIDADE | Jaccard >= 0.65 |
+| 3 | NCM4 + UNIDADE | Jaccard >= 0.80 |
+| 4 | (sem chave) | singleton |
+| 5 | (opcional) inverted index | Jaccard >= 0.70 |
+
+Cada item participa apenas da camada mais forte em que encontra
+companhia.
+
+### Vantagens
+
+- Configuracao com 4 thresholds em vez de ~25 parametros do composto.
+- Pipeline previsivel: tempo cresce linearmente com tamanho medio
+  de bucket, nao com N^2.
+- Auditavel: cada bloco traz a chave fiscal que o originou em
+  `sim_chave_fiscal`.
+
+### Quando usar
+
+- **Particionamento fiscal**: quando os identificadores estao bem
+  preenchidos (>80% dos itens com NCM e UNIDADE).
+- **Composto (legacy)**: quando a base tem muito ruido em NCM/CEST
+  e o sinal textual e mais confiavel.
+- **Apenas descricao**: analise exploratoria ou casos onde o operador
+  quer deliberadamente ignorar fiscais.
+
+---
+
+## 20. Modo "apenas descricao" via inverted index
+
+Quando os identificadores fiscais sao pouco confiaveis ou o
+usuario quer ignora-los, ha um terceiro metodo disponivel:
+agrupamento via indice invertido sobre tokens da descricao.
+
+### Como funciona
+
+1. Cada descricao e tokenizada (palavras com >=3 chars contendo letra).
+2. Um indice invertido `token -> [idx, ...]` e construido em O(N*T).
+3. Tokens muito comuns (DF > 5% do corpus) sao podados como genericos.
+4. Pares candidatos sao itens que compartilham >= 2 tokens nao-genericos.
+5. Jaccard e calculado apenas nos candidatos. Pares com sim >= 0.5
+   sao unidos via union-find.
+
+### Caracteristicas
+
+- Sem dependencias novas.
+- Custo memoria: proporcional ao vocabulario unico do corpus.
+- Atencao: itens com NCMs incompativeis podem ficar no mesmo bloco
+  sem revisao humana.
+
+---
+
+## 21. Colunas geradas pela metodologia de particionamento
+
+Alem das colunas do metodo composto, o particionamento adiciona:
+
+```text
+sim_camada       (int)    Camada que originou o agrupamento (0-5)
+sim_motivo       (str)    GTIN_IGUAL | NCM+CEST+UNID | NCM+UNID
+                          | NCM4+UNID | DESC_TOKENS | ISOLADO
+sim_chave_fiscal (str)    Chave concreta usada (ex: 'NCM=22030000|UN=UN')
+```
+
+---
+
+## 22. Selecao de metodo na UI
+
+Na aba Agregacao, o botao **Ordenar por similaridade** agora possui
+um seletor com 3 opcoes:
+
+- **Composto (legacy)**: o metodo das secoes 1-18 deste documento.
+- **Particionamento fiscal**: as secoes 19-21.
+- **Apenas descricao**: secao 20 isolada.
+
+Quando "Particionamento fiscal" selecionado, um checkbox adicional
+permite ativar a camada 5 (descricao para itens sem NCM). Por
+seguranca fiscal, esse checkbox e desligado por default.
