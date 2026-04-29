@@ -8,3 +8,6 @@
 ## 2026-04-23 - Native Polars Expression for Jaccard Similarity
 **Learning:** Using `map_elements` to apply a custom Python function for string similarity calculation (e.g. splitting words and finding set intersections) is a major performance bottleneck in Polars. It forces row-by-row execution and defeats multi-threading.
 **Action:** Always replace string tokenization and similarity logic with native Polars expressions using `str.split(" ")`, `list.eval(pl.element().filter(pl.element() != ""))` to drop empty strings, and `list.set_intersection()` to natively compute Jaccard similarity. This approach unlocks multithreaded Rust execution and drastically cuts processing time.
+## 2026-04-28 - Polars map_elements and null handling
+**Learning:** By default, Polars `map_elements` uses `skip_nulls=True`, silently returning `null` for `null` inputs without executing the python lambda function.
+**Action:** When refactoring `map_elements` into native Polars expressions (e.g. `pl.when().then().otherwise()`), ensure you explicitly map `.is_null()` back to `null` to accurately recreate the default `map_elements` behavior, even if the legacy python lambda would have handled `None` differently (e.g., returning an empty list `[]`).

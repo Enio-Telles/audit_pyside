@@ -645,8 +645,15 @@ def item_unidades(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         .with_columns(
             [
                 pl.format("id_item_unid_{}", pl.col("seq")).alias("id_item_unid"),
-                pl.col("codigo_fonte")
-                .map_elements(lambda x: [x] if x else [], return_dtype=pl.List(pl.String))
+                # pl.col("codigo_fonte").map_elements(lambda x: [x] if x else [], return_dtype=pl.List(pl.String))
+                # by default Polars map_elements with skip_nulls=True returns null for null values.
+                # using skip_nulls=False would map it to `[]`.
+                # So we must map None/null to null, "" to [], and non-empty to [val]
+                pl.when(pl.col("codigo_fonte").is_null())
+                .then(pl.lit(None, dtype=pl.List(pl.String)))
+                .when(pl.col("codigo_fonte") == "")
+                .then(pl.lit([], dtype=pl.List(pl.String)))
+                .otherwise(pl.concat_list([pl.col("codigo_fonte")]))
                 .alias("lista_codigo_fonte"),
             ]
         )
