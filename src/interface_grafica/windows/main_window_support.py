@@ -23,6 +23,7 @@ class MainWindowSupportMixin:
         if callback is None:
             return
         callback()
+
     def _schedule_debounced(
         self, key: str, callback: Callable[[], None], delay_ms: int = 280
     ) -> None:
@@ -34,6 +35,7 @@ class MainWindowSupportMixin:
             self._debounce_timers[key] = timer
         self._debounce_callbacks[key] = callback
         timer.start(delay_ms)
+
     def _registrar_limpeza_worker(self, attr_name: str, worker: QThread) -> None:
         def _cleanup() -> None:
             if getattr(self, attr_name, None) is worker:
@@ -44,22 +46,31 @@ class MainWindowSupportMixin:
                 self._tentar_fechar_apos_workers()
 
         worker.finished.connect(_cleanup)
+
     def _workers_ativos(self) -> list[QThread]:
         ativos: list[QThread] = []
-        for worker in (self.pipeline_worker, self.query_worker, self.service_worker):
+        for worker in (
+            self.pipeline_worker,
+            self.query_worker,
+            self.service_worker,
+            getattr(self, "table_page_worker", None),
+        ):
             if worker is not None and worker.isRunning():
                 ativos.append(worker)
         return ativos
+
     def _atualizar_estado_botao_nfe_entrada(self) -> None:
         if not hasattr(self, "btn_extract_nfe_entrada"):
             return
         habilitado = bool(self.state.current_cnpj) and not self._workers_ativos()
         self.btn_extract_nfe_entrada.setEnabled(habilitado)
+
     def _tentar_fechar_apos_workers(self) -> None:
         if self._workers_ativos():
             return
         self._closing_after_workers = False
         self.close()
+
     def closeEvent(self, event) -> None:
         ativos = self._workers_ativos()
         if not ativos:
@@ -76,6 +87,7 @@ class MainWindowSupportMixin:
                 worker.finished.connect(self._tentar_fechar_apos_workers)
             QTimer.singleShot(100, self._tentar_fechar_apos_workers)
         event.ignore()
+
     def _resize_table_once(self, table: QTableView, key: str) -> None:
         if key in self._auto_resized_tables:
             return
@@ -83,14 +95,21 @@ class MainWindowSupportMixin:
         previous_precision = header.resizeContentsPrecision()
         previous_blocked = header.blockSignals(True)
         try:
+            row_count = table.model().rowCount() if table.model() is not None else 0
+            col_count = table.model().columnCount() if table.model() is not None else 0
+            if row_count > 200 or col_count > 30:
+                self._auto_resized_tables.add(key)
+                return
             header.setResizeContentsPrecision(self._TABLE_RESIZE_CONTENTS_PRECISION)
             table.resizeColumnsToContents()
         finally:
             header.setResizeContentsPrecision(previous_precision)
             header.blockSignals(previous_blocked)
         self._auto_resized_tables.add(key)
+
     def _reset_table_resize_flag(self, key: str) -> None:
         self._auto_resized_tables.discard(key)
+
     def _estilo_botao_destacar(self) -> str:
         return (
             "QPushButton { background: #0e639c; color: #ffffff; border: 1px solid #1177bb; "
@@ -98,10 +117,12 @@ class MainWindowSupportMixin:
             "QPushButton:hover { background: #1177bb; }"
             "QPushButton:pressed { background: #0b4f7c; }"
         )
+
     def _criar_botao_destacar(self, texto: str = "Destacar") -> QPushButton:
         botao = QPushButton(texto)
         botao.setStyleSheet(self._estilo_botao_destacar())
         return botao
+
     def _abrir_fio_de_ouro(self, id_agrupado: str) -> None:
         if not self.state.current_cnpj:
             return
@@ -149,11 +170,13 @@ class MainWindowSupportMixin:
             dlg.exec()
         except Exception as e:
             self.show_error("Fio de Ouro", f"Erro ao gerar trilha de auditoria: {e}")
+
     def _copiar_valor_celula(self, table: QTableView, index) -> None:
         if not index or not index.isValid():
             return
         valor = index.data(Qt.DisplayRole)
         QGuiApplication.clipboard().setText("" if valor is None else str(valor))
+
     def _abrir_menu_contexto_celula(
         self, contexto: str, table: QTableView, pos
     ) -> None:
@@ -182,13 +205,17 @@ class MainWindowSupportMixin:
                 acao.triggered.connect(lambda: self._abrir_fio_de_ouro(id_agrupado))
 
         menu.exec(table.viewport().mapToGlobal(pos))
+
     def show_error(self, title: str, message: str) -> None:
         QMessageBox.critical(self, title, message)
+
     def show_info(self, title: str, message: str) -> None:
         QMessageBox.information(self, title, message)
+
     def _setup_copy_shortcut(self) -> None:
         self.shortcut_copy = QShortcut(QKeySequence.StandardKey.Copy, self)
         self.shortcut_copy.activated.connect(self._copy_selection_from_active_table)
+
     def _copy_selection_from_active_table(self) -> None:
         tables = [
             self.table_view,
@@ -232,6 +259,7 @@ class MainWindowSupportMixin:
             lines.append("\t".join(vals))
 
         QGuiApplication.clipboard().setText("\n".join(lines))
+
     def _detached_title(self, contexto: str) -> str:
         cnpj = self.state.current_cnpj or "sem CNPJ"
         mapa = {
@@ -248,6 +276,7 @@ class MainWindowSupportMixin:
             "produtos_selecionados": f"Produtos Selecionados - {cnpj}",
         }
         return mapa.get(contexto, f"Tabela Destacada - {cnpj}")
+
     def _detached_assets(
         self, contexto: str
     ) -> tuple[QTableView | None, PolarsTableModel | None]:
@@ -268,12 +297,15 @@ class MainWindowSupportMixin:
             ),
         }
         return mapa.get(contexto, (None, None))
+
     def _detached_scope(self, contexto: str) -> str | None:
         if contexto == "consulta":
             return self._consulta_scope()
         return None
+
     def _on_detached_window_closed(self, contexto: str) -> None:
         self._detached_windows.pop(contexto, None)
+
     def _destacar_tabela(self, contexto: str) -> None:
         table, source_model = self._detached_assets(contexto)
         if table is None or source_model is None:
@@ -381,8 +413,10 @@ class MainWindowSupportMixin:
         )
         janela.show()
         self._detached_windows[contexto] = janela
+
     def _destacar_tabela_estoque(self, contexto: str) -> None:
         self._destacar_tabela(contexto)
+
     def _toggle_left_panel(self, checked: bool) -> None:
         if checked:
             self.left_panel_widget.hide()
@@ -390,6 +424,7 @@ class MainWindowSupportMixin:
         else:
             self.left_panel_widget.show()
             self.btn_toggle_panel.setText("<< Ocultar Painel Lateral")
+
     def _atualizar_titulo_aba_mov_estoque(
         self, visiveis: int | None = None, total: int | None = None
     ) -> None:
@@ -402,6 +437,7 @@ class MainWindowSupportMixin:
             self.estoque_tabs.setTabText(idx, "Tabela mov_estoque")
             return
         self.estoque_tabs.setTabText(idx, f"Tabela mov_estoque ({visiveis})")
+
     def _atualizar_titulo_aba_produtos_selecionados(
         self, visiveis: int | None = None, total: int | None = None
     ) -> None:
@@ -419,6 +455,7 @@ class MainWindowSupportMixin:
             self.estoque_tabs.setTabText(idx, f"Produtos selecionados ({visiveis})")
             return
         self.estoque_tabs.setTabText(idx, f"Produtos selecionados ({visiveis}/{total})")
+
     def _atualizar_titulo_aba_id_agrupados(
         self, visiveis: int | None = None, total: int | None = None
     ) -> None:
@@ -434,6 +471,7 @@ class MainWindowSupportMixin:
             self.estoque_tabs.setTabText(idx, f"id_agrupados ({visiveis})")
             return
         self.estoque_tabs.setTabText(idx, f"id_agrupados ({visiveis}/{total})")
+
     def _atualizar_titulo_aba_mensal(
         self, visiveis: int | None = None, total: int | None = None
     ) -> None:
@@ -446,6 +484,7 @@ class MainWindowSupportMixin:
             self.estoque_tabs.setTabText(idx, "Tabela mensal")
             return
         self.estoque_tabs.setTabText(idx, f"Tabela mensal ({visiveis}/{total})")
+
     def _atualizar_titulo_aba_anual(
         self, visiveis: int | None = None, total: int | None = None
     ) -> None:
@@ -458,6 +497,7 @@ class MainWindowSupportMixin:
             self.estoque_tabs.setTabText(idx, "Tabela anual")
             return
         self.estoque_tabs.setTabText(idx, f"Tabela anual ({visiveis}/{total})")
+
     def _atualizar_titulo_aba_nfe_entrada(
         self, visiveis: int | None = None, total: int | None = None
     ) -> None:
@@ -473,6 +513,7 @@ class MainWindowSupportMixin:
             self.tabs.setTabText(idx, f"NFe Entrada ({visiveis})")
             return
         self.tabs.setTabText(idx, f"NFe Entrada ({visiveis}/{total})")
+
     def _atualizar_titulo_aba_periodos(
         self, visiveis: int | None = None, total: int | None = None
     ) -> None:
