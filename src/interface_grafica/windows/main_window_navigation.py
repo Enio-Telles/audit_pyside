@@ -19,6 +19,7 @@ class MainWindowNavigationMixin:
             )
             return None
         return self.state.current_cnpj
+
     def _executar_em_worker(
         self,
         func: Callable,
@@ -53,6 +54,7 @@ class MainWindowNavigationMixin:
         self._registrar_limpeza_worker("service_worker", worker)
         worker.start()
         return True
+
     def on_cnpj_selected(self) -> None:
         item = self.cnpj_list.currentItem()
         if not item:
@@ -61,6 +63,7 @@ class MainWindowNavigationMixin:
         self.state.current_cnpj = cnpj
         self._produtos_sel_preselecionado_cnpj = None
         self._atualizar_estado_botao_nfe_entrada()
+        self._reset_table_resize_flag("consulta")
         self._reset_table_resize_flag("conversao")
         self._reset_table_resize_flag("mov_estoque")
         self._reset_table_resize_flag("aba_mensal")
@@ -73,7 +76,8 @@ class MainWindowNavigationMixin:
         self._refresh_profile_combos()
         self.refresh_file_tree(cnpj)
 
-        # Lazy Loading: Carregar apenas a aba que o usuário está vendo no momento
+        # Lazy Loading: carregar apenas a aba visivel. A aba Consulta nao abre
+        # automaticamente o primeiro arquivo para evitar I/O pesado inesperado.
         self._carregar_aba_atual()
         self.recarregar_historico_agregacao(cnpj)
 
@@ -87,6 +91,7 @@ class MainWindowNavigationMixin:
             qdate = QDate.fromString(data_efd, "dd/MM/yyyy")
             if qdate.isValid():
                 self.date_input.setDate(qdate)
+
     def _carregar_aba_atual(self) -> None:
         """Carrega os dados da aba que está visível no momento para o CNPJ atual."""
         if not self.state.current_cnpj:
@@ -114,6 +119,7 @@ class MainWindowNavigationMixin:
             self.atualizar_aba_periodos()
         elif "id" in texto_aba and "agrupado" in texto_aba:
             self.atualizar_aba_id_agrupados()
+
     def refresh_file_tree(self, cnpj: str) -> None:
         self.file_tree.clear()
 
@@ -156,9 +162,25 @@ class MainWindowNavigationMixin:
             if cat.childCount() == 0:
                 self.file_tree.takeTopLevelItem(self.file_tree.indexOfTopLevelItem(cat))
 
+        self.state.current_file = None
+        self.state.all_columns = []
+        self.state.visible_columns = []
+        self.state.total_rows = 0
+        self.state.current_page = 1
+        self.state.filters = []
+        self.current_page_df_all = pl.DataFrame()
+        self.current_page_df_visible = pl.DataFrame()
+        self.table_model.set_dataframe(pl.DataFrame())
+        self.filter_column.clear()
+        self._refresh_filter_list_widget()
+        self._update_page_label()
+        self._update_context_label()
         if first_leaf is not None:
             self.file_tree.setCurrentItem(first_leaf)
-            self.on_file_activated(first_leaf, 0)
+            self.status.showMessage(
+                "CNPJ selecionado. Escolha um arquivo na arvore para carregar a consulta."
+            )
+
     def on_file_activated(self, item: QTreeWidgetItem, _column: int) -> None:
         raw_path = item.data(0, Qt.UserRole)
         if not raw_path:
@@ -171,6 +193,7 @@ class MainWindowNavigationMixin:
         self.current_page_df_visible = pl.DataFrame()
         self.load_current_file(reset_columns=True)
         self.tabs.setCurrentIndex(0)
+
     def load_current_file(self, reset_columns: bool = False) -> None:
         if self.state.current_file is None:
             return
@@ -194,35 +217,90 @@ class MainWindowNavigationMixin:
         self.filter_column.clear()
         self.filter_column.addItems(all_columns)
         self.reload_table()
+
     def reload_table(self, update_main_view: bool = True) -> None:
         if self.state.current_file is None:
             return
-        try:
-            page_result = self.parquet_service.get_page(
-                parquet_path=self.state.current_file,
-                conditions=self.state.filters or [],
-                visible_columns=self.state.visible_columns or [],
-                page=self.state.current_page,
-                page_size=self.state.page_size,
+
+        if not update_main_view:
+            try:
+                page_result = self.parquet_service.get_page(
+                    parquet_path=self.state.current_file,
+                    conditions=self.state.filters or [],
+                    visible_columns=self.state.visible_columns or [],
+                    page=self.state.current_page,
+                    page_size=self.state.page_size,
+                )
+                self.state.total_rows = page_result.total_rows
+                self.current_page_df_all = page_result.df_all_columns
+                self.current_page_df_visible = page_result.df_visible
+            except Exception as exc:
+                self.show_error("Erro ao carregar dados", str(exc))
+            return
+
+        self._table_page_request_id += 1
+        request_id = self._table_page_request_id
+        parquet_path = self.state.current_file
+        conditions = list(self.state.filters or [])
+        visible_columns = list(self.state.visible_columns or [])
+        page = self.state.current_page
+        page_size = self.state.page_size
+
+        if self.table_page_worker is not None and self.table_page_worker.isRunning():
+            self.status.showMessage("Nova carga solicitada; resultado anterior sera ignorado.")
+
+        def _load_page():
+            return self.parquet_service.get_page(
+                parquet_path=parquet_path,
+                conditions=conditions,
+                visible_columns=visible_columns,
+                page=page,
+                page_size=page_size,
             )
+
+        worker = ServiceTaskWorker(_load_page)
+        self.table_page_worker = worker
+        self.status.showMessage(f"Carregando pagina {page}...")
+        self.lbl_page.setText(f"Pagina {page} | carregando...")
+
+        def _on_success(page_result) -> None:
+            if request_id != self._table_page_request_id or parquet_path != self.state.current_file:
+                return
+            self.table_page_worker = None
             self.state.total_rows = page_result.total_rows
             self.current_page_df_all = page_result.df_all_columns
             self.current_page_df_visible = page_result.df_visible
+            self.table_model.set_dataframe(self.current_page_df_visible)
+            self._update_page_label()
+            self._update_context_label()
+            self._refresh_filter_list_widget()
+            self._resize_table_once(self.table_view, "consulta")
+            self._aplicar_preferencias_tabela(
+                "consulta",
+                self.table_view,
+                self.table_model,
+                self._consulta_scope(),
+            )
+            self.status.showMessage(
+                f"Pagina {self.state.current_page} carregada: {self.current_page_df_visible.height:,} linhas visiveis."
+            )
 
-            if update_main_view:
-                self.table_model.set_dataframe(self.current_page_df_visible)
-                self._update_page_label()
-                self._update_context_label()
-                self._refresh_filter_list_widget()
-                self._resize_table_once(self.table_view, "consulta")
-                self._aplicar_preferencias_tabela(
-                    "consulta",
-                    self.table_view,
-                    self.table_model,
-                    self._consulta_scope(),
-                )
-        except Exception as exc:
-            self.show_error("Erro ao carregar dados", str(exc))
+        def _on_failed(mensagem: str) -> None:
+            if request_id != self._table_page_request_id:
+                return
+            self.table_page_worker = None
+            self.show_error("Erro ao carregar dados", mensagem)
+
+        def _cleanup() -> None:
+            if self.table_page_worker is worker:
+                self.table_page_worker = None
+            worker.deleteLater()
+
+        worker.finished_ok.connect(_on_success)
+        worker.failed.connect(_on_failed)
+        worker.finished.connect(_cleanup)
+        worker.start()
+
     def _update_page_label(self) -> None:
         total_pages = max(
             1,
@@ -237,14 +315,18 @@ class MainWindowNavigationMixin:
         self.lbl_page.setText(
             f"Pagina {self.state.current_page}/{total_pages} | Linhas filtradas: {self.state.total_rows}"
         )
+
     def _update_context_label(self) -> None:
         if self.state.current_file is None:
-            self.lbl_context.setText("Nenhum arquivo selecionado")
+            self.lbl_context.setText(
+                f"CNPJ: {self.state.current_cnpj or '-'} | Nenhum arquivo selecionado"
+            )
             return
         self.lbl_context.setText(
             f"CNPJ: {self.state.current_cnpj or '-'} | Arquivo: {self.state.current_file.name} | "
             f"Colunas visiveis: {len(self.state.visible_columns or [])}/{len(self.state.all_columns or [])}"
         )
+
     def add_filter_from_form(self) -> None:
         column = self.filter_column.currentText().strip()
         operator = self.filter_operator.currentText().strip()
@@ -264,10 +346,12 @@ class MainWindowNavigationMixin:
         self.state.current_page = 1
         self.filter_value.clear()
         self.reload_table()
+
     def clear_filters(self) -> None:
         self.state.filters = []
         self.state.current_page = 1
         self.reload_table()
+
     def remove_selected_filter(self) -> None:
         row = self.filter_list.currentRow()
         if row < 0 or not self.state.filters:
@@ -275,11 +359,20 @@ class MainWindowNavigationMixin:
         self.state.filters.pop(row)
         self.state.current_page = 1
         self.reload_table()
+
     def refresh_logs(self) -> None:
         import json
 
-        logs = [json.dumps(log) for log in self.servico_agregacao.ler_linhas_log()]
-        self.log_view.setPlainText("\n".join(logs))
+        linhas = self.servico_agregacao.ler_linhas_log()
+        limite = 1000
+        if len(linhas) > limite:
+            linhas = linhas[-limite:]
+            prefixo = [f"... exibindo apenas as ultimas {limite} linhas de log ..."]
+        else:
+            prefixo = []
+        logs = [json.dumps(log, ensure_ascii=False) for log in linhas]
+        self.log_view.setPlainText("\n".join(prefixo + logs))
+
     def open_cnpj_folder(self) -> None:
         if not self.state.current_cnpj:
             self.show_error(
