@@ -34,7 +34,9 @@ def test_expr_normalizar_codigo_fonte_matches_python_logic():
     normalized_expr = df_result["codigo_normalized"].to_list()
     normalized_python = [normalizar_codigo_fonte(v) for v in test_cases]
 
-    for i, (expr_value, python_value) in enumerate(zip(normalized_expr, normalized_python)):
+    for i, (expr_value, python_value) in enumerate(
+        zip(normalized_expr, normalized_python, strict=True)
+    ):
         assert expr_value == python_value, (
             f"Mismatch at index {i}: expr={expr_value}, python={python_value} "
             f"for input='{test_cases[i]}'"

@@ -168,10 +168,9 @@ class ServicoAgregacao:
             if progresso:
                 progresso(f"[ERRO] Falha ao ler {nome}: {exc}")
             # Remove do cache se corrompido
-            if cnpj is not None and path in self._global_df_cache[cnpj]:
-                del self._global_df_cache[cnpj][path]
-            if path in cache:
-                del cache[path]
+            if cnpj is not None:
+                self._global_df_cache[cnpj].pop(path, None)
+            cache.pop(path, None)
             # Tenta reprocessar automaticamente se permitido
             if tentar_reprocessar:
                 if progresso:
@@ -569,7 +568,7 @@ class ServicoAgregacao:
         id_agrupados_col = df_rastreavel.get_column("id_agrupado").to_list()
 
         normalized_ids: list[list[str]] = []
-        for orig, id_agr in zip(ids_col, id_agrupados_col):
+        for orig, id_agr in zip(ids_col, id_agrupados_col, strict=True):
             if orig is None:
                 normalized = [str(id_agr).strip()]
             else:
@@ -1138,13 +1137,13 @@ class ServicoAgregacao:
         if not {"lista_descricoes", "lista_desc_compl"}.issubset(schema_regenerado):
             return False
 
-        if path_id_agrupados.exists() and not {
-            "lista_descricoes",
-            "lista_desc_compl",
-        }.issubset(self._obter_schema_parquet(path_id_agrupados)):
-            return False
-
-        return True
+        return not (
+            path_id_agrupados.exists()
+            and not {
+                "lista_descricoes",
+                "lista_desc_compl",
+            }.issubset(self._obter_schema_parquet(path_id_agrupados))
+        )
 
     def garantir_metricas_tabela_agregadas(self, cnpj: str) -> bool:
         path = self.garantir_tabela_agregadas(cnpj, criar_se_ausente=True)
@@ -2483,8 +2482,14 @@ class ServicoAgregacao:
                 ),
             )
 
+            colunas_metricas_obsoletas = set(colunas_metricas)
+            colunas_metricas_obsoletas.update(
+                f"{coluna}_right" for coluna in colunas_metricas
+            )
             cols_to_drop = [
-                c for c in ["total_compras", "total_vendas"] if c in cols_agrup
+                coluna
+                for coluna in df_agrup.columns
+                if coluna in colunas_metricas_obsoletas
             ]
             if cols_to_drop:
                 df_agrup = df_agrup.drop(cols_to_drop)

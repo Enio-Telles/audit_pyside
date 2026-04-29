@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from pathlib import Path
+from datetime import date
 
 import polars as pl
 import pytest
+from openpyxl import load_workbook
 
 from interface_grafica.services.export_service import ExportService
 
@@ -15,6 +17,26 @@ def test_export_excel_creates_file(tmp_path: Path) -> None:
     result = svc.export_excel(target, df)
     assert result == target
     assert target.exists()
+
+
+def test_export_excel_formats_dt_doc_and_dt_e_s_as_dates(tmp_path: Path) -> None:
+    svc = ExportService()
+    df = pl.DataFrame(
+        {
+            "Dt_doc": ["01/10/2021 00:00:00"],
+            "Dt_e_s": ["01/10/2021 00:00:00"],
+            "Cfop": ["1409"],
+        }
+    )
+    target = tmp_path / "mov_estoque.xlsx"
+
+    svc.export_excel(target, df, sheet_name="mov_estoque")
+
+    ws = load_workbook(target).active
+    assert ws["A2"].value.date() == date(2021, 10, 1)
+    assert ws["B2"].value.date() == date(2021, 10, 1)
+    assert ws["A2"].number_format == "dd/mm/yyyy"
+    assert ws["B2"].number_format == "dd/mm/yyyy"
 
 
 def test_export_txt_with_html(tmp_path: Path) -> None:

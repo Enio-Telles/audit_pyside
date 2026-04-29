@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date, datetime
 from pathlib import Path
 
 import polars as pl
@@ -8,7 +9,36 @@ from openpyxl.styles import Font as OpenPyxlFont
 from PySide6.QtWidgets import QMessageBox
 
 from interface_grafica.config import CNPJ_ROOT
+from transformacao.resumo_global import gerar_resumo_global_dataframe
 from utilitarios.text import display_cell, is_year_column_name
+
+
+_DATE_ONLY_EXPORT_COLUMNS = {"dt_doc", "dt_e_s"}
+_RESUMO_GLOBAL_PERIODO_COLUMNS = {
+    "ICMS_entr_desacob_periodo",
+    "ICMS_saidas_desac_periodo",
+    "ICMS_estoque_desac_periodo",
+    "Total_periodo",
+}
+
+
+def _valor_data_excel(coluna: str, valor):
+    if str(coluna).strip().lower() not in _DATE_ONLY_EXPORT_COLUMNS:
+        return None
+    if isinstance(valor, datetime):
+        return valor.date()
+    if isinstance(valor, date):
+        return valor
+    if isinstance(valor, str):
+        texto = valor.strip()
+        if not texto:
+            return None
+        for formato in ("%d/%m/%Y %H:%M:%S", "%d/%m/%Y", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+            try:
+                return datetime.strptime(texto, formato).date()
+            except ValueError:
+                continue
+    return None
 
 
 class RelatoriosResumoControllerMixin:
@@ -28,7 +58,10 @@ class RelatoriosResumoControllerMixin:
         for row in df.iter_rows():
             linha_excel = []
             for coluna, valor in zip(df.columns, row, strict=False):
-                if isinstance(valor, (int, float)) and not isinstance(valor, bool):
+                data_excel = _valor_data_excel(coluna, valor)
+                if data_excel is not None:
+                    linha_excel.append(data_excel)
+                elif isinstance(valor, (int, float)) and not isinstance(valor, bool):
                     linha_excel.append(valor)
                 else:
                     linha_excel.append(display_cell(valor, coluna))
@@ -68,144 +101,18 @@ class RelatoriosResumoControllerMixin:
         self,
         mensal: pl.DataFrame,
         anual: pl.DataFrame,
+        periodos: pl.DataFrame | list[int] | None = None,
         anos_base: list[int] | None = None,
     ) -> pl.DataFrame:
-        if anos_base is None:
-            anos_base = []
-            for df in (mensal, anual):
-                if not df.is_empty() and "ano" in df.columns:
-                    anos_base.extend(
-                        df.get_column("ano")
-                        .cast(pl.Int32, strict=False)
-                        .drop_nulls()
-                        .unique()
-                        .sort()
-                        .to_list()
-                    )
-            anos_base = sorted({int(ano) for ano in anos_base})
-
-        competencias = [
-            f"{ano:04d}-{mes:02d}" for ano in anos_base for mes in range(1, 13)
-        ]
-        if not competencias:
-            return pl.DataFrame({"Ano/Mes": []}).with_columns(
-                [
-                    pl.lit(0.0).alias("ICMS_entr_desacob"),
-                    pl.lit(0.0).alias("ICMS_saidas_desac"),
-                    pl.lit(0.0).alias("ICMS_estoque_desac"),
-                    pl.lit(0.0).alias("Total"),
-                ]
-            )
-
-        base_competencias = pl.DataFrame({"Ano/Mes": competencias})
-
-        if not mensal.is_empty():
-            mensal_base = (
-                mensal.select(
-                    [
-                        pl.concat_str(
-                            [
-                                pl.col("ano").cast(pl.Utf8, strict=False),
-                                pl.lit("-"),
-                                pl.col("mes").cast(pl.Utf8, strict=False).str.zfill(2),
-                            ]
-                        ).alias("Ano/Mes"),
-                        pl.col("ICMS_entr_desacob")
-                        .cast(pl.Float64, strict=False)
-                        .fill_null(0.0)
-                        .alias("ICMS_entr_desacob"),
-                    ]
-                )
-                .group_by("Ano/Mes")
-                .agg(pl.col("ICMS_entr_desacob").sum().alias("ICMS_entr_desacob"))
-            )
-        else:
-            mensal_base = pl.DataFrame(
-                schema={
-                    "Ano/Mes": pl.Utf8,
-                    "ICMS_entr_desacob": pl.Float64,
-                }
-            )
-
-        if not anual.is_empty():
-            anual_base = (
-                anual.select(
-                    [
-                        pl.concat_str(
-                            [
-                                pl.col("ano").cast(pl.Utf8, strict=False),
-                                pl.lit("-12"),
-                            ]
-                        ).alias("Ano/Mes"),
-                        pl.col("ICMS_saidas_desac")
-                        .cast(pl.Float64, strict=False)
-                        .fill_null(0.0)
-                        .alias("ICMS_saidas_desac"),
-                        pl.col("ICMS_estoque_desac")
-                        .cast(pl.Float64, strict=False)
-                        .fill_null(0.0)
-                        .alias("ICMS_estoque_desac"),
-                    ]
-                )
-                .group_by("Ano/Mes")
-                .agg(
-                    [
-                        pl.col("ICMS_saidas_desac").sum().alias("ICMS_saidas_desac"),
-                        pl.col("ICMS_estoque_desac").sum().alias("ICMS_estoque_desac"),
-                    ]
-                )
-            )
-        else:
-            anual_base = pl.DataFrame(
-                schema={
-                    "Ano/Mes": pl.Utf8,
-                    "ICMS_saidas_desac": pl.Float64,
-                    "ICMS_estoque_desac": pl.Float64,
-                }
-            )
-
-        consolidado = (
-            base_competencias.join(mensal_base, on="Ano/Mes", how="left")
-            .join(anual_base, on="Ano/Mes", how="left")
-            .with_columns(
-                [
-                    pl.col("ICMS_entr_desacob")
-                    .cast(pl.Float64, strict=False)
-                    .fill_null(0.0)
-                    .round(2),
-                    pl.col("ICMS_saidas_desac")
-                    .cast(pl.Float64, strict=False)
-                    .fill_null(0.0)
-                    .round(2),
-                    pl.col("ICMS_estoque_desac")
-                    .cast(pl.Float64, strict=False)
-                    .fill_null(0.0)
-                    .round(2),
-                ]
-            )
-            .with_columns(
-                (
-                    pl.col("ICMS_entr_desacob")
-                    + pl.col("ICMS_saidas_desac")
-                    + pl.col("ICMS_estoque_desac")
-                )
-                .round(2)
-                .alias("Total")
-            )
-        )
-
-        return consolidado.select(
-            [
-                "Ano/Mes",
-                "ICMS_entr_desacob",
-                "ICMS_saidas_desac",
-                "ICMS_estoque_desac",
-                "Total",
-            ]
-        ).sort(
-            ["Ano/Mes"],
-            descending=[False],
-            nulls_last=True,
+        if isinstance(periodos, list) and anos_base is None:
+            anos_base = periodos
+            periodos = None
+        return gerar_resumo_global_dataframe(
+            mensal,
+            anual,
+            periodos if isinstance(periodos, pl.DataFrame) else pl.DataFrame(),
+            anos_base,
+            manter_competencias_zeradas=True,
         )
     def atualizar_aba_resumo_global(self) -> None:
         cnpj = self.state.current_cnpj
@@ -230,6 +137,29 @@ class RelatoriosResumoControllerMixin:
                     "Resumo global nao encontrado para este CNPJ."
                 )
                 return
+            if (
+                not _RESUMO_GLOBAL_PERIODO_COLUMNS.issubset(set(df.columns))
+                and not self._aba_mensal_df.is_empty()
+                and not self._aba_anual_df.is_empty()
+                and {"ano", "mes", "ICMS_entr_desacob"}.issubset(
+                    set(self._aba_mensal_df.columns)
+                )
+                and {"ano", "ICMS_saidas_desac", "ICMS_estoque_desac"}.issubset(
+                    set(self._aba_anual_df.columns)
+                )
+                and (
+                    "ICMS_entr_desacob_periodo" in self._aba_mensal_df.columns
+                    or {
+                        "ICMS_saidas_desac_periodo",
+                        "ICMS_estoque_desac_periodo",
+                    }.issubset(set(self._aba_periodos_df.columns))
+                )
+            ):
+                df = self._gerar_resumo_global(
+                    self._aba_mensal_df,
+                    self._aba_anual_df,
+                    self._aba_periodos_df,
+                )
             self._resumo_global_df = df
             self.resumo_global_model.set_dataframe(df)
             self.lbl_resumo_global_status.setText(
@@ -281,7 +211,11 @@ class RelatoriosResumoControllerMixin:
 
         # Se temos os dados em memória, consolidar em tempo real
         try:
-            resumo = self._gerar_resumo_global(self._aba_mensal_df, self._aba_anual_df)
+            resumo = self._gerar_resumo_global(
+                self._aba_mensal_df,
+                self._aba_anual_df,
+                self._aba_periodos_df,
+            )
             self._resumo_global_df = resumo
             self.resumo_global_model.set_dataframe(resumo)
             self.lbl_resumo_global_status.setText(
@@ -346,7 +280,10 @@ class RelatoriosResumoControllerMixin:
         else:
             anos_base = None
 
-        return self._gerar_resumo_global(mensal, anual, anos_base)
+        periodos = self._filtrar_dataframe_por_ids(
+            self._produtos_selecionados_periodos_df, ids
+        )
+        return self._gerar_resumo_global(mensal, anual, periodos, anos_base)
     def exportar_produtos_selecionados_excel(self) -> None:
         if self._produtos_selecionados_df.is_empty():
             QMessageBox.information(

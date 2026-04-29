@@ -14,6 +14,29 @@ class TextValue:
     def currentText(self) -> str:  # noqa: N802
         return self.value
 
+    def text(self) -> str:
+        return self.value
+
+
+class ModelWithChecks:
+    def __init__(self) -> None:
+        self.dataframe = pl.DataFrame()
+        self.checked_keys: set[tuple[str]] = set()
+
+    def set_dataframe(self, df: pl.DataFrame) -> None:
+        self.dataframe = df
+
+    def get_checked_rows(self) -> list[dict[str, str]]:
+        return []
+
+    def set_checked_keys(self, keys: set[tuple[str]]) -> None:
+        self.checked_keys = keys
+
+
+class DateFilter:
+    def date(self) -> None:
+        return None
+
 
 @pytest.fixture
 def pyside_stubs(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -22,6 +45,7 @@ def pyside_stubs(monkeypatch: pytest.MonkeyPatch) -> None:
     qtcore = ModuleType("PySide6.QtCore")
     qtcore.QDate = object
     qtcore.QThread = object
+    qtcore.Qt = object
     qtcore.Signal = lambda *args, **kwargs: object()
     qtgui = ModuleType("PySide6.QtGui")
     qtgui.QFont = type("QFont", (), {"setBold": lambda self, value: None})
@@ -104,3 +128,110 @@ def test_produtos_helpers_filter_ids_years_and_checked_rows(pyside_stubs: None) 
     assert mixin._anos_disponiveis_produtos_selecionados() == [2024, 2025]
     assert mixin._intervalo_anos_produtos_selecionados() == (2024, 2025)
     assert mixin._ids_produtos_selecionados_para_exportacao() == ["A", "B"]
+
+
+def test_id_agrupados_legacy_parquet_recebe_qtd_descricoes(
+    pyside_stubs: None,
+) -> None:
+    from interface_grafica.controllers.id_agrupados_controller import (
+        _adicionar_qtd_descricoes,
+    )
+
+    df = pl.DataFrame(
+        {
+            "id_agrupado": ["A", "B"],
+            "lista_descricoes": [["Produto A", "Produto A var"], ["Produto B"]],
+        }
+    )
+
+    enriched = _adicionar_qtd_descricoes(df)
+
+    assert enriched["qtd_descricoes"].to_list() == [2, 1]
+
+
+def test_produtos_selecionados_consolida_totais_periodo(pyside_stubs: None) -> None:
+    from interface_grafica.controllers.relatorios_produtos_controller import (
+        RelatoriosProdutosControllerMixin,
+    )
+
+    class Controller(RelatoriosProdutosControllerMixin):
+        def __init__(self) -> None:
+            self.state = SimpleNamespace(current_cnpj="12345678000190")
+            self.produtos_selecionados_model = ModelWithChecks()
+            self.produtos_sel_table = object()
+            self.lbl_produtos_sel_status = SimpleNamespace(setText=lambda _value: None)
+            self.lbl_produtos_sel_resumo = SimpleNamespace(setText=lambda _value: None)
+            self.lbl_produtos_sel_filtros = SimpleNamespace(setText=lambda _value: None)
+            self.produtos_sel_filter_id = TextValue("")
+            self.produtos_sel_filter_desc = TextValue("")
+            self.produtos_sel_filter_texto = TextValue("")
+            self.produtos_sel_filter_ano_ini = TextValue("Todos")
+            self.produtos_sel_filter_ano_fim = TextValue("Todos")
+            self.produtos_sel_filter_data_ini = DateFilter()
+            self.produtos_sel_filter_data_fim = DateFilter()
+            self._produtos_sel_preselecionado_cnpj = None
+            self._mov_estoque_df = pl.DataFrame()
+            self._aba_mensal_df = pl.DataFrame(
+                {
+                    "id_agregado": ["A", "A"],
+                    "descr_padrao": ["Produto A", "Produto A"],
+                    "ano": [2025, 2025],
+                    "mes": [1, 2],
+                    "ICMS_entr_desacob": [10.0, 20.0],
+                    "ICMS_entr_desacob_periodo": [1.5, 2.5],
+                }
+            )
+            self._aba_anual_df = pl.DataFrame(
+                {
+                    "id_agregado": ["A"],
+                    "descr_padrao": ["Produto A"],
+                    "ano": [2025],
+                    "ICMS_saidas_desac": [7.0],
+                    "ICMS_estoque_desac": [3.0],
+                }
+            )
+            self._aba_periodos_df = pl.DataFrame(
+                {
+                    "id_agregado": ["A"],
+                    "descr_padrao": ["Produto A"],
+                    "ICMS_saidas_desac_periodo": [4.0],
+                    "ICMS_estoque_desac_periodo": [6.0],
+                }
+            )
+
+        def _valor_qdate_ativo(self, _value):
+            return None
+
+        def _filtrar_intervalo_data(self, df, *_args):
+            return df
+
+        def _filtrar_texto_em_colunas(self, df, _texto):
+            return df
+
+        def _formatar_resumo_filtros(self, _items):
+            return "Filtros ativos: nenhum"
+
+        def _atualizar_titulo_aba_produtos_selecionados(self, *_args):
+            return None
+
+        def _resize_table_once(self, *_args):
+            return None
+
+        def _aplicar_preferencias_tabela(self, *_args):
+            return True
+
+        def _salvar_preferencias_tabela(self, *_args):
+            return None
+
+    controller = Controller()
+    controller.aplicar_filtros_produtos_selecionados()
+
+    row = controller.produtos_selecionados_model.dataframe.row(0, named=True)
+    assert row["total_ICMS_entr_desacob"] == 30.0
+    assert row["total_ICMS_saidas_desac"] == 7.0
+    assert row["total_ICMS_estoque_desac"] == 3.0
+    assert row["total_ICMS_total"] == 40.0
+    assert row["total_ICMS_entr_desacob_periodo"] == 4.0
+    assert row["total_ICMS_saidas_desac_periodo"] == 4.0
+    assert row["total_ICMS_estoque_desac_periodo"] == 6.0
+    assert row["total_ICMS_total_periodo"] == 14.0

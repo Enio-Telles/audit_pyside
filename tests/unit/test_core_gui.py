@@ -9,6 +9,7 @@ from typing import Any
 import polars as pl
 import pytest
 from openpyxl import Workbook
+from datetime import date
 
 
 SRC = Path(__file__).resolve().parents[2] / "src"
@@ -397,16 +398,51 @@ def test_periodos_mensal_anual_and_resumo(
     worksheet = Workbook().active
     controller._escrever_planilha_openpyxl(
         worksheet,
-        pl.DataFrame({"ano": [2025], "valor": [12.5]}),
+        pl.DataFrame(
+            {
+                "ano": [2025],
+                "valor": [12.5],
+                "Dt_doc": ["01/10/2021 00:00:00"],
+                "Dt_e_s": ["01/10/2021 00:00:00"],
+            }
+        ),
     )
     assert worksheet["A2"].number_format == "0"
     assert worksheet["B2"].number_format == "#,##0.00"
+    assert worksheet["C2"].value == date(2021, 10, 1)
+    assert worksheet["D2"].value == date(2021, 10, 1)
+    assert worksheet["C2"].number_format == "dd/mm/yyyy"
+    assert worksheet["D2"].number_format == "dd/mm/yyyy"
 
+    controller._aba_mensal_df = pl.DataFrame(
+        {
+            "ano": [2025],
+            "mes": [1],
+            "ICMS_entr_desacob": [10.0],
+            "ICMS_entr_desacob_periodo": [2.0],
+        }
+    )
+    controller._aba_anual_df = pl.DataFrame(
+        {"ano": [2025], "ICMS_saidas_desac": [7.0], "ICMS_estoque_desac": [3.0]}
+    )
+    controller._aba_periodos_df = pl.DataFrame(
+        {
+            "cod_per": [202501],
+            "ICMS_saidas_desac_periodo": [4.0],
+            "ICMS_estoque_desac_periodo": [6.0],
+        }
+    )
     pl.DataFrame({"Ano/Mes": ["2025-01"], "Total": [1.0]}).write_parquet(
         folder / f"aba_resumo_global_{controller.state.current_cnpj}.parquet"
     )
     controller.atualizar_aba_resumo_global()
-    assert controller._resumo_global_df["Ano/Mes"].to_list() == ["2025-01"]
+    row_janeiro = controller._resumo_global_df.filter(pl.col("Ano/Mes") == "2025-01").row(
+        0, named=True
+    )
+    assert row_janeiro["ICMS_entr_desacob_periodo"] == 2.0
+    assert row_janeiro["ICMS_saidas_desac_periodo"] == 4.0
+    assert row_janeiro["ICMS_estoque_desac_periodo"] == 6.0
+    assert row_janeiro["Total_periodo"] == 12.0
 
 
 def test_resumo_global_helpers_cover_empty_and_consolidated(
@@ -429,21 +465,55 @@ def test_resumo_global_helpers_cover_empty_and_consolidated(
         "ICMS_saidas_desac",
         "ICMS_estoque_desac",
         "Total",
+        "ICMS_entr_desacob_periodo",
+        "ICMS_saidas_desac_periodo",
+        "ICMS_estoque_desac_periodo",
+        "Total_periodo",
     ]
     assert empty.height == 0
 
     controller._aba_mensal_df = pl.DataFrame(
-        {"ano": [2025, 2025], "mes": [1, 2], "ICMS_entr_desacob": [10.0, 5.0]}
+        {
+            "ano": [2025, 2025],
+            "mes": [1, 2],
+            "ICMS_entr_desacob": [10.0, 5.0],
+            "ICMS_entr_desacob_periodo": [2.0, 3.0],
+        }
     )
     controller._aba_anual_df = pl.DataFrame(
         {"ano": [2025], "ICMS_saidas_desac": [7.0], "ICMS_estoque_desac": [3.0]}
     )
+    controller._aba_periodos_df = pl.DataFrame(
+        {
+            "cod_per": [202501],
+            "ICMS_saidas_desac_periodo": [4.0],
+            "ICMS_estoque_desac_periodo": [6.0],
+        }
+    )
     summary = controller._gerar_resumo_global(
         controller._aba_mensal_df,
         controller._aba_anual_df,
+        controller._aba_periodos_df,
         [2025],
     )
     assert summary.filter(pl.col("Ano/Mes") == "2025-12")["Total"].item() == 10.0
+    assert (
+        summary.filter(pl.col("Ano/Mes") == "2025-01")["ICMS_entr_desacob_periodo"].item()
+        == 2.0
+    )
+    assert (
+        summary.filter(pl.col("Ano/Mes") == "2025-01")[
+            "ICMS_saidas_desac_periodo"
+        ].item()
+        == 4.0
+    )
+    assert (
+        summary.filter(pl.col("Ano/Mes") == "2025-01")[
+            "ICMS_estoque_desac_periodo"
+        ].item()
+        == 6.0
+    )
+    assert summary.filter(pl.col("Ano/Mes") == "2025-01")["Total_periodo"].item() == 12.0
     controller.atualizar_aba_resumo_global()
     assert (
         controller._resumo_global_df.filter(pl.col("Ano/Mes") == "2025-01")[

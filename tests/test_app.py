@@ -1,30 +1,60 @@
+import importlib
 import sys
 from types import ModuleType
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
+
+import pytest
 
 
-qtwidgets_stub = ModuleType("PySide6.QtWidgets")
-qtwidgets_stub.QApplication = MagicMock(name="QApplication")
+@pytest.fixture()
+def app_module(monkeypatch):
+    qtwidgets_stub = ModuleType("PySide6.QtWidgets")
+    qtwidgets_stub.QApplication = MagicMock(name="QApplication")
 
-main_window_stub = ModuleType("interface_grafica.ui.main_window")
-main_window_stub.MainWindow = MagicMock(name="MainWindow")
-windows_main_window_stub = ModuleType("interface_grafica.windows.main_window")
-windows_main_window_stub.MainWindow = main_window_stub.MainWindow
+    logging_setup_stub = ModuleType("interface_grafica.logging_setup")
+    logging_setup_stub.configure_structlog = MagicMock(name="configure_structlog")
+    logging_setup_stub.install_fallback_hooks = MagicMock(name="install_fallback_hooks")
 
-sys.modules.setdefault("PySide6", ModuleType("PySide6"))
-sys.modules["PySide6.QtWidgets"] = qtwidgets_stub
-sys.modules.setdefault("interface_grafica", ModuleType("interface_grafica"))
-sys.modules.setdefault("interface_grafica.ui", ModuleType("interface_grafica.ui"))
-sys.modules.setdefault("interface_grafica.windows", ModuleType("interface_grafica.windows"))
-sys.modules["interface_grafica.ui.main_window"] = main_window_stub
-sys.modules["interface_grafica.windows.main_window"] = windows_main_window_stub
+    patches_stub = ModuleType("interface_grafica.patches")
+    similaridade_patch_stub = ModuleType(
+        "interface_grafica.patches.similaridade_agregacao"
+    )
+    similaridade_patch_stub.apply_similarity_patch = MagicMock(
+        name="apply_similarity_patch"
+    )
 
-import app  # noqa: E402
+    interface_grafica_stub = ModuleType("interface_grafica")
+    interface_grafica_stub.__path__ = []
+
+    windows_stub = ModuleType("interface_grafica.windows")
+    windows_main_window_stub = ModuleType("interface_grafica.windows.main_window")
+    windows_main_window_stub.MainWindow = MagicMock(name="MainWindow")
+
+    monkeypatch.setitem(sys.modules, "PySide6", ModuleType("PySide6"))
+    monkeypatch.setitem(sys.modules, "PySide6.QtWidgets", qtwidgets_stub)
+    monkeypatch.setitem(sys.modules, "interface_grafica", interface_grafica_stub)
+    monkeypatch.setitem(sys.modules, "interface_grafica.logging_setup", logging_setup_stub)
+    monkeypatch.setitem(sys.modules, "interface_grafica.patches", patches_stub)
+    monkeypatch.setitem(
+        sys.modules,
+        "interface_grafica.patches.similaridade_agregacao",
+        similaridade_patch_stub,
+    )
+    monkeypatch.setitem(sys.modules, "interface_grafica.windows", windows_stub)
+    monkeypatch.setitem(
+        sys.modules, "interface_grafica.windows.main_window", windows_main_window_stub
+    )
+    monkeypatch.delitem(sys.modules, "app", raising=False)
+
+    module = importlib.import_module("app")
+    yield module
+    sys.modules.pop("app", None)
 
 
-@patch("app.QApplication")
-@patch("app.MainWindow")
-def test_main(mock_main_window_class, mock_qapplication_class):
+def test_main(app_module):
+    mock_qapplication_class = app_module.QApplication
+    mock_main_window_class = app_module.MainWindow
+
     # Setup mocks
     mock_app_instance = MagicMock()
     mock_qapplication_class.return_value = mock_app_instance
@@ -34,7 +64,7 @@ def test_main(mock_main_window_class, mock_qapplication_class):
     mock_main_window_class.return_value = mock_window_instance
 
     # Execute the function
-    result = app.main()
+    result = app_module.main()
 
     # Verify interactions
     mock_qapplication_class.assert_called_once_with(sys.argv)
@@ -51,9 +81,10 @@ def test_main(mock_main_window_class, mock_qapplication_class):
     assert result == 0
 
 
-@patch("app.QApplication")
-@patch("app.MainWindow")
-def test_main_error_code(mock_main_window_class, mock_qapplication_class):
+def test_main_error_code(app_module):
+    mock_qapplication_class = app_module.QApplication
+    mock_main_window_class = app_module.MainWindow
+
     # Setup mocks for error code return
     mock_app_instance = MagicMock()
     mock_qapplication_class.return_value = mock_app_instance
@@ -63,7 +94,7 @@ def test_main_error_code(mock_main_window_class, mock_qapplication_class):
     mock_main_window_class.return_value = mock_window_instance
 
     # Execute the function
-    result = app.main()
+    result = app_module.main()
 
     # Verify interactions
     mock_qapplication_class.assert_called_once_with(sys.argv)

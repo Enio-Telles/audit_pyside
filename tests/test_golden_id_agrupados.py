@@ -49,6 +49,10 @@ def test_golden_id_agrupados_output(tmp_path):
     assert output_file.exists()
 
     df_output = pl.read_parquet(output_file)
+    assert df_output.select(["id_agrupado", "qtd_descricoes"]).to_dicts() == [
+        {"id_agrupado": "AGR_1", "qtd_descricoes": 2},
+        {"id_agrupado": "AGR_2", "qtd_descricoes": 2},
+    ]
     verify_golden_hash(
         df_output,
         "id_agrupados_base_v1",

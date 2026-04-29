@@ -7,6 +7,26 @@ from PySide6.QtCore import Qt
 from interface_grafica.config import CNPJ_ROOT
 
 
+def _adicionar_qtd_descricoes(df: pl.DataFrame) -> pl.DataFrame:
+    if df.is_empty() or "lista_descricoes" not in df.columns:
+        return df
+
+    df = df.with_columns(
+        pl.col("lista_descricoes")
+        .cast(pl.List(pl.Utf8), strict=False)
+        .list.eval(pl.element().filter(pl.element().is_not_null() & (pl.element() != "")))
+        .list.len()
+        .cast(pl.Int64)
+        .alias("qtd_descricoes")
+    )
+    colunas = list(df.columns)
+    if "qtd_descricoes" in colunas and "lista_descricoes" in colunas:
+        colunas.remove("qtd_descricoes")
+        colunas.insert(colunas.index("lista_descricoes") + 1, "qtd_descricoes")
+        df = df.select(colunas)
+    return df
+
+
 class IdAgrupadosControllerMixin:
     def atualizar_aba_id_agrupados(self) -> None:
         cnpj = self.state.current_cnpj
@@ -42,6 +62,7 @@ class IdAgrupadosControllerMixin:
                 )
                 self._atualizar_titulo_aba_id_agrupados()
                 return
+            df = _adicionar_qtd_descricoes(df)
             self._id_agrupados_df = df
             self._id_agrupados_file_path = path
             self._reset_table_resize_flag("id_agrupados")

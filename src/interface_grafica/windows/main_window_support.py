@@ -16,6 +16,8 @@ log = structlog.get_logger(__name__)
 
 
 class MainWindowSupportMixin:
+    _TABLE_RESIZE_CONTENTS_PRECISION = 200
+
     def _executar_callback_debounce(self, key: str) -> None:
         callback = self._debounce_callbacks.get(key)
         if callback is None:
@@ -77,7 +79,15 @@ class MainWindowSupportMixin:
     def _resize_table_once(self, table: QTableView, key: str) -> None:
         if key in self._auto_resized_tables:
             return
-        table.resizeColumnsToContents()
+        header = table.horizontalHeader()
+        previous_precision = header.resizeContentsPrecision()
+        previous_blocked = header.blockSignals(True)
+        try:
+            header.setResizeContentsPrecision(self._TABLE_RESIZE_CONTENTS_PRECISION)
+            table.resizeColumnsToContents()
+        finally:
+            header.setResizeContentsPrecision(previous_precision)
+            header.blockSignals(previous_blocked)
         self._auto_resized_tables.add(key)
     def _reset_table_resize_flag(self, key: str) -> None:
         self._auto_resized_tables.discard(key)

@@ -102,6 +102,7 @@ SCHEMA_ID_AGRUPADOS: dict[str, pl.DataType] = {
     "id_agrupado": pl.Utf8,
     "descr_padrao": pl.Utf8,
     "lista_descricoes": pl.List(pl.Utf8),
+    "qtd_descricoes": pl.Int64,
     "lista_codigos": pl.List(pl.Utf8),
     "lista_unidades": pl.List(pl.Utf8),
 }
@@ -110,6 +111,7 @@ COLUNAS_OBRIGATORIAS_ID_AGRUPADOS: list[str] = [
     "id_agrupado",
     "descr_padrao",
     "lista_descricoes",
+    "qtd_descricoes",
     "lista_codigos",
     "lista_unidades",
 ]

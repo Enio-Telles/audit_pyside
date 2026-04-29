@@ -191,6 +191,23 @@ def gerar_id_agrupados(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
                 pl.col("lista_unidades").list.eval(pl.element().filter(pl.element() != "")),
             ]
         )
+        .with_columns(
+            pl.col("lista_descricoes")
+            .list.len()
+            .cast(pl.Int64)
+            .alias("qtd_descricoes")
+        )
+        .select(
+            [
+                "id_agrupado",
+                "descr_padrao",
+                "lista_descricoes",
+                "qtd_descricoes",
+                "lista_codigos",
+                "lista_desc_compl",
+                "lista_unidades",
+            ]
+        )
         .sort("id_agrupado")
     )
 

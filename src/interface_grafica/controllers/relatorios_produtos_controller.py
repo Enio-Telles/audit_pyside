@@ -383,12 +383,27 @@ class RelatoriosProdutosControllerMixin:
             if not df_mensal.is_empty() and {"id_agregado", "descr_padrao"}.issubset(
                 set(df_mensal.columns)
             ):
-                resumo_mensal = df_mensal.group_by(["id_agregado", "descr_padrao"]).agg(
+                agg_mensal = [
                     pl.col("ICMS_entr_desacob")
                     .cast(pl.Float64, strict=False)
-                    .fill_null(0)
+                    .fill_null(0.0)
                     .sum()
-                    .alias("total_ICMS_entr_desacob")
+                    .alias("total_ICMS_entr_desacob"),
+                ]
+                if "ICMS_entr_desacob_periodo" in df_mensal.columns:
+                    agg_mensal.append(
+                        pl.col("ICMS_entr_desacob_periodo")
+                        .cast(pl.Float64, strict=False)
+                        .fill_null(0.0)
+                        .sum()
+                        .alias("total_ICMS_entr_desacob_periodo")
+                    )
+                else:
+                    agg_mensal.append(
+                        pl.lit(0.0).alias("total_ICMS_entr_desacob_periodo")
+                    )
+                resumo_mensal = df_mensal.group_by(["id_agregado", "descr_padrao"]).agg(
+                    agg_mensal
                 )
             else:
                 resumo_mensal = pl.DataFrame(
@@ -396,6 +411,7 @@ class RelatoriosProdutosControllerMixin:
                         "id_agregado": pl.Utf8,
                         "descr_padrao": pl.Utf8,
                         "total_ICMS_entr_desacob": pl.Float64,
+                        "total_ICMS_entr_desacob_periodo": pl.Float64,
                     }
                 )
 
@@ -433,11 +449,61 @@ class RelatoriosProdutosControllerMixin:
                     }
                 )
 
+            df_periodos = self._filtrar_dataframe_por_ids(
+                self._aba_periodos_df, ids_filtrados
+            )
+            col_saida_periodo = (
+                "ICMS_saidas_desac_periodo"
+                if "ICMS_saidas_desac_periodo" in df_periodos.columns
+                else ("ICMS_saidas_desac" if "ICMS_saidas_desac" in df_periodos.columns else None)
+            )
+            col_estoque_periodo = (
+                "ICMS_estoque_desac_periodo"
+                if "ICMS_estoque_desac_periodo" in df_periodos.columns
+                else (
+                    "ICMS_estoque_desac"
+                    if "ICMS_estoque_desac" in df_periodos.columns
+                    else None
+                )
+            )
+            if (
+                not df_periodos.is_empty()
+                and {"id_agregado", "descr_padrao"}.issubset(set(df_periodos.columns))
+                and col_saida_periodo is not None
+                and col_estoque_periodo is not None
+            ):
+                resumo_periodos = df_periodos.group_by(
+                    ["id_agregado", "descr_padrao"]
+                ).agg(
+                    [
+                        pl.col(col_saida_periodo)
+                        .cast(pl.Float64, strict=False)
+                        .fill_null(0.0)
+                        .sum()
+                        .alias("total_ICMS_saidas_desac_periodo"),
+                        pl.col(col_estoque_periodo)
+                        .cast(pl.Float64, strict=False)
+                        .fill_null(0.0)
+                        .sum()
+                        .alias("total_ICMS_estoque_desac_periodo"),
+                    ]
+                )
+            else:
+                resumo_periodos = pl.DataFrame(
+                    schema={
+                        "id_agregado": pl.Utf8,
+                        "descr_padrao": pl.Utf8,
+                        "total_ICMS_saidas_desac_periodo": pl.Float64,
+                        "total_ICMS_estoque_desac_periodo": pl.Float64,
+                    }
+                )
+
             resumo = (
                 df_produtos.join(
                     resumo_mensal, on=["id_agregado", "descr_padrao"], how="left"
                 )
                 .join(resumo_anual, on=["id_agregado", "descr_padrao"], how="left")
+                .join(resumo_periodos, on=["id_agregado", "descr_padrao"], how="left")
                 .with_columns(
                     [
                         pl.col("total_ICMS_entr_desacob")
@@ -449,6 +515,18 @@ class RelatoriosProdutosControllerMixin:
                         .fill_null(0)
                         .round(2),
                         pl.col("total_ICMS_estoque_desac")
+                        .cast(pl.Float64, strict=False)
+                        .fill_null(0)
+                        .round(2),
+                        pl.col("total_ICMS_entr_desacob_periodo")
+                        .cast(pl.Float64, strict=False)
+                        .fill_null(0)
+                        .round(2),
+                        pl.col("total_ICMS_saidas_desac_periodo")
+                        .cast(pl.Float64, strict=False)
+                        .fill_null(0)
+                        .round(2),
+                        pl.col("total_ICMS_estoque_desac_periodo")
                         .cast(pl.Float64, strict=False)
                         .fill_null(0)
                         .round(2),
@@ -465,6 +543,19 @@ class RelatoriosProdutosControllerMixin:
                         )
                         .round(2)
                         .alias("total_ICMS_total"),
+                        (
+                            pl.col("total_ICMS_entr_desacob_periodo")
+                            .cast(pl.Float64, strict=False)
+                            .fill_null(0)
+                            + pl.col("total_ICMS_saidas_desac_periodo")
+                            .cast(pl.Float64, strict=False)
+                            .fill_null(0)
+                            + pl.col("total_ICMS_estoque_desac_periodo")
+                            .cast(pl.Float64, strict=False)
+                            .fill_null(0)
+                        )
+                        .round(2)
+                        .alias("total_ICMS_total_periodo"),
                     ]
                 )
                 .sort(["descr_padrao", "id_agregado"], nulls_last=True)
@@ -486,9 +577,7 @@ class RelatoriosProdutosControllerMixin:
                     "mov",
                 )
             )
-            self._produtos_selecionados_periodos_df = self._filtrar_dataframe_por_ids(
-                self._aba_periodos_df, ids_filtrados
-            )
+            self._produtos_selecionados_periodos_df = df_periodos
 
             self.produtos_selecionados_model.set_dataframe(resumo)
             if (
@@ -541,7 +630,7 @@ class RelatoriosProdutosControllerMixin:
                 )
             )
             self.lbl_produtos_sel_resumo.setText(
-                f"Recorte atual: mov_estoque {self._produtos_selecionados_mov_df.height:,} | mensal {self._produtos_selecionados_mensal_df.height:,} | anual {self._produtos_selecionados_anual_df.height:,}"
+                f"Recorte atual: mov_estoque {self._produtos_selecionados_mov_df.height:,} | mensal {self._produtos_selecionados_mensal_df.height:,} | anual {self._produtos_selecionados_anual_df.height:,} | periodos {self._produtos_selecionados_periodos_df.height:,}"
             )
             self._atualizar_titulo_aba_produtos_selecionados(resumo.height, base.height)
             self._salvar_preferencias_tabela(

@@ -401,6 +401,11 @@ def calcular_aba_periodos_dataframe(
             .alias("ICMS_saidas_desac"),
             (base_estoque * aliq_factor).alias("ICMS_estoque_desac"),
         ]
+    ).with_columns(
+        [
+            pl.col("ICMS_saidas_desac").alias("ICMS_saidas_desac_periodo"),
+            pl.col("ICMS_estoque_desac").alias("ICMS_estoque_desac_periodo"),
+        ]
     )
 
     cols_qtd = [
@@ -419,6 +424,8 @@ def calcular_aba_periodos_dataframe(
         "pms",
         "ICMS_saidas_desac",
         "ICMS_estoque_desac",
+        "ICMS_saidas_desac_periodo",
+        "ICMS_estoque_desac_periodo",
         "aliq_interna",
     ]
     exprs_arredondamento = [pl.col(c).round(4) for c in cols_qtd if c in df_per.columns]
@@ -447,6 +454,8 @@ def calcular_aba_periodos_dataframe(
             "aliq_interna",
             "ICMS_saidas_desac",
             "ICMS_estoque_desac",
+            "ICMS_saidas_desac_periodo",
+            "ICMS_estoque_desac_periodo",
         ]
     ).sort(["cod_per", "id_agregado"])
 
