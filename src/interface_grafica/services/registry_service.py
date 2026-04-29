@@ -26,7 +26,9 @@ class RegistryService:
         return json.loads(self.registry_file.read_text(encoding="utf-8"))
 
     def _save_raw(self, data: list[dict]) -> None:
-        self.registry_file.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        self.registry_file.write_text(
+            json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
 
     def list_records(self) -> list[CNPJRecord]:
         rows = self._load_raw()
@@ -38,9 +40,22 @@ class RegistryService:
         now = datetime.now().isoformat(timespec="seconds")
         existing = next((item for item in rows if item["cnpj"] == cnpj), None)
         if existing is None:
-            existing = {"cnpj": cnpj, "added_at": now, "last_run_at": now if ran_now else None}
+            existing = {
+                "cnpj": cnpj,
+                "added_at": now,
+                "last_run_at": now if ran_now else None,
+            }
             rows.append(existing)
         elif ran_now:
             existing["last_run_at"] = now
         self._save_raw(rows)
         return CNPJRecord(**existing)
+
+    def delete_by_cnpj(self, cnpj: str) -> bool:
+        """Remove um CNPJ do registry e retorna True se foi encontrado e removido."""
+        rows = self._load_raw()
+        new_rows = [r for r in rows if r["cnpj"] != cnpj]
+        if len(new_rows) == len(rows):
+            return False
+        self._save_raw(new_rows)
+        return True

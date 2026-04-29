@@ -1,6 +1,10 @@
 # Tabela Mensal
 
-Este documento consolida as regras da `aba_mensal_<cnpj>.parquet`, gerada por `src/transformacao/calculos_mensais.py` e pela implementação em `src/transformacao/calculos_mensais_pkg/`.
+## Identificação Fiscal (SITAFE)
+
+Toda a lógica de tributação e agregação mensal baseia-se no `co_sefin` identificado na etapa inicial do pipeline. O sistema consulta as tabelas oficiais do SITAFE (`dados/referencias/CO_SEFIN/`) priorizando o match em `CEST + NCM` e utilizando `CEST` ou `NCM` isolados apenas como fallback. Isso garante integridade na aplicação das alíquotas mensais.
+
+Este documento consolida as regras da `aba_mensal_<cnpj>.parquet`, gerada por `src/transformacao/calculos_mensais_pkg/calculos_mensais.py`.
 
 ## Papel da tabela
 
@@ -21,17 +25,63 @@ A data efetiva do mês segue:
 - `Dt_e_s`, quando existir;
 - senão `Dt_doc`.
 
-## Principais colunas
+## Campos da Tabela
 
-- `valor_entradas` e `qtd_entradas`
-- `valor_saidas` e `qtd_saidas`
-- `pme_mes` e `pms_mes`
-- `entradas_desacob`
-- `ICMS_entr_desacob`
-- `saldo_mes`
-- `custo_medio_mes`
-- `valor_estoque`
-- `ST`, `MVA` e `MVA_ajustado`
+### Identificação e Agrupamento
+
+| Campo           | Tipo        | Descrição                                                      |
+|-----------------|-------------|----------------------------------------------------------------|
+| `ano`           | `int`       | Ano civil do movimento                                         |
+| `mes`           | `int`       | Mês do movimento (1-12)                                        |
+| `id_agregado`   | `str`       | Chave mestra de agrupamento do produto (ex: `PROD_MSTR_00001`) |
+| `descr_padrao`  | `str`       | Descrição padrão normalizada do agrupamento                    |
+| `unids_mes`     | `list[str]` | Lista de unidades de medida usadas no mês                      |
+| `unids_ref_mes` | `list[str]` | Lista de unidades de referência usadas no mês                  |
+
+### Entradas e Saídas
+
+| Campo            | Tipo    | Descrição                                                               |
+|------------------|---------|-------------------------------------------------------------------------|
+| `valor_entradas` | `float` | Soma de `preco_item` das linhas `1 - ENTRADA`                           |
+| `qtd_entradas`   | `float` | Soma de `q_conv` das linhas `1 - ENTRADA`                               |
+| `pme_mes`        | `float` | Preço médio de entrada: `valor_entradas_validas / qtd_entradas_validas` |
+| `valor_saidas`   | `float` | Soma do valor absoluto de `preco_item` das linhas `2 - SAIDAS`          |
+| `qtd_saidas`     | `float` | Soma do valor absoluto de `q_conv` das linhas `2 - SAIDAS`              |
+| `pms_mes`        | `float` | Preço médio de saída: `valor_saidas_validas / qtd_saidas_validas`       |
+
+### Saldos e Estoque
+
+| Campo             | Tipo    | Descrição                           |
+|-------------------|---------|-------------------------------------|
+| `saldo_mes`       | `float` | Último `saldo_estoque_anual` do mês |
+| `custo_medio_mes` | `float` | Último `custo_medio_anual` do mês   |
+| `valor_estoque`   | `float` | `saldo_mes * custo_medio_mes`       |
+
+### Entradas Desacobertadas e ICMS
+
+| Campo               | Tipo    | Descrição                                                                  |
+|---------------------|---------|----------------------------------------------------------------------------|
+| `entradas_desacob`  | `float` | Soma mensal de `entr_desac_anual`                                          |
+| `ICMS_entr_desacob` | `float` | ICMS calculado sobre entradas desacobertadas (apenas quando há ST vigente) |
+
+### Substituição Tributária (ST)
+
+| Campo          | Tipo    | Descrição                                                                              |
+|----------------|---------|----------------------------------------------------------------------------------------|
+| `ST`           | `str`   | Histórico textual dos períodos de ST do mês                                            |
+| `it_in_st`     | `str`   | Flag "S"/"N" de sujeito a ST                                                           |
+| `MVA`          | `float` | Percentual MVA (`it_pc_mva`) da última movimentação válida do mês, apenas quando há ST |
+| `MVA_ajustado` | `float` | MVA ajustado pela fórmula, quando `it_in_mva_ajustado = 'S'`                           |
+
+### Campos por Período de Inventário (sufixo `_periodo`)
+
+| Campo                       | Tipo    | Descrição                                      |
+|-----------------------------|---------|------------------------------------------------|
+| `entradas_desacob_periodo`  | `float` | Soma de `entr_desac_periodo` no mês            |
+| `ICMS_entr_desacob_periodo` | `float` | ICMS sobre entradas desacobertadas por período |
+| `saldo_mes_periodo`         | `float` | Último `saldo_estoque_periodo` do mês          |
+| `custo_medio_mes_periodo`   | `float` | Último `custo_medio_periodo` do mês            |
+| `valor_estoque_periodo`     | `float` | `saldo_mes_periodo * custo_medio_mes_periodo`  |
 
 ## Regras de agregação física
 
@@ -50,7 +100,7 @@ entradas_desacob = soma mensal de entr_desac_anual
 
 Ou seja, a mensal apenas resume eventos já detectados na `mov_estoque`.
 
-## Médias do mês
+## Médias do mês (PME e PMS)
 
 `pme_mes` e `pms_mes` usam somente movimentos válidos. Ficam fora:
 
@@ -103,14 +153,33 @@ Onde `MVA_efetivo` é:
 - `it_pc_mva / 100`, quando `it_in_mva_ajustado = 'N'`;
 - `[((1 + MVA_orig) * (1 - ALQ_inter)) / (1 - ALQ_interna)] - 1`, quando `it_in_mva_ajustado = 'S'`.
 
+**Nota sobre arredondamento para cálculo de ICMS:**
+
+As médias usadas na base do ICMS (`__pme_mes_icms__` e `__pms_mes_icms__`) são arredondadas para 2 casas decimais antes da multiplicação, evitando diferença entre o valor exibido e o valor efetivamente calculado.
+
 ## Arredondamento
 
-- quantidades e saldos: 4 casas;
-- valores monetários: 2 casas;
-- `MVA_ajustado`: 6 casas.
+| Categoria                                                                                   | Casas Decimais |
+|---------------------------------------------------------------------------------------------|----------------|
+| Quantidades e saldos (`qtd_entradas`, `qtd_saidas`, `saldo_mes`, `entradas_desacob`)        | 4              |
+| Valores monetários (`valor_entradas`, `valor_saidas`, `valor_estoque`, `ICMS_entr_desacob`) | 2              |
+| Preços médios (`pme_mes`, `pms_mes`, `custo_medio_mes`, `MVA`)                              | 4              |
+| MVA ajustado (`MVA_ajustado`)                                                               | 6              |
 
 ## Saída gerada
 
 ```text
 dados/CNPJ/<cnpj>/analises/produtos/aba_mensal_<cnpj>.parquet
 ```
+
+## Período de Inventário
+
+A tabela mensal inclui campos com sufixo `_periodo` que refletem o cálculo por período de inventário (campo `periodo_inventario` da `mov_estoque`). Isso permite auditoria independente por período fiscal customizado, não apenas ano civil.
+
+Os campos `_periodo` seguem as mesmas regras dos campos anuais, mas são recalculados a cada `0 - ESTOQUE INICIAL` dentro de um `id_agrupado`:
+
+- `entradas_desacob_periodo`: soma de `entr_desac_periodo` no mês;
+- `saldo_mes_periodo`: último `saldo_estoque_periodo` do mês;
+- `custo_medio_mes_periodo`: último `custo_medio_periodo` do mês;
+- `valor_estoque_periodo`: `saldo_mes_periodo * custo_medio_mes_periodo`;
+- `ICMS_entr_desacob_periodo`: ICMS sobre entradas desacobertadas por período.

@@ -20,8 +20,17 @@ def test_load_dataset_filtra_coluna_lista_com_contem(tmp_path: Path):
     ).write_parquet(path)
 
     service = ParquetService(root=tmp_path)
-    df_ncm = service.load_dataset(path, [FilterCondition(column="lista_ncm", operator="contem", value="1000")])
-    df_descr = service.load_dataset(path, [FilterCondition(column="lista_descricoes", operator="contem", value="garrafa")])
+    df_ncm = service.load_dataset(
+        path, [FilterCondition(column="lista_ncm", operator="contem", value="1000")]
+    )
+    df_descr = service.load_dataset(
+        path,
+        [
+            FilterCondition(
+                column="lista_descricoes", operator="contem", value="garrafa"
+            )
+        ],
+    )
 
     assert df_ncm["id_agrupado"].to_list() == ["AGR_1"]
     assert df_descr["id_agrupado"].to_list() == ["AGR_1"]

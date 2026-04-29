@@ -2,6 +2,17 @@
 
 Este documento consolida as regras da `aba_anual_<cnpj>.parquet`, gerada por `src/transformacao/calculos_anuais.py` e pela implementação em `src/transformacao/calculos_anuais_pkg/`.
 
+## Identificação Fiscal (SITAFE)
+
+Para que os saldos de estoque possam ser auditados sob a ótica da carga tributária, cada produto é vinculado a um `co_sefin` (código de classificação interna da SEFIN) utilizando as tabelas do SITAFE localizadas em `dados/referencias/CO_SEFIN/`.
+
+A identificação ocorre na etapa `item_unidades` via `pl.coalesce`, seguindo esta precedência de match:
+1. **CEST + NCM**: Prioridade máxima via `sitafe_cest_ncm.parquet`.
+2. **Somente CEST**: Fallback para match por CEST via `sitafe_cest.parquet`.
+3. **Somente NCM**: Fallback final para match por NCM via `sitafe_ncm.parquet`.
+
+Este vínculo é essencial para as colunas enriquecidas como `it_pc_interna`, `it_in_st` e `it_pc_mva`.
+
 ## Papel da tabela
 
 A tabela anual resume a auditoria por `id_agrupado` e ano civil, confrontando:
@@ -121,6 +132,10 @@ Regra de ST vigente no código:
 
 - quantidades e saldos: 4 casas;
 - `pme`, `pms`, `aliq_interna`, `ICMS_saidas_desac` e `ICMS_estoque_desac`: 2 casas.
+
+## Identificação do CO_SEFIN (SITAFE)
+
+O `co_sefin` de cada produto, que determina as regras de ressarcimento e tributação aplicadas nesta tabela, é identificado no início do pipeline através de um cruzamento com as tabelas do SITAFE (`CEST+NCM`, `CEST` ou `NCM`, nesta ordem de prioridade). Isso garante que o resumo anual reflita a classificação fiscal correta reconhecida pela SEFIN.
 
 ## Saída gerada
 

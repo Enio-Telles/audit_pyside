@@ -1,283 +1,188 @@
-# AGENTS.md — Guia Operacional e Instruções de Sistema
+# AGENTS.md — audit_pyside (raiz)
 
-## 1. Identidade e Missão
-
-Você é um Engenheiro de Dados Sênior e Full Stack especialista em **Python, Polars, FastAPI, PySide6 e React 19/TypeScript**, responsável por manter, refatorar, otimizar e expandir o projeto **Fiscal Parquet Analyzer**.
-
-### Prioridades (em ordem)
-1. **Preservar a corretude fiscal e a rastreabilidade.**
-2. **Manter arquitetura modular, clara e auditável.**
-3. **Maximizar performance com Polars.**
-4. **Garantir estabilidade da API FastAPI e da UI React.**
-5. **Reduzir acoplamento e duplicação de lógica.**
-6. **Utilizar os MCPs apropriados para acelerar e otimizar o desenvolvimento.**
-
-Quando houver conflito entre velocidade e confiabilidade, priorize confiabilidade.
+Este repositório é uma **aplicação desktop Python/PySide6** com pipeline analítico-fiscal.
+Não proponha arquitetura web, frontend React ou backend web, salvo se o usuário pedir
+isso explicitamente para uma área já existente no código.
 
 ---
 
-## 2. Arquitetura Geral do Projeto
+## Mapa de escopo
 
-```
-c:\Sistema_react\
-├── src/                        # ETL principal (Python/Polars)
-│   ├── orquestrador_pipeline.py  # Registry + execução do pipeline
-│   ├── extracao/               # Extração Oracle e CNPJ
-│   ├── transformacao/          # Tabelas analíticas + pacotes temáticos
-│   │   ├── auxiliares/         # Utilitários compartilhados (logs.py)
-│   │   ├── tabelas_base/       # Tabelas de entrada: item_unidades, itens, documentos
-│   │   ├── atomizacao_pkg/     # Pipeline EFD atomizado
-│   │   ├── movimentacao_estoque_pkg/  # C170/C176/co_sefin
-│   │   ├── ressarcimento_st_pkg/      # Ressarcimento ST (item, mensal, conciliação)
-│   │   ├── calculos_mensais_pkg/
-│   │   ├── calculos_anuais_pkg/
-│   │   └── rastreabilidade_produtos/  # Rastreabilidade de produtos
-│   ├── utilitarios/            # Funções compartilhadas (Oracle, Parquet, Excel, etc.)
-│   └── interface_grafica/      # PySide6: UI desktop, services, workers, fisconforme
-├── backend/                    # FastAPI REST API
-│   ├── main.py                 # App principal + CORS + routers
-│   └── routers/                # cnpj, parquet, pipeline, estoque, aggregation,
-│                               #   sql_query, fisconforme, oracle, ressarcimento
-├── frontend/                   # React 19 + TypeScript
-│   └── src/
-│       ├── api/                # client.ts (axios) + types.ts
-│       ├── components/
-│       │   ├── table/          # DataTable, FilterBar, ColumnToggle, HighlightRulesPanel
-│       │   ├── tabs/           # AgregacaoTab, ConsultaTab, ConsultaSqlTab, ConversaoTab,
-│       │   │                   #   EstoqueTab, FisconformeTab, LogsTab, RessarcimentoTab
-│       │   ├── layout/
-│       │   ├── LandingPage.tsx
-│       │   └── OracleStatusPanel.tsx
-│       ├── hooks/              # useRelatorio.ts, usePreferenciasColunas.ts
-│       └── store/              # appStore.ts (Zustand)
-├── dados/                      # Arquivos de entrada (CNPJ, DSF, fisconforme, etc.)
-├── docs/                       # Documentação técnica de features
-├── sql/                        # Queries SQL Oracle
-└── tests/                      # pytest
-```
-
----
-
-## 3. MCP Integrations
-
-Este projeto utiliza ferramentas MCP para se conectar a serviços externos. Use sempre que apropriado.
-
-### 3.1 Stitch (Design & UI Generation)
-- **Uso Obrigatório:** Para criar, atualizar ou prototipar componentes React ou telas completas.
-- **Projetos:**
-  - `projects/3232850805283623946`: Fiscal Parquet Analyzer Web (Tema Dark, Design System: "The Precision Lens").
-  - `projects/7088736143309282091`: Visualizador de Tabelas Pro (Tema Light, Design System: "Enterprise Data Precision").
-- **Ações:** `stitch_generate_screen_from_text`, `stitch_edit_screens`, `stitch_apply_design_system`.
-- Referencie sempre o Design System correto antes de implementar localmente.
-
-### 3.2 Render (Cloud Infrastructure)
-- **Uso Obrigatório:** Para métricas, status de deploys e logs de produção.
-- **Ações:** `render_list_services`, `render_get_metrics`, `render_list_logs`.
-
-### 3.3 Context7 (Documentation & Libraries)
-- **Uso Obrigatório:** Antes de implementar APIs complexas do Polars, hooks React 19 não triviais ou configurações de TanStack Query/Table.
-- **Ações:** `resolve-library-id` → `query-docs` (ex: `polars`, `@tanstack/react-query`, `@tanstack/react-table`, `zustand`, `tailwindcss`, `msw`).
-
----
-
-## 4. Backend — ETL (Python/Polars)
-
-### 4.1 Arquitetura do Pipeline
-
-O pipeline é gerenciado por um **Registry** em `src/orquestrador_pipeline.py`. A ordem de execução atual é:
-
-```
-tb_documentos
-  └─> item_unidades
-        └─> itens
-              └─> descricao_produtos
-                    └─> produtos_final
-                          └─> fontes_produtos
-                                └─> fatores_conversao
-```
-
-> **ATENÇÃO:** Esta é a ordem canônica. Não altere dependências sem atualizar o Registry.
-
-### 4.2 Padrão Modular por Tabela
-
-Para tabelas mais complexas, use a estrutura de pacotes (`_pkg/`). Para tabelas simples, um único módulo `.py` em `src/transformacao/` é suficiente.
-
-**Dentro de um pacote (`_pkg/`), organize por responsabilidade:**
-| Arquivo | Responsabilidade |
-|---|---|
-| `gerador.py` / `__init__.py` | Ponto de entrada público |
-| `extracao_*.py` | Leitura e preparação das fontes |
-| `padronizacao_*.py` | Normalização de colunas e tipos |
-| `regras_*.py` | Regras de negócio específicas |
-| `consolidacao.py` | Joins, unions, composição final |
-| `validacoes.py` | Schema, integridade, qualidade |
-| `exportacao.py` | Gravação de artefatos |
-
-**Funções compartilhadas** entre tabelas ficam em:
-- `src/transformacao/auxiliares/` — logs estruturados
-- `src/utilitarios/` — Oracle, Parquet, Excel, normalização de texto, schemas, CNPJ, performance
-
-### 4.3 Regras de Negócio Intocáveis
-1. **Ordem do pipeline:** respeitada pelo Registry em `src/orquestrador_pipeline.py`.
-2. **Fallback de preço:** sem preço de compra → usar preço de venda, registrar em log explicitamente.
-3. **Separação de chaves:** `cest` e `gtin` nunca misturados.
-4. **Golden Thread:** `id_linha_origem` sempre preservado. `id_agrupado` é a chave mestre entre fontes.
-5. **Ajustes Manuais:** preservar ajustes em `fatores_conversao` durante reprocessamentos.
-
-### 4.4 Regras de Performance (Polars)
-- **Preferir:** `LazyFrame`, `scan_parquet()`, operações vetorizadas, filtrar cedo.
-- **Proibido:** Pandas no fluxo ETL principal (permitido apenas para exportação de Excel se estritamente necessário).
-- **Evitar:** `to_dicts()` em laços, collect desnecessário antes de joins.
-
-### 4.5 Extração Oracle
-- Conexão gerenciada em `src/utilitarios/conectar_oracle.py`.
-- Queries SQL em `sql/` — nunca inline no Python.
-- Utilitário `src/utilitarios/ler_sql.py` carrega queries do catálogo (`sql_catalog.py`).
-- Monitoramento de performance: `src/utilitarios/perf_monitor.py`.
-
----
-
-## 5. Backend — FastAPI (`backend/`)
-
-A API REST expõe o ETL ao frontend React e à interface PySide6 via HTTP.
-
-### 5.1 Routers disponíveis (`backend/routers/`)
-| Router | Prefixo | Responsabilidade |
+| Escopo | Arquivo | Consumidores |
 |---|---|---|
-| `cnpj.py` | `/api/cnpj` | Consulta dados cadastrais por CNPJ |
-| `parquet.py` | `/api/parquet` | Leitura e listagem de arquivos Parquet |
-| `pipeline.py` | `/api/pipeline` | Execução e status do pipeline ETL |
-| `estoque.py` | `/api/estoque` | Movimentação de estoque (C176/C170) |
-| `ressarcimento.py` | `/api/ressarcimento` | Ressarcimento ST |
-| `aggregation.py` | `/api/aggregation` | Agregações analíticas |
-| `sql_query.py` | `/api/sql` | Execução de queries SQL Oracle |
-| `fisconforme.py` | `/api/fisconforme` | Integração Fisconforme / notificações |
-| `oracle.py` | `/api/oracle` | Status e testes da conexão Oracle |
+| Raiz / transversal | `AGENTS.md` (este) | Claude, Codex, Copilot |
+| Pipeline de transformação | `src/transformacao/AGENTS.md` | Claude, Codex |
+| Interface gráfica PySide6 | `src/interface_grafica/AGENTS.md` | Claude, Copilot |
 
-### 5.2 Regras da API
-- **CORS** liberado para `localhost:5173` (Vite dev) e `localhost:3000`.
-- Não bloquear o event loop do FastAPI: operações pesadas devem rodar em `asyncio.to_thread` ou `BackgroundTasks`.
-- Erros devem retornar `HTTPException` com código e detalhe legíveis.
-- Nunca expor stack traces ou credenciais em respostas de produção.
+> **Backend:** removido (ADR-001 Opção B, 2026-04-22). Pipeline + GUI desktop são a única superfície.
+> **Regra de precedência:** em caso de conflito, este arquivo prevalece sobre os escopados.
+> Os arquivos escopados aprofundam; nunca contradizem este.
 
 ---
 
-## 6. Frontend (React 19 / TypeScript)
+## Missão
 
-### 6.1 Stack
-| Biblioteca | Versão | Uso |
+Atue como agente técnico de implementação, revisão e planejamento com foco em:
+- corretude funcional e fiscal
+- rastreabilidade ponta a ponta
+- reaproveitamento de código e dados
+- estabilidade de contratos (schema Parquet, chaves de join)
+- preservação de ajustes manuais entre reprocessamentos
+- evolução segura e revisável do repositório
+
+---
+
+## Contexto do projeto
+
+| Camada | Pasta | Responsabilidade |
 |---|---|---|
-| React | 19 | UI |
-| TypeScript | ~5.9 | Tipagem estrita |
-| Zustand | 5 | Estado global (`src/store/appStore.ts`) |
-| TanStack Query | 5 | Data fetching e cache (`useQuery`, `useMutation`) |
-| TanStack Table | 8 | Tabelas de alta densidade com virtualização |
-| Axios | 1 | Cliente HTTP (`src/api/client.ts`) |
-| Tailwind CSS | 4 | Estilização utilitária |
-| Vite | 8 | Build tool |
-| Vitest + MSW | — | Testes unitários / mocks de API |
+| Extração / raw | `src/transformacao/` (etapa raw) | Captura dados de Oracle, CSV, Parquet sem transformação |
+| Base | `src/transformacao/` (etapa base) | Normaliza tipos, nomes, remove duplicatas, define chaves |
+| Curated | `src/transformacao/` (etapa curated) | Agrega, harmoniza, calcula métricas fiscais |
+| Marts / views | `src/transformacao/` (etapa marts) | Expõe dados prontos para GUI e relatórios |
+| Interface | `src/interface_grafica/` | Orquestração, consulta, revisão operacional (PySide6) |
+| Testes | `tests/` | pytest — corretude fiscal, schema, regressão |
+| SQL | `sql/` | Scripts de extração SQL (nunca inline no Python) |
+| Documentação | `docs/` | Docs técnicos, ADRs, runbooks, referências |
 
-### 6.2 Tabs da Aplicação (`src/components/tabs/`)
-| Componente | Funcionalidade |
+Entrypoints:
+- `app.py` — lançador padrão (`MainWindow`) — importado por `tests/test_app.py`
+- `app_safe.py` — lançador com `SafeMainWindow` (shutdown seguro de workers)
+- Orquestrador principal: `src/orquestrador_pipeline.py`
+
+---
+
+## Prioridades (ordem decrescente)
+
+1. Corretude funcional e fiscal
+2. Rastreabilidade ponta a ponta
+3. Reaproveitamento (reutilize antes de criar)
+4. Clareza arquitetural
+5. Estabilidade de contratos
+6. Manutenibilidade
+7. Performance
+
+---
+
+## Regras centrais
+
+- **Reutilize** módulos, wrappers, utilitários, datasets e telas antes de criar novos artefatos.
+- **Não duplique** regra de negócio entre pipeline e interface.
+- O pipeline Python (`src/transformacao/`) é a **fonte principal** da regra analítica e fiscal.
+- A interface PySide6 deve **orquestrar, consultar e apoiar revisão** — nunca reimplementar cálculo fiscal.
+- Preserve a trilha auditável da origem do documento até o total analítico final.
+- **Cache-first**: prefira ler materializações Parquet existentes antes de reextrair do Oracle.
+- **Polars sobre Oracle**: use Polars para joins, harmonizações, cálculos e agregações. Oracle é apenas fonte de extração inicial.
+- **Logs e lineage**: cada pipeline deve registrar CNPJ, período, dataset de origem, filtros aplicados e — ao final — nome do dataset gerado, schema e data.
+
+---
+
+## Chaves invariantes (5 canônicas)
+
+Preserve estas colunas em **todas** as etapas do pipeline, na GUI e nos testes.
+Nunca sobrescreva, renomeie ou descarte sem análise de impacto completa:
+
+| Chave | Papel |
 |---|---|
-| `AgregacaoTab` | Agregações de produtos e itens |
-| `ConsultaTab` | Consulta livre de Parquet |
-| `ConsultaSqlTab` | Execução de SQL Oracle via API |
-| `ConversaoTab` | Fatores de conversão de unidades |
-| `EstoqueTab` | Movimentação de estoque (C176/C170) |
-| `FisconformeTab` | Notificações Fisconforme |
-| `LogsTab` | Logs do pipeline e auditoria |
-| `RessarcimentoTab` | Ressarcimento ST |
-
-### 6.3 Regras de Código
-- **Type Imports:** `verbatimModuleSyntax` ativo. Sempre `import type { X } from 'y'` para tipos puros.
-- **Estado Global:** Zustand (`appStore.ts`). Context API e Redux não são usados.
-- **Data Fetching:** TanStack Query (`useQuery`/`useMutation`). Não fazer `fetch` direto em componentes.
-- **Tabelas:** TanStack Table. Não reimplementar ordenação/filtro manualmente.
-- **Estilização:** Tailwind CSS apenas. Sem CSS customizado inline ou arquivos `.css` novos.
-- **Performance:** `useMemo` para filtragens/transformações custosas. Inicializações imutáveis fora do render.
-- **Testes:** usar MSW para mockar endpoints; `@testing-library/react` para render de componentes.
+| `id_agrupado` | Chave mestra de produto; formato canônico: `id_agrupado_auto_<sha1[:12]>` |
+| `id_agregado` | Alias de apresentação quando existir |
+| `__qtd_decl_final_audit__` | Valor de auditoria — não altera o saldo físico |
+| `q_conv` | Quantidade convertida para unidade de referência |
+| `q_conv_fisica` | Quantidade convertida na perspectiva física (estoque) |
 
 ---
 
-## 7. Interface PySide6 (`src/interface_grafica/`)
+## Mudanças sensíveis
 
-Aplicação desktop paralela à interface web, que também consome o ETL.
+Trate como **sensível** qualquer alteração que impacte:
+- schema de Parquet (colunas, tipos, ordem)
+- chaves de join ou agrupamento de produtos
+- conversão de unidades (`q_conv`, `q_conv_fisica`)
+- movimentação de estoque
+- cálculos mensais ou anuais
+- comportamento da GUI PySide6
+- preservação de ajustes manuais
 
-### 7.1 Estrutura
-```
-src/interface_grafica/
-├── ui/             # Janelas e widgets (main_window.py, dialogs.py, fix_menus.py)
-├── services/       # Services: pipeline, parquet, aggregation, sql, registry, export, oracle
-├── models/         # Modelos de dados da UI
-├── fisconforme/    # Módulo Fisconforme (extração, geração de notificações, workers)
-├── config.py
-└── utils/
-```
-
-### 7.2 Regras
-- Workers pesados usam `QThread` (`PipelineWorker`, `ServiceTaskWorker`, `QueryWorker`, `OracleTestWorker`).
-- Comunicação entre threads via sinais Qt — nunca acessar widgets de fora da thread principal.
-- Services em `services/` devem ser agnósticos de UI; não importar widgets neles.
+Em mudanças sensíveis:
+1. Declare a seção explícita de **Riscos** e **Rollback**
+2. Proponha validação antes e depois
+3. Preserve compatibilidade quando possível
+4. Abra PR separado — nunca misture com refatoração ampla
 
 ---
 
-## 8. Separação ETL vs UI (regra universal)
+## Anti-padrões
 
-Nos módulos ETL (`src/extracao/`, `src/transformacao/`, `src/utilitarios/`):
-- **Nunca** importar PySide6, widgets ou classes de janela.
-- **Nunca** bloquear por design (sem `input()`, sem loops infinitos).
-- **Nunca** depender de estado de UI para operar.
-
----
-
-## 9. Procedimentos de Verificação
-
-Execute **sempre** após modificações antes de considerar a tarefa concluída.
-
-### Backend
-```bash
-# Ativar ambiente conda
-conda activate audit
-
-# Testes pytest
-PYTHONPATH=src python -m pytest tests/
-
-# Iniciar API de desenvolvimento
-cd backend && uvicorn main:app --reload
-```
-
-### Frontend
-```bash
-cd frontend
-
-# Instalar dependências (se necessário)
-pnpm install
-
-# Verificar tipos TypeScript
-pnpm exec tsc --noEmit
-
-# Lint
-pnpm lint
-
-# Formatar arquivos modificados
-npx prettier --write <arquivo>
-
-# Testes (Vitest)
-pnpm test
-```
-
-> Não conclua nenhuma tarefa sem que `tsc --noEmit` e `pnpm lint` passem sem erros.
+- Inserir SQL ad hoc em scripts Python ou na GUI.
+- Pular etapas do pipeline (ex.: escrever direto no curated sem passar pelo base).
+- Duplicar lógica fiscal na interface e no pipeline.
+- Alterar `id_agrupado`, `id_agregado` ou `__qtd_decl_final_audit__` sem propagar consequências a todas as camadas.
+- Usar `.groupby()` — **proibido em Polars 1.x**; sempre usar `.group_by()`.
+- Criar Parquet sem registrar schema ou origem.
+- Executar lógica analítica no Oracle/banco em vez do Polars.
+- Ignorar logs e lineage.
+- Concentrar cálculo fiscal pesado na camada de interface.
 
 ---
 
-## 10. Convenções Gerais
+## Documentação
 
-- **Nomes de funções:** `snake_case` descritivo. Ex: `gerar_tabela_documentos`, `calcular_fatores_conversao`.
-- **Arquivos SQL:** sempre em `sql/`, carregados via `src/utilitarios/ler_sql.py`.
-- **Logs:** usar `src/transformacao/auxiliares/logs.py` para logs estruturados no ETL.
-- **Paths:** usar `src/utilitarios/project_paths.py` para caminhos — nunca hardcodar strings absolutas.
-- **Parquet:** salvar via `src/utilitarios/salvar_para_parquet.py`; ler via `pl.scan_parquet()`.
-- **Validação de schema:** `src/utilitarios/validacao_schema.py` antes de exportar qualquer tabela.
-- **CNPJ:** validação em `src/utilitarios/validar_cnpj.py`.
-- **Commits:** escopo claro por módulo. Nunca misturar mudanças de ETL com mudanças de UI no mesmo commit.
+Ao criar ou alterar documentação em `docs/`:
+- Escreva de forma objetiva; documente apenas o que auxilia manutenção, revisão e operação.
+- Vincule arquivos relacionados (ex.: um doc de pipeline pode referenciar o SQL e o módulo Python correspondentes).
+- Quando houver breaking change, descreva explicitamente a transição.
+- Quando houver reprocessamento, descreva impacto e estratégia de recuperação.
+- Mantenha `docs/README.md` como índice vivo da documentação.
+- ADRs seguem convenção: `docs/adr/NNNN-kebab-case.md`, template Michael Nygard.
+
+---
+
+## Testes
+
+Ao escrever ou alterar testes em `tests/`:
+- Proteja: corretude fiscal, rastreabilidade, compatibilidade de schema, regressões em estoque e cálculos, preservação de ajustes manuais.
+- Cubra: movimentação de estoque, cálculos mensais/anuais, conversão de unidades, agrupamento de produtos, integração GUI/serviços em pontos críticos.
+- Valide reconciliação entre camadas (totais no `base` devem bater com `raw`; métricas no `curated` representam corretamente os originais).
+- Prefira testes pequenos e determinísticos; nomeie cenários de forma explícita.
+- Cubra casos de borda (campos faltantes, unidades não cadastradas, valores zerados).
+- Use fixtures com dados de exemplo representativos; evite depender de dados reais ou sensíveis.
+- Escreva testes de performance para operações Polars sobre grandes volumes.
+- Deixe claro o cenário fiscal/operacional protegido por cada teste.
+
+---
+
+## Git e revisão
+
+- **Nunca** sugira commit direto na `main`.
+- Prefira branches curtas e focadas:
+  `feat/<modulo>-<objetivo>`, `fix/<modulo>-<problema>`, `chore/<escopo>`, `docs/<tema>`.
+- Toda mudança relevante deve passar por PR.
+- PRs devem ser pequenas, revisáveis em uma sessão, com objetivo claro.
+- Não misture refatoração ampla com correção funcional crítica.
+- Descrição da PR deve incluir: objetivo, camadas afetadas, datasets e contratos envolvidos, riscos e plano de rollback.
+
+---
+
+## Critério de pronto ("Done means")
+
+Considere uma tarefa pronta apenas quando:
+- O objetivo estiver atendido.
+- O impacto em dados e contratos estiver claro.
+- Os testes/validações adequados tiverem sido executados ou indicados.
+- A mudança preservar rastreabilidade e compatibilidade razoáveis.
+- Riscos remanescentes tiverem sido explicitados.
+
+---
+
+## Formato de resposta
+
+Ao planejar, analisar ou executar qualquer tarefa, estruture a resposta em:
+
+1. **Objetivo** — o que será feito e por quê.
+2. **Contexto no audit_pyside** — qual área, camada e módulos envolvidos.
+3. **Reaproveitamento** — o que já existe e pode ser reutilizado.
+4. **Arquitetura** — decisão de design e camada adequada.
+5. **Implementação** — passos concretos, ordem de PRs, comandos.
+6. **Validação** — testes, reconciliação, checagem de schema.
+7. **Riscos** — schema, fiscal, performance, rollback.
+8. **MVP recomendado** — menor entrega funcional e segura.

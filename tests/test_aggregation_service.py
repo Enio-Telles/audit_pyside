@@ -11,13 +11,19 @@ import interface_grafica.services.aggregation_service as aggregation_service_mod
 from interface_grafica.services.aggregation_service import ServicoAgregacao
 
 
-def test_recalcular_valores_totais_persiste_medias_sem_duplicar_descricao(monkeypatch, tmp_path: Path):
+def test_recalcular_valores_totais_persiste_medias_sem_duplicar_descricao(
+    monkeypatch, tmp_path: Path
+):
     cnpj = "12345678000190"
     pasta_prod = tmp_path / cnpj / "analises" / "produtos"
     pasta_prod.mkdir(parents=True, exist_ok=True)
 
     monkeypatch.setattr(aggregation_service_module, "CNPJ_ROOT", tmp_path)
-    monkeypatch.setattr(aggregation_service_module, "registrar_evento_performance", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        aggregation_service_module,
+        "registrar_evento_performance",
+        lambda *args, **kwargs: None,
+    )
 
     pl.DataFrame(
         {
@@ -48,7 +54,9 @@ def test_recalcular_valores_totais_persiste_medias_sem_duplicar_descricao(monkey
 
     assert servico.recalcular_valores_totais(cnpj, reprocessar_referencias=False)
 
-    df = pl.read_parquet(pasta_prod / f"produtos_agrupados_{cnpj}.parquet").sort("id_agrupado")
+    df = pl.read_parquet(pasta_prod / f"produtos_agrupados_{cnpj}.parquet").sort(
+        "id_agrupado"
+    )
     row_a = df.row(0, named=True)
     row_b = df.row(1, named=True)
 
@@ -75,13 +83,19 @@ def test_recalcular_valores_totais_persiste_medias_sem_duplicar_descricao(monkey
     assert row_b["total_movimentacao"] == 0.0
 
 
-def test_agregar_linhas_recalcula_padroes_com_colunas_item_unidades(monkeypatch, tmp_path: Path):
+def test_agregar_linhas_recalcula_padroes_com_colunas_item_unidades(
+    monkeypatch, tmp_path: Path
+):
     cnpj = "12345678000190"
     pasta_prod = tmp_path / cnpj / "analises" / "produtos"
     pasta_prod.mkdir(parents=True, exist_ok=True)
 
     monkeypatch.setattr(aggregation_service_module, "CNPJ_ROOT", tmp_path)
-    monkeypatch.setattr(aggregation_service_module, "registrar_evento_performance", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        aggregation_service_module,
+        "registrar_evento_performance",
+        lambda *args, **kwargs: None,
+    )
 
     pl.DataFrame(
         {
@@ -124,9 +138,15 @@ def test_agregar_linhas_recalcula_padroes_com_colunas_item_unidades(monkeypatch,
     ).write_parquet(pasta_prod / f"item_unidades_{cnpj}.parquet")
 
     servico = ServicoAgregacao()
-    monkeypatch.setattr(servico, "recalcular_valores_totais", lambda *args, **kwargs: True)
-    monkeypatch.setattr(servico, "recalcular_produtos_final", lambda *args, **kwargs: True)
-    monkeypatch.setattr(servico, "recalcular_referencias_produtos", lambda *args, **kwargs: True)
+    monkeypatch.setattr(
+        servico, "recalcular_valores_totais", lambda *args, **kwargs: True
+    )
+    monkeypatch.setattr(
+        servico, "recalcular_produtos_final", lambda *args, **kwargs: True
+    )
+    monkeypatch.setattr(
+        servico, "recalcular_referencias_produtos", lambda *args, **kwargs: True
+    )
 
     resultado = servico.agregar_linhas(cnpj, ["AGR_1", "AGR_2"])
 
@@ -155,13 +175,19 @@ def test_agregar_linhas_recalcula_padroes_com_colunas_item_unidades(monkeypatch,
     assert len(historico[-1]["grupos_origem"]) == 2
 
 
-def test_garantir_metricas_regenera_schema_legado_com_descricoes(monkeypatch, tmp_path: Path):
+def test_garantir_metricas_regenera_schema_legado_com_descricoes(
+    monkeypatch, tmp_path: Path
+):
     cnpj = "12345678000190"
     pasta_prod = tmp_path / cnpj / "analises" / "produtos"
     pasta_prod.mkdir(parents=True, exist_ok=True)
 
     monkeypatch.setattr(aggregation_service_module, "CNPJ_ROOT", tmp_path)
-    monkeypatch.setattr(aggregation_service_module, "registrar_evento_performance", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        aggregation_service_module,
+        "registrar_evento_performance",
+        lambda *args, **kwargs: None,
+    )
 
     pl.DataFrame(
         {
@@ -171,7 +197,9 @@ def test_garantir_metricas_regenera_schema_legado_com_descricoes(monkeypatch, tm
         }
     ).write_parquet(pasta_prod / f"produtos_agrupados_{cnpj}.parquet")
 
-    pl.DataFrame({"id_descricao": ["desc_1"]}).write_parquet(pasta_prod / f"descricao_produtos_{cnpj}.parquet")
+    pl.DataFrame({"id_descricao": ["desc_1"]}).write_parquet(
+        pasta_prod / f"descricao_produtos_{cnpj}.parquet"
+    )
     pl.DataFrame({"id_descricao": ["desc_1"], "id_agrupado": ["AGR_1"]}).write_parquet(
         pasta_prod / f"produtos_final_{cnpj}.parquet"
     )
@@ -206,8 +234,12 @@ def test_garantir_metricas_regenera_schema_legado_com_descricoes(monkeypatch, tm
         ).write_parquet(pasta_prod / f"id_agrupados_{cnpj}.parquet")
         return True
 
-    monkeypatch.setattr(aggregation_service_module, "inicializar_produtos_agrupados", fake_inicializar)
-    monkeypatch.setattr(aggregation_service_module, "gerar_id_agrupados", fake_id_agrupados)
+    monkeypatch.setattr(
+        aggregation_service_module, "inicializar_produtos_agrupados", fake_inicializar
+    )
+    monkeypatch.setattr(
+        aggregation_service_module, "gerar_id_agrupados", fake_id_agrupados
+    )
 
     servico = ServicoAgregacao()
     monkeypatch.setattr(
@@ -223,8 +255,12 @@ def test_garantir_metricas_regenera_schema_legado_com_descricoes(monkeypatch, tm
 
     assert servico.garantir_metricas_tabela_agregadas(cnpj) is True
 
-    schema_agr = pl.read_parquet(pasta_prod / f"produtos_agrupados_{cnpj}.parquet", n_rows=1).columns
-    schema_id = pl.read_parquet(pasta_prod / f"id_agrupados_{cnpj}.parquet", n_rows=1).columns
+    schema_agr = pl.read_parquet(
+        pasta_prod / f"produtos_agrupados_{cnpj}.parquet", n_rows=1
+    ).columns
+    schema_id = pl.read_parquet(
+        pasta_prod / f"id_agrupados_{cnpj}.parquet", n_rows=1
+    ).columns
 
     assert "lista_descricoes" in schema_agr
     assert "lista_desc_compl" in schema_agr
@@ -244,7 +280,11 @@ def test_reverter_agrupamento_restabelece_grupos_origem(monkeypatch, tmp_path: P
     pasta_prod.mkdir(parents=True, exist_ok=True)
 
     monkeypatch.setattr(aggregation_service_module, "CNPJ_ROOT", tmp_path)
-    monkeypatch.setattr(aggregation_service_module, "registrar_evento_performance", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        aggregation_service_module,
+        "registrar_evento_performance",
+        lambda *args, **kwargs: None,
+    )
 
     pl.DataFrame(
         {
@@ -286,9 +326,15 @@ def test_reverter_agrupamento_restabelece_grupos_origem(monkeypatch, tmp_path: P
     ).write_parquet(pasta_prod / f"item_unidades_{cnpj}.parquet")
 
     servico = ServicoAgregacao()
-    monkeypatch.setattr(servico, "recalcular_valores_totais", lambda *args, **kwargs: True)
-    monkeypatch.setattr(servico, "recalcular_produtos_final", lambda *args, **kwargs: True)
-    monkeypatch.setattr(servico, "recalcular_referencias_produtos", lambda *args, **kwargs: True)
+    monkeypatch.setattr(
+        servico, "recalcular_valores_totais", lambda *args, **kwargs: True
+    )
+    monkeypatch.setattr(
+        servico, "recalcular_produtos_final", lambda *args, **kwargs: True
+    )
+    monkeypatch.setattr(
+        servico, "recalcular_referencias_produtos", lambda *args, **kwargs: True
+    )
 
     servico.agregar_linhas(cnpj, ["AGR_1", "AGR_2"])
     resultado = servico.reverter_agrupamento(cnpj, "AGR_1")
@@ -296,23 +342,33 @@ def test_reverter_agrupamento_restabelece_grupos_origem(monkeypatch, tmp_path: P
     assert resultado["success"] is True
     assert resultado["ids_restaurados"] == ["AGR_1", "AGR_2"]
 
-    df = pl.read_parquet(pasta_prod / f"produtos_agrupados_{cnpj}.parquet").sort("id_agrupado")
+    df = pl.read_parquet(pasta_prod / f"produtos_agrupados_{cnpj}.parquet").sort(
+        "id_agrupado"
+    )
     assert df.get_column("id_agrupado").to_list() == ["AGR_1", "AGR_2"]
 
     historico = servico.ler_linhas_log(cnpj)
     entradas_agregacao = [item for item in historico if item.get("tipo") == "agregacao"]
-    entradas_desagrupacao = [item for item in historico if item.get("tipo") == "desagrupacao"]
+    entradas_desagrupacao = [
+        item for item in historico if item.get("tipo") == "desagrupacao"
+    ]
     assert entradas_agregacao[-1]["revertida"] is True
     assert entradas_desagrupacao[-1]["ids_restaurados"] == ["AGR_1", "AGR_2"]
 
 
-def test_artefatos_estoque_defasados_identifica_derivados_antigos_ou_ausentes(monkeypatch, tmp_path: Path):
+def test_artefatos_estoque_defasados_identifica_derivados_antigos_ou_ausentes(
+    monkeypatch, tmp_path: Path
+):
     cnpj = "12345678000190"
     pasta_prod = tmp_path / cnpj / "analises" / "produtos"
     pasta_prod.mkdir(parents=True, exist_ok=True)
 
     monkeypatch.setattr(aggregation_service_module, "CNPJ_ROOT", tmp_path)
-    monkeypatch.setattr(aggregation_service_module, "registrar_evento_performance", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        aggregation_service_module,
+        "registrar_evento_performance",
+        lambda *args, **kwargs: None,
+    )
 
     arq_mov = pasta_prod / f"mov_estoque_{cnpj}.parquet"
     arq_mensal = pasta_prod / f"aba_mensal_{cnpj}.parquet"
@@ -324,16 +380,26 @@ def test_artefatos_estoque_defasados_identifica_derivados_antigos_ou_ausentes(mo
 
     servico = ServicoAgregacao()
 
-    assert servico.artefatos_estoque_defasados(cnpj) == ["calculos_mensais", "calculos_anuais"]
+    assert servico.artefatos_estoque_defasados(cnpj) == [
+        "calculos_mensais",
+        "calculos_anuais",
+        "calculos_periodos",
+    ]
 
 
-def test_recalcular_resumos_estoque_executa_apenas_etapas_defasadas(monkeypatch, tmp_path: Path):
+def test_recalcular_resumos_estoque_executa_apenas_etapas_defasadas(
+    monkeypatch, tmp_path: Path
+):
     cnpj = "12345678000190"
     pasta_prod = tmp_path / cnpj / "analises" / "produtos"
     pasta_prod.mkdir(parents=True, exist_ok=True)
 
     monkeypatch.setattr(aggregation_service_module, "CNPJ_ROOT", tmp_path)
-    monkeypatch.setattr(aggregation_service_module, "registrar_evento_performance", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        aggregation_service_module,
+        "registrar_evento_performance",
+        lambda *args, **kwargs: None,
+    )
 
     arq_mov = pasta_prod / f"mov_estoque_{cnpj}.parquet"
     arq_mensal = pasta_prod / f"aba_mensal_{cnpj}.parquet"
@@ -358,8 +424,13 @@ def test_recalcular_resumos_estoque_executa_apenas_etapas_defasadas(monkeypatch,
         "gerar_calculos_anuais",
         lambda cnpj_recebido: chamadas.append(f"anual:{cnpj_recebido}") or True,
     )
+    monkeypatch.setattr(
+        aggregation_service_module,
+        "gerar_calculos_periodos",
+        lambda cnpj_recebido: chamadas.append(f"periodos:{cnpj_recebido}") or True,
+    )
 
     servico = ServicoAgregacao()
 
     assert servico.recalcular_resumos_estoque(cnpj) is True
-    assert chamadas == [f"mensal:{cnpj}"]
+    assert chamadas == [f"mensal:{cnpj}", f"periodos:{cnpj}"]

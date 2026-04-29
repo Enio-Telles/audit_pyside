@@ -1,0 +1,57 @@
+{
+    "item_unidades_base_v1": {
+        "hash": "2c211f4416026463daac1249c88b37551f1236719e81ed7692856c8282ae8de7",
+        "cols": [
+            "id_item_unid",
+            "codigo",
+            "unid",
+            "ncm"
+        ],
+        "last_updated": "2026-04-23T14:54:50.517860"
+    },
+    "itens_base_v1": {
+        "hash": "9fa00444b1113f8c8e9e0ba73d6c490c9bb1a8555ad119776421e39fd49dcfde",
+        "cols": [
+            "id_item",
+            "codigo",
+            "descricao_normalizada",
+            "lista_unid",
+            "lista_id_item_unid"
+        ],
+        "last_updated": "2026-04-23T17:40:01.999771"
+    },
+    "produtos_itens_base_v1": {
+        "hash": "9f33e9c2d11475f7fbc68695bf545a17840b770a9fe370420d5cea640779690c",
+        "cols": [
+            "chave_item",
+            "chave_produto",
+            "descricao",
+            "codigo",
+            "lista_unid"
+        ],
+        "last_updated": "2026-04-23T17:42:32.762769"
+    },
+    "descricao_produtos_base_v1": {
+        "hash": "4e35a172f54517a742227cff499f9bfd87c3f898be74ad2c0f50178d91f4bc94",
+        "cols": [
+            "id_descricao",
+            "descricao_normalizada",
+            "id_agrupado_base",
+            "lista_codigos",
+            "lista_unid",
+            "lista_id_item"
+        ],
+        "last_updated": "2026-04-23T17:44:49.790537"
+    },
+    "id_agrupados_base_v1": {
+        "hash": "d4b0edc199a70f8bd941c72282a2999c24aece98d3953e279027e7bac8689c61",
+        "cols": [
+            "id_agrupado",
+            "descr_padrao",
+            "lista_descricoes",
+            "lista_codigos",
+            "lista_unidades"
+        ],
+        "last_updated": "2026-04-23T17:47:23.838370"
+    }
+}

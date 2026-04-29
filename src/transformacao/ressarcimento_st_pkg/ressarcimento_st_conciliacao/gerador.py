@@ -4,7 +4,12 @@ from pathlib import Path
 
 import polars as pl
 
-from transformacao.ressarcimento_st_pkg.base import alinhar_schema, caminho_analise, ler_parquet_opcional, salvar_df
+from transformacao.ressarcimento_st_pkg.base import (
+    alinhar_schema,
+    caminho_analise,
+    ler_parquet_opcional,
+    salvar_df,
+)
 
 
 SCHEMA_CONCILIACAO = {
@@ -30,9 +35,15 @@ SCHEMA_CONCILIACAO = {
 
 def gerar_ressarcimento_st_conciliacao(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
     cnpj_limpo = "".join(filter(str.isdigit, cnpj))
-    caminho_item = caminho_analise(cnpj_limpo, f"ressarcimento_st_item_{cnpj_limpo}.parquet", pasta_cnpj)
-    caminho_mensal = caminho_analise(cnpj_limpo, f"ressarcimento_st_mensal_{cnpj_limpo}.parquet", pasta_cnpj)
-    caminho_saida = caminho_analise(cnpj_limpo, f"ressarcimento_st_conciliacao_{cnpj_limpo}.parquet", pasta_cnpj)
+    caminho_item = caminho_analise(
+        cnpj_limpo, f"ressarcimento_st_item_{cnpj_limpo}.parquet", pasta_cnpj
+    )
+    caminho_mensal = caminho_analise(
+        cnpj_limpo, f"ressarcimento_st_mensal_{cnpj_limpo}.parquet", pasta_cnpj
+    )
+    caminho_saida = caminho_analise(
+        cnpj_limpo, f"ressarcimento_st_conciliacao_{cnpj_limpo}.parquet", pasta_cnpj
+    )
 
     df_item = ler_parquet_opcional(caminho_item)
     df_mensal = ler_parquet_opcional(caminho_mensal)
@@ -41,12 +52,21 @@ def gerar_ressarcimento_st_conciliacao(cnpj: str, pasta_cnpj: Path | None = None
         return salvar_df(alinhar_schema(pl.DataFrame(), SCHEMA_CONCILIACAO), caminho_saida)
 
     contagens = (
-        df_item.group_by("mes_ref").agg(
+        df_item.group_by("mes_ref")
+        .agg(
             pl.len().alias("qtd_itens_c176"),
-            pl.sum(pl.when(pl.col("status_calculo") == "pendente_conversao").then(1).otherwise(0)).alias("qtd_pendencias_conversao"),
-            pl.sum(pl.when(pl.col("status_calculo") == "parcial_pos_2022").then(1).otherwise(0)).alias("qtd_parcial_pos_2022"),
-            pl.sum(pl.when(pl.col("possui_st_calc_ate_2022")).then(1).otherwise(0)).alias("qtd_itens_com_st_calc"),
-            pl.sum(pl.when(pl.col("possui_fronteira")).then(1).otherwise(0)).alias("qtd_itens_com_fronteira"),
+            pl.sum(
+                pl.when(pl.col("status_calculo") == "pendente_conversao").then(1).otherwise(0)
+            ).alias("qtd_pendencias_conversao"),
+            pl.sum(
+                pl.when(pl.col("status_calculo") == "parcial_pos_2022").then(1).otherwise(0)
+            ).alias("qtd_parcial_pos_2022"),
+            pl.sum(pl.when(pl.col("possui_st_calc_ate_2022")).then(1).otherwise(0)).alias(
+                "qtd_itens_com_st_calc"
+            ),
+            pl.sum(pl.when(pl.col("possui_fronteira")).then(1).otherwise(0)).alias(
+                "qtd_itens_com_fronteira"
+            ),
         )
         .with_columns(
             pl.when(pl.col("qtd_itens_c176") > 0)

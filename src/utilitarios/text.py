@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from datetime import date, datetime
 from decimal import Decimal
@@ -6,15 +6,43 @@ import math
 import numbers
 import re
 import unicodedata
-from typing import Any
+from typing import Any, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import polars as pl
 
 STOPWORDS = {
-    "A", "AS", "O", "OS", "DE", "DA", "DO", "DAS", "DOS", "COM", "PARA", "POR",
-    "E", "EM", "NA", "NO", "NAS", "NOS", "UM", "UMA",
+    "A",
+    "AS",
+    "O",
+    "OS",
+    "DE",
+    "DA",
+    "DO",
+    "DAS",
+    "DOS",
+    "COM",
+    "PARA",
+    "POR",
+    "E",
+    "EM",
+    "NA",
+    "NO",
+    "NAS",
+    "NOS",
+    "UM",
+    "UMA",
 }
+
+# Regra canonica de descricao fiscal: normalize_desc() e expr_normalizar_descricao()
+# devem preservar exatamente esta pontuacao, alem de letras, numeros e espacos.
+# Nao criar normalizadores paralelos para descricao fiscal.
+PONTUACAO_DESCRICAO_NORMALIZADA = r"-%$#@!.,}{\]\[\\/;"
+REGEX_DESCRICAO_NORMALIZADA = r"[^A-Z0-9\\s\\-\\%$#@!\\.,\\}\\{\\]\\[\\/;]"
 
 
 def remove_accents(text: str | None) -> str | None:
+    """Remove acentos de um texto preservando `None`."""
     if text is None:
         return None
     normalized = unicodedata.normalize("NFKD", str(text))
@@ -22,6 +50,7 @@ def remove_accents(text: str | None) -> str | None:
 
 
 def normalize_text(text: str | None) -> str:
+    """Normaliza texto para comparacoes amplas sem acentos e stopwords."""
     if text is None:
         return ""
     text = remove_accents(text) or ""
@@ -31,16 +60,58 @@ def normalize_text(text: str | None) -> str:
     return " ".join(tokens)
 
 
+def normalize_desc(text: str | None) -> str:
+    """Normalizacao canonica de descricao fiscal.
+
+    Regras aplicadas:
+    - remover acentos;
+    - converter para maiusculas;
+    - manter letras, numeros, espacos e pontuacao -%$#@!.,}{][\/; when spaced;
+    - substituir '-' e '/' por espaco quando estiverem dentro de tokens (adjacentes a alfanumericos);
+    - substituir os demais caracteres por espaco;
+    - remover espacos no inicio e no fim;
+    - reduzir espacos internos consecutivos para um unico espaco;
+    - nao remover stopwords.
+    """
+    if text is None:
+        return ""
+    t = remove_accents(str(text)) or ""
+    t = t.upper()
+    # Replace '-' or '/' between word characters with a space
+    t = re.sub(r'(?<=\w)[-/]|[-/](?=\w)', ' ', t)
+    # Allowed characters exactly matching canonical punctuation and alphanumerics
+    allowed = set("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 -%$#@!.,}{][/\;")
+    t = ''.join(ch if ch in allowed else ' ' for ch in t)
+    t = re.sub(r"\s+", ' ', t).strip()
+    return t
+
+def expr_normalizar_descricao(coluna: str | pl.Expr) -> pl.Expr:
+    """Expressao Polars equivalente a normalize_desc()."""
+    import polars as pl
+
+    col = pl.col(coluna) if isinstance(coluna, str) else coluna
+
+    return (
+        pl.when(col.is_null())
+        .then(pl.lit(""))
+        .otherwise(
+            col.cast(pl.Utf8, strict=False).map_elements(lambda s: normalize_desc(re.sub(r'(?<=\w)[-/]|[-/](?=\w)', ' ', s)), return_dtype=pl.Utf8)
+        )
+    )
+
 def natural_sort_key(value: str | None) -> list[Any]:
+    """Gera chave de ordenacao natural que separa trechos numericos."""
     text = "" if value is None else str(value)
     return [int(part) if part.isdigit() else part.lower() for part in re.split(r"(\d+)", text)]
 
 
 def _normalizar_nome_coluna(column_name: str | None) -> str:
+    """Normaliza o nome de coluna para comparacoes internas."""
     return "" if column_name is None else str(column_name).strip().lower()
 
 
 def is_year_column_name(column_name: str | None) -> bool:
+    """Indica se uma coluna representa ano para fins de formatacao."""
     nome = _normalizar_nome_coluna(column_name)
     if not nome:
         return False
@@ -48,6 +119,7 @@ def is_year_column_name(column_name: str | None) -> bool:
 
 
 def _formatar_numero_br(valor: numbers.Real | Decimal, casas_decimais: int) -> str:
+    """Formata numero usando separadores brasileiros."""
     if isinstance(valor, Decimal):
         numero = float(valor)
     else:
@@ -57,12 +129,14 @@ def _formatar_numero_br(valor: numbers.Real | Decimal, casas_decimais: int) -> s
 
 
 def _formatar_data(valor: date | datetime) -> str:
+    """Formata data ou datetime no padrao brasileiro."""
     if isinstance(valor, datetime):
         return valor.strftime("%d/%m/%Y %H:%M:%S")
     return valor.strftime("%d/%m/%Y")
 
 
 def _parse_data_iso(texto: str) -> datetime | date | None:
+    """Converte texto ISO em date ou datetime quando possivel."""
     texto = texto.strip()
     if not texto:
         return None
@@ -85,6 +159,7 @@ def _parse_data_iso(texto: str) -> datetime | date | None:
 
 
 def display_cell(value: Any, column_name: str | None = None) -> str:
+    """Formata um valor para exibicao tabular na interface e relatorios."""
     if value is None:
         return ""
 
@@ -134,3 +209,4 @@ def display_cell(value: Any, column_name: str | None = None) -> str:
         return _formatar_numero_br(value, 2)
 
     return str(value)
+

@@ -24,31 +24,32 @@ from typing import List, Dict, Any, Optional
 # Importa os módulos especializados
 from .extracao import (
     extrair_dados_cadastrais,
-    extrair_dados_multiplos_cnpjs,
     extrair_dados_malha,
     validar_cnpj,
-    limpar_cnpj
+    limpar_cnpj,
 )
 from .preenchimento import (
     processar_notificacao,
     ler_modelo_notificacao,
-    preencher_modelo,
-    salvar_notificacao
 )
 
 # Importa resolvedor de caminhos do pacote integrado
-from .path_resolver import get_resource_path, get_root_dir, get_env_path, get_modelo_path
+from .path_resolver import (
+    get_root_dir,
+    get_env_path,
+    get_modelo_path,
+)
 
 # Configuração do logging para rastrear execuções
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
+    format="%(asctime)s - %(levelname)s - %(message)s",
     handlers=[
         # Log em arquivo (no diretório de trabalho atual)
-        logging.FileHandler('geracao_notificacoes.log', encoding='utf-8'),
+        logging.FileHandler("geracao_notificacoes.log", encoding="utf-8"),
         # Log no console
-        logging.StreamHandler()
-    ]
+        logging.StreamHandler(),
+    ],
 )
 logger = logging.getLogger(__name__)
 
@@ -61,7 +62,7 @@ logger = logging.getLogger(__name__)
 ROOT_DIR = get_root_dir()
 
 # Diretório de saída para as notificações geradas (sempre relativo ao cwd)
-DIR_SAIDA_NOTIFICACOES = Path('notificacoes')
+DIR_SAIDA_NOTIFICACOES = Path("notificacoes")
 
 # Arquivo do modelo de notificação
 MODELO_NOTIFICACAO = get_modelo_path()
@@ -73,6 +74,7 @@ DIR_PARQUET = ROOT_DIR / "dados" / "fisconforme" / "data_parquet"
 # =============================================================================
 # FUNÇÕES AUXILIARES
 # =============================================================================
+
 
 def formatar_tabela_html(dados: List[Dict[str, Any]]) -> str:
     """
@@ -100,12 +102,12 @@ def formatar_tabela_html(dados: List[Dict[str, Any]]) -> str:
     # Mapeamento de chaves possíveis para colunas da tabela
     # Chave no dado -> Nome amigável na coluna
     mapeamento = {
-        'id_pendencia': 'ID FISCONF',
-        'malhas_id': 'ID MALHA',
-        'id_notificacao': 'NOTIFICACAO',
-        'titulo_malha': 'MALHA',
-        'periodo': 'PERIODO',
-        'status_pendencia': 'STATUS'
+        "id_pendencia": "ID FISCONF",
+        "malhas_id": "ID MALHA",
+        "id_notificacao": "NOTIFICACAO",
+        "titulo_malha": "MALHA",
+        "periodo": "PERIODO",
+        "status_pendencia": "STATUS",
     }
 
     # Filtra os dados para incluir apenas as colunas permitidas
@@ -119,10 +121,10 @@ def formatar_tabela_html(dados: List[Dict[str, Any]]) -> str:
                 if k.upper() == chave_origem.upper():
                     valor_encontrado = v
                     break
-            
+
             if valor_encontrado is not None:
                 linha_filtrada[nome_coluna] = valor_encontrado
-        
+
         if linha_filtrada:
             dados_filtrados.append(linha_filtrada)
 
@@ -135,35 +137,37 @@ def formatar_tabela_html(dados: List[Dict[str, Any]]) -> str:
     # Constrói o HTML da tabela
     html_lines = [
         '<table border="1" cellpadding="5" cellspacing="0" style="border-collapse: collapse; width: 100%; font-family: Arial, sans-serif; font-size: 12px;">',
-        '  <thead>',
-        '    <tr style="background-color: #f0f0f0;">'
+        "  <thead>",
+        '    <tr style="background-color: #f0f0f0;">',
     ]
 
     # Adiciona cabeçalho
     for coluna in colunas:
-        html_lines.append(f'      <th style="text-align: left; padding: 8px;">{coluna}</th>')
+        html_lines.append(
+            f'      <th style="text-align: left; padding: 8px;">{coluna}</th>'
+        )
 
-    html_lines.append('    </tr>')
-    html_lines.append('  </thead>')
-    html_lines.append('  <tbody>')
+    html_lines.append("    </tr>")
+    html_lines.append("  </thead>")
+    html_lines.append("  <tbody>")
 
     # Adiciona linhas de dados
     for i, linha in enumerate(dados_filtrados):
-        estilo_linha = 'background-color: #f9f9f9;' if i % 2 == 0 else ''
+        estilo_linha = "background-color: #f9f9f9;" if i % 2 == 0 else ""
         html_lines.append(f'    <tr style="{estilo_linha}">')
 
         for coluna in colunas:
-            valor = linha.get(coluna, '')
+            valor = linha.get(coluna, "")
             if valor is None:
-                valor = ''
+                valor = ""
             html_lines.append(f'      <td style="padding: 8px;">{valor}</td>')
 
-        html_lines.append('    </tr>')
+        html_lines.append("    </tr>")
 
-    html_lines.append('  </tbody>')
-    html_lines.append('</table>')
+    html_lines.append("  </tbody>")
+    html_lines.append("</table>")
 
-    return '\n'.join(html_lines)
+    return "\n".join(html_lines)
 
 
 def analisar_modelo(caminho_modelo: Optional[Path] = None) -> Dict[str, Any]:
@@ -185,7 +189,7 @@ def analisar_modelo(caminho_modelo: Optional[Path] = None) -> Dict[str, Any]:
         conteudo = ler_modelo_notificacao(caminho_modelo)
 
         if not conteudo:
-            return {'erro': 'Não foi possível ler o modelo de notificação'}
+            return {"erro": "Não foi possível ler o modelo de notificação"}
 
         # Importa função do módulo preenchimento
         from preenchimento import identificar_placeholders
@@ -193,19 +197,20 @@ def analisar_modelo(caminho_modelo: Optional[Path] = None) -> Dict[str, Any]:
         placeholders = identificar_placeholders(conteudo)
 
         return {
-            'caminho_modelo': caminho_modelo or MODELO_NOTIFICACAO,
-            'total_placeholders': len(placeholders),
-            'placeholders': placeholders
+            "caminho_modelo": caminho_modelo or MODELO_NOTIFICACAO,
+            "total_placeholders": len(placeholders),
+            "placeholders": placeholders,
         }
 
     except Exception as e:
         logger.error(f"Erro ao analisar modelo: {e}")
-        return {'erro': str(e)}
+        return {"erro": str(e)}
 
 
 # =============================================================================
 # FUNÇÕES DE ORQUESTRAÇÃO PRINCIPAL
 # =============================================================================
+
 
 def gerar_notificacao_para_cnpj(
     cnpj: str,
@@ -213,21 +218,21 @@ def gerar_notificacao_para_cnpj(
     dados_tabela: Optional[List[Dict[str, Any]]] = None,
     diretorio_saida: Optional[Path] = None,
     forcar_reatribuicao: bool = False,
-    periodo_analise: Optional[tuple[str, str]] = None
+    periodo_analise: Optional[tuple[str, str]] = None,
 ) -> Dict[str, Any]:
     """
     Gera uma notificação fiscal para um único CNPJ.
-    
+
     Esta é a função principal que coordena todo o fluxo de geração
     de notificação para um CNPJ específico.
-    
+
     Fluxo de execução:
     1. Validação do CNPJ
     2. Extração dos dados cadastrais do Oracle
     3. Extração da tabela de pendências (opcional)
     4. Preenchimento do modelo de notificação (com dados manuais e tabela)
     5. Salvamento do arquivo de notificação
-    
+
     Args:
         cnpj: CNPJ da empresa (pode estar formatado com pontos e traço)
         dados_manuais: Dicionário com dados fornecidos manualmente.
@@ -238,7 +243,7 @@ def gerar_notificacao_para_cnpj(
                         o diretório padrão notificacoes/<DSF>/.
         forcar_reatribuicao: Se True, força a reatribuição de campos faltantes
                             mesmo que já exista arquivo gerado
-    
+
     Returns:
         Dicionário com o resultado do processamento contendo:
         - 'sucesso': Booleano indicando se o processo foi concluído
@@ -246,14 +251,14 @@ def gerar_notificacao_para_cnpj(
         - 'arquivo_saida': Caminho do arquivo gerado (se sucesso)
         - 'erro': Mensagem de erro (se falhou)
         - 'etapa_falha': Nome da etapa onde falhou (se aplicável)
-    
+
     Exemplo de retorno de sucesso:
         {
             'sucesso': True,
             'cnpj': '12345678000190',
             'arquivo_saida': Path('.../notificacoes/DSF-001/notificacao_det_12345678000190.txt')
         }
-    
+
     Exemplo de retorno de falha:
         {
             'sucesso': False,
@@ -263,140 +268,156 @@ def gerar_notificacao_para_cnpj(
         }
     """
     logger.info(f"Iniciando geração de notificação para CNPJ: {cnpj}")
-    
+
     # Inicializa resultado com estrutura padrão
     resultado = {
-        'sucesso': False,
-        'cnpj': limpar_cnpj(cnpj) if cnpj else None,
-        'arquivo_saida': None,
-        'erro': None,
-        'etapa_falha': None
+        "sucesso": False,
+        "cnpj": limpar_cnpj(cnpj) if cnpj else None,
+        "arquivo_saida": None,
+        "erro": None,
+        "etapa_falha": None,
     }
-    
+
     # ==========================================================================
     # ETAPA 1: VALIDAÇÃO DO CNPJ
     # ==========================================================================
     logger.info("Etapa 1/4: Validação do CNPJ")
-    
+
     if not cnpj:
-        resultado['erro'] = "CNPJ não fornecido"
-        resultado['etapa_falha'] = 'validacao'
+        resultado["erro"] = "CNPJ não fornecido"
+        resultado["etapa_falha"] = "validacao"
         logger.error(f"Falha na validação: {resultado['erro']}")
         return resultado
-    
+
     if not validar_cnpj(cnpj):
-        resultado['erro'] = f"CNPJ inválido: {cnpj}"
-        resultado['etapa_falha'] = 'validacao'
+        resultado["erro"] = f"CNPJ inválido: {cnpj}"
+        resultado["etapa_falha"] = "validacao"
         logger.error(f"Falha na validação: {resultado['erro']}")
         return resultado
-    
+
     cnpj_limpo = limpar_cnpj(cnpj)
     logger.info(f"CNPJ validado e limpo: {cnpj_limpo}")
-    
+
     # ==========================================================================
     # ETAPA 2: EXTRAÇÃO DE DADOS CADASTRAIS DO ORACLE
     # ==========================================================================
     logger.info("Etapa 2/4: Extração de dados cadastrais do Oracle")
-    
+
     try:
         dados_cadastrais = extrair_dados_cadastrais(cnpj)
-        
+
         if not dados_cadastrais:
-            resultado['erro'] = "Nenhum dado encontrado para este CNPJ"
-            resultado['etapa_falha'] = 'extracao'
+            resultado["erro"] = "Nenhum dado encontrado para este CNPJ"
+            resultado["etapa_falha"] = "extracao"
             logger.warning(f"Falha na extração: {resultado['erro']}")
             return resultado
-        
-        logger.info(f"Dados extraídos com sucesso. Campos encontrados: {list(dados_cadastrais.keys())}")
-    
+
+        logger.info(
+            f"Dados extraídos com sucesso. Campos encontrados: {list(dados_cadastrais.keys())}"
+        )
+
     except ValueError as e:
-        resultado['erro'] = str(e)
-        resultado['etapa_falha'] = 'extracao'
+        resultado["erro"] = str(e)
+        resultado["etapa_falha"] = "extracao"
         logger.error(f"Falha na extração (ValueError): {e}")
         return resultado
-    
+
     except ConnectionError as e:
-        resultado['erro'] = str(e)
-        resultado['etapa_falha'] = 'extracao'
+        resultado["erro"] = str(e)
+        resultado["etapa_falha"] = "extracao"
         logger.error(f"Falha na extração (ConnectionError): {e}")
         return resultado
-    
+
     except Exception as e:
-        resultado['erro'] = f"Erro inesperado na extração: {e}"
-        resultado['etapa_falha'] = 'extracao'
+        resultado["erro"] = f"Erro inesperado na extração: {e}"
+        resultado["etapa_falha"] = "extracao"
         logger.error(f"Falha na extração (Exception): {e}")
         return resultado
-    
+
     # ==========================================================================
     # ETAPA 3: TABELA DE PENDÊNCIAS (dados fornecidos externamente)
     # ==========================================================================
     logger.info("Etapa 3/4: Verificação da tabela de pendências")
-    
+
     if dados_tabela is None:
         try:
-            logger.info(f"Extraindo dados de malha diretamente do Oracle para o período: {periodo_analise}")
+            logger.info(
+                f"Extraindo dados de malha diretamente do Oracle para o período: {periodo_analise}"
+            )
             d_ini, d_fim = periodo_analise if periodo_analise else (None, None)
             dados_tabela = extrair_dados_malha(cnpj, d_ini, d_fim)
             if not dados_tabela:
-                logger.info("Nenhuma pendência encontrada no Oracle para este CNPJ no período informado.")
+                logger.info(
+                    "Nenhuma pendência encontrada no Oracle para este CNPJ no período informado."
+                )
             else:
                 logger.info(f"Extraídas {len(dados_tabela)} pendências do Oracle.")
         except Exception as e:
             logger.error(f"Erro ao extrair pendências do Oracle: {e}")
             dados_tabela = []
     else:
-        logger.info(f"Dados da tabela fornecidos externamente: {len(dados_tabela)} linha(s)")
-    
+        logger.info(
+            f"Dados da tabela fornecidos externamente: {len(dados_tabela)} linha(s)"
+        )
+
     # ==========================================================================
     # ETAPA 4: PREENCHIMENTO E SALVAMENTO DA NOTIFICAÇÃO
     # ==========================================================================
     logger.info("Etapa 4/4: Preenchimento e salvamento da notificação")
-    
+
     try:
         # Formata a tabela HTML
-        tabela_html = formatar_tabela_html(dados_tabela) if dados_tabela else "<p>Nenhuma pendência encontrada.</p>"
-        
+        tabela_html = (
+            formatar_tabela_html(dados_tabela)
+            if dados_tabela
+            else "<p>Nenhuma pendência encontrada.</p>"
+        )
+
         # Log para depuração
         logger.info(f"Tabela HTML gerada: {len(tabela_html)} caracteres")
         if dados_tabela:
             logger.info(f"Dados da tabela: {len(dados_tabela)} linha(s)")
-            for i, linha in enumerate(dados_tabela[:3], start=1):  # Log das 3 primeiras linhas
+            for i, linha in enumerate(
+                dados_tabela[:3], start=1
+            ):  # Log das 3 primeiras linhas
                 logger.info(f"  Linha {i}: {linha}")
         else:
             logger.warning("Nenhum dado de pendência disponível para a tabela")
-        
+
         # Adiciona a tabela aos dados para preenchimento
         dados_completos = dados_cadastrais.copy()
-        dados_completos['TABELA'] = tabela_html
-        
+        dados_completos["TABELA"] = tabela_html
+
         # Log dos dados completos
-        logger.info(f"Dados completos para preenchimento: {list(dados_completos.keys())}")
-        
+        logger.info(
+            f"Dados completos para preenchimento: {list(dados_completos.keys())}"
+        )
+
         # Usa diretório fornecido ou padrão
         if diretorio_saida is None:
             diretorio_saida = DIR_SAIDA_NOTIFICACOES
-        
+
         caminho_arquivo = processar_notificacao(
             cnpj=cnpj,
             dados=dados_completos,
             diretorio_saida=diretorio_saida,
-            dados_manuais=dados_manuais
+            dados_manuais=dados_manuais,
         )
 
         if not caminho_arquivo:
-            resultado['erro'] = "Falha ao processar notificação"
-            resultado['etapa_falha'] = 'preenchimento'
+            resultado["erro"] = "Falha ao processar notificação"
+            resultado["etapa_falha"] = "preenchimento"
             logger.error(f"Falha no preenchimento: {resultado['erro']}")
             return resultado
 
         # Sucesso! Preenche resultado final
-        resultado['sucesso'] = True
-        resultado['arquivo_saida'] = caminho_arquivo
+        resultado["sucesso"] = True
+        resultado["arquivo_saida"] = caminho_arquivo
         logger.info(f"Notificação gerada com sucesso: {caminho_arquivo}")
 
     except Exception as e:
-        resultado['erro'] = f"Erro ao processar notificação: {e}"
-        resultado['etapa_falha'] = 'preenchimento'
+        resultado["erro"] = f"Erro ao processar notificação: {e}"
+        resultado["etapa_falha"] = "preenchimento"
         logger.error(f"Falha no preenchimento (Exception): {e}")
         return resultado
 
@@ -408,7 +429,7 @@ def gerar_notificacoes_em_lote(
     dados_manuais: Optional[Dict[str, str]] = None,
     periodo_analise: Optional[tuple[str, str]] = None,
     parar_no_primeiro_erro: bool = False,
-    arquivo_dsf: Optional[Path] = None
+    arquivo_dsf: Optional[Path] = None,
 ) -> Dict[str, Any]:
     """
     Gera notificações fiscais para múltiplos CNPJs em lote.
@@ -459,10 +480,11 @@ def gerar_notificacoes_em_lote(
     logger.info(f"Iniciando processamento em lote com {len(lista_cnpjs)} CNPJ(s)")
 
     # Extrai DSF dos dados manuais
-    dsf = dados_manuais.get('DSF', 'DSF_GERAL') if dados_manuais else 'DSF_GERAL'
+    dsf = dados_manuais.get("DSF", "DSF_GERAL") if dados_manuais else "DSF_GERAL"
 
     # Extrai mês e ano da data atual para compor o nome da pasta
     from datetime import datetime
+
     data_atual = datetime.now()
     mes_ano = data_atual.strftime("%m%Y")
 
@@ -473,15 +495,15 @@ def gerar_notificacoes_em_lote(
 
     # Inicializa estrutura de resultados
     resumo = {
-        'total': len(lista_cnpjs),
-        'sucessos': 0,
-        'falhas': 0,
-        'resultados': {},
-        'arquivos_gerados': [],
-        'dsf': dsf,
-        'diretorio_saida': dir_saida_base,
-        'cnpjs_por_dsf': {dsf: []},  # Agrupa CNPJs por DSF
-        'arquivo_dsf': arquivo_dsf
+        "total": len(lista_cnpjs),
+        "sucessos": 0,
+        "falhas": 0,
+        "resultados": {},
+        "arquivos_gerados": [],
+        "dsf": dsf,
+        "diretorio_saida": dir_saida_base,
+        "cnpjs_por_dsf": {dsf: []},  # Agrupa CNPJs por DSF
+        "arquivo_dsf": arquivo_dsf,
     }
 
     # Processa cada CNPJ sequencialmente
@@ -490,7 +512,7 @@ def gerar_notificacoes_em_lote(
 
         # Gera notificação para este CNPJ (salva diretamente na pasta notificacoes/)
         cnpj_limpo = limpar_cnpj(cnpj) if cnpj else str(indice)
-        
+
         # Gera notificação para este CNPJ
         resultado = gerar_notificacao_para_cnpj(
             cnpj=cnpj,
@@ -498,26 +520,26 @@ def gerar_notificacoes_em_lote(
             dados_tabela=None,  # Será extraído automaticamente
             diretorio_saida=dir_saida_base,  # Salva diretamente na pasta notificacoes/
             forcar_reatribuicao=False,
-            periodo_analise=periodo_analise
+            periodo_analise=periodo_analise,
         )
-        cnpj_result = resultado['cnpj']
+        cnpj_result = resultado["cnpj"]
 
         # Armazena resultado detalhado
-        resumo['resultados'][cnpj_result] = resultado
+        resumo["resultados"][cnpj_result] = resultado
 
         # Agrupa CNPJ por DSF
-        dsf_result = dados_manuais.get('DSF', dsf) if dados_manuais else dsf
-        if dsf_result not in resumo['cnpjs_por_dsf']:
-            resumo['cnpjs_por_dsf'][dsf_result] = []
-        if resultado['sucesso']:
-            resumo['cnpjs_por_dsf'][dsf_result].append(cnpj_result)
+        dsf_result = dados_manuais.get("DSF", dsf) if dados_manuais else dsf
+        if dsf_result not in resumo["cnpjs_por_dsf"]:
+            resumo["cnpjs_por_dsf"][dsf_result] = []
+        if resultado["sucesso"]:
+            resumo["cnpjs_por_dsf"][dsf_result].append(cnpj_result)
 
         # Atualiza contadores
-        if resultado['sucesso']:
-            resumo['sucessos'] += 1
-            resumo['arquivos_gerados'].append(resultado['arquivo_saida'])
+        if resultado["sucesso"]:
+            resumo["sucessos"] += 1
+            resumo["arquivos_gerados"].append(resultado["arquivo_saida"])
         else:
-            resumo['falhas'] += 1
+            resumo["falhas"] += 1
 
             # Verifica se deve parar no primeiro erro
             if parar_no_primeiro_erro:
@@ -530,18 +552,19 @@ def gerar_notificacoes_em_lote(
     # Salva arquivo de resumo com CNPJs agrupados por DSF
     try:
         import json
+
         resumo_cnpjs_dsf = {
-            'dsf': dsf,
-            'mes_ano': mes_ano,
-            'total_cnpjs': len(lista_cnpjs),
-            'cnpjs_por_dsf': resumo['cnpjs_por_dsf'],
-            'arquivo_dsf': str(arquivo_dsf) if arquivo_dsf else None
+            "dsf": dsf,
+            "mes_ano": mes_ano,
+            "total_cnpjs": len(lista_cnpjs),
+            "cnpjs_por_dsf": resumo["cnpjs_por_dsf"],
+            "arquivo_dsf": str(arquivo_dsf) if arquivo_dsf else None,
         }
-        
+
         arquivo_resumo = dir_saida_base / "resumo_cnpjs_por_dsf.json"
-        with open(arquivo_resumo, 'w', encoding='utf-8') as f:
+        with open(arquivo_resumo, "w", encoding="utf-8") as f:
             json.dump(resumo_cnpjs_dsf, f, indent=2, ensure_ascii=False)
-        
+
         logger.info(f"Resumo de CNPJs por DSF salvo em: {arquivo_resumo}")
     except Exception as e:
         logger.warning(f"Não foi possível salvar o resumo de CNPJs por DSF: {e}")
@@ -556,74 +579,82 @@ def gerar_notificacoes_em_lote(
 
 
 def listar_cnpjs_para_processamento(
-    arquivo_entrada: Optional[Path] = None
+    arquivo_entrada: Optional[Path] = None,
 ) -> List[str]:
     """
     Lista CNPJs para processamento a partir de arquivo ou entrada manual.
-    
+
     Função utilitária para carregar uma lista de CNPJs de um arquivo texto
     (um CNPJ por linha) ou para solicitar entrada manual do usuário.
-    
+
     Suporta múltiplos formatos de CNPJ no arquivo:
     - Apenas números: 12345678000190
     - Com formatação: 12.345.678/0001-90
     - Com espaços: 12.345.678 / 0001-90
     - Misto: 12345678/0001-90, 12.345.678000190, etc.
-    
+
     Args:
         arquivo_entrada: Caminho opcional para arquivo contendo CNPJs.
                         Se None, solicita entrada manual do usuário.
-    
+
     Returns:
         Lista de CNPJs para processamento (formato original, sem limpeza)
-    
+
     Formato do arquivo de entrada:
         Um CNPJ por linha, linhas em branco e comentários (#) são ignorados:
-        
+
         12.345.678/0001-90
         98765432000110
         # Este é um comentário
         11.222.333/0001-44
         11222333000144
-   """
+    """
     cnpjs = []
-    
+
     if arquivo_entrada and Path(arquivo_entrada).exists():
         # Lê CNPJs de arquivo
         logger.info(f"Lendo CNPJs do arquivo: {arquivo_entrada}")
-        
+
         try:
-            with open(arquivo_entrada, 'r', encoding='utf-8') as f:
+            with open(arquivo_entrada, "r", encoding="utf-8") as f:
                 linha_num = 0
                 for linha in f:
                     linha_num += 1
                     linha = linha.strip()
-                    
+
                     # Ignora linhas vazias e comentários
-                    if not linha or linha.startswith('#'):
+                    if not linha or linha.startswith("#"):
                         continue
-                    
+
                     # Extrai CNPJ da linha (pode ter vários formatos)
                     cnpj_extraido = extrair_cnpj_da_linha(linha)
-                    
+
                     if cnpj_extraido:
                         # Valida se o CNPJ extraído é válido
                         if validar_cnpj(cnpj_extraido):
                             cnpjs.append(cnpj_extraido)
-                            logger.info(f"Linha {linha_num}: CNPJ válido encontrado: {cnpj_extraido}")
+                            logger.info(
+                                f"Linha {linha_num}: CNPJ válido encontrado: {cnpj_extraido}"
+                            )
                         else:
-                            logger.warning(f"Linha {linha_num}: CNPJ inválido: {cnpj_extraido}")
+                            logger.warning(
+                                f"Linha {linha_num}: CNPJ inválido: {cnpj_extraido}"
+                            )
                     else:
-                        logger.warning(f"Linha {linha_num}: Nenhum CNPJ válido encontrado na linha: '{linha}'")
-        
+                        logger.warning(
+                            f"Linha {linha_num}: Nenhum CNPJ válido encontrado na linha: '{linha}'"
+                        )
+
         except Exception as e:
             logger.error(f"Erro ao ler arquivo {arquivo_entrada}: {e}")
             print(f"[ERRO] Não foi possível ler o arquivo: {e}")
             return []
-        
+
         logger.info(f"{len(cnpjs)} CNPJ(s) válidos lidos do arquivo")
-        print(f"\n✅ {len(cnpjs)} CNPJ(s) válidos encontrados no arquivo: {arquivo_entrada}")
-        
+        print(
+            f"\n✅ {len(cnpjs)} CNPJ(s) válidos encontrados no arquivo: {arquivo_entrada}"
+        )
+
         # Exibe resumo dos CNPJs encontrados
         if cnpjs:
             print("\nCNPJs encontrados:")
@@ -631,7 +662,7 @@ def listar_cnpjs_para_processamento(
                 print(f"  {i}. {cnpj}")
             if len(cnpjs) > 10:
                 print(f"  ... e mais {len(cnpjs) - 10} CNPJ(s)")
-    
+
     else:
         # Solicita entrada manual do usuário
         print("\n" + "=" * 60)
@@ -640,123 +671,126 @@ def listar_cnpjs_para_processamento(
         print("\nInforme os CNPJs para processamento.")
         print("Digite um CNPJ por linha. Deixe em branco para finalizar.")
         print("=" * 60)
-        
+
         while True:
             try:
-                entrada = input(f"\nCNPJ {len(cnpjs) + 1} (ou Enter para finalizar): ").strip()
-                
+                entrada = input(
+                    f"\nCNPJ {len(cnpjs) + 1} (ou Enter para finalizar): "
+                ).strip()
+
                 if not entrada:
                     break
-                
+
                 # Valida o CNPJ informado
                 if validar_cnpj(entrada):
                     cnpjs.append(entrada)
                     print(f"  ✅ CNPJ adicionado: {entrada}")
                 else:
                     print(f"  ❌ CNPJ inválido: {entrada}")
-            
+
             except KeyboardInterrupt:
                 print("\n\nOperação cancelada pelo usuário.")
                 break
             except EOFError:
                 break
-        
+
         print("\n" + "=" * 60)
         print(f"Total de CNPJs informados: {len(cnpjs)}")
         print("=" * 60)
-    
+
     return cnpjs
 
 
 def extrair_cnpj_da_linha(linha: str) -> Optional[str]:
     """
     Extrai um CNPJ de uma linha de texto, suportando vários formatos.
-    
+
     Esta função usa expressões regulares para identificar e extrair CNPJs
     em diferentes formatos:
     - Apenas números: 12345678000190
     - Formatado: 12.345.678/0001-90
     - Parcialmente formatado: 12345678/0001-90, 12.345.678000190
     - Com espaços: 12.345.678 / 0001-90
-    
+
     Args:
         linha: String contendo potencialmente um CNPJ
-    
+
     Returns:
         CNPJ formatado se encontrado e válido, None caso contrário
-    
+
     Exemplos:
         >>> extrair_cnpj_da_linha("12.345.678/0001-90")
         '12.345.678/0001-90'
-        
+
         >>> extrair_cnpj_da_linha("12345678000190")
         '12345678000190'
-        
+
         >>> extrair_cnpj_da_linha("CNPJ: 12.345.678/0001-90 - Empresa X")
         '12.345.678/0001-90'
     """
     import re
-    
+
     # Padrão 1: CNPJ formatado completo (XX.XXX.XXX/XXXX-XX)
-    padrao_formatado = r'\b(\d{1,2}\.\d{3}\.\d{3}\s*/\s*\d{4}-\d{2})\b'
-    
+    padrao_formatado = r"\b(\d{1,2}\.\d{3}\.\d{3}\s*/\s*\d{4}-\d{2})\b"
+
     # Padrão 2: CNPJ com barra (XXXXXXXX/XXXX-XX ou XXXXXXXX/XXXXXXXX)
-    padrao_com_barra = r'\b(\d{7,8}\s*/\s*\d{4,8}[-]?\d{0,2})\b'
-    
+    padrao_com_barra = r"\b(\d{7,8}\s*/\s*\d{4,8}[-]?\d{0,2})\b"
+
     # Padrão 3: CNPJ apenas números (14 dígitos)
-    padrao_numeros = r'\b(\d{14})\b'
-    
+    padrao_numeros = r"\b(\d{14})\b"
+
     # Padrão 4: CNPJ com alguns pontos mas sem barra completa
-    padrao_parcial = r'\b(\d{1,2}\.\d{3}\.\d{3}\d{6,8})\b'
-    
+    padrao_parcial = r"\b(\d{1,2}\.\d{3}\.\d{3}\d{6,8})\b"
+
     # Tenta cada padrão em ordem de especificidade
     padroes = [padrao_formatado, padrao_com_barra, padrao_parcial, padrao_numeros]
-    
+
     for padrao in padroes:
         match = re.search(padrao, linha)
         if match:
             cnpj_encontrado = match.group(1)
-            
+
             # Limpa espaços extras
-            cnpj_limpo = cnpj_encontrado.replace(' ', '')
-            
+            cnpj_limpo = cnpj_encontrado.replace(" ", "")
+
             # Valida o CNPJ encontrado
             if validar_cnpj(cnpj_limpo):
                 return cnpj_limpo
-    
+
     # Se nenhum padrão encontrou CNPJ válido, tenta extrair todos os dígitos
     # e verificar se formam um CNPJ válido
-    todos_digitos = re.sub(r'\D', '', linha)
-    
+    todos_digitos = re.sub(r"\D", "", linha)
+
     if len(todos_digitos) == 14 and validar_cnpj(todos_digitos):
         return todos_digitos
-    
+
     return None
 
 
 def listar_arquivos_txt_no_diretorio(diretorio: Optional[Path] = None) -> List[Path]:
     """
     Lista todos os arquivos TXT em um diretório.
-    
+
     Args:
         diretorio: Diretório para buscar arquivos. Se None, usa o diretório raiz.
-    
+
     Returns:
         Lista de caminhos de arquivos TXT encontrados
     """
     if diretorio is None:
         diretorio = ROOT_DIR
-    
+
     arquivos_txt = list(diretorio.glob("*.txt"))
-    
+
     # Filtra arquivos que podem conter CNPJs (exclui modelos e logs)
     arquivos_cnpjs = [
-        f for f in arquivos_txt 
-        if 'modelo' not in f.name.lower() 
-        and 'log' not in f.name.lower()
-        and 'readme' not in f.name.lower()
+        f
+        for f in arquivos_txt
+        if "modelo" not in f.name.lower()
+        and "log" not in f.name.lower()
+        and "readme" not in f.name.lower()
     ]
-    
+
     return arquivos_cnpjs
 
 
@@ -822,14 +856,18 @@ def coletar_arquivo_dsf() -> Optional[Path]:
             while True:
                 opcao = input("\nEscolha uma opção (1-3): ").strip()
 
-                if opcao == '3':
-                    print("⚠️  Nenhum arquivo PDF informado. As notificações serão geradas sem imagens da DSF.")
+                if opcao == "3":
+                    print(
+                        "⚠️  Nenhum arquivo PDF informado. As notificações serão geradas sem imagens da DSF."
+                    )
                     return None
 
-                elif opcao == '1':
+                elif opcao == "1":
                     while True:
                         try:
-                            idx = input(f"  Número do arquivo (1-{len(arquivos_dsf)}): ").strip()
+                            idx = input(
+                                f"  Número do arquivo (1-{len(arquivos_dsf)}): "
+                            ).strip()
                             if not idx:
                                 break
 
@@ -839,11 +877,13 @@ def coletar_arquivo_dsf() -> Optional[Path]:
                                 print(f"✅ Arquivo PDF selecionado: {pdf_path.name}")
                                 return pdf_path
                             else:
-                                print(f"  ❌ Opção inválida. Digite um número entre 1 e {len(arquivos_dsf)}.")
+                                print(
+                                    f"  ❌ Opção inválida. Digite um número entre 1 e {len(arquivos_dsf)}."
+                                )
                         except ValueError:
                             print("  ❌ Digite apenas números.")
 
-                elif opcao == '2':
+                elif opcao == "2":
                     break  # Vai para entrada manual
 
                 else:
@@ -852,10 +892,14 @@ def coletar_arquivo_dsf() -> Optional[Path]:
         # Opção 2: Entrada manual do caminho
         print("\nInforme o caminho do arquivo PDF da DSF:")
         while True:
-            caminho_pdf = input("\nCaminho do arquivo PDF (ou Enter para pular): ").strip()
+            caminho_pdf = input(
+                "\nCaminho do arquivo PDF (ou Enter para pular): "
+            ).strip()
 
             if not caminho_pdf:
-                print("⚠️  Nenhum arquivo PDF informado. As notificações serão geradas sem imagens da DSF.")
+                print(
+                    "⚠️  Nenhum arquivo PDF informado. As notificações serão geradas sem imagens da DSF."
+                )
                 return None
 
             # Converte para Path
@@ -868,10 +912,12 @@ def coletar_arquivo_dsf() -> Optional[Path]:
                 continue
 
             # Verifica se é um arquivo PDF
-            if pdf_path.suffix.lower() != '.pdf':
+            if pdf_path.suffix.lower() != ".pdf":
                 print(f"⚠️  O arquivo não tem extensão .pdf: {pdf_path.suffix}")
-                continuar = input("   Deseja continuar mesmo assim? (S/N): ").strip().upper()
-                if continuar not in ('S', 'SIM', 'Y', 'YES'):
+                continuar = (
+                    input("   Deseja continuar mesmo assim? (S/N): ").strip().upper()
+                )
+                if continuar not in ("S", "SIM", "Y", "YES"):
                     continue
 
             print(f"✅ Arquivo PDF selecionado: {pdf_path}")
@@ -918,7 +964,9 @@ def coletar_dados_manuais() -> Dict[str, str]:
         print("-" * 60)
         for i, (nome, dados) in enumerate(dados_salvos.items(), start=1):
             print(f"  [{i}] {nome}")
-            print(f"      Auditor: {dados.get('AUDITOR', 'N/A')} | Matrícula: {dados.get('MATRICULA', 'N/A')}")
+            print(
+                f"      Auditor: {dados.get('AUDITOR', 'N/A')} | Matrícula: {dados.get('MATRICULA', 'N/A')}"
+            )
         print("-" * 60)
         print("\nOpções:")
         print("  - Digite o número da configuração desejada")
@@ -936,7 +984,10 @@ def coletar_dados_manuais() -> Dict[str, str]:
                 print(f"\n✅ Configuração '{config_selecionada}' selecionada!")
                 print("\nDados carregados:")
                 for chave, valor in dados_selecionados.items():
-                    if chave not in ('DSF', 'DSF_NUM'):  # Não mostra DSF antiga para não confundir
+                    if chave not in (
+                        "DSF",
+                        "DSF_NUM",
+                    ):  # Não mostra DSF antiga para não confundir
                         print(f"  {chave}: {valor}")
 
                 dados_manuais = dados_selecionados.copy()
@@ -955,19 +1006,19 @@ def coletar_dados_manuais() -> Dict[str, str]:
         try:
             auditor = input("\nNome do AUDITOR: ").strip()
             if auditor:
-                dados_manuais['AUDITOR'] = auditor
+                dados_manuais["AUDITOR"] = auditor
 
             matricula = input("Matrícula do auditor (MATRICULA): ").strip()
             if matricula:
-                dados_manuais['MATRICULA'] = matricula
+                dados_manuais["MATRICULA"] = matricula
 
             contato = input("Contato (telefone/email): ").strip()
             if contato:
-                dados_manuais['CONTATO'] = contato
+                dados_manuais["CONTATO"] = contato
 
             orgao = input("Órgão expedidor (ORGAO): ").strip()
             if orgao:
-                dados_manuais['ORGAO'] = orgao
+                dados_manuais["ORGAO"] = orgao
 
         except (KeyboardInterrupt, EOFError):
             print("\n\nColeta de dados cancelada.")
@@ -975,13 +1026,17 @@ def coletar_dados_manuais() -> Dict[str, str]:
 
     # Passo obrigatório: Sempre pedir o número da DSF
     try:
-        dsf_atual = dados_manuais.get('DSF', '')
-        prompt_dsf = f"\nNúmero da DSF para esta geração [{dsf_atual}]: " if dsf_atual else "\nNúmero da DSF para esta geração: "
+        dsf_atual = dados_manuais.get("DSF", "")
+        prompt_dsf = (
+            f"\nNúmero da DSF para esta geração [{dsf_atual}]: "
+            if dsf_atual
+            else "\nNúmero da DSF para esta geração: "
+        )
 
         while True:
             dsf = input(prompt_dsf).strip()
             if dsf:
-                dados_manuais['DSF'] = dsf
+                dados_manuais["DSF"] = dsf
                 break
             elif dsf_atual:
                 # Se já tinha no config e deu Enter, mantém
@@ -994,7 +1049,7 @@ def coletar_dados_manuais() -> Dict[str, str]:
         return {}
 
     # Validação mínima: pelo menos um campo (exceto DSF que já é obrigatório)
-    if len(dados_manuais) <= 1 and 'DSF' in dados_manuais:
+    if len(dados_manuais) <= 1 and "DSF" in dados_manuais:
         logger.info("Apenas DSF informada.")
 
     # Pergunta se deseja salvar
@@ -1005,9 +1060,15 @@ def coletar_dados_manuais() -> Dict[str, str]:
     print("-" * 60)
 
     try:
-        salvar = input("\nDeseja salvar esta configuração para uso futuro? (S/N): ").strip().upper()
-        if salvar in ('S', 'SIM', 'Y', 'YES'):
-            nome_config = input("Nome para esta configuração (ex: 'Padrao', 'Auditor_Joao'): ").strip()
+        salvar = (
+            input("\nDeseja salvar esta configuração para uso futuro? (S/N): ")
+            .strip()
+            .upper()
+        )
+        if salvar in ("S", "SIM", "Y", "YES"):
+            nome_config = input(
+                "Nome para esta configuração (ex: 'Padrao', 'Auditor_Joao'): "
+            ).strip()
             if not nome_config:
                 nome_config = f"Config_{len(dados_salvos) + 1}"
 
@@ -1024,13 +1085,13 @@ def coletar_dados_manuais() -> Dict[str, str]:
 def coletar_periodo_analise() -> tuple[str, str]:
     """
     Coleta do usuário o período de análise para extração das pendências.
-    
+
     Solicita as datas inicial e final no formato MM/YYYY para usar
     como parâmetros na query SQL de extração de pendências.
-    
+
     Returns:
         Tupla contendo (data_inicial, data_final) no formato MM/YYYY
-    
+
     Exemplo:
         ("01/2024", "12/2024")
     """
@@ -1040,10 +1101,10 @@ def coletar_periodo_analise() -> tuple[str, str]:
     print("\nInforme o período para extração das pendências.")
     print("Formato: MM/YYYY (ex: 01/2024)")
     print("-" * 60)
-    
+
     data_inicial = "01/2024"  # Valor padrão
-    data_final = "12/2024"    # Valor padrão
-    
+    data_final = "12/2024"  # Valor padrão
+
     try:
         # Coleta data inicial
         entrada_inicial = input(f"\nData inicial [{data_inicial}]: ").strip()
@@ -1053,7 +1114,7 @@ def coletar_periodo_analise() -> tuple[str, str]:
                 data_inicial = entrada_inicial
             else:
                 print(f"⚠️  Formato inválido. Usando padrão: {data_inicial}")
-        
+
         # Coleta data final
         entrada_final = input(f"Data final [{data_final}]: ").strip()
         if entrada_final:
@@ -1062,44 +1123,45 @@ def coletar_periodo_analise() -> tuple[str, str]:
                 data_final = entrada_final
             else:
                 print(f"⚠️  Formato inválido. Usando padrão: {data_final}")
-        
+
     except (KeyboardInterrupt, EOFError):
         print("\n\nColeta de período cancelada.")
-    
+
     print("\n" + "-" * 60)
-    print(f"Período de análise definido:")
+    print("Período de análise definido:")
     print(f"  Início: {data_inicial}")
     print(f"  Fim:    {data_final}")
     print("=" * 60)
-    
+
     return data_inicial, data_final
 
 
 def validar_formato_data(data: str) -> bool:
     """
     Valida se uma string está no formato MM/YYYY.
-    
+
     Args:
         data: String no formato MM/YYYY
-    
+
     Returns:
         True se o formato for válido, False caso contrário
     """
     import re
-    padrao = r'^\d{2}/\d{4}$'
-    
+
+    padrao = r"^\d{2}/\d{4}$"
+
     if not re.match(padrao, data):
         return False
-    
+
     # Valida mês (01-12)
     try:
-        mes, ano = data.split('/')
+        mes, ano = data.split("/")
         mes_int = int(mes)
         if mes_int < 1 or mes_int > 12:
             return False
-    except:
+    except Exception:
         return False
-    
+
     return True
 
 
@@ -1110,17 +1172,17 @@ def carregar_config_db() -> Dict[str, str]:
     """
     try:
         from dotenv import dotenv_values
-        
+
         # Usa o resolvedor de caminhos para encontrar .env
         env_path = get_env_path()
 
         # Padrões SEFIN
         padroes = {
-            'ORACLE_HOST': 'exa01-scan.sefin.ro.gov.br',
-            'ORACLE_PORT': '1521',
-            'ORACLE_SERVICE': 'sefindw',
-            'DB_USER': '',
-            'DB_PASSWORD': ''
+            "ORACLE_HOST": "",
+            "ORACLE_PORT": "",
+            "ORACLE_SERVICE": "",
+            "DB_USER": "",
+            "DB_PASSWORD": "",
         }
 
         if not env_path.exists():
@@ -1130,11 +1192,11 @@ def carregar_config_db() -> Dict[str, str]:
         env_vars = dotenv_values(env_path)
 
         return {
-            'ORACLE_HOST': env_vars.get('ORACLE_HOST', padroes['ORACLE_HOST']),
-            'ORACLE_PORT': env_vars.get('ORACLE_PORT', padroes['ORACLE_PORT']),
-            'ORACLE_SERVICE': env_vars.get('ORACLE_SERVICE', padroes['ORACLE_SERVICE']),
-            'DB_USER': env_vars.get('DB_USER', ''),
-            'DB_PASSWORD': env_vars.get('DB_PASSWORD', '')
+            "ORACLE_HOST": env_vars.get("ORACLE_HOST", padroes["ORACLE_HOST"]),
+            "ORACLE_PORT": env_vars.get("ORACLE_PORT", padroes["ORACLE_PORT"]),
+            "ORACLE_SERVICE": env_vars.get("ORACLE_SERVICE", padroes["ORACLE_SERVICE"]),
+            "DB_USER": env_vars.get("DB_USER", ""),
+            "DB_PASSWORD": env_vars.get("DB_PASSWORD", ""),
         }
     except Exception as e:
         logger.warning(f"Erro ao carregar configurações de DB: {e}")
@@ -1152,29 +1214,36 @@ def salvar_config_db(dados: Dict[str, str]) -> bool:
         # Lê conteúdo atual
         conteudo_atual = ""
         if env_path.exists():
-            with open(env_path, 'r', encoding='utf-8') as f:
+            with open(env_path, "r", encoding="utf-8") as f:
                 conteudo_atual = f.read()
 
         # Chaves a serem atualizadas
-        chaves = ['ORACLE_HOST', 'ORACLE_PORT', 'ORACLE_SERVICE', 'DB_USER', 'DB_PASSWORD']
+        chaves = [
+            "ORACLE_HOST",
+            "ORACLE_PORT",
+            "ORACLE_SERVICE",
+            "DB_USER",
+            "DB_PASSWORD",
+        ]
 
         conteudo_final = conteudo_atual
         for chave in chaves:
-            valor = str(dados.get(chave, '')).strip()
+            valor = str(dados.get(chave, "")).strip()
             import re
+
             # Substitui se já existir, senão adiciona ao final
-            if re.search(fr'^{chave}=', conteudo_final, flags=re.MULTILINE):
+            if re.search(rf"^{chave}=", conteudo_final, flags=re.MULTILINE):
                 conteudo_final = re.sub(
-                    fr'^{chave}=.*$',
+                    rf"^{chave}=.*$",
                     f"{chave}={valor}",
                     conteudo_final,
-                    flags=re.MULTILINE
+                    flags=re.MULTILINE,
                 )
             else:
                 conteudo_final = conteudo_final.rstrip() + f"\n{chave}={valor}\n"
 
-        with open(env_path, 'w', encoding='utf-8') as f:
-            f.write(conteudo_final.strip() + '\n')
+        with open(env_path, "w", encoding="utf-8") as f:
+            f.write(conteudo_final.strip() + "\n")
 
         logger.info(f"Configurações de banco de dados salvas em: {env_path}")
         return True
@@ -1200,7 +1269,7 @@ def carregar_dados_salvos() -> Dict[str, Dict[str, str]]:
 
     try:
         from dotenv import dotenv_values
-        
+
         # Usa o resolvedor de caminhos para encontrar .env
         env_path = get_env_path()
 
@@ -1209,27 +1278,27 @@ def carregar_dados_salvos() -> Dict[str, Dict[str, str]]:
 
         # Carrega todas as variáveis do .env
         env_vars = dotenv_values(env_path)
-        
+
         # Encontra todas as configurações salvas
         configs = {}
-        padrao_config = re.compile(r'^CONFIG_(.+)_AUDITOR$')
-        
+        padrao_config = re.compile(r"^CONFIG_(.+)_AUDITOR$")
+
         for chave, valor in env_vars.items():
             match = padrao_config.match(chave)
             if match:
                 nome_config = match.group(1)
-                
+
                 # Carrega todos os campos desta configuração
                 configs[nome_config] = {
-                    'AUDITOR': valor,
-                    'MATRICULA': env_vars.get(f'CONFIG_{nome_config}_MATRICULA', ''),
-                    'DSF': env_vars.get(f'CONFIG_{nome_config}_DSF', ''),
-                    'CONTATO': env_vars.get(f'CONFIG_{nome_config}_CONTATO', ''),
-                    'ORGAO': env_vars.get(f'CONFIG_{nome_config}_ORGAO', '')
+                    "AUDITOR": valor,
+                    "MATRICULA": env_vars.get(f"CONFIG_{nome_config}_MATRICULA", ""),
+                    "DSF": env_vars.get(f"CONFIG_{nome_config}_DSF", ""),
+                    "CONTATO": env_vars.get(f"CONFIG_{nome_config}_CONTATO", ""),
+                    "ORGAO": env_vars.get(f"CONFIG_{nome_config}_ORGAO", ""),
                 }
-        
+
         return configs
-    
+
     except Exception as e:
         logger.warning(f"Erro ao carregar configurações salvas: {e}")
         return {}
@@ -1249,49 +1318,53 @@ def salvar_dados_manuais(nome_config: str, dados: Dict[str, str]) -> None:
 
         # Sanitiza o nome_config para evitar espaços nas chaves do .env
         import re
-        nome_config_sanitizado = re.sub(r'[^a-zA-Z0-9_]', '_', nome_config).strip('_')
-        nome_config_sanitizado = re.sub(r'_+', '_', nome_config_sanitizado)
+
+        nome_config_sanitizado = re.sub(r"[^a-zA-Z0-9_]", "_", nome_config).strip("_")
+        nome_config_sanitizado = re.sub(r"_+", "_", nome_config_sanitizado)
 
         # Prepara linhas para adicionar/atualizar
         linhas_config = []
-        campos = ['AUDITOR', 'MATRICULA', 'DSF', 'CONTATO', 'ORGAO']
+        campos = ["AUDITOR", "MATRICULA", "DSF", "CONTATO", "ORGAO"]
 
         for campo in campos:
-            valor = dados.get(campo, '')
+            valor = dados.get(campo, "")
             linhas_config.append(f"CONFIG_{nome_config_sanitizado}_{campo}={valor}")
 
         # Lê conteúdo atual do .env
         conteudo_atual = ""
         if env_path.exists():
-            with open(env_path, 'r', encoding='utf-8') as f:
+            with open(env_path, "r", encoding="utf-8") as f:
                 conteudo_atual = f.read()
 
         # Remove configurações antigas com mesmo nome (se houver)
         import re
+
         conteudo_sem_config_antiga = re.sub(
-            rf'^CONFIG_{re.escape(nome_config_sanitizado)}_.*$\n?',
-            '',
+            rf"^CONFIG_{re.escape(nome_config_sanitizado)}_.*$\n?",
+            "",
             conteudo_atual,
-            flags=re.MULTILINE
+            flags=re.MULTILINE,
         )
 
         # Adiciona nova configuração
-        secao_existe = '# CONFIGURAÇÕES SALVAS DE AUDITORES' in conteudo_sem_config_antiga
+        secao_existe = (
+            "# CONFIGURAÇÕES SALVAS DE AUDITORES" in conteudo_sem_config_antiga
+        )
 
         if not secao_existe:
             # Adiciona cabeçalho da seção
-            conteudo_final = conteudo_sem_config_antiga.rstrip() + '\n\n'
-            conteudo_final += '# =============================================================================\n'
-            conteudo_final += '# CONFIGURAÇÕES SALVAS DE AUDITORES\n'
-            conteudo_final += '# =============================================================================\n'
+            conteudo_final = conteudo_sem_config_antiga.rstrip() + "\n\n"
+            conteudo_final += "# =============================================================================\n"
+            conteudo_final += "# CONFIGURAÇÕES SALVAS DE AUDITORES\n"
+            conteudo_final += "# =============================================================================\n"
         else:
             conteudo_final = conteudo_sem_config_antiga
 
         # Adiciona linhas da configuração
-        conteudo_final += '\n'.join(linhas_config) + '\n'
+        conteudo_final += "\n".join(linhas_config) + "\n"
 
         # Escreve de volta no arquivo
-        with open(env_path, 'w', encoding='utf-8') as f:
+        with open(env_path, "w", encoding="utf-8") as f:
             f.write(conteudo_final)
 
         logger.info(f"Configuração '{nome_config_sanitizado}' salva em: {env_path}")
@@ -1313,48 +1386,48 @@ def exibir_relatorio_final(resumo: Dict[str, Any]) -> None:
     print("=" * 70)
 
     # Resumo estatístico
-    print(f"\n📊 RESUMO ESTATÍSTICO")
+    print("\n📊 RESUMO ESTATÍSTICO")
     print(f"   Total de CNPJs processados: {resumo['total']}")
     print(f"   ✅ Sucessos: {resumo['sucessos']}")
     print(f"   ❌ Falhas: {resumo['falhas']}")
 
     # Taxa de sucesso
-    if resumo['total'] > 0:
-        taxa_sucesso = (resumo['sucessos'] / resumo['total']) * 100
+    if resumo["total"] > 0:
+        taxa_sucesso = (resumo["sucessos"] / resumo["total"]) * 100
         print(f"   📈 Taxa de sucesso: {taxa_sucesso:.1f}%")
 
     # DSF e estrutura de pastas
-    print(f"\n📁 ESTRUTURA DE PASTAS")
-    dsf = resumo.get('dsf', 'N/A')
-    dir_saida = resumo.get('diretorio_saida', 'N/A')
+    print("\n📁 ESTRUTURA DE PASTAS")
+    dsf = resumo.get("dsf", "N/A")
+    dir_saida = resumo.get("diretorio_saida", "N/A")
     print(f"   DSF: {dsf}")
     print(f"   Diretório base: {dir_saida}")
-    print(f"   Formato: <mes>_DSF_<numero_dsf>/<cnpj>/")
-    
+    print("   Formato: <mes>_DSF_<numero_dsf>/<cnpj>/")
+
     # Arquivo DSF
-    arquivo_dsf = resumo.get('arquivo_dsf')
+    arquivo_dsf = resumo.get("arquivo_dsf")
     if arquivo_dsf:
         print(f"   Arquivo PDF da DSF: {arquivo_dsf}")
 
     # CNPJs agrupados por DSF
-    cnpjs_por_dsf = resumo.get('cnpjs_por_dsf', {})
+    cnpjs_por_dsf = resumo.get("cnpjs_por_dsf", {})
     if cnpjs_por_dsf:
-        print(f"\n📋 CNPJs AGRUPADOS POR DSF")
+        print("\n📋 CNPJs AGRUPADOS POR DSF")
         print("-" * 70)
         for dsf_key, cnpjs_lista in cnpjs_por_dsf.items():
             print(f"\n   DSF: {dsf_key}")
             print(f"   Total de CNPJs: {len(cnpjs_lista)}")
             if cnpjs_lista:
-                print(f"   CNPJs:")
+                print("   CNPJs:")
                 for cnpj in cnpjs_lista[:10]:  # Mostra até 10
                     print(f"      - {cnpj}")
                 if len(cnpjs_lista) > 10:
                     print(f"      ... e mais {len(cnpjs_lista) - 10} CNPJ(s)")
-        
+
         # Salva resumo em arquivo TXT para fácil visualização
         try:
             arquivo_txt = dir_saida / "resumo_cnpjs.txt"
-            with open(arquivo_txt, 'w', encoding='utf-8') as f:
+            with open(arquivo_txt, "w", encoding="utf-8") as f:
                 f.write("=" * 70 + "\n")
                 f.write("RESUMO DE CNPJs POR DSF\n")
                 f.write("=" * 70 + "\n\n")
@@ -1377,11 +1450,11 @@ def exibir_relatorio_final(resumo: Dict[str, Any]) -> None:
             logger.warning(f"Não foi possível salvar o resumo em TXT: {e}")
 
     # Detalhes por CNPJ
-    print(f"\n📋 DETALHAMENTO POR CNPJ")
+    print("\n📋 DETALHAMENTO POR CNPJ")
     print("-" * 70)
 
-    for cnpj, resultado in resumo['resultados'].items():
-        if resultado['sucesso']:
+    for cnpj, resultado in resumo["resultados"].items():
+        if resultado["sucesso"]:
             status = "✅ SUCESSO"
             detalhe = f"Arquivo: {resultado['arquivo_saida']}"
         else:
@@ -1393,22 +1466,23 @@ def exibir_relatorio_final(resumo: Dict[str, Any]) -> None:
         print(f"   {detalhe}")
 
     # Arquivos gerados
-    if resumo['arquivos_gerados']:
+    if resumo["arquivos_gerados"]:
         print(f"\n📁 ARQUIVOS GERADOS ({len(resumo['arquivos_gerados'])})")
         print("-" * 70)
-        for arquivo in resumo['arquivos_gerados']:
+        for arquivo in resumo["arquivos_gerados"]:
             print(f"   📄 {arquivo}")
 
         # Instrução para abrir a pasta
-        print(f"\n💡 Para visualizar os arquivos:")
-        print(f"   1. Abra o Explorer de Arquivos")
+        print("\n💡 Para visualizar os arquivos:")
+        print("   1. Abra o Explorer de Arquivos")
         print(f"   2. Navegue até: {dir_saida}")
         print(f"   3. Ou execute: explorer {dir_saida}")
 
         # Tenta abrir automaticamente no Windows
         try:
             import subprocess
-            subprocess.run(['explorer', str(dir_saida)], check=False)
+
+            subprocess.run(["explorer", str(dir_saida)], check=False)
             print(f"\n✅ Explorer aberto em: {dir_saida}")
         except Exception as e:
             logger.warning(f"Não foi possível abrir o explorer: {e}")
@@ -1436,9 +1510,9 @@ def perguntar_proxima_acao() -> str:
     while True:
         try:
             opcao = input("\nEscolha uma opção (1-2): ").strip()
-            if opcao == '1':
+            if opcao == "1":
                 return "nova_dsf"
-            if opcao == '2':
+            if opcao == "2":
                 return "fechar"
             print("❌ Opção inválida. Escolha 1 ou 2.")
         except (KeyboardInterrupt, EOFError):
@@ -1449,6 +1523,7 @@ def perguntar_proxima_acao() -> str:
 # =============================================================================
 # PONTO DE ENTRADA PRINCIPAL
 # =============================================================================
+
 
 def main():
     """
@@ -1468,9 +1543,13 @@ def main():
 
     # Verifica se há argumento de arquivo
     arquivo_cnpjs = None
-    if '--arquivo' in sys.argv or '-a' in sys.argv:
+    if "--arquivo" in sys.argv or "-a" in sys.argv:
         try:
-            idx = sys.argv.index('--arquivo') if '--arquivo' in sys.argv else sys.argv.index('-a')
+            idx = (
+                sys.argv.index("--arquivo")
+                if "--arquivo" in sys.argv
+                else sys.argv.index("-a")
+            )
             if idx + 1 < len(sys.argv):
                 arquivo_cnpjs = Path(sys.argv[idx + 1])
         except (ValueError, IndexError):
@@ -1479,7 +1558,11 @@ def main():
     # Obtém lista de CNPJs
     if cnpjs_argumento and not arquivo_cnpjs:
         # Filtra argumentos de controle
-        cnpjs_argumento = [c for c in cnpjs_argumento if not c.startswith('--') and not c.startswith('-')]
+        cnpjs_argumento = [
+            c
+            for c in cnpjs_argumento
+            if not c.startswith("--") and not c.startswith("-")
+        ]
         logger.info(f"CNPJs fornecidos via linha de comando: {len(cnpjs_argumento)}")
         lista_cnpjs = cnpjs_argumento
     elif arquivo_cnpjs:
@@ -1514,7 +1597,7 @@ def main():
     print("\n📄 Analisando modelo de notificação...")
     analise = analisar_modelo()
 
-    if 'erro' not in analise:
+    if "erro" not in analise:
         print(f"   Modelo: {analise['caminho_modelo']}")
         print(f"   Campos necessários: {analise['total_placeholders']}")
         logger.info(f"Modelo analisado: {analise['total_placeholders']} campos")
@@ -1531,12 +1614,12 @@ def main():
     print(f"   Período: {data_inicial} a {data_final}")
     if arquivo_dsf:
         print(f"   Arquivo DSF: {arquivo_dsf}")
-    
+
     resumo = gerar_notificacoes_em_lote(
         lista_cnpjs=lista_cnpjs,
         dados_manuais=dados_manuais,
         periodo_analise=periodo_analise,
-        arquivo_dsf=arquivo_dsf
+        arquivo_dsf=arquivo_dsf,
     )
 
     # Exibe relatório final
@@ -1547,11 +1630,12 @@ def main():
     logger.info("GERAÇÃO DE NOTIFICAÇÕES CONCLUÍDA")
     logger.info("=" * 60)
 
-
     proxima_acao = perguntar_proxima_acao()
     if proxima_acao == "nova_dsf":
         if len(sys.argv) > 1:
-            print("\nâ„¹ï¸  Reiniciando em modo interativo para processar uma nova DSF.")
+            print(
+                "\nâ„¹ï¸  Reiniciando em modo interativo para processar uma nova DSF."
+            )
             sys.argv = [sys.argv[0]]
         main()
         return
@@ -1560,12 +1644,12 @@ def main():
 def menu_selecao_cnpjs() -> List[str]:
     """
     Exibe menu interativo para seleção de origem dos CNPJs.
-    
+
     Oferece três opções:
     1. Digitar CNPJs manualmente
     2. Informar caminho de arquivo TXT
     3. Selecionar arquivo TXT do diretório
-    
+
     Returns:
         Lista de CNPJs para processamento
     """
@@ -1579,16 +1663,16 @@ def menu_selecao_cnpjs() -> List[str]:
     print("  [3] Selecionar arquivo TXT do diretório")
     print("  [4] Sair")
     print("-" * 60)
-    
+
     while True:
         try:
             opcao = input("\nEscolha uma opção (1-4): ").strip()
-            
-            if opcao == '1':
+
+            if opcao == "1":
                 # Digitação manual
                 return listar_cnpjs_para_processamento()
-            
-            elif opcao == '2':
+
+            elif opcao == "2":
                 # Informar caminho do arquivo
                 try:
                     caminho = input("\nCaminho do arquivo TXT: ").strip()
@@ -1602,22 +1686,22 @@ def menu_selecao_cnpjs() -> List[str]:
                         print("❌ Caminho não informado.")
                 except Exception as e:
                     print(f"❌ Erro: {e}")
-            
-            elif opcao == '3':
+
+            elif opcao == "3":
                 # Selecionar do diretório
                 arquivos = listar_arquivos_txt_no_diretorio()
-                
+
                 if not arquivos:
                     print("\n⚠️  Nenhum arquivo TXT encontrado no diretório.")
                     print(f"Diretório: {ROOT_DIR}")
                     continue
-                
+
                 print(f"\n📂 {len(arquivos)} arquivo(s) TXT encontrado(s):")
                 print("-" * 60)
                 for i, arquivo in enumerate(arquivos, start=1):
                     print(f"  [{i}] {arquivo.name}")
                 print("-" * 60)
-                
+
                 try:
                     selecao = input("\nEscolha um arquivo (número): ").strip()
                     if selecao.isdigit() and 1 <= int(selecao) <= len(arquivos):
@@ -1627,15 +1711,15 @@ def menu_selecao_cnpjs() -> List[str]:
                         print("❌ Seleção inválida.")
                 except Exception as e:
                     print(f"❌ Erro: {e}")
-            
-            elif opcao == '4':
+
+            elif opcao == "4":
                 # Sair
                 print("\nOperação cancelada.")
                 return []
-            
+
             else:
                 print("❌ Opção inválida. Escolha 1, 2, 3 ou 4.")
-        
+
         except (KeyboardInterrupt, EOFError):
             print("\n\nOperação cancelada pelo usuário.")
             return []

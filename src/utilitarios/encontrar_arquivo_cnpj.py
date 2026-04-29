@@ -1,5 +1,6 @@
 from pathlib import Path
 
+
 def encontrar_arquivo(diretorio: Path, prefixo: str, cnpj: str):
     """Busca arquivo Parquet por prefixo e CNPJ no diretório especificado, priorizando os agrupados."""
     # 1. Tentar primeiro o arquivo já AGRUPADO
@@ -11,7 +12,7 @@ def encontrar_arquivo(diretorio: Path, prefixo: str, cnpj: str):
     arquivo_normal = diretorio / f"{prefixo}_{cnpj}.parquet"
     if arquivo_normal.is_file():
         return arquivo_normal
-    
+
     # 3. Fallback: buscar com prefixo parcial
     prefixo_lower = prefixo.lower()
     for arq in diretorio.glob(f"*{cnpj}*.parquet"):

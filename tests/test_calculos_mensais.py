@@ -17,8 +17,18 @@ def test_calcular_aba_mensal_com_devolucao_excluida_das_medias():
             "co_sefin_agr": ["1001", "1001", "1001", "1001"],
             "descr_padrao": ["Produto X"] * 4,
             "Tipo_operacao": ["1 - ENTRADA", "1 - ENTRADA", "2 - SAIDAS", "2 - SAIDAS"],
-            "Dt_doc": [date(2024, 1, 2), date(2024, 1, 5), date(2024, 1, 10), date(2024, 1, 20)],
-            "Dt_e_s": [date(2024, 1, 2), date(2024, 1, 5), date(2024, 1, 10), date(2024, 1, 20)],
+            "Dt_doc": [
+                date(2024, 1, 2),
+                date(2024, 1, 5),
+                date(2024, 1, 10),
+                date(2024, 1, 20),
+            ],
+            "Dt_e_s": [
+                date(2024, 1, 2),
+                date(2024, 1, 5),
+                date(2024, 1, 10),
+                date(2024, 1, 20),
+            ],
             "ordem_operacoes": [1, 2, 3, 4],
             "Unid": ["CX", "CX", "CX", "CX"],
             "unid_ref": ["UN", "UN", "UN", "UN"],
@@ -126,7 +136,9 @@ def test_calcular_aba_mensal_icms_st_usa_fallback_pme_mva_quando_nao_ha_pms():
     assert row["qtd_saidas"] == 0.0
     assert row["pms_mes"] == 0.0
     assert row["MVA"] == 40.0
-    assert row["MVA_ajustado"] == pytest.approx((((1 + 0.40) * (1 - 0.12)) / (1 - 0.18)) - 1, rel=1e-6)
+    assert row["MVA_ajustado"] == pytest.approx(
+        (((1 + 0.40) * (1 - 0.12)) / (1 - 0.18)) - 1, rel=1e-6
+    )
     assert row["entradas_desacob"] == 2.0
     assert row["ICMS_entr_desacob"] == pytest.approx(0.9, rel=1e-4)
 

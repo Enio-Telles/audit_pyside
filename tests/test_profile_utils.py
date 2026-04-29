@@ -3,7 +3,10 @@ import sys
 
 sys.path.insert(0, str(Path("src").resolve()))
 
-from interface_grafica.services.profile_utils import ordenar_colunas_perfil, ordenar_colunas_visiveis
+from interface_grafica.services.profile_utils import (
+    ordenar_colunas_perfil,
+    ordenar_colunas_visiveis,
+)
 
 
 def test_ordenar_colunas_perfil_prioriza_ordem_salva():

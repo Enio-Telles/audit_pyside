@@ -69,6 +69,10 @@ class WorkerThread(QThread):
 
     def cancelar(self):
         self._cancelar = True
+        self.requestInterruption()
+
+    def _deve_cancelar(self) -> bool:
+        return self._cancelar or self.isInterruptionRequested()
 
     def run(self):
         total = len(self.lista_cnpjs)
@@ -77,7 +81,9 @@ class WorkerThread(QThread):
         dir_saida.mkdir(parents=True, exist_ok=True)
 
         self.log_msg.emit(f"Iniciando processamento de {total} CNPJ(s)...")
-        self.log_msg.emit(f"Período: {self.periodo_analise[0]} a {self.periodo_analise[1]}")
+        self.log_msg.emit(
+            f"Período: {self.periodo_analise[0]} a {self.periodo_analise[1]}"
+        )
         if dsf_num:
             self.log_msg.emit(f"DSF: {dsf_num}")
         self.log_msg.emit(f"Saída: {dir_saida}")
@@ -86,13 +92,15 @@ class WorkerThread(QThread):
             "total": total,
             "sucessos": 0,
             "falhas": 0,
+            "cancelado": False,
             "resultados": {},
             "arquivos_gerados": [],
             "diretorio_saida": dir_saida,
         }
 
         for i, cnpj in enumerate(self.lista_cnpjs, start=1):
-            if self._cancelar:
+            if self._deve_cancelar():
+                resumo["cancelado"] = True
                 self.log_msg.emit("⚠️ Processamento cancelado pelo usuário.")
                 break
 
@@ -110,6 +118,10 @@ class WorkerThread(QThread):
                     forcar_reatribuicao=False,
                     periodo_analise=self.periodo_analise,
                 )
+                if self._deve_cancelar():
+                    resumo["cancelado"] = True
+                    self.log_msg.emit("⚠️ Processamento cancelado pelo usuário.")
+                    break
                 resumo["resultados"][cnpj_limpo] = resultado
 
                 if resultado["sucesso"]:
@@ -131,7 +143,12 @@ class WorkerThread(QThread):
                 self.cnpj_resultado.emit(cnpj_limpo, False, str(exc))
 
         self.log_msg.emit(f"\n{'═' * 50}")
-        self.log_msg.emit(
-            f"Concluído: {resumo['sucessos']} sucesso(s), {resumo['falhas']} falha(s)"
-        )
+        if resumo["cancelado"]:
+            self.log_msg.emit(
+                f"Cancelado: {resumo['sucessos']} sucesso(s), {resumo['falhas']} falha(s), {len(resumo['resultados'])} item(ns) processado(s)"
+            )
+        else:
+            self.log_msg.emit(
+                f"Concluído: {resumo['sucessos']} sucesso(s), {resumo['falhas']} falha(s)"
+            )
         self.concluido.emit(resumo)

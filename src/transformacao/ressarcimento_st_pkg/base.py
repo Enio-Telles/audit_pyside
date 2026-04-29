@@ -66,10 +66,7 @@ def caminho_analise(cnpj: str, nome_arquivo: str, pasta_cnpj: Path | None = None
 
 def dataframe_vazio(schema: dict[str, pl.DataType]) -> pl.DataFrame:
     return pl.DataFrame(
-        {
-            nome: pl.Series(name=nome, values=[], dtype=tipo)
-            for nome, tipo in schema.items()
-        }
+        {nome: pl.Series(name=nome, values=[], dtype=tipo) for nome, tipo in schema.items()}
     )
 
 
@@ -104,12 +101,7 @@ def salvar_df(df: pl.DataFrame, caminho: Path) -> bool:
 
 def expr_mes_ref(coluna_periodo: str = "periodo_efd") -> pl.Expr:
     return (
-        (
-            pl.col(coluna_periodo)
-            .cast(pl.Utf8, strict=False)
-            .str.replace("/", "-")
-            + pl.lit("-01")
-        )
+        (pl.col(coluna_periodo).cast(pl.Utf8, strict=False).str.replace("/", "-") + pl.lit("-01"))
         .str.strptime(pl.Date, "%Y-%m-%d", strict=False)
         .alias("mes_ref")
     )

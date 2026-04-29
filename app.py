@@ -4,9 +4,9 @@ Lançador principal do Fiscal Parquet Analyzer.
 Executa a interface gráfica a partir da raiz do projeto C:\\Sistema_pysisde,
 configurando o sys.path para encontrar os pacotes dentro de src/.
 """
+
 from __future__ import annotations
 
-import os
 import sys
 from pathlib import Path
 
@@ -21,10 +21,26 @@ UTILITARIOS_DIR = SRC_DIR / "utilitarios"
 if str(UTILITARIOS_DIR) not in sys.path:
     sys.path.insert(0, str(UTILITARIOS_DIR))
 
-from PySide6.QtWidgets import QApplication
-from interface_grafica.ui.main_window import MainWindow
+# Bundle smoke-test mode: verify imports without launching the GUI.
+# Used by .github/workflows/bundle-smoke.yml — exits 0 if the bundle is healthy.
+if __name__ == "__main__" and "--smoke" in sys.argv:
+    from utilitarios.project_paths import PROJECT_ROOT  # noqa: F401
+
+    print("smoke-ok", flush=True)
+    sys.exit(0)
+
+from PySide6.QtWidgets import QApplication  # noqa: E402
+from interface_grafica.logging_setup import configure_structlog, install_fallback_hooks  # noqa: E402
+from interface_grafica.patches.similaridade_agregacao import apply_similarity_patch  # noqa: E402
+
+apply_similarity_patch()
+
+from interface_grafica.windows.main_window import MainWindow  # noqa: E402
+
 
 def main() -> int:
+    configure_structlog()
+    install_fallback_hooks()
     app = QApplication(sys.argv)
     app.setApplicationName("Fiscal Parquet Analyzer (Refatorado)")
     window = MainWindow()
@@ -34,4 +50,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

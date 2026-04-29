@@ -3,19 +3,44 @@ from __future__ import annotations
 import re
 import threading
 import logging
+import sys
+from pathlib import Path
+from typing import Sequence
 
-logger = logging.getLogger(__name__)
+import oracledb
 import polars as pl
-import concurrent.futures
-
 from rich import print as rprint
 
-def get_thread_connection():
+logger = logging.getLogger(__name__)
+thread_local = threading.local()
+
+
+def close_thread_connection() -> None:
+    """Fecha e libera a conexão Oracle do thread local corrente, se existir."""
+    if hasattr(thread_local, "conexao"):
+        if thread_local.conexao:
+            try:
+                thread_local.conexao.close()
+            except Exception as e:
+                logger.warning(f"Erro ao fechar conexao de thread: {e}")
+        thread_local.conexao = None
+
+
+def get_thread_connection() -> oracledb.Connection | None:
+    """Retorna (ou cria) a conexão Oracle do thread local corrente.
+
+    Returns:
+        Objeto de conexão Oracle ou None se a conexão falhar.
+    """
     if not hasattr(thread_local, "conexao"):
         # Cria uma nova conexão para esta thread
-        conn = conectar_oracle()
+        # Usa o nome `conectar` importado de utilitarios.conectar_oracle para permitir
+        # que os testes possam mockar `extracao.extrair_dados_cnpj.conectar`.
+        conn = conectar()
         if conn is None:
-            logger.error(f"[{threading.current_thread().name}] Falha ao criar conexão com banco de dados.")
+            logger.error(
+                f"[{threading.current_thread().name}] Falha ao criar conexão com banco de dados."
+            )
             return None
 
         try:
@@ -23,25 +48,20 @@ def get_thread_connection():
             cursor = conn.cursor()
             cursor.execute("SELECT 1 FROM DUAL")
         except Exception as e:
-            logger.error(f"[{threading.current_thread().name}] Erro ao testar conexão: {e}")
+            logger.error(
+                f"[{threading.current_thread().name}] Erro ao testar conexão: {e}"
+            )
             return None
 
         thread_local.conexao = conn
     return thread_local.conexao
 
 
-def extrair_dados(
-    cnpj_input: str,
-    data_limite_input: str | None = None,
-    consultas_selecionadas: Sequence[Path | str] | None = None,
-) -> bool:
-    """Extrai as consultas SQL em parquet usando escrita incremental por lotes."""
-
-ROOT_DIR        = Path(r"c:\funcoes - Copia")
-SRC_DIR         = ROOT_DIR / "src"
-SQL_DIR         = ROOT_DIR / "sql"
-DADOS_DIR       = ROOT_DIR / "dados"
-CNPJ_ROOT       = DADOS_DIR / "CNPJ"
+ROOT_DIR = Path(r"c:\funcoes - Copia")
+SRC_DIR = ROOT_DIR / "src"
+SQL_DIR = ROOT_DIR / "sql"
+DADOS_DIR = ROOT_DIR / "dados"
+CNPJ_ROOT = DADOS_DIR / "CNPJ"
 
 
 try:
@@ -53,9 +73,38 @@ except ImportError as e:
     rprint(f"[red]Erro ao importar módulos utilitários:[/red] {e}")
     sys.exit(1)
 
+# Import helpers from the efficient extractor module (same package)
+from .extracao_oracle_eficiente import (
+    descobrir_consultas_sql,
+    executar_extracao_oracle,
+    imprimir_resumo_extracao,
+)
 
 
-def processar_arquivo(arq_sql, cnpj_limpo, data_limite_input, consultas_dir, pasta_saida):
+def processar_arquivo(
+    arq_sql: Path | str,
+    cnpj_limpo: str,
+    data_limite_input: str | None,
+    consultas_dir: Path | str,
+    pasta_saida: Path,
+) -> bool:
+    """Executa um arquivo SQL Oracle e salva o resultado como Parquet.
+
+    Args:
+        arq_sql: Caminho do arquivo ``.sql`` a executar.
+        cnpj_limpo: CNPJ somente dígitos, usado como bind ``:CNPJ`` na query.
+        data_limite_input: Data limite de processamento (bind opcional ``DATA_LIMITE_PROCESSAMENTO``).
+        consultas_dir: Diretório raiz das consultas (usado para calcular caminho relativo de saída).
+        pasta_saida: Pasta onde o Parquet resultante será gravado.
+
+    Returns:
+        True em caso de sucesso ou query sem dados; False em caso de erro.
+    """
+    # Garantir que arq_sql e consultas_dir sejam Path (podem vir como str do catalogo)
+    arq_sql = Path(arq_sql) if not isinstance(arq_sql, Path) else arq_sql
+    consultas_dir = (
+        Path(consultas_dir) if not isinstance(consultas_dir, Path) else consultas_dir
+    )
     try:
         conexao = get_thread_connection()
         if not conexao:
@@ -65,17 +114,21 @@ def processar_arquivo(arq_sql, cnpj_limpo, data_limite_input, consultas_dir, pas
         with conexao.cursor() as cursor:
             cursor.arraysize = 1000
 
-            rprint(f"\n[bold cyan]Processando: {arq_sql.relative_to(consultas_dir)}[/bold cyan]")
+            rprint(
+                f"\n[bold cyan]Processando: {arq_sql.relative_to(consultas_dir)}[/bold cyan]"
+            )
 
             sql_txt = ler_sql(arq_sql)
             if not sql_txt:
-                rprint(f"[yellow]Arquivo {arq_sql.name} vazio ou com erro de leitura.[/yellow]")
+                rprint(
+                    f"[yellow]Arquivo {arq_sql.name} vazio ou com erro de leitura.[/yellow]"
+                )
                 return True
 
             cursor.prepare(sql_txt)
             nomes_binds = cursor.bindnames()
 
-            binds = {}
+            binds: dict[str, str | None] = {}
             tem_bind_cnpj = False
             for b in nomes_binds:
                 b_upper = b.upper()
@@ -88,22 +141,30 @@ def processar_arquivo(arq_sql, cnpj_limpo, data_limite_input, consultas_dir, pas
             # Executa consulta
             if not tem_bind_cnpj:
                 if nomes_binds:
-                    rprint(f"[yellow]⚠️ Consulta possui os binds ({', '.join(nomes_binds)}) mas não o :CNPJ. Pulando para evitar extração imensa.[/yellow]")
+                    rprint(
+                        f"[yellow]⚠️ Consulta possui os binds ({', '.join(nomes_binds)}) mas não o :CNPJ. Pulando para evitar extração imensa.[/yellow]"
+                    )
                 else:
-                    rprint("[yellow]⚠️ Consulta não possui nenhuma variável de bind. Pulando para evitar extração imensa da base.[/yellow]")
+                    rprint(
+                        "[yellow]⚠️ Consulta não possui nenhuma variável de bind. Pulando para evitar extração imensa da base.[/yellow]"
+                    )
                 return True
 
             cursor.execute(None, binds)
 
             colunas = [col[0].lower() for col in cursor.description]
             dados = cursor.fetchall()
-            
+
             if not dados:
-                rprint(f"[yellow]  Zero linhas retornadas para {arq_sql.name}. Pulando gravação.[/yellow]")
+                rprint(
+                    f"[yellow]  Zero linhas retornadas para {arq_sql.name}. Pulando gravação.[/yellow]"
+                )
                 return True
 
             df = pl.DataFrame(dados, schema=colunas, orient="row")
-            rprint(f"[green]  {len(df)} linhas lidas com sucesso para {arq_sql.name}.[/green]")
+            rprint(
+                f"[green]  {len(df)} linhas lidas com sucesso para {arq_sql.name}.[/green]"
+            )
 
             # Nome do arquivo no formato nomedaconsulta_<cnpj>.parquet (mantendo subpastas se houver)
             caminho_relativo = arq_sql.relative_to(consultas_dir)
@@ -118,13 +179,30 @@ def processar_arquivo(arq_sql, cnpj_limpo, data_limite_input, consultas_dir, pas
         return False
     # finally block removed because connection is thread-local and will be closed later
 
-def extrair_dados(cnpj_input, data_limite_input=None):
+
+def extrair_dados(
+    cnpj_input: str,
+    data_limite_input: str | None = None,
+    consultas_selecionadas: Sequence[Path | str] | None = None,
+) -> bool:
+    """Extrai dados do Oracle para um CNPJ e grava resultados em Parquet.
+
+    Args:
+        cnpj_input: CNPJ do contribuinte (com ou sem formatação).
+        data_limite_input: Data limite de processamento no formato ``DD/MM/YYYY``.
+        consultas_selecionadas: Caminhos específicos de arquivos SQL; usa todos disponíveis quando None.
+
+    Returns:
+        True se todas as consultas forem executadas com sucesso; False em caso de falha.
+    """
     if not validar_cnpj(cnpj_input):
         rprint(f"[red]Erro:[/red] CNPJ '{cnpj_input}' invalido!")
         return False
 
     cnpj_limpo = re.sub(r"[^0-9]", "", cnpj_input)
-    msg_inicio = f"[bold green]Iniciando extracao para o CNPJ: {cnpj_limpo}[/bold green]"
+    msg_inicio = (
+        f"[bold green]Iniciando extracao para o CNPJ: {cnpj_limpo}[/bold green]"
+    )
     if data_limite_input:
         msg_inicio += f" [cyan](Data Limite: {data_limite_input})[/cyan]"
     rprint(msg_inicio)
@@ -152,6 +230,7 @@ def extrair_dados(cnpj_input, data_limite_input=None):
 
 
 def main() -> None:
+    """Ponto de entrada CLI para extração de dados Oracle por CNPJ."""
     data_limite_arg = None
     if len(sys.argv) > 1:
         cnpj_arg = sys.argv[1]
@@ -161,7 +240,9 @@ def main() -> None:
         try:
             cnpj_arg = input("Informe o CNPJ para extracao: ").strip()
             if cnpj_arg:
-                data_limite_arg = input("Data Limite Processamento (DD/MM/YYYY) [opcional, Enter para pular]: ").strip()
+                data_limite_arg = input(
+                    "Data Limite Processamento (DD/MM/YYYY) [opcional, Enter para pular]: "
+                ).strip()
                 if not data_limite_arg:
                     data_limite_arg = None
         except KeyboardInterrupt:

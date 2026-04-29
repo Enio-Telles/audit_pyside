@@ -1,0 +1,35 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: end-of-file-fixer
+        files: ^(src/transformacao/.*\.py|\.pre-commit-config\.yaml|pyproject\.toml|\.github/workflows/.*\.ya?ml)$
+        types_or: [python, pyi, yaml, toml]
+      - id: trailing-whitespace
+        files: ^(src/transformacao/.*\.py|\.pre-commit-config\.yaml|pyproject\.toml|\.github/workflows/.*\.ya?ml)$
+        types_or: [python, pyi, yaml, toml]
+      - id: check-yaml
+      - id: check-toml
+
+  - repo: local
+    hooks:
+      - id: ruff
+        name: ruff
+        entry: ruff check
+        language: system
+        pass_filenames: false
+        types_or: [python, pyi]
+
+      - id: ruff-format
+        name: ruff format
+        entry: ruff format --check
+        language: system
+        pass_filenames: false
+        types_or: [python, pyi]
+
+      - id: mypy-transformacao
+        name: mypy src/transformacao
+        entry: mypy src/transformacao
+        language: system
+        pass_filenames: false
+        types_or: [python, pyi]

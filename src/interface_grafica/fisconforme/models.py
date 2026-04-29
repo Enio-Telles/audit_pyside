@@ -11,7 +11,15 @@ from .theme import COLORS
 
 
 class CNPJTableModel(QAbstractTableModel):
-    HEADERS = ["#", "CNPJ", "Razão Social", "Município/UF", "Situação", "Origem", "Status"]
+    HEADERS = [
+        "#",
+        "CNPJ",
+        "Razão Social",
+        "Município/UF",
+        "Situação",
+        "Origem",
+        "Status",
+    ]
 
     def __init__(self):
         super().__init__()
@@ -127,7 +135,11 @@ class CNPJTableModel(QAbstractTableModel):
                 setattr(record, key, value)
             top_left = self.index(row, 0)
             bottom_right = self.index(row, self.columnCount() - 1)
-            self.dataChanged.emit(top_left, bottom_right, [Qt.DisplayRole, Qt.ToolTipRole, Qt.ForegroundRole])
+            self.dataChanged.emit(
+                top_left,
+                bottom_right,
+                [Qt.DisplayRole, Qt.ToolTipRole, Qt.ForegroundRole],
+            )
             return
 
     def has_cnpj(self, cnpj: str) -> bool:
@@ -192,4 +204,3 @@ class ResultsTableModel(QAbstractTableModel):
 
     def results(self) -> List[ProcessingResult]:
         return list(self._results)
-

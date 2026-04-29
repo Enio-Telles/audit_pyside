@@ -1,128 +1,138 @@
 # fatores_conversao
 
-## Visão Geral
+## Visao Geral
 
-Tabela que calcula os fatores de conversão entre diferentes unidades de medida de um mesmo produto, padronizando quantidades e valores para uma unidade de referência (`unid_ref`).
+Tabela que calcula os fatores de conversao entre diferentes unidades de medida de um mesmo produto, padronizando quantidades e valores para uma unidade de referencia (`unid_ref`).
 
-## Função de Geração
+## Funcao de Geracao
 
 ```python
 def calcular_fatores_conversao(cnpj: str, pasta_cnpj: Path | None = None) -> bool
 ```
 
-Módulo: `src/transformacao/fatores_conversao.py`
+Modulo de entrada: `src/transformacao/fatores_conversao.py`
 
-## Dependências
+Implementacao canonica: `src/transformacao/rastreabilidade_produtos/fatores_conversao.py`
 
-- **Depende de**: `fontes_produtos`, `item_unidades`, `produtos_final`
-- **É dependência de**: `c170_xml`, `c176_xml`, `movimentacao_estoque`
+## Dependencias
+
+- **Depende de**: `item_unidades`, `produtos_final`
+- **E dependencia de**: `c170_xml`, `c176_xml`, `movimentacao_estoque`
+
+Dependencias canonicas auxiliares:
+
+- `map_produto_agrupado_<cnpj>.parquet`
+- `produtos_agrupados_<cnpj>.parquet`
 
 ## Fontes de Entrada
 
 - `item_unidades_<cnpj>.parquet`
 - `produtos_final_<cnpj>.parquet`
+- `fatores_conversao_<cnpj>.parquet` existente, quando houver, para preservar overrides
 
 ## Objetivo
 
-Calregar coeficientes que permitem converter quantidades de qualquer unidade de medida para uma unidade de referência comum, possibilitando soma e comparação de movimentações de produtos que usam unidades diferentes (ex: CX, UN, KG, LT).
+Calcular coeficientes que permitem converter quantidades de qualquer unidade de medida para uma unidade de referencia comum, possibilitando soma e comparacao de movimentacoes de produtos que usam unidades diferentes.
 
 ## Principais Colunas
 
-| Coluna | Tipo | Descrição |
+| Coluna | Tipo | Descricao |
 |--------|------|-----------|
 | `id_agrupado` | str | Chave do produto agrupado |
-| `id_produtos` | str | Identificador do produto (igual a `id_agrupado`) |
-| `descr_padrao` | str | Descrição padrão do produto |
+| `id_produtos` | str | Alias historico preenchido com o proprio `id_agrupado` |
+| `descr_padrao` | str | Descricao padrao do produto |
 | `unid` | str | Unidade de medida da linha |
-| `unid_ref` | str | Unidade de referência do produto |
-| `fator` | float | Fator de conversão: `qtd_padronizada = qtd_original * fator` |
-| `preco_medio` | float | Preço médio base do produto |
-| `origem_preco` | str | Origem do preço: `COMPRA`, `VENDA` ou `SEM_PRECO` |
+| `unid_ref` | str | Unidade de referencia do produto |
+| `unid_ref_override` | str | Override manual preservado quando existir |
+| `fator` | float | Fator efetivo de conversao |
+| `fator_override` | float | Override manual preservado quando existir |
+| `fator_manual` | bool | Indica se o fator efetivo veio de override manual |
+| `unid_ref_manual` | bool | Indica se a unidade de referencia efetiva veio de override manual |
+| `preco_medio` | float | Preco medio base da unidade |
+| `origem_preco` | str | Origem do preco base: `COMPRA`, `VENDA` ou `SEM_PRECO` |
+| `fator_origem` | str | Origem do fator: `manual`, `preco`, `fallback_sem_preco` ou `fallback_sem_preco_ref` |
+
+`fator_conversao_origem` nao e coluna canonica desta tabela. Quando aparecer, trata-se de alias conceitual gerado em camadas auxiliares, como `src/metodologia_mds/service.py`.
 
 ## Regras de Processamento
 
-### Preço Médio por Unidade
+### Vinculo do produto
 
-Para cada combinação `id_agrupado + unid`:
+Prioridade operacional:
 
-```
-compras_total = soma(compras)
-qtd_compras_total = soma(qtd_compras)
-vendas_total = soma(vendas)
-qtd_vendas_total = soma(qtd_vendas)
-qtd_mov_total = qtd_compras_total + qtd_vendas_total
+1. chave fisica `id_item_unid -> id_agrupado`, quando o artefato de vinculo existir;
+2. fallback por `descricao_normalizada`.
 
-preco_medio_compra = compras_total / qtd_compras_total  (se qtd_compras_total > 0)
-preco_medio_venda = vendas_total / qtd_vendas_total    (se qtd_vendas_total > 0)
-```
+Se uma descricao for ambigua no vinculo por descricao, o runtime gera auditoria e descarta o match ambiguo.
 
-### Escolha do Preço-Base
+### Escolha da unidade de referencia
 
 Prioridade:
 
-1. `preco_medio_compra` (preferencial)
-2. Fallback para `preco_medio_venda`
-3. `SEM_PRECO` se nenhum estiver disponível
+1. override manual preservado;
+2. `unid_ref_sugerida` vinda de `produtos_final`;
+3. unidade com maior movimentacao agregada.
 
-### Escolha da Unidade de Referência
+### Escolha do preco base
 
-**Prioridade manual:**
-- Se `unid_ref_sugerida` existir em `produtos_final`, ela vira `unid_ref`
+Prioridade:
 
-**Fallback automático:**
-- Unidade com maior `qtd_mov_total`
-- Em empate, maior `qtd_compras_total`
+1. `preco_medio_compra`
+2. fallback para `preco_medio_venda`
+3. `SEM_PRECO`
 
-### Cálculo do Fator
+### Calculo do fator
 
-```
-preco_unid_ref = preço_medio_base da unidade de referência
-fator = preco_medio_base / preco_unid_ref   (se preco_unid_ref > 0)
-fator = 1.0                                  (caso contrário)
+```text
+fator = preco_medio_base / preco_unid_ref
 ```
 
-**Interpretação:**
-- `fator > 1`: a unidade da linha representa múltiplas unidades de referência
-- `fator < 1`: a unidade da linha representa fração da unidade de referência
+Se nao houver preco utilizavel para a unidade de referencia, o fluxo cai em fallback controlado.
 
-## Preservação de Ajustes Manuais
+## Preservacao de Ajustes Manuais
 
-**Regra crítica:** Quando o usuário ajusta `unid_ref` ou `fator` na interface:
+Regra critica:
 
-- O parquet reflete a edição manual
-- Reprocessamentos preservam essas escolhas
-- Nova `unid_ref` recalcula fatores a partir do preço médio disponível
-- Se a nova unidade não tiver preço utilizável, recebe `fator = 1.0`
+- overrides existentes em `fatores_conversao_<cnpj>.parquet` sao reconciliados com o agrupamento atual;
+- `unid_ref` manual e `fator` manual devem sobreviver a reprocessamentos;
+- colunas ausentes em artefatos antigos sao preenchidas de forma tolerante antes da reconciliacao.
 
 ## Uso Posterior do Fator
 
-O fator é consumido por:
+O fator e consumido por:
 
-- **c170_xml**, **c176_xml**: padronizar quantidades e valores
-- **movimentacao_estoque**: converter para unidade de referência
+- `c170_xml`
+- `c176_xml`
+- `movimentacao_estoque`
 
-Uso típico:
+Uso tipico:
 
-```
+```text
 qtd_padronizada = quantidade_original * fator
 valor_unitario_padronizado = valor_unitario_original / fator
 ```
 
-## Saídas Geradas
+## Saidas Geradas
 
-**Principal:**
-```
+Principal:
+
+```text
 dados/CNPJ/<cnpj>/analises/produtos/fatores_conversao_<cnpj>.parquet
 ```
 
-**Logs auxiliares:**
-```
+Logs auxiliares:
+
+```text
 dados/CNPJ/<cnpj>/analises/produtos/log_sem_preco_medio_compra_<cnpj>.parquet
 dados/CNPJ/<cnpj>/analises/produtos/log_sem_preco_medio_compra_<cnpj>.json
+dados/CNPJ/<cnpj>/analises/produtos/log_reconciliacao_overrides_fatores_<cnpj>.parquet
+dados/CNPJ/<cnpj>/analises/produtos/log_reconciliacao_overrides_fatores_<cnpj>.json
+dados/CNPJ/<cnpj>/analises/produtos/audit_descricao_ambigua_fatores_<cnpj>.parquet
 ```
 
 ## Notas
 
-- Se não houver vínculo entre `item_unidades` e `produtos_final`, salva saída vazia
-- O log de itens sem preço de compra ajuda a identificar problemas de dados
-- Fatores são essenciais para somar movimentações de unidades diferentes
+- se nao houver vinculacao entre `item_unidades` e a camada canonica de agrupamento, a saida pode ser vazia;
+- a camada viva usa `produtos_final` como entrada e `map_produto_agrupado` / `produtos_agrupados` como suporte canonico de vinculo;
+- o log de itens sem preco de compra ajuda a identificar problemas de dados;
+- fatores sao essenciais para somar movimentacoes de unidades diferentes.

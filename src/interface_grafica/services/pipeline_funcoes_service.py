@@ -18,12 +18,12 @@ from typing import Any, Callable
 
 import polars as pl
 
-from extracao.extracao_oracle_eficiente import descobrir_consultas_sql, executar_extracao_oracle
 from interface_grafica.config import CNPJ_ROOT, SQL_DIR
 
-from utilitarios.sql_catalog import list_sql_entries
-
+from utilitarios.sql_catalog import list_sql_entries, resolve_sql_path
 from utilitarios.extrair_parametros import extrair_parametros_sql
+from utilitarios.conectar_oracle import obter_conexao_oracle
+from utilitarios.ler_sql import ler_sql
 
 
 @dataclass
@@ -49,6 +49,13 @@ class ResultadoGeracaoTabelas:
 
 
 TABELAS_DISPONIVEIS: list[dict[str, str]] = [
+    {
+        "id": "efd_atomizacao",
+        "nome": "EFD Atomizacao",
+        "descricao": "Etapa opcional de atomizacao EFD",
+        "modulo": "efd_atomizacao",
+        "funcao": "gerar_efd_atomizacao",
+    },
     {
         "id": "tb_documentos",
         "nome": "Consolidacao de Documentos",
@@ -139,7 +146,11 @@ TABELAS_DISPONIVEIS: list[dict[str, str]] = [
 class ServicoExtracao:
     """Executa consultas SQL Oracle e salva os resultados como Parquet."""
 
-    def __init__(self, consultas_dir: Path | list[Path] | None = None, cnpj_root: Path = CNPJ_ROOT):
+    def __init__(
+        self,
+        consultas_dir: Path | list[Path] | None = None,
+        cnpj_root: Path = CNPJ_ROOT,
+    ):
         if consultas_dir is None:
             candidatos = [SQL_DIR]
         elif isinstance(consultas_dir, list):
@@ -147,7 +158,11 @@ class ServicoExtracao:
         else:
             candidatos = [Path(consultas_dir)]
 
-        self.consultas_dirs = [diretorio for idx, diretorio in enumerate(candidatos) if diretorio not in candidatos[:idx]]
+        self.consultas_dirs = [
+            diretorio
+            for idx, diretorio in enumerate(candidatos)
+            if diretorio not in candidatos[:idx]
+        ]
         self.consultas_dir = self.consultas_dirs[0] if self.consultas_dirs else SQL_DIR
         self.cnpj_root = cnpj_root
 
@@ -186,7 +201,7 @@ class ServicoExtracao:
                 shutil.rmtree(caminho)
         return True
 
-    def apagar_cnpj(self, cnpj: str) -> bool:
+    def apagar_cnpj_total(self, cnpj: str) -> bool:
         import shutil
 
         pasta = self.pasta_cnpj(cnpj)
@@ -244,7 +259,21 @@ class ServicoExtracao:
 
         _msg("Conectando ao Oracle...")
         with obter_conexao_oracle() as conn:
-            for sql_path in consultas:
+            for sql_item in consultas:
+                # Se for apenas nome ou ID, resolve via catálogo
+                try:
+                    sql_path = resolve_sql_path(sql_item)
+                except Exception:
+                    # Fallback para o comportamento anterior se falhar a resolução pelo catálogo
+                    sql_path = Path(sql_item)
+                    if not sql_path.is_absolute():
+                        # Tenta resolver na pasta de consultas do serviço
+                        candidato = self.consultas_dir / sql_path
+                        if candidato.exists():
+                            sql_path = candidato
+                        elif (self.consultas_dir / f"{sql_item}.sql").exists():
+                            sql_path = self.consultas_dir / f"{sql_item}.sql"
+
                 nome_consulta = sql_path.stem.lower()
                 _msg(f"Executando {sql_path.name}...")
 
@@ -273,7 +302,9 @@ class ServicoExtracao:
                             if not lote:
                                 break
                             todas_linhas.extend(lote)
-                            _msg(f"  {sql_path.name}: {len(todas_linhas):,} linhas lidas...")
+                            _msg(
+                                f"  {sql_path.name}: {len(todas_linhas):,} linhas lidas..."
+                            )
 
                     if todas_linhas:
                         try:
@@ -309,7 +340,9 @@ class ServicoExtracao:
                     arquivo_saida = pasta / f"{nome_consulta}_{cnpj}.parquet"
                     df.write_parquet(arquivo_saida, compression="snappy")
                     arquivos.append(str(arquivo_saida))
-                    _msg(f"OK {sql_path.name}: {df.height:,} linhas -> {arquivo_saida.name}")
+                    _msg(
+                        f"OK {sql_path.name}: {df.height:,} linhas -> {arquivo_saida.name}"
+                    )
                 except Exception as exc:
                     _msg(f"Erro em {sql_path.name}: {exc}")
 
@@ -347,7 +380,10 @@ class ServicoTabelas:
                 nome = path.name
                 if nome.startswith(("produtos_agrupados_", "produtos_final_")):
                     continue
-                if nome.startswith(ServicoTabelas.PREFIXOS_ANALISE_LEGADOS) or "_sem_id_agrupado_" in nome:
+                if (
+                    nome.startswith(ServicoTabelas.PREFIXOS_ANALISE_LEGADOS)
+                    or "_sem_id_agrupado_" in nome
+                ):
                     try:
                         path.unlink()
                     except Exception:
@@ -474,7 +510,9 @@ class ServicoPipelineCompleto:
                 )
                 resultado.arquivos_gerados.extend(arquivos)
                 resultado.tempos["extracao_oracle"] = perf_counter() - inicio_extracao
-                _msg(f"Tempo da extracao Oracle: {resultado.tempos['extracao_oracle']:.2f}s")
+                _msg(
+                    f"Tempo da extracao Oracle: {resultado.tempos['extracao_oracle']:.2f}s"
+                )
             except Exception as exc:
                 resultado.erros.append(f"Falha na extracao: {exc}")
                 resultado.ok = False
@@ -484,11 +522,17 @@ class ServicoPipelineCompleto:
             _msg(f"=== Fase 2: Geracao de tabelas ({len(tabelas)} selecionadas) ===")
             inicio_tabelas = perf_counter()
             try:
-                resultado_tabelas = self.servico_tabelas.gerar_tabelas(cnpj, tabelas, _msg)
+                resultado_tabelas = self.servico_tabelas.gerar_tabelas(
+                    cnpj, tabelas, _msg
+                )
                 resultado.arquivos_gerados.extend(resultado_tabelas.geradas)
-                resultado.tempos.update({f"tabela::{k}": v for k, v in resultado_tabelas.tempos.items()})
+                resultado.tempos.update(
+                    {f"tabela::{k}": v for k, v in resultado_tabelas.tempos.items()}
+                )
                 resultado.tempos["geracao_tabelas"] = perf_counter() - inicio_tabelas
-                _msg(f"Tempo da geracao de tabelas: {resultado.tempos['geracao_tabelas']:.2f}s")
+                _msg(
+                    f"Tempo da geracao de tabelas: {resultado.tempos['geracao_tabelas']:.2f}s"
+                )
                 if not resultado_tabelas.ok:
                     resultado.ok = False
                     resultado.erros.extend(resultado_tabelas.erros)

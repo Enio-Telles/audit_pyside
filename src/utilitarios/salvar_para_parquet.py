@@ -1,23 +1,22 @@
+from __future__ import annotations
+
+import logging
 from pathlib import Path
+from typing import Optional, Dict, Any
 
 import polars as pl
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-
-def _safe_print(message: str) -> None:
-    try:
-        print(message)
-    except UnicodeEncodeError:
-        print(message.encode("ascii", errors="replace").decode("ascii"))
+logger = logging.getLogger(__name__)
 
 
 def salvar_para_parquet(
     df,
     caminho_saida: Path,
-    nome_arquivo: str = None,
-    schema=None,
-    metadata: dict = None,
+    nome_arquivo: Optional[str] = None,
+    schema: Optional[pa.Schema] = None,
+    metadata: Optional[Dict[str, Any]] = None,
 ) -> bool:
     """
     Exporta um DataFrame ou LazyFrame do Polars para Parquet.
@@ -46,7 +45,9 @@ def salvar_para_parquet(
             df = df.collect()
 
         if df.is_empty():
-            _safe_print(f"   [!] Aviso: o DataFrame a ser salvo em {arquivo.name} esta vazio.")
+            logger.warning(
+                f"Aviso: o DataFrame a ser salvo em {arquivo.name} esta vazio."
+            )
 
         if schema or metadata:
             table = df.to_arrow()
@@ -55,8 +56,8 @@ def salvar_para_parquet(
                 try:
                     table = table.cast(schema)
                 except Exception as e_schema:
-                    _safe_print(
-                        f"   [!] Aviso de schema: falha ao impor schema estrito em {arquivo.name}: {e_schema}"
+                    logger.warning(
+                        f"Falha ao impor schema estrito em {arquivo.name}: {e_schema}"
                     )
 
             if metadata:
@@ -82,10 +83,14 @@ def salvar_para_parquet(
         else:
             df.write_parquet(arquivo, compression="snappy")
 
-        _safe_print(f"   [OK] Parquet salvo com sucesso: {arquivo.name}")
+        logger.info(f"Parquet salvo com sucesso: {arquivo.name}")
         return True
 
     except Exception as e:
-        nome = arquivo.name if "arquivo" in locals() else str(nome_arquivo or caminho_saida)
-        _safe_print(f"   [ERRO] Erro ao salvar arquivo Parquet {nome}: {e}")
+        nome = (
+            arquivo.name
+            if "arquivo" in locals()
+            else str(nome_arquivo or caminho_saida)
+        )
+        logger.error(f"Erro ao salvar arquivo Parquet {nome}: {e}")
         return False

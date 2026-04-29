@@ -1,4 +1,4 @@
-﻿"""
+"""
 02_itens.py
 
 Objetivo: Gerar a tabela consolidada de itens a partir de item_unidades.
@@ -25,7 +25,6 @@ CNPJ_ROOT = DADOS_DIR / "CNPJ"
 
 try:
     from utilitarios.salvar_para_parquet import salvar_para_parquet
-    from utilitarios.text import remove_accents
     from transformacao.item_unidades import item_unidades
 except ImportError as e:
     rprint(f"[red]Erro ao importar modulos:[/red] {e}")
@@ -33,6 +32,17 @@ except ImportError as e:
 
 
 def _normalizar_descricao_expr(col: str) -> pl.Expr:
+    """Returns a Polars expression that normalizes a description column.
+
+    Converts to uppercase, replaces accented characters with ASCII equivalents,
+    collapses whitespace, and aliases the result to ``'descricao_normalizada'``.
+
+    Args:
+        col: Column name containing the raw description.
+
+    Returns:
+        Polars expression aliased to ``'descricao_normalizada'``.
+    """
     return (
         pl.col(col)
         .cast(pl.Utf8, strict=False)
@@ -52,6 +62,15 @@ def _normalizar_descricao_expr(col: str) -> pl.Expr:
 
 
 def _agg_list(col: str, alias: str) -> pl.Expr:
+    """Returns a Polars aggregation expression for unique, sorted, non-null strings.
+
+    Args:
+        col: Column name to aggregate.
+        alias: Output column name.
+
+    Returns:
+        Polars expression collecting distinct non-empty values as a sorted list.
+    """
     return (
         pl.col(col)
         .cast(pl.String, strict=False)
@@ -65,6 +84,25 @@ def _agg_list(col: str, alias: str) -> pl.Expr:
 
 
 def itens(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
+    """Generates the consolidated ``itens`` table from ``item_unidades``.
+
+    Groups ``item_unidades_{cnpj}.parquet`` by normalized description,
+    picks the richest representative row per group, and writes
+    ``analises/produtos/itens_{cnpj}.parquet``.
+
+    Args:
+        cnpj: CPF or CNPJ string (11 or 14 digits).
+        pasta_cnpj: Root directory for this CNPJ's data.  Defaults to
+            ``CNPJ_ROOT / cnpj``.
+
+    Returns:
+        ``True`` on success, ``False`` if ``item_unidades`` could not be
+        generated or the result is empty.
+
+    Raises:
+        ValueError: If ``cnpj`` does not have 11 or 14 digits after stripping
+            non-digits.
+    """
     cnpj = re.sub(r"\D", "", cnpj or "")
     if len(cnpj) not in {11, 14}:
         raise ValueError("CPF/CNPJ invalido.")
@@ -76,7 +114,9 @@ def itens(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
     arq_item_unid = pasta_analises / f"item_unidades_{cnpj}.parquet"
 
     if not arq_item_unid.exists():
-        rprint("[yellow]item_unidades nao encontrado. Gerando base antes de consolidar itens...[/yellow]")
+        rprint(
+            "[yellow]item_unidades nao encontrado. Gerando base antes de consolidar itens...[/yellow]"
+        )
         if not item_unidades(cnpj, pasta_cnpj):
             return False
 
@@ -115,19 +155,55 @@ def itens(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
 
     # Ordena primeiro os registros mais "ricos" para que os campos canonicos usem
     # uma linha representativa com mais informacao preenchida.
-    df = (
-        df.with_columns(
-            (
-                pl.when(pl.col("codigo").is_not_null() & (pl.col("codigo").cast(pl.String).str.strip_chars() != "")).then(1).otherwise(0)
-                + pl.when(pl.col("descr_compl").is_not_null() & (pl.col("descr_compl").cast(pl.String).str.strip_chars() != "")).then(1).otherwise(0)
-                + pl.when(pl.col("tipo_item").is_not_null() & (pl.col("tipo_item").cast(pl.String).str.strip_chars() != "")).then(1).otherwise(0)
-                + pl.when(pl.col("ncm").is_not_null() & (pl.col("ncm").cast(pl.String).str.strip_chars() != "")).then(1).otherwise(0)
-                + pl.when(pl.col("cest").is_not_null() & (pl.col("cest").cast(pl.String).str.strip_chars() != "")).then(1).otherwise(0)
-                + pl.when(pl.col("co_sefin_item").is_not_null() & (pl.col("co_sefin_item").cast(pl.String).str.strip_chars() != "")).then(1).otherwise(0)
-                + pl.when(pl.col("gtin").is_not_null() & (pl.col("gtin").cast(pl.String).str.strip_chars() != "")).then(1).otherwise(0)
-            ).alias("__score")
-        )
-        .sort(["descricao_normalizada", "__score", "descricao", "codigo"], descending=[False, True, False, False], nulls_last=True)
+    df = df.with_columns(
+        (
+            pl.when(
+                pl.col("codigo").is_not_null()
+                & (pl.col("codigo").cast(pl.String).str.strip_chars() != "")
+            )
+            .then(1)
+            .otherwise(0)
+            + pl.when(
+                pl.col("descr_compl").is_not_null()
+                & (pl.col("descr_compl").cast(pl.String).str.strip_chars() != "")
+            )
+            .then(1)
+            .otherwise(0)
+            + pl.when(
+                pl.col("tipo_item").is_not_null()
+                & (pl.col("tipo_item").cast(pl.String).str.strip_chars() != "")
+            )
+            .then(1)
+            .otherwise(0)
+            + pl.when(
+                pl.col("ncm").is_not_null()
+                & (pl.col("ncm").cast(pl.String).str.strip_chars() != "")
+            )
+            .then(1)
+            .otherwise(0)
+            + pl.when(
+                pl.col("cest").is_not_null()
+                & (pl.col("cest").cast(pl.String).str.strip_chars() != "")
+            )
+            .then(1)
+            .otherwise(0)
+            + pl.when(
+                pl.col("co_sefin_item").is_not_null()
+                & (pl.col("co_sefin_item").cast(pl.String).str.strip_chars() != "")
+            )
+            .then(1)
+            .otherwise(0)
+            + pl.when(
+                pl.col("gtin").is_not_null()
+                & (pl.col("gtin").cast(pl.String).str.strip_chars() != "")
+            )
+            .then(1)
+            .otherwise(0)
+        ).alias("__score")
+    ).sort(
+        ["descricao_normalizada", "__score", "descricao", "codigo"],
+        descending=[False, True, False, False],
+        nulls_last=True,
     )
 
     df_itens = (
@@ -148,7 +224,7 @@ def itens(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
             ]
         )
         .sort(["descricao_normalizada", "descricao"], nulls_last=True)
-        .with_row_count("seq", offset=1)
+        .with_row_index("seq", offset=1)
         .with_columns(pl.format("id_item_{}", pl.col("seq")).alias("id_item"))
         .drop("seq", "__score", strict=False)
         .select(
@@ -174,6 +250,15 @@ def itens(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
 
 
 def gerar_itens(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
+    """Entry-point alias for :func:`itens`.
+
+    Args:
+        cnpj: CPF or CNPJ string (11 or 14 digits).
+        pasta_cnpj: Override for the CNPJ root data directory.
+
+    Returns:
+        ``True`` on success, ``False`` otherwise.
+    """
     return itens(cnpj, pasta_cnpj)
 
 
@@ -182,5 +267,3 @@ if __name__ == "__main__":
         itens(sys.argv[1])
     else:
         itens(input("CNPJ: "))
-
-

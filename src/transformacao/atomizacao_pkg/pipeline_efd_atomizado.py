@@ -72,15 +72,11 @@ def _mapa_referencia(
     alias_chave: str,
     alias_descricao: str,
 ) -> pl.LazyFrame:
-    return (
-        referencia.filter(
-            (pl.col("source_field") == campo_origem)
-            & (pl.col("branch_kind") == "WHEN")
-        )
-        .select(
-            pl.col("match_value").alias(alias_chave),
-            pl.col("description").alias(alias_descricao),
-        )
+    return referencia.filter(
+        (pl.col("source_field") == campo_origem) & (pl.col("branch_kind") == "WHEN")
+    ).select(
+        pl.col("match_value").alias(alias_chave),
+        pl.col("description").alias(alias_descricao),
     )
 
 
@@ -97,24 +93,29 @@ def _adicionar_tipagem_periodo_efd(lf: pl.LazyFrame) -> pl.LazyFrame:
     return lf.with_columns(expressoes) if expressoes else lf
 
 
-def _gerar_codigo_fonte(expr_cnpj: pl.Expr, expr_item: pl.Expr) -> pl.Expr:
-    return pl.concat_str([expr_cnpj.cast(pl.Utf8, strict=False), pl.lit("|"), expr_item.cast(pl.Utf8, strict=False)]).alias("codigo_fonte")
+try:
+    from utilitarios.codigo_fonte import expr_gerar_codigo_fonte
+except ImportError:
+    # Fallback caso esteja rodando fora do PYTHONPATH padrão do projeto
+    import sys
+
+    sys.path.append(str(Path(__file__).resolve().parents[2]))
+    from utilitarios.codigo_fonte import expr_gerar_codigo_fonte
 
 
 def construir_reg0200_tipado(cnpj: str) -> pl.LazyFrame:
     """Tipa a dimensao de produtos 0200 e cria a chave tecnica por CNPJ."""
 
-    return (
-        _adicionar_tipagem_periodo_efd(carregar_reg0200_bruto(cnpj))
-        .with_columns(
+    return _adicionar_tipagem_periodo_efd(carregar_reg0200_bruto(cnpj)).with_columns(
+        [
             pl.col("cod_item").cast(pl.Utf8, strict=False),
             pl.col("descr_item").cast(pl.Utf8, strict=False),
             pl.col("tipo_item").cast(pl.Utf8, strict=False),
             pl.col("cod_ncm").cast(pl.Utf8, strict=False),
             pl.col("cest").cast(pl.Utf8, strict=False),
             pl.col("cod_barra").cast(pl.Utf8, strict=False),
-            _gerar_codigo_fonte(pl.col("cnpj"), pl.col("cod_item")),
-        )
+            expr_gerar_codigo_fonte(pl.col("cnpj"), pl.col("cod_item")),
+        ]
     )
 
 
@@ -170,8 +171,7 @@ def construir_c170_tipado(cnpj: str) -> pl.LazyFrame:
     )
 
     return (
-        c170
-        .with_columns(
+        c170.with_columns(
             pl.col("num_item").cast(pl.Int64, strict=False),
             pl.col("cod_item").cast(pl.Utf8, strict=False),
             pl.col("descr_compl").cast(pl.Utf8, strict=False),
@@ -190,8 +190,14 @@ def construir_c170_tipado(cnpj: str) -> pl.LazyFrame:
         )
         .join(itens_0200, on=["reg_0000_id", "cod_item"], how="left")
         .with_columns(
-            pl.coalesce([pl.col("codigo_fonte"), _gerar_codigo_fonte(pl.col("cnpj"), pl.col("cod_item"))])
-            .alias("codigo_fonte")
+            pl.coalesce(
+                [
+                    pl.col("codigo_fonte"),
+                    expr_gerar_codigo_fonte(
+                        pl.col("cnpj"), pl.col("cod_item"), pl.col("descr_item")
+                    ),
+                ]
+            ).alias("codigo_fonte")
         )
     )
 
@@ -222,25 +228,22 @@ def construir_c176_tipado(cnpj: str) -> pl.LazyFrame:
         "vl_item",
         "codigo_fonte",
     )
-    c100 = construir_c100_tipado(cnpj).select("reg_c100_id", "chv_nfe", "num_doc", "ser", "dt_doc", "dt_e_s")
+    c100 = construir_c100_tipado(cnpj).select(
+        "reg_c100_id", "chv_nfe", "num_doc", "ser", "dt_doc", "dt_e_s"
+    )
 
-    return (
-        c176
-        .join(c170, left_on="reg_c170_id", right_on="reg_c170_id", how="left")
-        .join(c100, left_on="reg_c100_id", right_on="reg_c100_id", how="left")
+    return c176.join(c170, left_on="reg_c170_id", right_on="reg_c170_id", how="left").join(
+        c100, left_on="reg_c100_id", right_on="reg_c100_id", how="left"
     )
 
 
 def construir_h005_tipado(cnpj: str) -> pl.LazyFrame:
     """Tipa o cabecalho do inventario H005."""
 
-    return (
-        _adicionar_tipagem_periodo_efd(carregar_h005_bruto(cnpj))
-        .with_columns(
-            pl.col("dt_inv_raw").str.strptime(pl.Date, "%d%m%Y", strict=False).alias("dt_inv"),
-            pl.col("vl_inv_raw").cast(pl.Float64, strict=False).alias("vl_inv"),
-            pl.col("mot_inv").cast(pl.Utf8, strict=False),
-        )
+    return _adicionar_tipagem_periodo_efd(carregar_h005_bruto(cnpj)).with_columns(
+        pl.col("dt_inv_raw").str.strptime(pl.Date, "%d%m%Y", strict=False).alias("dt_inv"),
+        pl.col("vl_inv_raw").cast(pl.Float64, strict=False).alias("vl_inv"),
+        pl.col("mot_inv").cast(pl.Utf8, strict=False),
     )
 
 
@@ -272,8 +275,14 @@ def construir_h010_tipado(cnpj: str) -> pl.LazyFrame:
         )
         .join(itens_0200, on=["reg_0000_id", "cod_item"], how="left")
         .with_columns(
-            pl.coalesce([pl.col("codigo_fonte"), _gerar_codigo_fonte(pl.col("cnpj"), pl.col("cod_item"))])
-            .alias("codigo_fonte")
+            pl.coalesce(
+                [
+                    pl.col("codigo_fonte"),
+                    expr_gerar_codigo_fonte(
+                        pl.col("cnpj"), pl.col("cod_item"), pl.col("descr_item")
+                    ),
+                ]
+            ).alias("codigo_fonte")
         )
     )
 
@@ -281,13 +290,10 @@ def construir_h010_tipado(cnpj: str) -> pl.LazyFrame:
 def construir_h020_tipado(cnpj: str) -> pl.LazyFrame:
     """Tipa a tributacao do inventario H020."""
 
-    return (
-        _adicionar_tipagem_periodo_efd(carregar_h020_bruto(cnpj))
-        .with_columns(
-            pl.col("cst_icms").cast(pl.Utf8, strict=False),
-            pl.col("bc_icms").cast(pl.Float64, strict=False),
-            pl.col("vl_icms").cast(pl.Float64, strict=False),
-        )
+    return _adicionar_tipagem_periodo_efd(carregar_h020_bruto(cnpj)).with_columns(
+        pl.col("cst_icms").cast(pl.Utf8, strict=False),
+        pl.col("bc_icms").cast(pl.Float64, strict=False),
+        pl.col("vl_icms").cast(pl.Float64, strict=False),
     )
 
 
@@ -307,10 +313,8 @@ def construir_bloco_h_tipado(cnpj: str) -> pl.LazyFrame:
     h010 = construir_h010_tipado(cnpj)
     h020 = construir_h020_tipado(cnpj).select("reg_h010_id", "cst_icms", "bc_icms", "vl_icms")
 
-    return (
-        h010
-        .join(h005, on=["reg_h005_id", "reg_0000_id"], how="left")
-        .join(h020, on="reg_h010_id", how="left")
+    return h010.join(h005, on=["reg_h005_id", "reg_0000_id"], how="left").join(
+        h020, on="reg_h010_id", how="left"
     )
 
 

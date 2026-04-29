@@ -5,7 +5,9 @@ from pathlib import Path
 from rich import print as rprint
 
 from transformacao.atomizacao_pkg.pipeline_efd_atomizado import _base_atomizada
-from transformacao.atomizacao_pkg.pipeline_efd_atomizado import materializar_camadas_atomizadas
+from transformacao.atomizacao_pkg.pipeline_efd_atomizado import (
+    materializar_camadas_atomizadas,
+)
 
 
 def gerar_efd_atomizacao(cnpj: str, _pasta_cnpj: Path | None = None) -> bool:

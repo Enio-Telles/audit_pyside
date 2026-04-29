@@ -1,4 +1,4 @@
-﻿"""
+"""
 co_sefin.py
 
 Script para inferir o codigo co_sefin_inferido com base no NCM e CEST
@@ -118,13 +118,13 @@ def inferir_co_sefin_dataframe(
     df_join = df_join.join(ref_c, left_on="_cest_join", right_on="ref_cest", how="left")
     df_join = df_join.join(ref_n, left_on="_ncm_join", right_on="ref_ncm", how="left")
 
-    return (
-        df_join.with_columns(
-            pl.coalesce(["it_co_sefin", "co_sefin_cest", "co_sefin_ncm"])
-            .cast(pl.String, strict=False)
-            .alias(output_col)
-        )
-        .drop(["_ncm_join", "_cest_join", "it_co_sefin", "co_sefin_cest", "co_sefin_ncm"], strict=False)
+    return df_join.with_columns(
+        pl.coalesce(["it_co_sefin", "co_sefin_cest", "co_sefin_ncm"])
+        .cast(pl.String, strict=False)
+        .alias(output_col)
+    ).drop(
+        ["_ncm_join", "_cest_join", "it_co_sefin", "co_sefin_cest", "co_sefin_ncm"],
+        strict=False,
     )
 
 
@@ -154,7 +154,9 @@ def co_sefin(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         rprint(f"[cyan]Processando {arq.name}...[/cyan]")
 
         try:
-            df_result = inferir_co_sefin_dataframe(pl.read_parquet(arq), col_ncm="ncm", col_cest="cest")
+            df_result = inferir_co_sefin_dataframe(
+                pl.read_parquet(arq), col_ncm="ncm", col_cest="cest"
+            )
         except Exception as exc:
             rprint(f"[red]Erro ao inferir co_sefin em {arq.name}:[/red] {exc}")
             sucesso_total = False
@@ -187,5 +189,3 @@ if __name__ == "__main__":
 
     sucesso = co_sefin(cnpj_arg)
     sys.exit(0 if sucesso else 1)
-
-

@@ -10,6 +10,7 @@ SQL_ROOT = PROJECT_ROOT / "sql"
 SQL_ARCHIVE_ROOT = SQL_ROOT / "archive"
 DATA_ROOT = PROJECT_ROOT / "dados"
 CNPJ_ROOT = DATA_ROOT / "CNPJ"
+DADOS_DIR = DATA_ROOT
 WORKSPACE_ROOT = PROJECT_ROOT / "workspace"
 CONSULTAS_ROOT = WORKSPACE_ROOT / "consultas"
 APP_STATE_ROOT = WORKSPACE_ROOT / "app_state"
@@ -22,6 +23,7 @@ TRACEBACK_PATH = WORKSPACE_ROOT / "traceback.txt"
 
 
 def ensure_runtime_directories() -> None:
+    """Cria os diretorios de runtime esperados pela aplicacao desktop."""
     for path in (
         SQL_ROOT,
         SQL_ARCHIVE_ROOT,
@@ -35,6 +37,7 @@ def ensure_runtime_directories() -> None:
 
 
 def migrate_legacy_app_state() -> None:
+    """Migra arquivos de estado legados para a pasta workspace atual."""
     if not LEGACY_APP_STATE_ROOT.exists():
         return
 

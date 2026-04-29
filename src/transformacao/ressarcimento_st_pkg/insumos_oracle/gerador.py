@@ -138,11 +138,19 @@ def _normalizar_fronteira_simples(df: pl.DataFrame) -> pl.DataFrame:
         pl.col("cest").cast(pl.Utf8, strict=False).alias("fronteira_cest"),
         pl.col("qtd_comercial").cast(pl.Float64, strict=False).alias("fronteira_qtd_comercial"),
         pl.col("valor_produto").cast(pl.Float64, strict=False).alias("fronteira_valor_produto"),
-        pl.col("bc_icms_st_destacado").cast(pl.Float64, strict=False).alias("fronteira_bc_icms_st_destacado"),
-        pl.col("icms_st_destacado").cast(pl.Float64, strict=False).alias("fronteira_icms_st_destacado"),
+        pl.col("bc_icms_st_destacado")
+        .cast(pl.Float64, strict=False)
+        .alias("fronteira_bc_icms_st_destacado"),
+        pl.col("icms_st_destacado")
+        .cast(pl.Float64, strict=False)
+        .alias("fronteira_icms_st_destacado"),
         pl.col("co_sefin").cast(pl.Utf8, strict=False).alias("fronteira_co_sefin_calc"),
-        pl.col("cod_rotina_calculo").cast(pl.Utf8, strict=False).alias("fronteira_cod_rotina_calculo"),
-        pl.col("valor_icms_fronteira").cast(pl.Float64, strict=False).alias("fronteira_valor_icms_total_item"),
+        pl.col("cod_rotina_calculo")
+        .cast(pl.Utf8, strict=False)
+        .alias("fronteira_cod_rotina_calculo"),
+        pl.col("valor_icms_fronteira")
+        .cast(pl.Float64, strict=False)
+        .alias("fronteira_valor_icms_total_item"),
     )
     return alinhar_schema(convertido, SCHEMA_FRONTEIRA_SIMPLES)
 
@@ -182,43 +190,63 @@ def _normalizar_fronteira_completo(df: pl.DataFrame) -> pl.DataFrame:
 
 def gerar_vigencia_sefin(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
     cnpj_limpo = "".join(filter(str.isdigit, cnpj))
-    caminho_saida = caminho_oracle(cnpj_limpo, f"07_sefin_vigencia_{cnpj_limpo}.parquet", pasta_cnpj)
+    caminho_saida = caminho_oracle(
+        cnpj_limpo, f"07_sefin_vigencia_{cnpj_limpo}.parquet", pasta_cnpj
+    )
     df = _normalizar_vigencia(ler_parquet_opcional(caminho_saida, SCHEMA_VIGENCIA))
     return salvar_df(df, caminho_saida)
 
 
 def gerar_rateio_frete_cte(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
     cnpj_limpo = "".join(filter(str.isdigit, cnpj))
-    caminho_saida = caminho_oracle(cnpj_limpo, f"08_rateio_frete_cte_{cnpj_limpo}.parquet", pasta_cnpj)
+    caminho_saida = caminho_oracle(
+        cnpj_limpo, f"08_rateio_frete_cte_{cnpj_limpo}.parquet", pasta_cnpj
+    )
     df = _normalizar_rateio(ler_parquet_opcional(caminho_saida, SCHEMA_RATEIO))
     return salvar_df(df, caminho_saida)
 
 
 def gerar_st_material_ate_2022(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
     cnpj_limpo = "".join(filter(str.isdigit, cnpj))
-    caminho_saida = caminho_oracle(cnpj_limpo, f"10_st_calc_ate_2022_{cnpj_limpo}.parquet", pasta_cnpj)
+    caminho_saida = caminho_oracle(
+        cnpj_limpo, f"10_st_calc_ate_2022_{cnpj_limpo}.parquet", pasta_cnpj
+    )
     legado = caminho_bruto(cnpj_limpo, f"nfe_dados_st_{cnpj_limpo}.parquet", pasta_cnpj)
     if not legado.exists():
         legado = caminho_bruto(cnpj_limpo, f"Nfe_dados_ST_{cnpj_limpo}.parquet", pasta_cnpj)
 
-    df_fonte = ler_parquet_opcional(caminho_saida if caminho_saida.exists() else legado, SCHEMA_ST_MATERIAL)
+    df_fonte = ler_parquet_opcional(
+        caminho_saida if caminho_saida.exists() else legado, SCHEMA_ST_MATERIAL
+    )
     df = _normalizar_st_material(df_fonte)
     return salvar_df(df, caminho_saida)
 
 
 def gerar_fronteira_item(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
     cnpj_limpo = "".join(filter(str.isdigit, cnpj))
-    caminho_simples = caminho_oracle(cnpj_limpo, f"11_fronteira_item_simples_{cnpj_limpo}.parquet", pasta_cnpj)
-    caminho_completo = caminho_oracle(cnpj_limpo, f"12_fronteira_item_completo_{cnpj_limpo}.parquet", pasta_cnpj)
+    caminho_simples = caminho_oracle(
+        cnpj_limpo, f"11_fronteira_item_simples_{cnpj_limpo}.parquet", pasta_cnpj
+    )
+    caminho_completo = caminho_oracle(
+        cnpj_limpo, f"12_fronteira_item_completo_{cnpj_limpo}.parquet", pasta_cnpj
+    )
 
     legado_simples = caminho_bruto(cnpj_limpo, f"fronteira_{cnpj_limpo}.parquet", pasta_cnpj)
-    legado_completo = caminho_bruto(cnpj_limpo, f"fronteira_completo_{cnpj_limpo}.parquet", pasta_cnpj)
+    legado_completo = caminho_bruto(
+        cnpj_limpo, f"fronteira_completo_{cnpj_limpo}.parquet", pasta_cnpj
+    )
 
     df_simples = _normalizar_fronteira_simples(
-        ler_parquet_opcional(caminho_simples if caminho_simples.exists() else legado_simples, SCHEMA_FRONTEIRA_SIMPLES)
+        ler_parquet_opcional(
+            caminho_simples if caminho_simples.exists() else legado_simples,
+            SCHEMA_FRONTEIRA_SIMPLES,
+        )
     )
     df_completo = _normalizar_fronteira_completo(
-        ler_parquet_opcional(caminho_completo if caminho_completo.exists() else legado_completo, SCHEMA_FRONTEIRA_COMPLETO)
+        ler_parquet_opcional(
+            caminho_completo if caminho_completo.exists() else legado_completo,
+            SCHEMA_FRONTEIRA_COMPLETO,
+        )
     )
 
     ok_simples = salvar_df(df_simples, caminho_simples)

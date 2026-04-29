@@ -1,108 +1,64 @@
-﻿# Fiscal Parquet Analyzer
+# Setup Codex — audit_pyside (PySide only)
 
-Ferramenta de extraÃ§Ã£o, transformaÃ§Ã£o e auditoria de dados fiscais com persistÃªncia em Parquet, pipeline modular em `src/transformacao/` e interface grÃ¡fica em PySide6.
+Este pacote adapta o repositório `audit_pyside` para o formato de instruções do **Codex**.
 
-## Objetivo
+## Arquivos
+- `AGENTS.md`
+- `src/transformacao/AGENTS.md`
+- `src/interface_grafica/AGENTS.md`
+- `tests/AGENTS.md`
+- `docs/AGENTS.md`
+- `docs/codex_usage.md`
 
-O projeto organiza o fluxo fiscal em trÃªs camadas:
+## Estratégia
+Em vez de `copilot-instructions.md`, o Codex usa `AGENTS.md` por escopo de pasta.
 
-- extraÃ§Ã£o Oracle para Parquet por CNPJ;
-- transformaÃ§Ã£o analÃ­tica com foco em rastreabilidade e auditoria;
-- consulta e operaÃ§Ã£o do pipeline pela interface grÃ¡fica.
+## Como aplicar
+1. copie os arquivos para a raiz do repositório
+2. commit e push
+3. abra o projeto no Codex
+4. peça tarefas específicas por área do código
 
-O princÃ­pio central Ã© preservar a linha original do documento fiscal e permitir que qualquer total analÃ­tico seja auditado de volta Ã  origem.
+## Instalação
 
-## Pipeline oficial
+### Com uv (recomendado)
+```bash
+uv sync                   # instala dependências runtime
+uv sync --group dev       # instala dependências de desenvolvimento
+uv run pytest -q          # roda testes
+uv run python app.py      # lança a aplicação
+```
 
-A ordem ativa do pipeline estÃ¡ em `src/orquestrador_pipeline.py`:
+### Com pip (legacy)
+```bash
+pip install -e ".[dev]"
+```
 
-1. `tb_documentos`
-2. `item_unidades`
-3. `itens`
-4. `descricao_produtos`
-5. `produtos_final`
-6. `fontes_produtos`
-7. `fatores_conversao`
-8. `c170_xml`
-9. `c176_xml`
-10. `movimentacao_estoque`
-11. `calculos_mensais`
-12. `calculos_anuais`
+## Scripts
 
-Os wrappers em `src/transformacao/` existem em boa parte para compatibilidade. Ao corrigir ou evoluir regras, a implementaÃ§Ã£o real costuma estar nos subpacotes `*_pkg`.
+Há utilitários em `scripts/` para gerar documentação e artefatos de amostra. Exemplos de uso (execute a partir da raiz do repositório):
 
-## ExecuÃ§Ã£o rÃ¡pida
-
-InstalaÃ§Ã£o mÃ­nima:
+- Gerar índice de Parquet (dry-run, imprime em stdout):
 
 ```bash
-pip install polars PySide6 openpyxl python-docx python-dotenv rich oracledb
+python scripts/generate_parquet_references.py --root . --out-dir docs/referencias --max-rows 3 --dry-run
 ```
 
-Abrir a aplicaÃ§Ã£o:
+- Gerar amostras de saída para um CNPJ (gera arquivos em `docs/referencias/samples`):
 
 ```bash
-python app.py
+python scripts/generate_output_samples.py --cnpj 84654326000394 --base-dir dados/CNPJ --out-dir docs/referencias/samples --max-rows 3
 ```
 
-Rodar a suÃ­te de testes:
+- Gerar fatores de conversão a partir de `produtos_final_<cnpj>.parquet`:
 
 ```bash
-python -m pytest
+python scripts/gen_fatores_84654326000394.py --prod-file dados/CNPJ/84654326000394/analises/produtos/produtos_final_84654326000394.parquet --out-file dados/CNPJ/84654326000394/analises/fatores_conversao_84654326000394.parquet
 ```
 
-Rodar testes direcionados:
+Notas:
+- Os scripts usam `polars` para leitura/escrita de Parquet — instale com `pip install polars` se necessário.
+- Prefira passar caminhos explícitos (`--prod-file`, `--out-dir`) em vez de editar código com CNPJs hardcoded.
+- Para geração de arquivos grandes (índice Parquet), use `--dry-run` primeiro para validar comportamento.
 
-```bash
-python -m pytest tests/test_movimentacao_estoque.py
-python -m pytest tests/test_calculos_mensais.py
-python -m pytest tests/test_calculos_anuais.py
-```
-
-## DocumentaÃ§Ã£o oficial
-
-Os documentos ativos do projeto ficam na raiz de `docs/`:
-
-- [MovimentaÃ§Ã£o de Estoque](docs/mov_estoque.md)
-- [Tabela Mensal](docs/tabela_mensal.md)
-- [Tabela Anual](docs/tabela_anual.md)
-- [ConversÃ£o de Unidades](docs/conversao_unidades.md)
-- [AgregaÃ§Ã£o de Produtos](docs/agregacao_produtos.md)
-
-## ConvenÃ§Ãµes importantes
-
-- `id_agrupado` Ã© a chave mestra de produto no pipeline.
-- `id_agregado` aparece em algumas saÃ­das analÃ­ticas como alias de apresentaÃ§Ã£o de `id_agrupado`.
-- `__qtd_decl_final_audit__` guarda a quantidade declarada no estoque final para auditoria, sem alterar o saldo fÃ­sico.
-- ajustes manuais de conversÃ£o e agrupamento devem ser preservados em reprocessamentos.
-
-## DocumentaÃ§Ã£o histÃ³rica
-
-Materiais antigos, planos intermediÃ¡rios, diagnÃ³sticos e anexos foram movidos para `docs/archive/`. Eles permanecem como histÃ³rico e apoio, mas a referÃªncia operacional atual Ã© somente a documentaÃ§Ã£o oficial listada acima.
-
-
-## CatÃ¡logo SQL canÃ´nico
-
-Todas as consultas ativas do sistema ficam exclusivamente dentro de `sql/`, organizada por domÃ­nio:
-
-```text
-sql/
-  fiscal/
-    efd/
-    documentos/
-    fronteira/
-    validacao/
-  fisconforme/
-    cadastro/
-    malhas/
-  apoio/
-    dicionarios/
-    verificacoes/
-  archive/
-```
-
-Regras operacionais:
-
-- `sql/` Ã© a Ãºnica fonte de verdade das consultas usadas pelo backend, frontend e desktop.
-- seleÃ§Ãµes persistidas usam IDs relativos ao catÃ¡logo, como `fiscal/efd/c170.sql`.
-- `sql/archive/` preserva material histÃ³rico, mas nÃ£o entra na descoberta automÃ¡tica do pipeline.
+Para detalhes e opções avançadas, veja `docs/scripts_usage.md`.

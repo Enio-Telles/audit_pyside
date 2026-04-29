@@ -4,15 +4,20 @@ Worker QThread para execucao assincrona de consultas Oracle.
 Evita congelamento da interface durante consultas demoradas.
 Emite sinais de progresso, sucesso e falha.
 """
+
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from time import perf_counter
 from typing import Any
 
 import polars as pl
 from PySide6.QtCore import QThread, Signal
 from rich import print as rprint
+
+from interface_grafica.utils.retry import retry_on_io
+from transformacao.auxiliares.logs import log_exception
 from utilitarios.perf_monitor import registrar_evento_performance
 from utilitarios.project_paths import ENV_PATH
 
@@ -28,6 +33,27 @@ except ImportError:
 _DB_CONFIG_CACHE: dict[str, Any] | None = None
 
 
+class QueryCancelledError(RuntimeError):
+    """Consulta cancelada pelo usuario."""
+
+
+def _iter_env_candidates() -> list[Path]:
+    candidates = [ENV_PATH, Path.cwd() / ".env"]
+    ordered: list[Path] = []
+    seen: set[Path] = set()
+    for candidate in candidates:
+        try:
+            resolved = candidate.resolve()
+        except Exception:
+            resolved = candidate
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        ordered.append(candidate)
+    return ordered
+
+
+@retry_on_io()
 def _conectar_oracle_fallback():
     """Conexao Oracle standalone caso o import falhe."""
     try:
@@ -40,8 +66,7 @@ def _conectar_oracle_fallback():
     if _DB_CONFIG_CACHE is None:
         from dotenv import load_dotenv
 
-        root = Path(__file__).resolve().parents[2]
-        for candidate in [Path.cwd() / ".env", root / ".env"]:
+        for candidate in _iter_env_candidates():
             if candidate.exists():
                 load_dotenv(candidate, override=False, encoding="latin-1")
                 break
@@ -56,7 +81,9 @@ def _conectar_oracle_fallback():
 
     cfg = _DB_CONFIG_CACHE
     if not all(cfg.values()):
-        raise RuntimeError("Configuracao Oracle incompleta. Verifique as variaveis ORACLE_HOST, ORACLE_PORT, ORACLE_SERVICE, DB_USER e DB_PASSWORD no .env")
+        raise RuntimeError(
+            "Configuracao Oracle incompleta. Verifique as variaveis ORACLE_HOST, ORACLE_PORT, ORACLE_SERVICE, DB_USER e DB_PASSWORD no .env"
+        )
 
     dsn = oracledb.makedsn(cfg["host"], int(cfg["porta"]), service_name=cfg["servico"])
     conn = oracledb.connect(user=cfg["usuario"], password=cfg["senha"], dsn=dsn)
@@ -91,16 +118,22 @@ class QueryWorker(QThread):
         self.binds = binds
         self.fetch_size = fetch_size
 
+    def _raise_if_cancelled(self) -> None:
+        if self.isInterruptionRequested():
+            raise QueryCancelledError("Consulta cancelada pelo usuario.")
+
     def run(self) -> None:
         conn = None
         inicio_total = perf_counter()
         try:
+            self._raise_if_cancelled()
             self.progress.emit("Conectando ao Oracle...")
             inicio_conexao = perf_counter()
             if conectar_oracle is not None:
                 conn = conectar_oracle()
             else:
                 conn = _conectar_oracle_fallback()
+            self._raise_if_cancelled()
             registrar_evento_performance(
                 "query_worker.conectar_oracle",
                 perf_counter() - inicio_conexao,
@@ -117,6 +150,7 @@ class QueryWorker(QThread):
 
                 inicio_execute = perf_counter()
                 cursor.execute(self.sql, self.binds)
+                self._raise_if_cancelled()
                 registrar_evento_performance(
                     "query_worker.execute",
                     perf_counter() - inicio_execute,
@@ -126,12 +160,17 @@ class QueryWorker(QThread):
                     },
                 )
 
-                columns = [desc[0] for desc in cursor.description]
+                columns = (
+                    [desc[0] for desc in cursor.description]
+                    if cursor.description
+                    else []
+                )
                 all_rows: list[tuple] = []
 
                 batch_num = 0
                 inicio_fetch = perf_counter()
                 while True:
+                    self._raise_if_cancelled()
                     rows = cursor.fetchmany(self.fetch_size)
                     if not rows:
                         break
@@ -149,13 +188,19 @@ class QueryWorker(QThread):
                     },
                 )
 
+            self._raise_if_cancelled()
             inicio_dataframe = perf_counter()
             if not all_rows:
                 self.progress.emit("Consulta retornou 0 linhas.")
                 df = pl.DataFrame({col: [] for col in columns})
             else:
                 # Otimizacao Bolt: criar DataFrame diretamente de tuplas (muito mais rapido)
-                df = pl.DataFrame(all_rows, schema=columns, orient="row", infer_schema_length=min(len(all_rows), 1000))
+                df = pl.DataFrame(
+                    all_rows,
+                    schema=columns,
+                    orient="row",
+                    infer_schema_length=min(len(all_rows), 1000),
+                )
             registrar_evento_performance(
                 "query_worker.build_dataframe",
                 perf_counter() - inicio_dataframe,
@@ -178,7 +223,29 @@ class QueryWorker(QThread):
             )
             self.finished_ok.emit(df)
 
+        except QueryCancelledError as exc:
+            if conn is not None:
+                try:
+                    cancel = getattr(conn, "cancel", None)
+                    if callable(cancel):
+                        cancel()
+                except Exception as cancel_exc:
+                    log_exception(cancel_exc)
+            registrar_evento_performance(
+                "query_worker.total",
+                perf_counter() - inicio_total,
+                {
+                    "fetch_size": self.fetch_size,
+                    "quantidade_binds": len(self.binds or {}),
+                    "erro": str(exc),
+                },
+                status="cancelled",
+            )
+            self.progress.emit("Consulta cancelada.")
+            self.failed.emit("Consulta cancelada pelo usuario.")
+
         except Exception as exc:
+            log_exception(exc)
             registrar_evento_performance(
                 "query_worker.total",
                 perf_counter() - inicio_total,
@@ -198,4 +265,7 @@ class QueryWorker(QThread):
                 try:
                     conn.close()
                 except Exception as close_exc:
-                    rprint(f"[yellow]Aviso: Erro ao fechar conexao Oracle:[/yellow] {close_exc}")
+                    log_exception(close_exc)
+                    rprint(
+                        f"[yellow]Aviso: Erro ao fechar conexao Oracle:[/yellow] {close_exc}"
+                    )

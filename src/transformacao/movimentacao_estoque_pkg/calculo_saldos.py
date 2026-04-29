@@ -11,17 +11,14 @@ from __future__ import annotations
 
 import numpy as np
 import polars as pl
+from numba import njit
 from rich import print as rprint
 
 
 def _padronizar_tipo_operacao_expr(col: str = "Tipo_operacao") -> pl.Expr:
     """Normaliza valores de Tipo_operacao para os 4 tipos canonicos."""
     valor = (
-        pl.col(col)
-        .cast(pl.Utf8, strict=False)
-        .fill_null("")
-        .str.strip_chars()
-        .str.to_uppercase()
+        pl.col(col).cast(pl.Utf8, strict=False).fill_null("").str.strip_chars().str.to_uppercase()
     )
     return (
         pl.when(valor == "INVENTARIO")
@@ -47,15 +44,6 @@ def _padronizar_tipo_operacao_expr(col: str = "Tipo_operacao") -> pl.Expr:
     )
 
 
-def _valor_bool(value) -> bool:
-    if isinstance(value, bool):
-        return value
-    if value is None:
-        return False
-    texto = str(value).strip().upper()
-    return texto in {"1", "TRUE", "T", "S", "SIM", "Y", "YES"}
-
-
 def _boolish_expr(coluna: str) -> pl.Expr:
     return (
         pl.col(coluna)
@@ -68,13 +56,13 @@ def _boolish_expr(coluna: str) -> pl.Expr:
 
 
 def gerar_eventos_estoque(df_mov: pl.DataFrame) -> pl.DataFrame:
-    """Gera linhas de ESTOQUE INICIAL e ESTOQUE FINAL para cada id_agrupado/ano.
+    """Gera linhas de ESTOQUE INICIAL e ESTOQUE FINAL para cada id_agrupado/ano."""
+    is_lazy = isinstance(df_mov, pl.LazyFrame)
+    if (is_lazy and df_mov.collect_schema().names() == []) or (not is_lazy and df_mov.is_empty()):
+        return df_mov
 
-    - Inventarios existentes viram ESTOQUE FINAL.
-    - Anos sem inventario 31/12 recebem ESTOQUE FINAL gerado (qtd=0).
-    - Cada ESTOQUE FINAL gera um ESTOQUE INICIAL no dia seguinte.
-    """
-    if df_mov.is_empty() or "id_agrupado" not in df_mov.columns:
+    columns = df_mov.collect_schema().names() if is_lazy else df_mov.columns
+    if "id_agrupado" not in columns:
         return df_mov
 
     dt_doc_dtype = df_mov.schema.get("Dt_doc", pl.Datetime)
@@ -89,27 +77,37 @@ def gerar_eventos_estoque(df_mov: pl.DataFrame) -> pl.DataFrame:
                 ]
             ).alias("__data_ref__"),
             pl.col("Tipo_operacao").cast(pl.Utf8, strict=False).fill_null("").alias("__tipo_op__"),
+            (
+                pl.col("origem_evento_estoque").cast(pl.Utf8, strict=False)
+                if "origem_evento_estoque" in columns
+                else pl.lit("registro")
+            )
+            .fill_null("registro")
+            .alias("origem_evento_estoque"),
+            (
+                pl.col("evento_sintetico").cast(pl.Boolean, strict=False)
+                if "evento_sintetico" in columns
+                else pl.lit(False)
+            )
+            .fill_null(False)
+            .alias("evento_sintetico"),
         ]
     )
 
-    # Estoque vindo do bloco H vira sempre ESTOQUE FINAL existente.
-    df_exist_final = (
-        df_base
-        .filter(pl.col("__tipo_op__") == "inventario")
-        .with_columns(
-            [
-                pl.lit("3 - ESTOQUE FINAL").alias("Tipo_operacao"),
-                pl.col("__data_ref__").cast(dt_doc_dtype, strict=False).alias("Dt_doc"),
-                pl.col("__data_ref__").cast(dt_es_dtype, strict=False).alias("Dt_e_s"),
-            ]
-        )
+    df_exist_final = df_base.filter(pl.col("__tipo_op__") == "inventario").with_columns(
+        [
+            pl.lit("3 - ESTOQUE FINAL").alias("Tipo_operacao"),
+            pl.col("__data_ref__").cast(dt_doc_dtype, strict=False).alias("Dt_doc"),
+            pl.col("__data_ref__").cast(dt_es_dtype, strict=False).alias("Dt_e_s"),
+            pl.lit("inventario_bloco_h").alias("origem_evento_estoque"),
+            pl.lit(False).alias("evento_sintetico"),
+        ]
     )
 
     rprint("[cyan]Ajustando eventos de estoque...[/cyan]")
 
     produtos_unicos = (
-        df_base
-        .filter(pl.col("id_agrupado").is_not_null())
+        df_base.filter(pl.col("id_agrupado").is_not_null())
         .select(
             [
                 "id_agrupado",
@@ -132,8 +130,7 @@ def gerar_eventos_estoque(df_mov: pl.DataFrame) -> pl.DataFrame:
     )
 
     anos_ativos = (
-        df_base
-        .filter(
+        df_base.filter(
             pl.col("id_agrupado").is_not_null()
             & pl.col("__data_ref__").is_not_null()
             & (pl.col("__tipo_op__") != "inventario")
@@ -144,8 +141,7 @@ def gerar_eventos_estoque(df_mov: pl.DataFrame) -> pl.DataFrame:
     )
 
     movimentos_31_12 = (
-        df_base
-        .filter(
+        df_base.filter(
             pl.col("id_agrupado").is_not_null()
             & pl.col("__data_ref__").is_not_null()
             & (pl.col("__tipo_op__") == "inventario")
@@ -165,10 +161,13 @@ def gerar_eventos_estoque(df_mov: pl.DataFrame) -> pl.DataFrame:
     pares_sem_31_12 = anos_ativos.join(movimentos_31_12, on=["id_agrupado", "__ano__"], how="anti")
 
     df_gerado_final = pl.DataFrame()
-    if pares_sem_31_12.height > 0:
+    if isinstance(pares_sem_31_12, pl.LazyFrame):
+        tem_pares = pares_sem_31_12.select(pl.len()).collect().item() > 0
+    else:
+        tem_pares = not pares_sem_31_12.is_empty()
+    if tem_pares:
         df_gerado_final = (
-            pares_sem_31_12
-            .join(produtos_unicos, on="id_agrupado", how="left")
+            pares_sem_31_12.join(produtos_unicos, on="id_agrupado", how="left")
             .with_columns(
                 [
                     pl.concat_str(
@@ -185,6 +184,8 @@ def gerar_eventos_estoque(df_mov: pl.DataFrame) -> pl.DataFrame:
                     pl.lit(None).alias("Unid"),
                     pl.lit("gerado").alias("Ser"),
                     pl.lit("gerado").alias("fonte"),
+                    pl.lit("estoque_final_gerado").alias("origem_evento_estoque"),
+                    pl.lit(True).alias("evento_sintetico"),
                 ]
             )
             .with_columns(
@@ -205,38 +206,40 @@ def gerar_eventos_estoque(df_mov: pl.DataFrame) -> pl.DataFrame:
     df_finais = pl.concat(
         [
             df_exist_final.select(df_base.columns),
-            df_gerado_final.select(df_base.columns) if not df_gerado_final.is_empty() else pl.DataFrame(schema=df_base.schema),
+            df_gerado_final.select(df_base.columns)
+            if not df_gerado_final.is_empty()
+            else pl.DataFrame(schema=df_base.schema),
         ],
         how="vertical_relaxed",
     )
 
     df_iniciais = pl.DataFrame(schema=df_base.schema)
     if not df_finais.is_empty():
-        df_iniciais = (
-            df_finais
-            .with_columns(
-                [
-                    (
-                        pl.col("__data_ref__").cast(pl.Date, strict=False) + pl.duration(days=1)
-                    ).alias("__data_inicial__"),
-                ]
-            )
-            .with_columns(
-                [
-                    pl.when(pl.col("Tipo_operacao") == "3 - ESTOQUE FINAL")
-                    .then(pl.lit("0 - ESTOQUE INICIAL"))
-                    .otherwise(pl.lit("0 - ESTOQUE INICIAL gerado"))
-                    .alias("Tipo_operacao"),
-                    pl.col("__data_inicial__").cast(dt_doc_dtype, strict=False).alias("Dt_doc"),
-                    pl.col("__data_inicial__").cast(dt_es_dtype, strict=False).alias("Dt_e_s"),
-                    pl.lit("gerado").alias("fonte"),
-                ]
-            )
+        df_iniciais = df_finais.with_columns(
+            [
+                (pl.col("__data_ref__").cast(pl.Date, strict=False) + pl.duration(days=1)).alias(
+                    "__data_inicial__"
+                ),
+            ]
+        ).with_columns(
+            [
+                pl.when(pl.col("Tipo_operacao") == "3 - ESTOQUE FINAL")
+                .then(pl.lit("0 - ESTOQUE INICIAL"))
+                .otherwise(pl.lit("0 - ESTOQUE INICIAL gerado"))
+                .alias("Tipo_operacao"),
+                pl.col("__data_inicial__").cast(dt_doc_dtype, strict=False).alias("Dt_doc"),
+                pl.col("__data_inicial__").cast(dt_es_dtype, strict=False).alias("Dt_e_s"),
+                pl.lit("gerado").alias("fonte"),
+                pl.when(pl.col("origem_evento_estoque") == "inventario_bloco_h")
+                .then(pl.lit("estoque_inicial_derivado"))
+                .otherwise(pl.lit("estoque_inicial_gerado"))
+                .alias("origem_evento_estoque"),
+                pl.lit(True).alias("evento_sintetico"),
+            ]
         )
 
     iniciais_deriv_01_01 = (
-        df_iniciais
-        .with_columns(
+        df_iniciais.with_columns(
             [
                 pl.col("Dt_e_s").dt.year().alias("__ano__"),
                 pl.col("Dt_e_s").dt.month().alias("__mes__"),
@@ -249,8 +252,7 @@ def gerar_eventos_estoque(df_mov: pl.DataFrame) -> pl.DataFrame:
     )
 
     inv_01_01_base = (
-        df_base
-        .filter(
+        df_base.filter(
             pl.col("id_agrupado").is_not_null()
             & pl.col("__data_ref__").is_not_null()
             & (pl.col("__tipo_op__") == "inventario")
@@ -270,10 +272,13 @@ def gerar_eventos_estoque(df_mov: pl.DataFrame) -> pl.DataFrame:
     tem_01_01 = pl.concat([iniciais_deriv_01_01, inv_01_01_base]).unique()
     pares_sem_01_01 = anos_ativos.join(tem_01_01, on=["id_agrupado", "__ano__"], how="anti")
 
-    if pares_sem_01_01.height > 0:
+    if isinstance(pares_sem_01_01, pl.LazyFrame):
+        tem_pares_01 = pares_sem_01_01.select(pl.len()).collect().item() > 0
+    else:
+        tem_pares_01 = not pares_sem_01_01.is_empty()
+    if tem_pares_01:
         df_gerado_inicial = (
-            pares_sem_01_01
-            .join(produtos_unicos, on="id_agrupado", how="left")
+            pares_sem_01_01.join(produtos_unicos, on="id_agrupado", how="left")
             .with_columns(
                 [
                     pl.concat_str([pl.col("__ano__").cast(pl.Utf8), pl.lit("-01-01")])
@@ -285,6 +290,8 @@ def gerar_eventos_estoque(df_mov: pl.DataFrame) -> pl.DataFrame:
                     pl.lit(None).alias("Unid"),
                     pl.lit("gerado").alias("Ser"),
                     pl.lit("gerado").alias("fonte"),
+                    pl.lit("estoque_inicial_gerado").alias("origem_evento_estoque"),
+                    pl.lit(True).alias("evento_sintetico"),
                 ]
             )
             .with_columns(
@@ -299,14 +306,28 @@ def gerar_eventos_estoque(df_mov: pl.DataFrame) -> pl.DataFrame:
         for c in df_base.columns:
             if c not in df_gerado_inicial.columns:
                 df_gerado_inicial = df_gerado_inicial.with_columns(pl.lit(None).alias(c))
-        df_iniciais = pl.concat([df_iniciais.select(df_base.columns), df_gerado_inicial.select(df_base.columns)], how="vertical_relaxed")
+        df_iniciais = pl.concat(
+            [df_iniciais.select(df_base.columns), df_gerado_inicial.select(df_base.columns)],
+            how="vertical_relaxed",
+        )
 
-    df_sem_inventario = df_base.filter(pl.col("__tipo_op__") != "inventario")
+    df_sem_inventario = df_base.filter(pl.col("__tipo_op__") != "inventario").with_columns(
+        [
+            pl.coalesce([pl.col("origem_evento_estoque"), pl.lit("registro")]).alias(
+                "origem_evento_estoque"
+            ),
+            pl.coalesce([pl.col("evento_sintetico"), pl.lit(False)]).alias("evento_sintetico"),
+        ]
+    )
     df_result = pl.concat(
         [
             df_sem_inventario.select(df_base.columns),
-            df_finais.select(df_base.columns) if not df_finais.is_empty() else pl.DataFrame(schema=df_base.schema),
-            df_iniciais.select(df_base.columns) if not df_iniciais.is_empty() else pl.DataFrame(schema=df_base.schema),
+            df_finais.select(df_base.columns)
+            if not df_finais.is_empty()
+            else pl.DataFrame(schema=df_base.schema),
+            df_iniciais.select(df_base.columns)
+            if not df_iniciais.is_empty()
+            else pl.DataFrame(schema=df_base.schema),
         ],
         how="vertical_relaxed",
     )
@@ -314,87 +335,42 @@ def gerar_eventos_estoque(df_mov: pl.DataFrame) -> pl.DataFrame:
     return df_result.drop(["__data_ref__", "__tipo_op__"], strict=False)
 
 
-def _calc_saldos_loop(df: pl.DataFrame, sufixo: str) -> pl.DataFrame:
-    """Calcula saldo de estoque sequencial por grupo.
-
-    Usa arrays NumPy em vez de to_dicts() para ~3-5x de speedup.
-    A logica sequencial (saldo depende da linha anterior) impede window functions
-    puras, mas o acesso direto a arrays evita overhead de dicts Python.
-    """
-    if df.is_empty():
-        return df
-
-    n = df.height
-
-    # Extrair colunas como arrays (evita to_dicts overhead)
-    tipos = df["Tipo_operacao"].cast(pl.Utf8, strict=False).fill_null("").to_list()
-    q_conv_arr = df["q_conv"].cast(pl.Float64, strict=False).fill_null(0.0).to_numpy()
-    q_sinal_arr = df["__q_conv_sinal__"].cast(pl.Float64, strict=False).fill_null(0.0).to_numpy()
-    preco_arr = df["preco_item"].cast(pl.Float64, strict=False).fill_null(0.0).to_numpy()
-    qtd_decl_arr = df["__qtd_decl_final_audit__"].cast(pl.Float64, strict=False).fill_null(0.0).to_numpy()
-    finnfe_arr = (
-        df["finnfe"].cast(pl.Utf8, strict=False).fill_null("").to_list()
-        if "finnfe" in df.columns
-        else [""] * n
-    )
-    dev_simples_arr = (
-        df["dev_simples"].to_list()
-        if "dev_simples" in df.columns
-        else [False] * n
-    )
-    dev_venda_arr = (
-        df["dev_venda"].to_list()
-        if "dev_venda" in df.columns
-        else [False] * n
-    )
-    dev_compra_arr = (
-        df["dev_compra"].to_list()
-        if "dev_compra" in df.columns
-        else [False] * n
-    )
-    dev_ent_simples_arr = (
-        df["dev_ent_simples"].to_list()
-        if "dev_ent_simples" in df.columns
-        else [False] * n
-    )
-
-    saldos = np.empty(n, dtype=np.float64)
-    entradas_desacob = np.empty(n, dtype=np.float64)
-    custos = np.empty(n, dtype=np.float64)
+@njit
+def _numba_calc_saldos_core(
+    tipos_int: np.ndarray,
+    q_conv_arr: np.ndarray,
+    q_sinal_arr: np.ndarray,
+    preco_arr: np.ndarray,
+    is_devolucao_arr: np.ndarray,
+):
+    n = len(tipos_int)
+    saldos = np.zeros(n, dtype=np.float64)
+    entradas_desacob = np.zeros(n, dtype=np.float64)
+    custos = np.zeros(n, dtype=np.float64)
 
     saldo_qtd = 0.0
     saldo_valor = 0.0
     custo_medio = 0.0
 
     for i in range(n):
-        tipo = tipos[i]
+        tipo_int = tipos_int[i]
         q_conv = q_conv_arr[i]
         q_sinal = q_sinal_arr[i]
         preco_item = preco_arr[i]
-        qtd_decl_final = qtd_decl_arr[i]
-        finnfe = str(finnfe_arr[i]).strip()
-        is_devolucao = (
-            finnfe == "4"
-            or _valor_bool(dev_simples_arr[i])
-            or _valor_bool(dev_venda_arr[i])
-            or _valor_bool(dev_compra_arr[i])
-            or _valor_bool(dev_ent_simples_arr[i])
-        )
+        is_devolucao = is_devolucao_arr[i]
 
         entr_desac = 0.0
 
-        if tipo[:1] == "0" or tipo == "1 - ENTRADA":
-            # ESTOQUE INICIAL ou ENTRADA
+        if tipo_int == 0:
             if q_sinal > 0:
                 saldo_qtd += q_sinal
-                if tipo == "1 - ENTRADA" and is_devolucao:
-                    # Devolucoes retornam quantidade sem alterar o custo medio vigente.
+                if is_devolucao:
                     saldo_valor += q_sinal * custo_medio
                 else:
                     saldo_valor += preco_item
                 custo_medio = (saldo_valor / saldo_qtd) if saldo_qtd > 0 else 0.0
 
-        elif tipo == "2 - SAIDAS":
+        elif tipo_int == 1:
             if q_conv > 0:
                 saldo_qtd += q_sinal
                 if saldo_qtd < 0:
@@ -413,16 +389,61 @@ def _calc_saldos_loop(df: pl.DataFrame, sufixo: str) -> pl.DataFrame:
                             saldo_valor = 0.0
                         custo_medio = saldo_valor / saldo_qtd
 
-        elif tipo[:1] == "3":
-            # ESTOQUE FINAL apenas audita a quantidade declarada em
-            # __qtd_decl_final_audit__. A regra de negocio vigente exige
-            # que essa linha permaneça neutra para entradas desacobertadas,
-            # saldo fisico e custo medio.
+        elif tipo_int == 2:
             pass
 
         saldos[i] = round(saldo_qtd, 6)
         entradas_desacob[i] = round(entr_desac, 6)
         custos[i] = round(custo_medio, 6)
+
+    return saldos, entradas_desacob, custos
+
+
+def _calc_saldos_loop(df: pl.DataFrame, sufixo: str) -> pl.DataFrame:
+    if df.is_empty():
+        return df
+
+    df_prep = df.with_columns(
+        [
+            pl.col("Tipo_operacao").cast(pl.Utf8, strict=False).fill_null("").alias("__tipo_str__"),
+            pl.col("finnfe").cast(pl.Utf8, strict=False).fill_null("").alias("__finnfe_str__")
+            if "finnfe" in df.columns
+            else pl.lit("").alias("__finnfe_str__"),
+        ]
+    ).with_columns(
+        [
+            pl.when(
+                pl.col("__tipo_str__").str.starts_with("0")
+                | (pl.col("__tipo_str__") == "1 - ENTRADA")
+            )
+            .then(0)
+            .when(pl.col("__tipo_str__") == "2 - SAIDAS")
+            .then(1)
+            .when(pl.col("__tipo_str__").str.starts_with("3"))
+            .then(2)
+            .otherwise(3)
+            .alias("__tipo_int__"),
+            (
+                (pl.col("__finnfe_str__").str.strip_chars() == "4")
+                | _boolish_expr("dev_simples")
+                | _boolish_expr("dev_venda")
+                | _boolish_expr("dev_compra")
+                | _boolish_expr("dev_ent_simples")
+            ).alias("__is_devolucao__"),
+        ]
+    )
+
+    tipos_int = df_prep["__tipo_int__"].to_numpy().astype(np.int8)
+    q_conv_arr = df_prep["q_conv"].cast(pl.Float64, strict=False).fill_null(0.0).to_numpy()
+    q_sinal_arr = (
+        df_prep["__q_conv_sinal__"].cast(pl.Float64, strict=False).fill_null(0.0).to_numpy()
+    )
+    preco_arr = df_prep["preco_item"].cast(pl.Float64, strict=False).fill_null(0.0).to_numpy()
+    is_devolucao_arr = df_prep["__is_devolucao__"].to_numpy().astype(np.bool_)
+
+    saldos, entradas_desacob, custos = _numba_calc_saldos_core(
+        tipos_int, q_conv_arr, q_sinal_arr, preco_arr, is_devolucao_arr
+    )
 
     return df.with_columns(
         [
@@ -435,6 +456,7 @@ def _calc_saldos_loop(df: pl.DataFrame, sufixo: str) -> pl.DataFrame:
 
 def calcular_saldo_estoque_anual(df: pl.DataFrame) -> pl.DataFrame:
     return _calc_saldos_loop(df, "anual")
+
 
 def calcular_saldo_estoque_periodo(df: pl.DataFrame) -> pl.DataFrame:
     return _calc_saldos_loop(df, "periodo")

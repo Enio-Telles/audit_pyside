@@ -55,7 +55,9 @@ def test_calcular_precos_medios_produtos_final_com_log(tmp_path: Path):
         }
     ).write_parquet(pasta_prod / f"produtos_final_{cnpj}.parquet")
 
-    df_precos, df_sem_compra = calcular_precos_medios_produtos_final(cnpj, pasta_cnpj=pasta_cnpj, salvar_logs=True)
+    df_precos, df_sem_compra = calcular_precos_medios_produtos_final(
+        cnpj, pasta_cnpj=pasta_cnpj, salvar_logs=True
+    )
 
     assert df_precos.height == 2
     assert set(df_precos["origem_preco"].to_list()) == {"COMPRA", "VENDA"}

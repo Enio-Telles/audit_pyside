@@ -1,4 +1,4 @@
-﻿"""
+"""
 c176_xml.py
 
 Objetivo:
@@ -40,11 +40,7 @@ except ImportError as e:
 
 def _norm_unid_expr(col: str) -> pl.Expr:
     return (
-        pl.col(col)
-        .cast(pl.Utf8, strict=False)
-        .fill_null("")
-        .str.strip_chars()
-        .str.to_uppercase()
+        pl.col(col).cast(pl.Utf8, strict=False).fill_null("").str.strip_chars().str.to_uppercase()
     )
 
 
@@ -54,11 +50,7 @@ def _to_float_expr(col: str) -> pl.Expr:
 
 def _norm_text_expr(col: str) -> pl.Expr:
     return (
-        pl.col(col)
-        .cast(pl.Utf8, strict=False)
-        .fill_null("")
-        .str.strip_chars()
-        .str.to_uppercase()
+        pl.col(col).cast(pl.Utf8, strict=False).fill_null("").str.strip_chars().str.to_uppercase()
     )
 
 
@@ -93,7 +85,17 @@ def gerar_c176_xml(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         )
         validar_parquet_essencial(
             arq_c170_agr,
-            ["chv_nfe", "num_item", "cod_item", "id_agrupado", "descr_padrao", "cod_ncm", "cest", "unid", "qtd"],
+            [
+                "chv_nfe",
+                "num_item",
+                "cod_item",
+                "id_agrupado",
+                "descr_padrao",
+                "cod_ncm",
+                "cest",
+                "unid",
+                "qtd",
+            ],
             contexto="c176_xml/c170_agr",
         )
         validar_parquet_essencial(
@@ -120,8 +122,7 @@ def gerar_c176_xml(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         return salvar_para_parquet(pl.DataFrame(), pasta_analises, f"c176_xml_{cnpj}.parquet")
 
     df_saida_ref = (
-        df_saida
-        .select(
+        df_saida.select(
             [
                 "chv_nfe",
                 "num_item",
@@ -138,8 +139,14 @@ def gerar_c176_xml(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
             [
                 pl.col("num_item").cast(pl.Int64, strict=False).alias("num_item"),
                 pl.col("cod_item").cast(pl.Utf8, strict=False).str.strip_chars().alias("cod_item"),
-                pl.col("cod_ncm").cast(pl.Utf8, strict=False).str.strip_chars().alias("cod_ncm_saida_agr"),
-                pl.col("cest").cast(pl.Utf8, strict=False).str.strip_chars().alias("cest_saida_agr"),
+                pl.col("cod_ncm")
+                .cast(pl.Utf8, strict=False)
+                .str.strip_chars()
+                .alias("cod_ncm_saida_agr"),
+                pl.col("cest")
+                .cast(pl.Utf8, strict=False)
+                .str.strip_chars()
+                .alias("cest_saida_agr"),
                 _norm_unid_expr("unid").alias("unid_saida_agr"),
                 _to_float_expr("qtd").alias("qtd_saida_agr"),
             ]
@@ -148,12 +155,13 @@ def gerar_c176_xml(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
     )
 
     df_c176_base = (
-        df_c176
-        .with_columns(
+        df_c176.with_columns(
             [
                 pl.col("num_item_saida").cast(pl.Int64, strict=False).alias("num_item_saida"),
                 pl.col("cod_item").cast(pl.Utf8, strict=False).str.strip_chars().alias("cod_item"),
-                pl.col("c176_num_item_ult_e_declarado").cast(pl.Int64, strict=False).alias("__item_entrada_xml"),
+                pl.col("c176_num_item_ult_e_declarado")
+                .cast(pl.Int64, strict=False)
+                .alias("__item_entrada_xml"),
                 _norm_unid_expr("unid_saida").alias("unid_saida_norm"),
                 _to_float_expr("qtd_item_saida").alias("qtd_item_saida"),
             ]
@@ -173,8 +181,7 @@ def gerar_c176_xml(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
     )
 
     df_fatores_ref = (
-        df_fatores
-        .select(["id_agrupado", "unid", "unid_ref", "fator"])
+        df_fatores.select(["id_agrupado", "unid", "unid_ref", "fator"])
         .with_columns(
             [
                 _norm_unid_expr("unid").alias("__unid_norm"),
@@ -186,8 +193,7 @@ def gerar_c176_xml(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
     )
 
     df_saida_conv = (
-        df_c176_base
-        .join(
+        df_c176_base.join(
             df_fatores_ref.select(
                 [
                     "id_agrupado",
@@ -202,7 +208,9 @@ def gerar_c176_xml(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         )
         .with_columns(
             [
-                pl.coalesce([pl.col("unid_ref_saida"), pl.col("unid_saida_norm")]).alias("unid_ref"),
+                pl.coalesce([pl.col("unid_ref_saida"), pl.col("unid_saida_norm")]).alias(
+                    "unid_ref"
+                ),
                 pl.col("fator_saida").fill_null(1.0).alias("fator_saida"),
             ]
         )
@@ -226,8 +234,7 @@ def gerar_c176_xml(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
     )
 
     df_entrada_xml = (
-        df_nfe
-        .select(
+        df_nfe.select(
             [
                 "chave_acesso",
                 "prod_nitem",
@@ -252,9 +259,15 @@ def gerar_c176_xml(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         .with_columns(
             [
                 pl.col("prod_nitem").cast(pl.Int64, strict=False).alias("prod_nitem"),
-                pl.col("prod_cprod").cast(pl.Utf8, strict=False).str.strip_chars().alias("prod_cprod"),
+                pl.col("prod_cprod")
+                .cast(pl.Utf8, strict=False)
+                .str.strip_chars()
+                .alias("prod_cprod"),
                 pl.col("prod_ncm").cast(pl.Utf8, strict=False).str.strip_chars().alias("prod_ncm"),
-                pl.col("prod_cest").cast(pl.Utf8, strict=False).str.strip_chars().alias("prod_cest"),
+                pl.col("prod_cest")
+                .cast(pl.Utf8, strict=False)
+                .str.strip_chars()
+                .alias("prod_cest"),
                 _norm_unid_expr("prod_ucom").alias("unid_entrada_xml"),
                 _norm_text_expr("prod_xprod").alias("prod_xprod_norm"),
                 _to_float_expr("prod_qcom").alias("qtd_entrada_xml"),
@@ -275,15 +288,22 @@ def gerar_c176_xml(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         .unique(subset=["chave_acesso", "prod_nitem", "id_agrupado_entrada_xml"])
     )
 
-    chaves_particao = ["chave_saida", "num_item_saida", "cod_item_ref_saida", "chave_nfe_ultima_entrada"]
+    chaves_particao = [
+        "chave_saida",
+        "num_item_saida",
+        "cod_item_ref_saida",
+        "chave_nfe_ultima_entrada",
+    ]
 
     df_result = (
-        df_saida_conv
-        .with_columns(
+        df_saida_conv.with_columns(
             [
                 _norm_text_expr("descricao_item").alias("descricao_item_norm"),
                 _norm_text_expr("descr_padrao").alias("descr_padrao_norm"),
-                pl.col("cod_item_ref_saida").cast(pl.Utf8, strict=False).str.strip_chars().alias("cod_item_ref_saida"),
+                pl.col("cod_item_ref_saida")
+                .cast(pl.Utf8, strict=False)
+                .str.strip_chars()
+                .alias("cod_item_ref_saida"),
             ]
         )
         .join(
@@ -295,34 +315,68 @@ def gerar_c176_xml(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         .with_columns(
             [
                 pl.col("prod_nitem").is_not_null().alias("tem_item_xml"),
-                (pl.col("prod_nitem") == pl.col("__item_entrada_xml")).fill_null(False).alias("ind_match_item_declarado"),
-                (pl.col("id_agrupado_entrada_xml") == pl.col("id_agrupado")).fill_null(False).alias("ind_match_id_agrupado"),
-                (pl.col("prod_cprod") == pl.col("cod_item_ref_saida")).fill_null(False).alias("ind_match_cod_item"),
+                (pl.col("prod_nitem") == pl.col("__item_entrada_xml"))
+                .fill_null(False)
+                .alias("ind_match_item_declarado"),
+                (pl.col("id_agrupado_entrada_xml") == pl.col("id_agrupado"))
+                .fill_null(False)
+                .alias("ind_match_id_agrupado"),
+                (pl.col("prod_cprod") == pl.col("cod_item_ref_saida"))
+                .fill_null(False)
+                .alias("ind_match_cod_item"),
                 (
                     pl.col("prod_ncm").cast(pl.Utf8, strict=False).fill_null("").str.strip_chars()
-                    == pl.col("cod_ncm_saida_agr").cast(pl.Utf8, strict=False).fill_null("").str.strip_chars()
-                ).fill_null(False).alias("ind_match_ncm"),
+                    == pl.col("cod_ncm_saida_agr")
+                    .cast(pl.Utf8, strict=False)
+                    .fill_null("")
+                    .str.strip_chars()
+                )
+                .fill_null(False)
+                .alias("ind_match_ncm"),
                 (
                     pl.col("prod_cest").cast(pl.Utf8, strict=False).fill_null("").str.strip_chars()
-                    == pl.col("cest_saida_agr").cast(pl.Utf8, strict=False).fill_null("").str.strip_chars()
-                ).fill_null(False).alias("ind_match_cest"),
-                (pl.col("prod_xprod_norm") == pl.col("descricao_item_norm")).fill_null(False).alias("ind_match_desc_saida"),
-                (pl.col("prod_xprod_norm") == pl.col("descr_padrao_norm")).fill_null(False).alias("ind_match_desc_padrao"),
-                (pl.col("qtd_entrada_xml") - pl.col("qtd_item_saida")).abs().alias("diff_qtd_vinculo"),
+                    == pl.col("cest_saida_agr")
+                    .cast(pl.Utf8, strict=False)
+                    .fill_null("")
+                    .str.strip_chars()
+                )
+                .fill_null(False)
+                .alias("ind_match_cest"),
+                (pl.col("prod_xprod_norm") == pl.col("descricao_item_norm"))
+                .fill_null(False)
+                .alias("ind_match_desc_saida"),
+                (pl.col("prod_xprod_norm") == pl.col("descr_padrao_norm"))
+                .fill_null(False)
+                .alias("ind_match_desc_padrao"),
+                (pl.col("qtd_entrada_xml") - pl.col("qtd_item_saida"))
+                .abs()
+                .alias("diff_qtd_vinculo"),
             ]
         )
         .with_columns(
             [
-                pl.col("ind_match_id_agrupado").max().over(chaves_particao).alias("existe_match_id_agrupado"),
-                pl.col("ind_match_cod_item").max().over(chaves_particao).alias("existe_match_cod_item"),
+                pl.col("ind_match_id_agrupado")
+                .max()
+                .over(chaves_particao)
+                .alias("existe_match_id_agrupado"),
+                pl.col("ind_match_cod_item")
+                .max()
+                .over(chaves_particao)
+                .alias("existe_match_cod_item"),
                 (
-                    pl.when(pl.col("ind_match_item_declarado")).then(pl.lit(1000)).otherwise(pl.lit(0))
+                    pl.when(pl.col("ind_match_item_declarado"))
+                    .then(pl.lit(1000))
+                    .otherwise(pl.lit(0))
                     + pl.when(pl.col("ind_match_ncm")).then(pl.lit(300)).otherwise(pl.lit(0))
                     + pl.when(pl.col("ind_match_cest")).then(pl.lit(250)).otherwise(pl.lit(0))
                     + pl.when(pl.col("ind_match_desc_saida")).then(pl.lit(150)).otherwise(pl.lit(0))
-                    + pl.when(pl.col("ind_match_desc_padrao")).then(pl.lit(100)).otherwise(pl.lit(0))
-                    + pl.when(pl.col("qtd_entrada_xml") == pl.col("qtd_item_saida")).then(pl.lit(80))
-                    .when((pl.col("qtd_entrada_xml") - pl.col("qtd_item_saida")).abs() <= 1).then(pl.lit(30))
+                    + pl.when(pl.col("ind_match_desc_padrao"))
+                    .then(pl.lit(100))
+                    .otherwise(pl.lit(0))
+                    + pl.when(pl.col("qtd_entrada_xml") == pl.col("qtd_item_saida"))
+                    .then(pl.lit(80))
+                    .when((pl.col("qtd_entrada_xml") - pl.col("qtd_item_saida")).abs() <= 1)
+                    .then(pl.lit(30))
                     .otherwise(pl.lit(0))
                 ).alias("score_vinculo_entrada"),
             ]
@@ -338,13 +392,17 @@ def gerar_c176_xml(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
             ]
         )
         .sort(
-            chaves_particao + ["__ordem_match", "score_vinculo_entrada", "diff_qtd_vinculo", "prod_nitem"],
+            chaves_particao
+            + [
+                "__ordem_match",
+                "score_vinculo_entrada",
+                "diff_qtd_vinculo",
+                "prod_nitem",
+            ],
             descending=[False, False, False, False, True, True, False, False],
             nulls_last=True,
         )
-        .with_columns(
-            pl.int_range(0, pl.len()).over(chaves_particao).alias("__rank_vinculo")
-        )
+        .with_columns(pl.int_range(0, pl.len()).over(chaves_particao).alias("__rank_vinculo"))
         .filter(pl.col("__rank_vinculo") == 0)
         .join(
             df_fatores_ref.select(
@@ -363,7 +421,13 @@ def gerar_c176_xml(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
             [
                 pl.col("prod_nitem").is_not_null().alias("match_entrada_xml"),
                 pl.col("fator_entrada_xml").fill_null(1.0).alias("fator_entrada_xml"),
-                pl.coalesce([pl.col("unid_ref"), pl.col("unid_ref_entrada"), pl.col("unid_entrada_xml")]).alias("unid_ref"),
+                pl.coalesce(
+                    [
+                        pl.col("unid_ref"),
+                        pl.col("unid_ref_entrada"),
+                        pl.col("unid_entrada_xml"),
+                    ]
+                ).alias("unid_ref"),
             ]
         )
         .with_columns(
@@ -380,9 +444,14 @@ def gerar_c176_xml(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         )
         .with_columns(
             [
-                (pl.col("qtd_entrada_xml") * pl.col("fator_entrada_xml")).alias("qtd_entrada_xml_unid_ref"),
+                (pl.col("qtd_entrada_xml") * pl.col("fator_entrada_xml")).alias(
+                    "qtd_entrada_xml_unid_ref"
+                ),
                 pl.when((pl.col("qtd_entrada_xml") * pl.col("fator_entrada_xml")) > 0)
-                .then(pl.col("vl_total_entrada_xml") / (pl.col("qtd_entrada_xml") * pl.col("fator_entrada_xml")))
+                .then(
+                    pl.col("vl_total_entrada_xml")
+                    / (pl.col("qtd_entrada_xml") * pl.col("fator_entrada_xml"))
+                )
                 .otherwise(None)
                 .alias("vl_unitario_entrada_xml_unid_ref"),
             ]
@@ -438,7 +507,15 @@ def gerar_c176_xml(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
                 "match_entrada_xml",
             ]
         )
-        .sort(["periodo_efd", "chave_saida", "num_item_saida", "chave_nfe_ultima_entrada"], nulls_last=True)
+        .sort(
+            [
+                "periodo_efd",
+                "chave_saida",
+                "num_item_saida",
+                "chave_nfe_ultima_entrada",
+            ],
+            nulls_last=True,
+        )
     )
 
     return salvar_para_parquet(df_result, pasta_analises, f"c176_xml_{cnpj}.parquet")
@@ -449,5 +526,3 @@ if __name__ == "__main__":
         gerar_c176_xml(sys.argv[1])
     else:
         gerar_c176_xml(input("CNPJ: "))
-
-

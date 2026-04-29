@@ -1,7 +1,10 @@
 import polars as pl
 from typing import Optional, Union
 
-def normalizar_colunas_parquet(df: Optional[Union[pl.DataFrame, pl.LazyFrame]]) -> Optional[Union[pl.DataFrame, pl.LazyFrame]]:
+
+def normalizar_colunas_parquet(
+    df: Optional[Union[pl.DataFrame, pl.LazyFrame]]
+) -> Optional[Union[pl.DataFrame, pl.LazyFrame]]:
     """
     Normaliza os nomes das colunas de um DataFrame ou LazyFrame do Polars
     para letras minúsculas a fim de evitar erros de case sensitivity.
@@ -13,6 +16,6 @@ def normalizar_colunas_parquet(df: Optional[Union[pl.DataFrame, pl.LazyFrame]]) 
             return df
         if isinstance(df, pl.LazyFrame):
             return df.rename({c: c.lower() for c in df.collect_schema().names()})
-        else: # df is a pl.DataFrame (and not empty)
+        else:  # df is a pl.DataFrame (and not empty)
             return df.rename({c: c.lower() for c in df.columns})
     return df
