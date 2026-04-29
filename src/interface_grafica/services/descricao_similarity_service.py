@@ -9,6 +9,7 @@ from typing import Any
 import polars as pl
 
 from utilitarios.text import expr_normalizar_descricao, normalize_desc, remove_accents
+from utilitarios.unidades_descricao import normalizar_unidades_em_texto
 
 COLUNAS_DESCRICAO = [
     "descr_padrao",
@@ -61,6 +62,20 @@ SIM_CONFIG = {
     "min_desc_for_id_boost": 50,
     "gtin_min_score": 92,
     "cest_ncm_min_score": 86,
+    # --- Caps de eficiencia (Sprint 3) ---
+    # Tamanho maximo de um bucket de chave para gerar pares.
+    # Buckets muito grandes (ex.: TOK2 com palavra muito comum) sao
+    # descartados ou amostrados para evitar explosao quadratica.
+    "max_bucket_size": 250,
+    # Limite de pares por linha. Quando uma linha aparece em muitas chaves,
+    # mantemos apenas os top_k melhores candidatos para nao saturar o
+    # calculo de score em bases grandes.
+    "top_k_per_row": 50,
+    # Tamanho maximo de bloco visual apos union-find. Blocos maiores sao
+    # fragmentados mantendo as ligacoes mais fortes.
+    "max_bloco_size": 25,
+    # Coesao minima exigida para manter uma linha em um bloco. 0 desativa.
+    "min_coesao_intra_bloco": 0,
 }
 @dataclass(frozen=True)
 class _RowSimilarityData:
@@ -245,13 +260,37 @@ def _codigo_score(a: frozenset[str], b: frozenset[str]) -> int | None:
     return 100 if a & b else 0
 
 
+def _prefixos_ncm(partes: frozenset[str], n: int) -> frozenset[str]:
+    """Retorna prefixos numericos com `n` digitos das partes NCM informadas."""
+    prefixos = {re.sub(r"\D", "", parte)[:n] for parte in partes}
+    return frozenset(prefixo for prefixo in prefixos if len(prefixo) == n)
+
+
 def _ncm_score(a: _RowSimilarityData, b: _RowSimilarityData) -> int | None:
+    """Score hierarquico de NCM.
+
+    Niveis:
+        100 - NCM completo igual (item, 8 digitos)
+         85 - subposicao igual (6 digitos)
+         70 - posicao igual (4 digitos)
+         30 - capitulo igual (2 digitos)
+          0 - sem coincidencia hierarquica
+        None - falta NCM em uma das linhas
+    """
     if not a.ncm_partes or not b.ncm_partes:
         return None
     if a.ncm_partes & b.ncm_partes:
         return 100
+    a6 = _prefixos_ncm(a.ncm_partes, 6)
+    b6 = _prefixos_ncm(b.ncm_partes, 6)
+    if a6 and b6 and a6 & b6:
+        return 85
     if a.ncm4_partes and b.ncm4_partes and a.ncm4_partes & b.ncm4_partes:
         return 70
+    a2 = _prefixos_ncm(a.ncm_partes, 2)
+    b2 = _prefixos_ncm(b.ncm_partes, 2)
+    if a2 and b2 and a2 & b2:
+        return 30
     return 0
 
 
@@ -281,8 +320,9 @@ def _score_composto(a: _RowSimilarityData, b: _RowSimilarityData) -> _ScoreDetal
         "gtin": SIM_CONFIG["gtin_weight"],
     }
 
-    # Dynamic scaling for identifier matches
-    if score_cest == 100 and (score_ncm == 100 or score_ncm == 70) and score_desc >= SIM_CONFIG["min_desc_for_id_boost"]:
+    # Dynamic scaling for identifier matches.
+    # NCM 100/85/70 (item/subposicao/posicao) ativa boost junto com CEST igual.
+    if score_cest == 100 and score_ncm in (100, 85, 70) and score_desc >= SIM_CONFIG["min_desc_for_id_boost"]:
         weight_map["ncm"] = int(round(weight_map["ncm"] * SIM_CONFIG["cest_ncm_scale"]))
         weight_map["cest"] = int(round(weight_map["cest"] * SIM_CONFIG["cest_ncm_scale"]))
 
@@ -307,8 +347,9 @@ def _score_composto(a: _RowSimilarityData, b: _RowSimilarityData) -> _ScoreDetal
     if score_gtin == 100 and score_desc >= SIM_CONFIG["min_desc_for_id_boost"]:
         score_final = max(score_final, SIM_CONFIG["gtin_min_score"])
 
-    # Configurable minimum for CEST + NCM match (tunable floor)
-    if score_cest == 100 and (score_ncm == 100 or score_ncm == 70) and score_desc >= SIM_CONFIG["min_desc_for_id_boost"]:
+    # Configurable minimum for CEST + NCM match (tunable floor).
+    # Inclui NCM 100/85/70 (item/subposicao/posicao).
+    if score_cest == 100 and score_ncm in (100, 85, 70) and score_desc >= SIM_CONFIG["min_desc_for_id_boost"]:
         score_final = max(score_final, SIM_CONFIG.get("cest_ncm_min_score", 86))
 
     motivos: list[str] = []
@@ -322,8 +363,12 @@ def _score_composto(a: _RowSimilarityData, b: _RowSimilarityData) -> _ScoreDetal
         motivos.append("NUMEROS_IGUAIS")
     if score_ncm == 100:
         motivos.append("NCM_IGUAL")
+    elif score_ncm == 85:
+        motivos.append("NCM6_IGUAL")
     elif score_ncm == 70:
         motivos.append("NCM4_IGUAL")
+    elif score_ncm == 30:
+        motivos.append("NCM2_IGUAL")
     if score_cest == 100:
         motivos.append("CEST_IGUAL")
     if score_gtin == 100:
@@ -376,7 +421,11 @@ def _criar_dados_linhas(df: pl.DataFrame) -> dict[int, _RowSimilarityData]:
         ]
     ).iter_rows(named=True):
         desc = str(row.get("sim_desc_norm") or "")
-        tokens = _tokens(desc)
+        # Aplica canonizacao de unidades apenas para extracao de numeros e
+        # geracao de tokens. desc_norm preservada para o calculo do dice
+        # score textual (que depende da forma original).
+        desc_canonica_unidades = normalizar_unidades_em_texto(desc)
+        tokens = _tokens(desc_canonica_unidades)
         fortes = _strong_tokens(tokens)
         ncm_partes = _partes_codigo(str(row.get("sim_ncm_norm") or ""))
         dados[int(row["__sim_row_pos"])] = _RowSimilarityData(
@@ -388,7 +437,7 @@ def _criar_dados_linhas(df: pl.DataFrame) -> dict[int, _RowSimilarityData]:
             sim_chave_ordem=str(row.get("sim_chave_ordem") or ""),
             tokens=tokens,
             strong_tokens=fortes,
-            numeros=_numeros(desc),
+            numeros=_numeros(desc_canonica_unidades),
             ncm_partes=ncm_partes,
             ncm4_partes=_ncm4(ncm_partes),
             cest_partes=_partes_codigo(str(row.get("sim_cest_norm") or "")),
@@ -433,8 +482,11 @@ def _candidate_pairs(
     dados: dict[int, _RowSimilarityData],
     janela_fallback: int,
     usar_ncm_cest: bool,
-    max_group_size: int = 250,
+    max_group_size: int | None = None,
 ) -> set[tuple[int, int]]:
+    if max_group_size is None:
+        max_group_size = int(SIM_CONFIG.get("max_bucket_size", 250))
+
     key_to_rows: dict[str, list[int]] = defaultdict(list)
     for row in dados.values():
         for key in _candidate_keys(row, usar_ncm_cest=usar_ncm_cest):
@@ -442,12 +494,30 @@ def _candidate_pairs(
 
     max_pairs = min(750_000, max(20_000, len(dados) * 60))
     pairs: set[tuple[int, int]] = set()
-    for rows in key_to_rows.values():
+    # Conta de candidatos por linha para aplicar top_k_per_row.
+    candidatos_por_linha: dict[int, int] = defaultdict(int)
+    top_k = int(SIM_CONFIG.get("top_k_per_row", 50))
+    # 0 ou negativo desativa o cap por linha.
+    cap_por_linha = top_k if top_k > 0 else None
+
+    # Iterar do bucket menor para o maior: privilegia chaves discriminativas
+    # (poucas linhas) antes das genericas (muitas linhas).
+    for rows in sorted(key_to_rows.values(), key=len):
         if len(rows) < 2 or len(rows) > max_group_size:
             continue
         rows = sorted(set(rows))
         for a, b in combinations(rows, 2):
-            pairs.add((a, b) if a < b else (b, a))
+            if cap_por_linha is not None and (
+                candidatos_por_linha[a] >= cap_por_linha
+                or candidatos_por_linha[b] >= cap_por_linha
+            ):
+                continue
+            par = (a, b) if a < b else (b, a)
+            if par in pairs:
+                continue
+            pairs.add(par)
+            candidatos_por_linha[a] += 1
+            candidatos_por_linha[b] += 1
             if len(pairs) >= max_pairs:
                 break
         if len(pairs) >= max_pairs:
@@ -484,6 +554,98 @@ def _calcular_pares(
     return pair_scores, melhores
 
 
+def _coesao_membro(
+    pos: int,
+    bloco: list[int],
+    pair_scores: dict[tuple[int, int], _ScoreDetalhe],
+) -> int:
+    """Score minimo de uma linha contra os demais membros do bloco.
+
+    Retorna 100 se for o unico membro. Usa _score_par para tratar pares
+    sem score como -1 (ausencia de aresta).
+    """
+    if len(bloco) <= 1:
+        return 100
+    scores = [
+        _score_par(pair_scores, pos, outro) for outro in bloco if outro != pos
+    ]
+    return min(scores) if scores else 0
+
+
+def _fragmentar_bloco_grande(
+    posicoes: list[int],
+    pair_scores: dict[tuple[int, int], _ScoreDetalhe],
+    max_size: int,
+) -> list[list[int]]:
+    """Quebra um bloco maior que max_size em sub-blocos.
+
+    Estrategia: enquanto houver bloco grande, remove o membro com menor
+    coesao (menor score minimo contra os demais) e o coloca em um bloco
+    separado. Repete ate que o bloco atinja max_size. Os removidos formam
+    um (ou mais) sub-blocos por agrupamento iterativo entre si.
+    """
+    if len(posicoes) <= max_size:
+        return [posicoes]
+
+    centrais = list(posicoes)
+    expulsos: list[int] = []
+    while len(centrais) > max_size:
+        pior = min(
+            centrais,
+            key=lambda pos: _coesao_membro(pos, centrais, pair_scores),
+        )
+        centrais.remove(pior)
+        expulsos.append(pior)
+
+    sub_blocos: list[list[int]] = [centrais]
+    if expulsos:
+        uf_expulsos = _UnionFind(expulsos)
+        for a, b in combinations(expulsos, 2):
+            score = _score_par(pair_scores, a, b)
+            if score >= 0:
+                uf_expulsos.union(a, b)
+        agrupados: dict[int, list[int]] = defaultdict(list)
+        for pos in expulsos:
+            agrupados[uf_expulsos.find(pos)].append(pos)
+        for grupo in agrupados.values():
+            sub_blocos.extend(
+                _fragmentar_bloco_grande(sorted(grupo), pair_scores, max_size)
+            )
+    return sub_blocos
+
+
+def _aplicar_coesao_minima(
+    blocos: dict[int, list[int]],
+    pair_scores: dict[tuple[int, int], _ScoreDetalhe],
+    min_coesao: int,
+) -> dict[int, list[int]]:
+    """Remove de cada bloco membros com coesao abaixo de min_coesao.
+
+    Membros expulsos viram singletons. Operacao iterativa: ao remover um,
+    a coesao dos restantes pode aumentar. min_coesao=0 desativa.
+    """
+    if min_coesao <= 0:
+        return blocos
+
+    resultado: dict[int, list[int]] = {}
+    for root, posicoes in blocos.items():
+        atuais = list(posicoes)
+        if len(atuais) <= 1:
+            resultado[root] = atuais
+            continue
+        while len(atuais) > 1:
+            piores = [
+                (pos, _coesao_membro(pos, atuais, pair_scores)) for pos in atuais
+            ]
+            pior_pos, pior_score = min(piores, key=lambda item: item[1])
+            if pior_score >= min_coesao:
+                break
+            atuais.remove(pior_pos)
+            resultado[pior_pos] = [pior_pos]
+        resultado[root] = atuais
+    return resultado
+
+
 def _formar_blocos(
     dados: dict[int, _RowSimilarityData],
     pair_scores: dict[tuple[int, int], _ScoreDetalhe],
@@ -497,7 +659,27 @@ def _formar_blocos(
     blocos: dict[int, list[int]] = defaultdict(list)
     for pos in dados:
         blocos[uf.find(pos)].append(pos)
-    return {root: sorted(posicoes) for root, posicoes in blocos.items()}
+    blocos_dict = {root: sorted(posicoes) for root, posicoes in blocos.items()}
+
+    # Aplica coesao minima (remove membros fracos do bloco).
+    min_coesao = int(SIM_CONFIG.get("min_coesao_intra_bloco", 0))
+    blocos_dict = _aplicar_coesao_minima(blocos_dict, pair_scores, min_coesao)
+
+    # Aplica cap de tamanho fragmentando blocos grandes.
+    max_size = int(SIM_CONFIG.get("max_bloco_size", 0))
+    if max_size > 0:
+        fragmentados: dict[int, list[int]] = {}
+        for root, posicoes in blocos_dict.items():
+            if len(posicoes) <= max_size:
+                fragmentados[root] = posicoes
+                continue
+            for sub in _fragmentar_bloco_grande(posicoes, pair_scores, max_size):
+                if sub:
+                    chave = sub[0]
+                    fragmentados[chave] = sub
+        blocos_dict = fragmentados
+
+    return blocos_dict
 
 
 def _score_par(pair_scores: dict[tuple[int, int], _ScoreDetalhe], a: int, b: int) -> int:

@@ -106,3 +106,120 @@ def test_pode_ignorar_priorizacao_ncm_cest():
 
     assert out.height == 4
     assert "sim_bloco" in out.columns
+
+
+def test_ncm_com_mesmos_6_primeiros_digitos_recebe_score_85():
+    df = pl.DataFrame(
+        {
+            "id_agrupado": ["1", "2"],
+            "descr_padrao": [
+                "BISCOITO RECHEADO CHOCOLATE 100G",
+                "BISCOITO RECHEADO CHOCOLATE 200G",
+            ],
+            "ncm_padrao": ["19053100", "19053190"],
+            "cest_padrao": ["", ""],
+            "gtin_padrao": ["", ""],
+        }
+    )
+
+    out = ordenar_blocos_similaridade_descricao(df)
+
+    assert out["sim_score_ncm"].drop_nulls().to_list() == [85, 85]
+    assert out["sim_motivos"].str.contains("NCM6_IGUAL").any()
+
+
+def test_ncm_com_mesmos_2_primeiros_digitos_recebe_score_30():
+    df = pl.DataFrame(
+        {
+            "id_agrupado": ["1", "2"],
+            "descr_padrao": [
+                "PRODUTO QUIMICO ALFA",
+                "PRODUTO QUIMICO BETA",
+            ],
+            "ncm_padrao": ["28011000", "28499000"],
+            "cest_padrao": ["", ""],
+            "gtin_padrao": ["", ""],
+        }
+    )
+
+    out = ordenar_blocos_similaridade_descricao(df)
+
+    valores = out["sim_score_ncm"].drop_nulls().to_list()
+    assert valores == [30, 30]
+    assert out["sim_motivos"].str.contains("NCM2_IGUAL").any()
+
+
+def test_ncm_sem_coincidencia_hierarquica_recebe_zero():
+    df = pl.DataFrame(
+        {
+            "id_agrupado": ["1", "2"],
+            "descr_padrao": [
+                "BISCOITO 100G",
+                "PARAFUSO METAL",
+            ],
+            "ncm_padrao": ["19053100", "73181500"],
+            "cest_padrao": ["", ""],
+            "gtin_padrao": ["", ""],
+        }
+    )
+
+    out = ordenar_blocos_similaridade_descricao(df)
+
+    assert out["sim_score_ncm"].drop_nulls().to_list() == [0, 0]
+
+
+def test_max_bloco_size_fragmenta_blocos_muito_grandes():
+    from interface_grafica.services.descricao_similarity_service import SIM_CONFIG
+
+    descricoes = [f"CERVEJA HEINEKEN LATA 350ML PACK {i}" for i in range(8)]
+    df = pl.DataFrame(
+        {
+            "id_agrupado": [str(i) for i in range(8)],
+            "descr_padrao": descricoes,
+            "ncm_padrao": ["22030000"] * 8,
+            "cest_padrao": ["0302100"] * 8,
+            "gtin_padrao": ["7891"] * 8,
+        }
+    )
+    original = SIM_CONFIG["max_bloco_size"]
+    try:
+        SIM_CONFIG["max_bloco_size"] = 3
+        out = ordenar_blocos_similaridade_descricao(df)
+        n_blocos = out["sim_bloco"].n_unique()
+        assert n_blocos >= 3
+        max_size = (
+            out.group_by("sim_bloco").len().select(pl.col("len").max()).item()
+        )
+        assert max_size <= 3
+    finally:
+        SIM_CONFIG["max_bloco_size"] = original
+
+
+def test_coesao_minima_expulsa_membros_fracos():
+    from interface_grafica.services.descricao_similarity_service import SIM_CONFIG
+
+    df = pl.DataFrame(
+        {
+            "id_agrupado": ["1", "2", "3"],
+            "descr_padrao": [
+                "CERVEJA HEINEKEN LATA 350ML",
+                "CERVEJA HEINEKEN 350 ML LATA",
+                "AGUA MINERAL CRYSTAL 500ML SEM GAS",
+            ],
+            "ncm_padrao": ["22030000", "22030000", "22011000"],
+            "cest_padrao": ["0302100", "0302100", ""],
+            "gtin_padrao": ["7891", "7891", "7892"],
+        }
+    )
+    original = SIM_CONFIG["min_coesao_intra_bloco"]
+    try:
+        SIM_CONFIG["min_coesao_intra_bloco"] = 80
+        out = ordenar_blocos_similaridade_descricao(df)
+        bloco_cervejas = out.filter(pl.col("id_agrupado").is_in(["1", "2"]))[
+            "sim_bloco"
+        ].unique()
+        bloco_agua = out.filter(pl.col("id_agrupado") == "3")["sim_bloco"].unique()
+        assert len(bloco_cervejas) == 1
+        assert bloco_cervejas[0] != bloco_agua[0]
+    finally:
+        SIM_CONFIG["min_coesao_intra_bloco"] = original
