@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from PySide6.QtWidgets import QCheckBox, QPushButton
+from PySide6.QtWidgets import QCheckBox, QComboBox, QLabel, QPushButton
 
 
 def apply_similarity_patch() -> None:
@@ -30,15 +30,43 @@ def apply_similarity_patch() -> None:
         if not hasattr(self, "btn_ordenar_similaridade_desc"):
             self.btn_ordenar_similaridade_desc = QPushButton("Ordenar por similaridade")
             self.btn_ordenar_similaridade_desc.setToolTip(
-                "Ordena a tabela por blocos de similaridade de descricao, NCM, CEST e GTIN. "
-                "Nao executa agrupamento automatico."
+                "Ordena a tabela em blocos visuais. Nao executa agrupamento."
             )
-            self.chk_similarity_ncm_cest = QCheckBox("Priorizar NCM/CEST")
-            self.chk_similarity_ncm_cest.setChecked(True)
-            self.chk_similarity_ncm_cest.setToolTip(
-                "Quando marcado, NCM e CEST entram na chave de aproximacao dos blocos. "
-                "GTIN continua sendo considerado no score quando existir."
+
+            self.cmb_metodo_similaridade = QComboBox()
+            self.cmb_metodo_similaridade.addItems([
+                "Composto (legacy)",
+                "Particionamento fiscal",
+                "Apenas descricao",
+            ])
+            self.cmb_metodo_similaridade.setToolTip(
+                "Composto: metodo classico baseado em score ponderado.\n"
+                "Particionamento: agrupa por GTIN/NCM/CEST/UNIDADE primeiro.\n"
+                "Apenas descricao: ignora identificadores, so texto."
             )
+
+            self.chk_incluir_desc_sem_ncm = QCheckBox(
+                "Incluir descricao em itens sem NCM"
+            )
+            self.chk_incluir_desc_sem_ncm.setVisible(False)
+
+            self.lbl_aviso_similaridade = QLabel("")
+            self.lbl_aviso_similaridade.setStyleSheet("color: #c47900;")
+            self.lbl_aviso_similaridade.setVisible(False)
+
+            def _on_metodo_changed(idx: int) -> None:
+                is_particionamento = idx == 1
+                is_so_descricao = idx == 2
+                self.chk_incluir_desc_sem_ncm.setVisible(is_particionamento)
+                if is_so_descricao:
+                    self.lbl_aviso_similaridade.setText(
+                        "Identificadores fiscais ignorados. Revise manualmente."
+                    )
+                    self.lbl_aviso_similaridade.setVisible(True)
+                else:
+                    self.lbl_aviso_similaridade.setVisible(False)
+
+            self.cmb_metodo_similaridade.currentIndexChanged.connect(_on_metodo_changed)
 
             parent = self.btn_reprocessar_agregacao.parentWidget()
             layout = parent.layout() if parent is not None else None
@@ -48,42 +76,71 @@ def apply_similarity_patch() -> None:
                     item = layout.itemAt(idx)
                     if item is not None and item.widget() is self.btn_reprocessar_agregacao:
                         layout.insertWidget(idx + 1, self.btn_ordenar_similaridade_desc)
-                        layout.insertWidget(idx + 2, self.chk_similarity_ncm_cest)
+                        layout.insertWidget(idx + 2, self.cmb_metodo_similaridade)
+                        layout.insertWidget(idx + 3, self.chk_incluir_desc_sem_ncm)
+                        layout.insertWidget(idx + 4, self.lbl_aviso_similaridade)
                         inserted = True
                         break
             if not inserted and layout is not None:
                 layout.addWidget(self.btn_ordenar_similaridade_desc)
-                layout.addWidget(self.chk_similarity_ncm_cest)
+                layout.addWidget(self.cmb_metodo_similaridade)
+                layout.addWidget(self.chk_incluir_desc_sem_ncm)
+                layout.addWidget(self.lbl_aviso_similaridade)
 
         return tab
 
     def ordenar_agregacao_por_similaridade(self) -> None:
-        from interface_grafica.services.descricao_similarity_service import (
-            ordenar_blocos_similaridade_descricao,
-        )
-
         df = self.aggregation_table_model.get_dataframe()
         if df.is_empty():
             self.status.showMessage("Nenhuma linha para ordenar por similaridade.")
             return
 
-        usar_ncm_cest = True
-        if hasattr(self, "chk_similarity_ncm_cest"):
-            usar_ncm_cest = self.chk_similarity_ncm_cest.isChecked()
+        metodo_idx = 0
+        if hasattr(self, "cmb_metodo_similaridade"):
+            metodo_idx = self.cmb_metodo_similaridade.currentIndex()
 
         try:
-            df_ordenado = ordenar_blocos_similaridade_descricao(
-                df,
-                janela=4,
-                limite_bloco=82,
-                usar_ncm_cest=usar_ncm_cest,
-            )
+            if metodo_idx == 0:
+                from interface_grafica.services.descricao_similarity_service import (
+                    ordenar_blocos_similaridade_descricao,
+                )
+                df_ordenado = ordenar_blocos_similaridade_descricao(
+                    df, janela=4, limite_bloco=82, usar_ncm_cest=True,
+                )
+                mensagem = (
+                    "Tabela ordenada (metodo composto). "
+                    "Nenhum agrupamento foi executado."
+                )
+            elif metodo_idx == 1:
+                from interface_grafica.services.particionamento_fiscal import (
+                    ordenar_blocos_por_particionamento_fiscal,
+                )
+                incluir_desc = (
+                    self.chk_incluir_desc_sem_ncm.isChecked()
+                    if hasattr(self, "chk_incluir_desc_sem_ncm") else False
+                )
+                df_ordenado = ordenar_blocos_por_particionamento_fiscal(
+                    df, incluir_camada_so_descricao=incluir_desc,
+                )
+                mensagem = (
+                    f"Tabela ordenada (particionamento fiscal). "
+                    f"{'Camada de descricao ATIVA. ' if incluir_desc else ''}"
+                    "Nenhum agrupamento foi executado."
+                )
+            else:
+                from interface_grafica.services.inverted_index_descricao import (
+                    ordenar_blocos_apenas_por_descricao,
+                )
+                df_ordenado = ordenar_blocos_apenas_por_descricao(df, threshold=0.5)
+                mensagem = (
+                    "Tabela ordenada (apenas descricao). "
+                    "Identificadores fiscais ignorados. "
+                    "Revise os agrupamentos manualmente."
+                )
+
             self.aggregation_table_model.set_dataframe(df_ordenado)
             self._resize_table_once(self.aggregation_table_view, "agregacao_top")
-            self.status.showMessage(
-                "Tabela ordenada por similaridade de descricao, NCM, CEST e GTIN. "
-                "Nenhum agrupamento foi executado."
-            )
+            self.status.showMessage(mensagem)
         except Exception as exc:
             self.show_error("Erro ao ordenar por similaridade", str(exc))
 
