@@ -109,6 +109,8 @@ class MainWindow(
         self.pipeline_worker: PipelineWorker | None = None
         self.query_worker: QueryWorker | None = None
         self.service_worker: ServiceTaskWorker | None = None
+        self.table_page_worker: ServiceTaskWorker | None = None
+        self._table_page_request_id = 0
         self._sql_files: list = []
         self._sql_param_widgets: dict[str, QWidget] = {}
         self._sql_current_sql: str = ""
