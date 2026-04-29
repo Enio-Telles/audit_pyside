@@ -35,12 +35,14 @@ def apply_similarity_patch() -> None:
 
             self.cmb_metodo_similaridade = QComboBox()
             self.cmb_metodo_similaridade.addItems([
-                "Composto (legacy)",
+                "Multiatributo (desc+NCM+CEST+GTIN+codigo)",
+                "Composto legacy",
                 "Particionamento fiscal",
                 "Apenas descricao",
             ])
             self.cmb_metodo_similaridade.setToolTip(
-                "Composto: metodo classico baseado em score ponderado.\n"
+                "Multiatributo: descricao, NCM, CEST, GTIN e cod_item/prod_cprod.\n"
+                "Composto legacy: metodo classico baseado em score ponderado.\n"
                 "Particionamento: agrupa por GTIN/NCM/CEST/UNIDADE primeiro.\n"
                 "Apenas descricao: ignora identificadores, so texto."
             )
@@ -55,8 +57,8 @@ def apply_similarity_patch() -> None:
             self.lbl_aviso_similaridade.setVisible(False)
 
             def _on_metodo_changed(idx: int) -> None:
-                is_particionamento = idx == 1
-                is_so_descricao = idx == 2
+                is_particionamento = idx == 2
+                is_so_descricao = idx == 3
                 self.chk_incluir_desc_sem_ncm.setVisible(is_particionamento)
                 if is_so_descricao:
                     self.lbl_aviso_similaridade.setText(
@@ -101,6 +103,18 @@ def apply_similarity_patch() -> None:
 
         try:
             if metodo_idx == 0:
+                from interface_grafica.services.similaridade_multiatributo_service import (
+                    ordenar_blocos_similaridade_multiatributo,
+                )
+                df_ordenado = ordenar_blocos_similaridade_multiatributo(
+                    df, janela=4, limite_bloco=82, usar_ncm_cest=True,
+                )
+                mensagem = (
+                    "Tabela ordenada por similaridade multiatributo "
+                    "(descricao, NCM, CEST, GTIN e codigo fiscal). "
+                    "Nenhum agrupamento foi executado."
+                )
+            elif metodo_idx == 1:
                 from interface_grafica.services.descricao_similarity_service import (
                     ordenar_blocos_similaridade_descricao,
                 )
@@ -108,10 +122,10 @@ def apply_similarity_patch() -> None:
                     df, janela=4, limite_bloco=82, usar_ncm_cest=True,
                 )
                 mensagem = (
-                    "Tabela ordenada (metodo composto). "
+                    "Tabela ordenada (metodo composto legacy). "
                     "Nenhum agrupamento foi executado."
                 )
-            elif metodo_idx == 1:
+            elif metodo_idx == 2:
                 from interface_grafica.services.particionamento_fiscal import (
                     ordenar_blocos_por_particionamento_fiscal,
                 )
