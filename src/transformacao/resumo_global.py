@@ -38,22 +38,8 @@ def _ano_mes_from_data_col(coluna: str) -> pl.Expr:
 
 
 def _anos_periodos(periodos: pl.DataFrame) -> list[int]:
-    # Preferir data_estoque_inicial (DD/MM/YYYY) quando disponível
-    if not periodos.is_empty() and "data_estoque_inicial" in periodos.columns:
-        anos = (
-            periodos.get_column("data_estoque_inicial")
-            .cast(pl.Utf8, strict=False)
-            .drop_nulls()
-            .str.slice(6, 4)
-            .cast(pl.Int32, strict=False)
-            .drop_nulls()
-            .unique()
-            .sort()
-            .to_list()
-        )
-        if anos:
-            return anos
-    # Fallback: cod_per/periodo_inventario no formato YYYYMM
+    # Preferir cod_per (YYYYMM = ano fiscal correto) sobre data_estoque_inicial
+    # (que pode ser "31/12/YYYY-1", retornando o ano anterior ao periodo de auditoria)
     for coluna in ("cod_per", "periodo_inventario"):
         if not periodos.is_empty() and coluna in periodos.columns:
             periodos_validos = (
@@ -172,31 +158,32 @@ def gerar_resumo_global_dataframe(
         "ICMS_estoque_desac_periodo",
     }.issubset(set(periodos.columns))
     if not periodos.is_empty() and _tem_icms_periodo:
-        if "data_estoque_inicial" in periodos.columns:
-            ano_mes_expr = _ano_mes_from_data_col("data_estoque_inicial")
-        else:
-            col_periodo = next(
-                (c for c in ("cod_per", "periodo_inventario") if c in periodos.columns),
-                None,
+        # Preferir cod_per (YYYYMM = ano fiscal correto) sobre data_estoque_inicial
+        # (que pode ser "31/12/YYYY-1", caindo fora do anos_base e perdendo os valores no join)
+        col_periodo = next(
+            (c for c in ("cod_per", "periodo_inventario") if c in periodos.columns),
+            None,
+        )
+        if col_periodo is not None:
+            primeiro = (
+                periodos.get_column(col_periodo)
+                .cast(pl.Int64, strict=False)
+                .drop_nulls()
+                .head(1)
+                .to_list()
             )
-            # só usa cod_per se estiver em formato YYYYMM (valor > 100)
-            if col_periodo is not None:
-                primeiro = (
-                    periodos.get_column(col_periodo)
-                    .cast(pl.Int64, strict=False)
-                    .drop_nulls()
-                    .head(1)
-                    .to_list()
-                )
-                if primeiro and primeiro[0] > 100:
-                    periodo_int = pl.col(col_periodo).cast(pl.Int64, strict=False)
-                    ano_mes_expr = pl.concat_str(
-                        [(periodo_int // 100).cast(pl.Utf8), pl.lit("-"),
-                         (periodo_int % 100).cast(pl.Utf8).str.zfill(2)]
-                    ).alias("Ano/Mes")
-                else:
-                    col_periodo = None
-            if col_periodo is None:
+            if primeiro and primeiro[0] > 100:
+                periodo_int = pl.col(col_periodo).cast(pl.Int64, strict=False)
+                ano_mes_expr = pl.concat_str(
+                    [(periodo_int // 100).cast(pl.Utf8), pl.lit("-"),
+                     (periodo_int % 100).cast(pl.Utf8).str.zfill(2)]
+                ).alias("Ano/Mes")
+            else:
+                col_periodo = None
+        if col_periodo is None:
+            if "data_estoque_inicial" in periodos.columns:
+                ano_mes_expr = _ano_mes_from_data_col("data_estoque_inicial")
+            else:
                 _tem_icms_periodo = False
 
     if not periodos.is_empty() and _tem_icms_periodo:

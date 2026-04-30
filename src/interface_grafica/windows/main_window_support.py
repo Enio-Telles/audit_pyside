@@ -95,8 +95,10 @@ class MainWindowSupportMixin:
         previous_precision = header.resizeContentsPrecision()
         previous_blocked = header.blockSignals(True)
         try:
-            row_count = table.model().rowCount() if table.model() is not None else 0
-            col_count = table.model().columnCount() if table.model() is not None else 0
+            model_getter = getattr(table, "model", None)
+            model = model_getter() if callable(model_getter) else None
+            row_count = model.rowCount() if model is not None else 0
+            col_count = model.columnCount() if model is not None else 0
             if row_count > 200 or col_count > 30:
                 self._auto_resized_tables.add(key)
                 return

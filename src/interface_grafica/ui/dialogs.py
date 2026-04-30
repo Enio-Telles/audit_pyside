@@ -174,7 +174,8 @@ class DialogoSelecaoConsultas(QDialog):
         self.chk_forcar_reextracao.setChecked(False)
         self.chk_forcar_reextracao.setToolTip(
             "Quando desmarcado, consultas cujo parquet ja existe em disco sao puladas.\n"
-            "Marque apenas quando precisar atualizar os dados ja extraidos."
+            "Se houver checkpoint de uma extracao interrompida, a mesma consulta sera retomada.\n"
+            "Marque apenas quando precisar atualizar os parquets finais ja extraidos."
         )
         layout.addWidget(self.chk_forcar_reextracao)
 

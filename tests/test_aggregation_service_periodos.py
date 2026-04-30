@@ -112,6 +112,30 @@ def test_recalcular_mov_estoque_inclui_calculos_periodos(monkeypatch):
     ]
 
 
+def test_calcular_estoque_codigo_produto_pode_recalcular_base(monkeypatch):
+    ordem = []
+    servico = aggregation_service_module.ServicoAgregacao()
+
+    monkeypatch.setattr(
+        servico,
+        "recalcular_mov_estoque",
+        lambda cnpj, progresso=None, reset_timings=True: ordem.append("mov_base") or True,
+    )
+    monkeypatch.setattr(
+        aggregation_service_module,
+        "gerar_estoque_codigo_produto",
+        lambda cnpj: ordem.append("estoque_codigo_produto") or True,
+    )
+
+    assert (
+        servico.calcular_estoque_codigo_produto(
+            "12345678000190", reset_timings=False, recalcular_base=True
+        )
+        is True
+    )
+    assert ordem == ["mov_base", "estoque_codigo_produto"]
+
+
 def test_artefatos_estoque_defasados_inclui_calculos_periodos(tmp_path, monkeypatch):
     cnpj = "12345678000190"
     pasta_produtos = tmp_path / cnpj / "analises" / "produtos"

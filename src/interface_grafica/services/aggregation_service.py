@@ -103,6 +103,11 @@ except ImportError:
     gerar_aba_produtos_selecionados = None
 
 try:
+    from transformacao.estoque_codigo_produto import gerar_estoque_codigo_produto
+except ImportError:
+    gerar_estoque_codigo_produto = None
+
+try:
     from utilitarios.salvar_para_parquet import salvar_para_parquet
 except ImportError:
     salvar_para_parquet = None
@@ -1826,6 +1831,56 @@ class ServicoAgregacao:
             contexto={**contexto_base, "sucesso": ok_total},
         )
         return ok_total
+
+    def calcular_estoque_codigo_produto(
+        self,
+        cnpj: str,
+        progresso=None,
+        reset_timings: bool = True,
+        recalcular_base: bool = False,
+    ) -> bool:
+        """
+        Gera artefatos separados de estoque por codigo do produto.
+
+        A base usa mov_estoque ja materializado, portanto preserva q_conv/q_conv_fisica
+        calculados com fatores de conversao. Quando recalcular_base=True, reexecuta a
+        cadeia de mov_estoque antes de derivar os artefatos por codigo.
+        """
+        if gerar_estoque_codigo_produto is None:
+            raise ImportError("Nao foi possivel importar estoque_codigo_produto.py.")
+
+        if reset_timings:
+            self.ultimo_tempo_etapas = {}
+        inicio_total = perf_counter()
+        contexto_base = {"cnpj": cnpj, "fluxo": "estoque_codigo_produto"}
+
+        ok_base = True
+        if recalcular_base:
+            ok_base = bool(
+                self.recalcular_mov_estoque(
+                    cnpj,
+                    progresso=progresso,
+                    reset_timings=False,
+                )
+            )
+
+        ok_codigo = (
+            self._executar_etapa_tempo(
+                "estoque_codigo_produto",
+                lambda: bool(gerar_estoque_codigo_produto(cnpj)),
+                progresso,
+                contexto=contexto_base,
+            )
+            if ok_base
+            else False
+        )
+        self._registrar_tempo(
+            "estoque_codigo_produto_total",
+            perf_counter() - inicio_total,
+            progresso,
+            contexto={**contexto_base, "sucesso": bool(ok_base and ok_codigo)},
+        )
+        return bool(ok_base and ok_codigo)
 
     def recalcular_resumos_estoque(
         self, cnpj: str, progresso=None, reset_timings: bool = True

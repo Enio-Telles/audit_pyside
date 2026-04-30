@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import polars as pl
 import pytest
 
 from extracao.extracao_oracle_eficiente import (
     ConsultaSql,
     _extrair_comandos_pre_sql,
+    _gravar_cursor_em_parquet,
     _looks_like_windows_path,
     _relative_sql_path,
     _sql_stem,
@@ -69,3 +71,59 @@ def test_extrair_comandos_pre_sql_strips_semicolons() -> None:
     sql = "-- PRE: ALTER SESSION SET X=1;\nSELECT 1"
     cmds, _ = _extrair_comandos_pre_sql(sql)
     assert not cmds[0].endswith(";")
+
+
+class CursorLotes:
+    description = [("ID",), ("VALOR",)]
+
+    def __init__(self, lotes: list[list[tuple] | BaseException]) -> None:
+        self.lotes = list(lotes)
+        self.fetch_sizes: list[int] = []
+
+    def fetchmany(self, size: int) -> list[tuple]:
+        self.fetch_sizes.append(size)
+        if not self.lotes:
+            return []
+        lote = self.lotes.pop(0)
+        if isinstance(lote, BaseException):
+            raise lote
+        return lote
+
+
+def test_gravar_cursor_em_parquet_retorna_de_checkpoint_apos_interrupcao(
+    tmp_path: Path,
+) -> None:
+    destino = tmp_path / "consulta_12345678000190.parquet"
+    cursor_interrompido = CursorLotes(
+        [
+            [(1, "a"), (2, "b")],
+            RuntimeError("queda de rede"),
+        ]
+    )
+
+    with pytest.raises(RuntimeError, match="queda de rede"):
+        _gravar_cursor_em_parquet(cursor_interrompido, destino, tamanho_lote=2)
+
+    checkpoint_dir = tmp_path / "consulta_12345678000190.parquet.resume"
+    assert checkpoint_dir.exists()
+    assert (checkpoint_dir / "part_000001.parquet").exists()
+    assert not destino.exists()
+
+    cursor_retomada = CursorLotes(
+        [
+            [(1, "a"), (2, "b")],
+            [(3, "c")],
+            [],
+        ]
+    )
+
+    total = _gravar_cursor_em_parquet(cursor_retomada, destino, tamanho_lote=2)
+
+    assert total == 3
+    assert cursor_retomada.fetch_sizes[:2] == [2, 2]
+    assert pl.read_parquet(destino).to_dicts() == [
+        {"id": 1, "valor": "a"},
+        {"id": 2, "valor": "b"},
+        {"id": 3, "valor": "c"},
+    ]
+    assert not checkpoint_dir.exists()

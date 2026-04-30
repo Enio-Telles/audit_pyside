@@ -29,11 +29,7 @@ class RelatoriosProdutosControllerMixin:
             return
 
         path = (
-            CNPJ_ROOT
-            / cnpj
-            / "analises"
-            / "produtos"
-            / f"aba_produtos_selecionados_{cnpj}.parquet"
+            CNPJ_ROOT / cnpj / "analises" / "produtos" / f"aba_produtos_selecionados_{cnpj}.parquet"
         )
 
         def _finalizar_carga_produtos_sel(
@@ -126,6 +122,7 @@ class RelatoriosProdutosControllerMixin:
         worker.finished.connect(lambda: self._active_load_workers.discard(worker))
         worker.finished.connect(worker.deleteLater)
         worker.start()
+
     def _coletar_base_produtos_selecionados(self) -> pl.DataFrame:
         bases: list[pl.DataFrame] = []
         if not self._aba_mensal_df.is_empty() and {
@@ -142,27 +139,15 @@ class RelatoriosProdutosControllerMixin:
             col_id = (
                 "id_agregado"
                 if "id_agregado" in self._mov_estoque_df.columns
-                else (
-                    "id_agrupado"
-                    if "id_agrupado" in self._mov_estoque_df.columns
-                    else None
-                )
+                else ("id_agrupado" if "id_agrupado" in self._mov_estoque_df.columns else None)
             )
-            col_desc = (
-                "descr_padrao"
-                if "descr_padrao" in self._mov_estoque_df.columns
-                else None
-            )
+            col_desc = "descr_padrao" if "descr_padrao" in self._mov_estoque_df.columns else None
             if col_id and col_desc:
                 bases.append(
                     self._mov_estoque_df.select(
                         [
-                            pl.col(col_id)
-                            .cast(pl.Utf8, strict=False)
-                            .alias("id_agregado"),
-                            pl.col(col_desc)
-                            .cast(pl.Utf8, strict=False)
-                            .alias("descr_padrao"),
+                            pl.col(col_id).cast(pl.Utf8, strict=False).alias("id_agregado"),
+                            pl.col(col_desc).cast(pl.Utf8, strict=False).alias("descr_padrao"),
                         ]
                     )
                 )
@@ -176,14 +161,14 @@ class RelatoriosProdutosControllerMixin:
             .unique(subset=["id_agregado"])
             .sort("id_agregado")
         )
+
     def _anos_disponiveis_produtos_selecionados(self) -> list[int]:
         anos: set[int] = set()
         for df in (self._aba_mensal_df, self._aba_anual_df):
             if not df.is_empty() and "ano" in df.columns:
                 try:
                     anos.update(
-                        int(a)
-                        for a in df.get_column("ano").drop_nulls().unique().to_list()
+                        int(a) for a in df.get_column("ano").drop_nulls().unique().to_list()
                     )
                 except Exception:
                     pass
@@ -203,6 +188,7 @@ class RelatoriosProdutosControllerMixin:
                     except Exception:
                         pass
         return sorted(anos)
+
     def _intervalo_anos_produtos_selecionados(self) -> tuple[int | None, int | None]:
         ano_ini_txt = self.produtos_sel_filter_ano_ini.currentText().strip()
         ano_fim_txt = self.produtos_sel_filter_ano_fim.currentText().strip()
@@ -211,6 +197,7 @@ class RelatoriosProdutosControllerMixin:
         if ano_ini is not None and ano_fim is not None and ano_ini > ano_fim:
             ano_ini, ano_fim = ano_fim, ano_ini
         return ano_ini, ano_fim
+
     def _intervalo_datas_produtos_selecionados(
         self,
     ) -> tuple[QDate | None, QDate | None]:
@@ -219,20 +206,16 @@ class RelatoriosProdutosControllerMixin:
         if data_ini is not None and data_fim is not None and data_ini > data_fim:
             data_ini, data_fim = data_fim, data_ini
         return data_ini, data_fim
-    def _filtrar_dataframe_por_ids(
-        self, df: pl.DataFrame, ids: list[str]
-    ) -> pl.DataFrame:
+
+    def _filtrar_dataframe_por_ids(self, df: pl.DataFrame, ids: list[str]) -> pl.DataFrame:
         if df.is_empty() or not ids:
             return df
         if "id_agregado" in df.columns:
-            return df.filter(
-                pl.col("id_agregado").cast(pl.Utf8, strict=False).is_in(ids)
-            )
+            return df.filter(pl.col("id_agregado").cast(pl.Utf8, strict=False).is_in(ids))
         if "id_agrupado" in df.columns:
-            return df.filter(
-                pl.col("id_agrupado").cast(pl.Utf8, strict=False).is_in(ids)
-            )
+            return df.filter(pl.col("id_agrupado").cast(pl.Utf8, strict=False).is_in(ids))
         return df
+
     def _filtrar_dataframe_por_ano(
         self, df: pl.DataFrame, ano_ini: int | None, ano_fim: int | None
     ) -> pl.DataFrame:
@@ -258,6 +241,7 @@ class RelatoriosProdutosControllerMixin:
         if ano_fim is not None:
             df = df.filter(ano_expr <= ano_fim)
         return df
+
     def _filtrar_dataframe_produtos_selecionados_por_data(
         self,
         df: pl.DataFrame,
@@ -274,19 +258,14 @@ class RelatoriosProdutosControllerMixin:
                     [
                         pl.col("ano").cast(pl.Int32, strict=False).cast(pl.Utf8),
                         pl.lit("-"),
-                        pl.col("mes")
-                        .cast(pl.Int32, strict=False)
-                        .cast(pl.Utf8)
-                        .str.zfill(2),
+                        pl.col("mes").cast(pl.Int32, strict=False).cast(pl.Utf8).str.zfill(2),
                         pl.lit("-01"),
                     ]
                 )
                 .str.strptime(pl.Date, "%Y-%m-%d", strict=False)
                 .alias("__data_ref_filtro__")
             )
-            df_tmp = self._filtrar_intervalo_data(
-                df_tmp, "__data_ref_filtro__", data_ini, data_fim
-            )
+            df_tmp = self._filtrar_intervalo_data(df_tmp, "__data_ref_filtro__", data_ini, data_fim)
             return df_tmp.drop("__data_ref_filtro__", strict=False)
 
         if tipo_base == "anual" and "ano" in df.columns:
@@ -300,24 +279,20 @@ class RelatoriosProdutosControllerMixin:
                 .str.strptime(pl.Date, "%Y-%m-%d", strict=False)
                 .alias("__data_ref_filtro__")
             )
-            df_tmp = self._filtrar_intervalo_data(
-                df_tmp, "__data_ref_filtro__", data_ini, data_fim
-            )
+            df_tmp = self._filtrar_intervalo_data(df_tmp, "__data_ref_filtro__", data_ini, data_fim)
             return df_tmp.drop("__data_ref_filtro__", strict=False)
 
         return self._filtrar_intervalo_data(
             df, "Dt_e_s" if "Dt_e_s" in df.columns else "Dt_doc", data_ini, data_fim
         )
+
     def _ids_produtos_selecionados_para_exportacao(self) -> list[str]:
         checked = self.produtos_selecionados_model.get_checked_rows()
-        ids = [
-            str(r.get("id_agregado") or "").strip()
-            for r in checked
-            if r.get("id_agregado")
-        ]
+        ids = [str(r.get("id_agregado") or "").strip() for r in checked if r.get("id_agregado")]
         if ids:
             return sorted(set(ids))
         return []
+
     def aplicar_filtros_produtos_selecionados(self) -> None:
         try:
             base = self._coletar_base_produtos_selecionados()
@@ -373,9 +348,7 @@ class RelatoriosProdutosControllerMixin:
                 else []
             )
 
-            df_mensal = self._filtrar_dataframe_por_ids(
-                self._aba_mensal_df, ids_filtrados
-            )
+            df_mensal = self._filtrar_dataframe_por_ids(self._aba_mensal_df, ids_filtrados)
             df_mensal = self._filtrar_dataframe_por_ano(df_mensal, ano_ini, ano_fim)
             df_mensal = self._filtrar_dataframe_produtos_selecionados_por_data(
                 df_mensal, data_ini, data_fim, "mensal"
@@ -399,12 +372,8 @@ class RelatoriosProdutosControllerMixin:
                         .alias("total_ICMS_entr_desacob_periodo")
                     )
                 else:
-                    agg_mensal.append(
-                        pl.lit(0.0).alias("total_ICMS_entr_desacob_periodo")
-                    )
-                resumo_mensal = df_mensal.group_by(["id_agregado", "descr_padrao"]).agg(
-                    agg_mensal
-                )
+                    agg_mensal.append(pl.lit(0.0).alias("total_ICMS_entr_desacob_periodo"))
+                resumo_mensal = df_mensal.group_by(["id_agregado", "descr_padrao"]).agg(agg_mensal)
             else:
                 resumo_mensal = pl.DataFrame(
                     schema={
@@ -415,9 +384,7 @@ class RelatoriosProdutosControllerMixin:
                     }
                 )
 
-            df_anual = self._filtrar_dataframe_por_ids(
-                self._aba_anual_df, ids_filtrados
-            )
+            df_anual = self._filtrar_dataframe_por_ids(self._aba_anual_df, ids_filtrados)
             df_anual = self._filtrar_dataframe_por_ano(df_anual, ano_ini, ano_fim)
             df_anual = self._filtrar_dataframe_produtos_selecionados_por_data(
                 df_anual, data_ini, data_fim, "anual"
@@ -449,9 +416,7 @@ class RelatoriosProdutosControllerMixin:
                     }
                 )
 
-            df_periodos = self._filtrar_dataframe_por_ids(
-                self._aba_periodos_df, ids_filtrados
-            )
+            df_periodos = self._filtrar_dataframe_por_ids(self._aba_periodos_df, ids_filtrados)
             _tem_col_saida_per = "ICMS_saidas_desac_periodo" in df_periodos.columns
             _tem_col_estoque_per = "ICMS_estoque_desac_periodo" in df_periodos.columns
             if (
@@ -480,9 +445,9 @@ class RelatoriosProdutosControllerMixin:
                     )
                 else:
                     aggs_periodo.append(pl.lit(0.0).alias("total_ICMS_estoque_desac_periodo"))
-                resumo_periodos = df_periodos.group_by(
-                    ["id_agregado", "descr_padrao"]
-                ).agg(aggs_periodo)
+                resumo_periodos = df_periodos.group_by(["id_agregado", "descr_padrao"]).agg(
+                    aggs_periodo
+                )
             else:
                 resumo_periodos = pl.DataFrame(
                     schema={
@@ -494,9 +459,7 @@ class RelatoriosProdutosControllerMixin:
                 )
 
             resumo = (
-                df_produtos.join(
-                    resumo_mensal, on=["id_agregado", "descr_padrao"], how="left"
-                )
+                df_produtos.join(resumo_mensal, on=["id_agregado", "descr_padrao"], how="left")
                 .join(resumo_anual, on=["id_agregado", "descr_padrao"], how="left")
                 .join(resumo_periodos, on=["id_agregado", "descr_padrao"], how="left")
                 .with_columns(
@@ -634,11 +597,15 @@ class RelatoriosProdutosControllerMixin:
                 self.produtos_selecionados_model,
             )
         except Exception as e:
-            QMessageBox.warning(
-                self, "Erro", f"Erro ao consolidar produtos selecionados: {e}"
-            )
+            QMessageBox.warning(self, "Erro", f"Erro ao consolidar produtos selecionados: {e}")
+
     def limpar_vistos_produtos_selecionados(self) -> None:
         self.produtos_selecionados_model.clear_checked()
+        self._salvar_preferencias_tabela(
+            "produtos_selecionados",
+            self.produtos_sel_table,
+            self.produtos_selecionados_model,
+        )
         self.status.showMessage("Vistos limpos.")
 
     def selecionar_top20_icms_produtos_selecionados(self) -> None:
@@ -652,12 +619,7 @@ class RelatoriosProdutosControllerMixin:
         if df.is_empty() or col not in df.columns:
             self.status.showMessage(f"Coluna '{col}' nao disponivel.")
             return
-        top_ids = (
-            df.sort(col, descending=True)
-            .head(n)
-            .get_column("id_agregado")
-            .to_list()
-        )
+        top_ids = df.sort(col, descending=True).head(n).get_column("id_agregado").to_list()
         ids_set = set(top_ids)
         model = self.produtos_selecionados_model
         model.uncheck_all()
@@ -665,6 +627,7 @@ class RelatoriosProdutosControllerMixin:
             row_data = model.row_as_dict(row)
             if row_data.get("id_agregado") in ids_set:
                 from PySide6.QtCore import Qt
+
                 idx = model.index(row, 0)
                 model.setData(idx, Qt.CheckState.Checked, Qt.ItemDataRole.CheckStateRole)
         self.status.showMessage(f"Top {n} por '{col}' marcados.")
@@ -674,11 +637,7 @@ class RelatoriosProdutosControllerMixin:
         self.produtos_sel_filter_desc.clear()
         self.produtos_sel_filter_ano_ini.setCurrentIndex(0)
         self.produtos_sel_filter_ano_fim.setCurrentIndex(0)
-        self.produtos_sel_filter_data_ini.setDate(
-            self.produtos_sel_filter_data_ini.minimumDate()
-        )
-        self.produtos_sel_filter_data_fim.setDate(
-            self.produtos_sel_filter_data_fim.minimumDate()
-        )
+        self.produtos_sel_filter_data_ini.setDate(self.produtos_sel_filter_data_ini.minimumDate())
+        self.produtos_sel_filter_data_fim.setDate(self.produtos_sel_filter_data_fim.minimumDate())
         self.produtos_sel_filter_texto.clear()
         self.aplicar_filtros_produtos_selecionados()

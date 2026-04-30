@@ -34,12 +34,14 @@ def apply_similarity_patch() -> None:
             )
 
             self.cmb_metodo_similaridade = QComboBox()
-            self.cmb_metodo_similaridade.addItems([
-                "Multiatributo (desc+NCM+CEST+GTIN+codigo)",
-                "Composto legacy",
-                "Particionamento fiscal",
-                "Apenas descricao",
-            ])
+            self.cmb_metodo_similaridade.addItems(
+                [
+                    "Multiatributo (desc+NCM+CEST+GTIN+codigo)",
+                    "Composto legacy",
+                    "Particionamento fiscal",
+                    "Apenas descricao",
+                ]
+            )
             self.cmb_metodo_similaridade.setToolTip(
                 "Multiatributo: descricao, NCM, CEST, GTIN e cod_item/prod_cprod.\n"
                 "Composto legacy: metodo classico baseado em score ponderado.\n"
@@ -47,9 +49,7 @@ def apply_similarity_patch() -> None:
                 "Apenas descricao: ignora identificadores, so texto."
             )
 
-            self.chk_incluir_desc_sem_ncm = QCheckBox(
-                "Incluir descricao em itens sem NCM"
-            )
+            self.chk_incluir_desc_sem_ncm = QCheckBox("Incluir descricao em itens sem NCM")
             self.chk_incluir_desc_sem_ncm.setVisible(False)
 
             self.lbl_aviso_similaridade = QLabel("")
@@ -106,8 +106,12 @@ def apply_similarity_patch() -> None:
                 from interface_grafica.services.similaridade_multiatributo_service import (
                     ordenar_blocos_similaridade_multiatributo,
                 )
+
                 df_ordenado = ordenar_blocos_similaridade_multiatributo(
-                    df, janela=4, limite_bloco=82, usar_ncm_cest=True,
+                    df,
+                    janela=4,
+                    limite_bloco=82,
+                    usar_ncm_cest=True,
                 )
                 mensagem = (
                     "Tabela ordenada por similaridade multiatributo "
@@ -118,23 +122,29 @@ def apply_similarity_patch() -> None:
                 from interface_grafica.services.descricao_similarity_service import (
                     ordenar_blocos_similaridade_descricao,
                 )
+
                 df_ordenado = ordenar_blocos_similaridade_descricao(
-                    df, janela=4, limite_bloco=82, usar_ncm_cest=True,
+                    df,
+                    janela=4,
+                    limite_bloco=82,
+                    usar_ncm_cest=True,
                 )
                 mensagem = (
-                    "Tabela ordenada (metodo composto legacy). "
-                    "Nenhum agrupamento foi executado."
+                    "Tabela ordenada (metodo composto legacy). Nenhum agrupamento foi executado."
                 )
             elif metodo_idx == 2:
                 from interface_grafica.services.particionamento_fiscal import (
                     ordenar_blocos_por_particionamento_fiscal,
                 )
+
                 incluir_desc = (
                     self.chk_incluir_desc_sem_ncm.isChecked()
-                    if hasattr(self, "chk_incluir_desc_sem_ncm") else False
+                    if hasattr(self, "chk_incluir_desc_sem_ncm")
+                    else False
                 )
                 df_ordenado = ordenar_blocos_por_particionamento_fiscal(
-                    df, incluir_camada_so_descricao=incluir_desc,
+                    df,
+                    incluir_camada_so_descricao=incluir_desc,
                 )
                 mensagem = (
                     f"Tabela ordenada (particionamento fiscal). "
@@ -145,6 +155,7 @@ def apply_similarity_patch() -> None:
                 from interface_grafica.services.inverted_index_descricao import (
                     ordenar_blocos_apenas_por_descricao,
                 )
+
                 df_ordenado = ordenar_blocos_apenas_por_descricao(df, threshold=0.5)
                 mensagem = (
                     "Tabela ordenada (apenas descricao). "
@@ -161,18 +172,12 @@ def apply_similarity_patch() -> None:
     def _connect_consulta_agregacao_signals_com_similaridade(self) -> None:
         original_connect_consulta_agregacao(self)
         if hasattr(self, "btn_ordenar_similaridade_desc"):
-            import warnings
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore", RuntimeWarning)
-                try:
-                    self.btn_ordenar_similaridade_desc.clicked.disconnect(
-                        self.ordenar_agregacao_por_similaridade
-                    )
-                except Exception:
-                    pass
+            if getattr(self, "_similarity_sort_signal_connected", False):
+                return
             self.btn_ordenar_similaridade_desc.clicked.connect(
                 self.ordenar_agregacao_por_similaridade
             )
+            self._similarity_sort_signal_connected = True
 
     AgregacaoWindowMixin._build_tab_agregacao = _build_tab_agregacao_com_similaridade
     AgregacaoControllerMixin.ordenar_agregacao_por_similaridade = ordenar_agregacao_por_similaridade

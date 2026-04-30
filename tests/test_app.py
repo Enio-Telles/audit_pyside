@@ -29,6 +29,9 @@ def app_module(monkeypatch):
     windows_stub = ModuleType("interface_grafica.windows")
     windows_main_window_stub = ModuleType("interface_grafica.windows.main_window")
     windows_main_window_stub.MainWindow = MagicMock(name="MainWindow")
+    widgets_stub = ModuleType("interface_grafica.widgets")
+    splash_screen_stub = ModuleType("interface_grafica.widgets.splash_screen")
+    splash_screen_stub.ModernSplashScreen = MagicMock(name="ModernSplashScreen")
 
     monkeypatch.setitem(sys.modules, "PySide6", ModuleType("PySide6"))
     monkeypatch.setitem(sys.modules, "PySide6.QtWidgets", qtwidgets_stub)
@@ -44,9 +47,14 @@ def app_module(monkeypatch):
     monkeypatch.setitem(
         sys.modules, "interface_grafica.windows.main_window", windows_main_window_stub
     )
+    monkeypatch.setitem(sys.modules, "interface_grafica.widgets", widgets_stub)
+    monkeypatch.setitem(
+        sys.modules, "interface_grafica.widgets.splash_screen", splash_screen_stub
+    )
     monkeypatch.delitem(sys.modules, "app", raising=False)
 
     module = importlib.import_module("app")
+    module.MainWindow = windows_main_window_stub.MainWindow
     yield module
     sys.modules.pop("app", None)
 
