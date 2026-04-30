@@ -82,6 +82,10 @@ _COLUNAS_FONTE: dict[str, list[str] | None] = {
     ],
 }
 
+# Fontes com volume > este limiar (linhas) sao processadas em batches anuais
+# para evitar OOM em maquinas com RAM limitada.
+_LIMIAR_BATCH_LINHAS = 5_000_000
+
 
 def _ler_primeiro(
     arq_dir: Path, prefix: str, colunas: list[str] | None = None
@@ -98,6 +102,110 @@ def _ler_primeiro(
     schema_cols = set(pl.scan_parquet(arquivos[0]).collect_schema().names())
     cols_existentes = [c for c in colunas if c in schema_cols]
     return pl.scan_parquet(arquivos[0]).select(cols_existentes).collect()
+
+
+def _resolver_arquivo_fonte(arq_dir: Path, prefix: str) -> Path | None:
+    arquivos = sorted(arq_dir.glob(f"{prefix}_*.parquet"))
+    if not arquivos:
+        arquivos = sorted(arq_dir.glob(f"{prefix.upper()}_*.parquet"))
+    return arquivos[0] if arquivos else None
+
+
+def _processar_fonte_em_batches_anuais(
+    arquivo: Path,
+    colunas: list[str] | None,
+    df_mapa: pl.DataFrame,
+    df_attrs: pl.DataFrame,
+    pasta_analises: Path,
+    pasta_brutos: Path,
+    cnpj: str,
+    fonte: str,
+) -> bool:
+    """Processa fonte com muitas linhas ano a ano, concatenando no parquet de saida."""
+    schema_cols = set(pl.scan_parquet(arquivo).collect_schema().names())
+    if colunas is not None:
+        cols_sel = [c for c in colunas if c in schema_cols]
+    else:
+        cols_sel = list(schema_cols)
+
+    if "dhemi" not in schema_cols:
+        rprint(f"[yellow]{fonte}: sem coluna dhemi — batch anual impossivel; carregando completo.[/yellow]")
+        df_src = pl.scan_parquet(arquivo).select(cols_sel).collect()
+        col_desc = _detectar_coluna_descricao(df_src, fonte)
+        if not col_desc:
+            return False
+        exprs = _preservar_colunas_rastreabilidade(df_src, fonte=fonte)
+        if exprs:
+            df_src = df_src.with_columns(exprs)
+        df_out = _anexar_id_agrupado_por_codigo_ou_descricao(df_src, df_mapa, df_attrs, col_desc, pasta_analises, cnpj)
+        return bool(salvar_para_parquet(df_out, pasta_brutos, f"{fonte}_agr_{cnpj}.parquet"))
+
+    anos = (
+        pl.scan_parquet(arquivo)
+        .select(pl.col("dhemi").dt.year().alias("ano"))
+        .unique()
+        .collect()["ano"]
+        .drop_nulls()
+        .sort()
+        .to_list()
+    )
+    rprint(f"[cyan]{fonte}: processamento em batches para anos {anos}[/cyan]")
+
+    batches: list[pl.DataFrame] = []
+    for ano in anos:
+        rprint(f"  [dim]batch {ano}...[/dim]", end=" ")
+        df_ano = (
+            pl.scan_parquet(arquivo)
+            .filter(pl.col("dhemi").dt.year() == ano)
+            .select(cols_sel)
+            .collect()
+        )
+        rprint(f"{df_ano.height:,} linhas")
+
+        col_desc = _detectar_coluna_descricao(df_ano, fonte)
+        if not col_desc:
+            continue
+
+        exprs = _preservar_colunas_rastreabilidade(df_ano, fonte=fonte)
+        if exprs:
+            df_ano = df_ano.with_columns(exprs)
+
+        df_out_ano = _anexar_id_agrupado_por_codigo_ou_descricao(
+            df_src=df_ano,
+            df_mapa=df_mapa,
+            df_attrs=df_attrs,
+            col_desc=col_desc,
+            pasta_analises=pasta_analises,
+            cnpj=cnpj,
+        )
+        batches.append(df_out_ano)
+        del df_ano, df_out_ano
+
+    if not batches:
+        return False
+
+    df_final = pl.concat(batches, how="diagonal_relaxed")
+    del batches
+
+    faltantes = df_final.filter(pl.col("id_agrupado").is_null())
+    if faltantes.height > 0:
+        salvar_para_parquet(faltantes, pasta_analises, f"{fonte}_agr_sem_id_agrupado_{cnpj}.parquet")
+        rprint(f"[yellow]Aviso: {fonte} possui {faltantes.height} linhas sem id_agrupado.[/yellow]")
+        df_final = df_final.filter(pl.col("id_agrupado").is_not_null())
+
+    if df_final.is_empty():
+        return False
+
+    if "descricao_normalizada" not in df_final.columns and "__descricao_normalizada__" in df_final.columns:
+        df_final = df_final.rename({"__descricao_normalizada__": "descricao_normalizada"})
+    else:
+        df_final = df_final.drop("__descricao_normalizada__", strict=False)
+
+    for col in COLUNAS_RASTREABILIDADE_FONTES:
+        if col not in df_final.columns:
+            df_final = df_final.with_columns(pl.lit(None, dtype=pl.Utf8).alias(col))
+
+    return bool(salvar_para_parquet(df_final, pasta_brutos, f"{fonte}_agr_{cnpj}.parquet"))
 
 
 def _construir_mapas(df_mapa: pl.DataFrame) -> tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame]:
@@ -381,6 +489,28 @@ def gerar_fontes_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
     gerou_algum = False
 
     for fonte in fontes:
+        arq_fonte = _resolver_arquivo_fonte(pasta_brutos, fonte)
+        if arq_fonte is None:
+            continue
+
+        n_linhas = pl.scan_parquet(arq_fonte).select(pl.len()).collect().item()
+        rprint(f"[dim]{fonte}: {n_linhas:,} linhas[/dim]")
+
+        if n_linhas > _LIMIAR_BATCH_LINHAS:
+            ok = _processar_fonte_em_batches_anuais(
+                arquivo=arq_fonte,
+                colunas=_COLUNAS_FONTE.get(fonte),
+                df_mapa=df_mapa,
+                df_attrs=df_attrs,
+                pasta_analises=pasta_analises,
+                pasta_brutos=pasta_brutos,
+                cnpj=cnpj,
+                fonte=fonte,
+            )
+            if ok:
+                gerou_algum = True
+            continue
+
         df_src = _ler_primeiro(pasta_brutos, fonte, _COLUNAS_FONTE.get(fonte))
         if df_src is None or df_src.is_empty():
             continue
@@ -413,10 +543,6 @@ def gerar_fontes_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
             )
             df_out = df_out.filter(pl.col("id_agrupado").is_not_null())
             if df_out.is_empty():
-                continue
-                rprint(
-                    f"[yellow]Fonte {fonte}: todas as linhas foram excluidas (sem correspondencia). Pulando.[/yellow]"
-                )
                 continue
 
         if (
