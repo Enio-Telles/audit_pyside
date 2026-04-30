@@ -248,7 +248,10 @@ class ServicoExtracao:
         consultas: list[str | Path],
         data_limite: str | None = None,
         progresso: Callable[[str], None] | None = None,
+        pular_existente: bool = False,
     ) -> list[str]:
+        import pyarrow.parquet as pq
+
         def _msg(texto: str) -> None:
             if progresso:
                 progresso(texto)
@@ -275,6 +278,13 @@ class ServicoExtracao:
                             sql_path = self.consultas_dir / f"{sql_item}.sql"
 
                 nome_consulta = sql_path.stem.lower()
+                arquivo_saida = pasta / f"{nome_consulta}_{cnpj}.parquet"
+
+                if pular_existente and arquivo_saida.exists() and arquivo_saida.stat().st_size > 0:
+                    _msg(f"Pulando {sql_path.name} (parquet ja existe: {arquivo_saida.name})")
+                    arquivos.append(str(arquivo_saida))
+                    continue
+
                 _msg(f"Executando {sql_path.name}...")
 
                 sql_text = ler_sql(sql_path)
@@ -296,54 +306,55 @@ class ServicoExtracao:
                         cursor.prefetchrows = 50_000
                         cursor.execute(sql_text, binds)
                         colunas = [desc[0].lower() for desc in cursor.description]
-                        todas_linhas: list[tuple] = []
-                        while True:
-                            lote = cursor.fetchmany(50_000)
-                            if not lote:
-                                break
-                            todas_linhas.extend(lote)
-                            _msg(
-                                f"  {sql_path.name}: {len(todas_linhas):,} linhas lidas..."
-                            )
 
-                    if todas_linhas:
+                        writer: pq.ParquetWriter | None = None
+                        schema_arrow = None
+                        schema_polars: dict | None = None
+                        total_linhas = 0
+
                         try:
-                            # Otimizacao Bolt: criar DataFrame diretamente de tuplas
-                            df = pl.DataFrame(
-                                todas_linhas,
-                                schema=colunas,
-                                orient="row",
-                                infer_schema_length=min(len(todas_linhas), 50_000),
-                            )
-                        except Exception as exc:
-                            _msg(
-                                f"  Aviso: falha na inferencia automatica ({exc}). Tentando modo robusto..."
-                            )
-                            dados_colunas = {
-                                col_name: [row[i] for row in todas_linhas]
-                                for i, col_name in enumerate(colunas)
-                            }
-                            try:
-                                df = pl.DataFrame(dados_colunas)
-                            except Exception:
-                                dados_string = {
-                                    col_name: [
-                                        str(row[i]) if row[i] is not None else None
-                                        for row in todas_linhas
-                                    ]
-                                    for i, col_name in enumerate(colunas)
-                                }
-                                df = pl.DataFrame(dados_string)
-                    else:
-                        df = pl.DataFrame({col: [] for col in colunas})
+                            while True:
+                                lote = cursor.fetchmany(50_000)
+                                if not lote:
+                                    break
+                                try:
+                                    df_lote = pl.DataFrame(lote, schema=colunas, orient="row")
+                                except Exception:
+                                    dados_colunas = {
+                                        col_name: [row[i] for row in lote]
+                                        for i, col_name in enumerate(colunas)
+                                    }
+                                    df_lote = pl.DataFrame(dados_colunas)
+                                if schema_polars is None:
+                                    schema_polars = df_lote.schema
+                                else:
+                                    df_lote = df_lote.cast(schema_polars, strict=False)
 
-                    arquivo_saida = pasta / f"{nome_consulta}_{cnpj}.parquet"
-                    df.write_parquet(arquivo_saida, compression="snappy")
+                                tabela_arrow = df_lote.to_arrow()
+                                if schema_arrow is None:
+                                    schema_arrow = tabela_arrow.schema
+                                    writer = pq.ParquetWriter(
+                                        arquivo_saida, schema_arrow, compression="snappy"
+                                    )
+                                elif tabela_arrow.schema != schema_arrow:
+                                    tabela_arrow = tabela_arrow.cast(schema_arrow, safe=False)
+                                writer.write_table(tabela_arrow)
+                                total_linhas += df_lote.height
+                                _msg(f"  {sql_path.name}: {total_linhas:,} linhas gravadas...")
+                        finally:
+                            if writer is not None:
+                                writer.close()
+
+                        if schema_arrow is None:
+                            pl.DataFrame({col: [] for col in colunas}).write_parquet(
+                                arquivo_saida, compression="snappy"
+                            )
+
                     arquivos.append(str(arquivo_saida))
-                    _msg(
-                        f"OK {sql_path.name}: {df.height:,} linhas -> {arquivo_saida.name}"
-                    )
+                    _msg(f"OK {sql_path.name}: {total_linhas:,} linhas -> {arquivo_saida.name}")
                 except Exception as exc:
+                    if arquivo_saida.exists() and arquivo_saida.stat().st_size == 0:
+                        arquivo_saida.unlink(missing_ok=True)
                     _msg(f"Erro em {sql_path.name}: {exc}")
 
         return arquivos
@@ -489,6 +500,7 @@ class ServicoPipelineCompleto:
         tabelas: list[str],
         data_limite: str | None = None,
         progresso: Callable[[str], None] | None = None,
+        pular_existente: bool = True,
     ) -> ResultadoPipeline:
         cnpj = ServicoExtracao.sanitizar_cnpj(cnpj)
         resultado = ResultadoPipeline(ok=True, cnpj=cnpj)
@@ -507,6 +519,7 @@ class ServicoPipelineCompleto:
                     consultas,
                     data_limite,
                     _msg,
+                    pular_existente=pular_existente,
                 )
                 resultado.arquivos_gerados.extend(arquivos)
                 resultado.tempos["extracao_oracle"] = perf_counter() - inicio_extracao

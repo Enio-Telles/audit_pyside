@@ -168,6 +168,16 @@ class DialogoSelecaoConsultas(QDialog):
             self.lista.addItem(item)
         layout.addWidget(self.lista, 1)
 
+        self.chk_forcar_reextracao = QCheckBox(
+            "Forcar re-extracao (ignorar parquets ja existentes)"
+        )
+        self.chk_forcar_reextracao.setChecked(False)
+        self.chk_forcar_reextracao.setToolTip(
+            "Quando desmarcado, consultas cujo parquet ja existe em disco sao puladas.\n"
+            "Marque apenas quando precisar atualizar os dados ja extraidos."
+        )
+        layout.addWidget(self.chk_forcar_reextracao)
+
         botoes = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         botoes.accepted.connect(self.accept)
         botoes.rejected.connect(self.reject)
@@ -185,6 +195,9 @@ class DialogoSelecaoConsultas(QDialog):
             if item.checkState() == Qt.Checked:
                 selecionadas.append(item.data(Qt.UserRole))
         return selecionadas
+
+    def forcar_reextracao(self) -> bool:
+        return self.chk_forcar_reextracao.isChecked()
 
 
 class DialogoSelecaoTabelas(QDialog):

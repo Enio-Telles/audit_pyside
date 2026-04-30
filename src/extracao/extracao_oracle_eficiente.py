@@ -419,6 +419,7 @@ def processar_consulta_oracle(
     data_limite_input: str | None = None,
     tamanho_lote: int = TAMANHO_LOTE_PADRAO,
     progresso: Callable[[str], None] | None = None,
+    pular_existente: bool = False,
 ) -> ResultadoConsultaExtracao:
     """Executa uma consulta SQL Oracle e grava o resultado em parquet por lotes."""
 
@@ -427,6 +428,18 @@ def processar_consulta_oracle(
         Path(consulta.caminho) if not isinstance(consulta.caminho, Path) else consulta.caminho
     )
     rotulo_consulta = _formatar_rotulo_consulta(consulta)
+
+    if pular_existente:
+        arquivo_existente = obter_caminho_saida_parquet(consulta, cnpj_limpo, pasta_saida_base)
+        if arquivo_existente.exists() and arquivo_existente.stat().st_size > 0:
+            if progresso:
+                progresso(f"Pulando {rotulo_consulta} (parquet ja existe: {arquivo_existente.name})")
+            return ResultadoConsultaExtracao(
+                consulta=consulta,
+                ok=True,
+                arquivo_saida=arquivo_existente,
+                ignorada=True,
+            )
 
     try:
         conexao = _obter_conexao_thread()
@@ -525,6 +538,7 @@ def executar_extracao_oracle(
     max_workers: int = MAX_WORKERS_PADRAO,
     tamanho_lote: int = TAMANHO_LOTE_PADRAO,
     progresso: Callable[[str], None] | None = None,
+    pular_existente: bool = False,
 ) -> list[ResultadoConsultaExtracao]:
     """Executa a extracao Oracle em paralelo por consulta, com escrita incremental em parquet."""
 
@@ -553,6 +567,7 @@ def executar_extracao_oracle(
                 data_limite_input,
                 tamanho_lote,
                 progresso,
+                pular_existente,
             ): consulta
             for consulta in consultas
         }

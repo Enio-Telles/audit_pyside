@@ -25,6 +25,7 @@ class PipelineWorker(QThread):
         consultas: list[str | Path],
         tabelas: list[str],
         data_limite: str | None = None,
+        pular_existente: bool = True,
     ) -> None:
         super().__init__()
         self.service = service
@@ -32,6 +33,7 @@ class PipelineWorker(QThread):
         self.consultas = consultas
         self.tabelas = tabelas
         self.data_limite = data_limite
+        self.pular_existente = pular_existente
 
     def run(self) -> None:
         try:
@@ -41,6 +43,7 @@ class PipelineWorker(QThread):
                 self.tabelas,
                 self.data_limite,
                 progresso=self.progress.emit,
+                pular_existente=self.pular_existente,
             )
         except Exception as exc:  # pragma: no cover - UI
             from utilitarios.perf_monitor import registrar_evento_performance
