@@ -47,6 +47,9 @@ class RelatoriosWindowMixin:
         self.tab_id_agrupados = self._build_tab_id_agrupados()
         self.estoque_tabs.addTab(self.tab_id_agrupados, "id_agrupados")
 
+        self.tab_aba_codigo_original = self._build_tab_aba_codigo_original()
+        self.estoque_tabs.addTab(self.tab_aba_codigo_original, "Codigo Original")
+
         layout.addWidget(self.estoque_tabs)
         return tab
     def _build_tab_produtos_selecionados(self) -> QWidget:
@@ -817,4 +820,123 @@ class RelatoriosWindowMixin:
             "QTableCornerButton::section { background: #18181b; border: 1px solid #3f3f46; }"
         )
         layout.addWidget(self.aba_mensal_table, 1)
+        return tab
+
+    def _build_tab_aba_codigo_original(self) -> QWidget:
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        tab.setStyleSheet(self.tab_aba_anual.styleSheet())
+
+        self.lbl_aba_codigo_original_titulo = QLabel("Tabela: aba_codigo_original")
+        self.lbl_aba_codigo_original_titulo.setStyleSheet(
+            self.lbl_aba_anual_titulo.styleSheet()
+        )
+        layout.addWidget(self.lbl_aba_codigo_original_titulo)
+
+        toolbar = QHBoxLayout()
+        self.btn_refresh_aba_codigo_original = QPushButton("Recarregar")
+        self.btn_refresh_aba_codigo_original.setIcon(
+            QApplication.style().standardIcon(
+                QApplication.style().StandardPixmap.SP_BrowserReload
+            )
+        )
+        self.btn_apply_aba_codigo_original_filters = QPushButton("Aplicar filtros")
+        self.btn_clear_aba_codigo_original_filters = QPushButton("Limpar filtros")
+        self.btn_export_aba_codigo_original = QPushButton("Exportar Excel")
+        self.btn_destacar_aba_codigo_original = self._criar_botao_destacar()
+        self.cod_original_profile = QComboBox()
+        self.cod_original_profile.addItems(["Padrao", "Auditoria", "Estoque", "Custos"])
+        self.btn_cod_original_profile = QPushButton("Perfil")
+        self.btn_cod_original_save_profile = QPushButton("Salvar perfil")
+        self.btn_cod_original_colunas = QPushButton("Colunas")
+
+        toolbar.addWidget(self.btn_refresh_aba_codigo_original)
+        toolbar.addWidget(self.btn_apply_aba_codigo_original_filters)
+        toolbar.addWidget(self.btn_clear_aba_codigo_original_filters)
+        toolbar.addStretch()
+        toolbar.addWidget(self.cod_original_profile)
+        toolbar.addWidget(self.btn_cod_original_profile)
+        toolbar.addWidget(self.btn_cod_original_save_profile)
+        toolbar.addWidget(self.btn_cod_original_colunas)
+        toolbar.addWidget(self.btn_destacar_aba_codigo_original)
+        toolbar.addWidget(self.btn_export_aba_codigo_original)
+        layout.addLayout(toolbar)
+
+        filtros = QHBoxLayout()
+        self.cod_original_filter_cod = QComboBox()
+        self.cod_original_filter_cod.setEditable(True)
+        self.cod_original_filter_cod.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+        self.cod_original_filter_cod.setMinimumWidth(220)
+        self.cod_original_filter_cod.lineEdit().setPlaceholderText("Filtrar Cod_item")
+        self.cod_original_filter_desc = QLineEdit()
+        self.cod_original_filter_desc.setPlaceholderText("Filtrar descricao")
+        self.cod_original_filter_ano = QComboBox()
+        self.cod_original_filter_ano.addItem("Todos")
+        self.cod_original_filter_mes = QComboBox()
+        self.cod_original_filter_mes.addItems(
+            ["Todos"] + [str(m) for m in range(1, 13)]
+        )
+        self.cod_original_filter_texto = QLineEdit()
+        self.cod_original_filter_texto.setPlaceholderText("Busca ampla...")
+        self.cod_original_filter_num_col = QComboBox()
+        self.cod_original_filter_num_col.addItems(
+            ["valor_entradas", "qtd_entradas", "valor_saidas", "qtd_saidas", "saldo_mes", "valor_estoque"]
+        )
+        self.cod_original_filter_num_min = QLineEdit()
+        self.cod_original_filter_num_min.setPlaceholderText("Min numerico")
+        self.cod_original_filter_num_max = QLineEdit()
+        self.cod_original_filter_num_max.setPlaceholderText("Max numerico")
+
+        for widget in [
+            self.cod_original_filter_cod,
+            self.cod_original_filter_desc,
+            QLabel("Ano"),
+            self.cod_original_filter_ano,
+            QLabel("Mes"),
+            self.cod_original_filter_mes,
+            self.cod_original_filter_texto,
+            QLabel("Numero"),
+            self.cod_original_filter_num_col,
+            self.cod_original_filter_num_min,
+            self.cod_original_filter_num_max,
+        ]:
+            filtros.addWidget(widget)
+        filtros.addStretch()
+        layout.addLayout(filtros)
+
+        self.lbl_aba_codigo_original_status = QLabel(
+            "Selecione um CNPJ para carregar o resumo por codigo original."
+        )
+        self.lbl_aba_codigo_original_status.setStyleSheet(
+            self.lbl_aba_anual_status.styleSheet()
+        )
+        layout.addWidget(self.lbl_aba_codigo_original_status)
+
+        self.lbl_aba_codigo_original_filtros = QLabel("Filtros ativos: nenhum")
+        self.lbl_aba_codigo_original_filtros.setStyleSheet(
+            self.lbl_aba_anual_filtros.styleSheet()
+        )
+        layout.addWidget(self.lbl_aba_codigo_original_filtros)
+
+        self.aba_codigo_original_table = QTableView()
+        self.aba_codigo_original_table.setModel(self.aba_codigo_original_model)
+        self.aba_codigo_original_table.setSelectionBehavior(QAbstractItemView.SelectItems)
+        self.aba_codigo_original_table.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        self.aba_codigo_original_table.setAlternatingRowColors(True)
+        self.aba_codigo_original_table.setSortingEnabled(True)
+        self.aba_codigo_original_table.setWordWrap(True)
+        self.aba_codigo_original_table.setStyleSheet(self.aba_anual_table.styleSheet())
+        self.aba_codigo_original_table.horizontalHeader().setMinimumSectionSize(40)
+        self.aba_codigo_original_table.horizontalHeader().setDefaultSectionSize(170)
+        self.aba_codigo_original_table.horizontalHeader().setMaximumSectionSize(380)
+        self.aba_codigo_original_table.horizontalHeader().setStretchLastSection(True)
+        self.aba_codigo_original_table.horizontalHeader().setSectionsMovable(True)
+        self.aba_codigo_original_table.horizontalHeader().setContextMenuPolicy(
+            Qt.CustomContextMenu
+        )
+        self.aba_codigo_original_table.setStyleSheet(
+            "QTableView::item { padding: 4px 2px; }"
+            "QTableCornerButton::section { background: #18181b; border: 1px solid #3f3f46; }"
+        )
+        layout.addWidget(self.aba_codigo_original_table, 1)
         return tab

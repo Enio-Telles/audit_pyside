@@ -233,6 +233,7 @@ class MainWindowSignalWiringCoreMixin:
             (self.nfe_entrada_table, "nfe_entrada"),
             (self.produtos_sel_table, "produtos_selecionados"),
             (self.id_agrupados_table, "id_agrupados"),
+            (self.aba_codigo_original_table, "aba_codigo_original"),
         ]:
             tabela.setContextMenuPolicy(Qt.CustomContextMenu)
             tabela.customContextMenuRequested.connect(

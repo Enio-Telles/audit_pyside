@@ -11,6 +11,7 @@ from interface_grafica.controllers.consulta_controller import ConsultaController
 from interface_grafica.controllers.conversao_controller import ConversaoControllerMixin
 from interface_grafica.controllers.id_agrupados_controller import IdAgrupadosControllerMixin
 from interface_grafica.controllers.importacao_controller import ImportacaoControllerMixin
+from interface_grafica.controllers.relatorios_codigo_original_controller import RelatoriosCodigoOriginalControllerMixin
 from interface_grafica.controllers.relatorios_periodos_controller import RelatoriosPeriodosControllerMixin
 from interface_grafica.controllers.relatorios_produtos_controller import RelatoriosProdutosControllerMixin
 from interface_grafica.controllers.relatorios_resumo_controller import RelatoriosResumoControllerMixin
@@ -58,6 +59,7 @@ class MainWindow(
     RelatoriosResumoControllerMixin,
     RelatoriosProdutosControllerMixin,
     RelatoriosPeriodosControllerMixin,
+    RelatoriosCodigoOriginalControllerMixin,
     RelatoriosWindowMixin,
     SqlQueryControllerMixin,
     ConversaoControllerMixin,
@@ -156,6 +158,9 @@ class MainWindow(
         self._produtos_selecionados_periodos_df: pl.DataFrame = pl.DataFrame()
         self.resumo_global_model = PolarsTableModel()
         self._resumo_global_df: pl.DataFrame = pl.DataFrame()
+        self.aba_codigo_original_model = PolarsTableModel()
+        self._aba_codigo_original_file_path: Path | None = None
+        self._aba_codigo_original_df: pl.DataFrame = pl.DataFrame()
         self._produtos_sel_preselecionado_cnpj: str | None = None
         self._filtro_cruzado_anuais_ids: list[str] = []
         self._aggregation_file_path: Path | None = None

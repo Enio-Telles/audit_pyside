@@ -419,6 +419,105 @@ class MainWindowSignalWiringRelatoriosMixin:
             )
         )
 
+        self.btn_refresh_aba_codigo_original.clicked.connect(
+            self.atualizar_aba_codigo_original
+        )
+        self.btn_apply_aba_codigo_original_filters.clicked.connect(
+            self.aplicar_filtros_aba_codigo_original
+        )
+        self.btn_clear_aba_codigo_original_filters.clicked.connect(
+            self.limpar_filtros_aba_codigo_original
+        )
+        self.btn_export_aba_codigo_original.clicked.connect(
+            self.exportar_aba_codigo_original_excel
+        )
+        self.btn_cod_original_profile.clicked.connect(
+            lambda: self._aplicar_perfil_tabela(
+                "aba_codigo_original",
+                self.aba_codigo_original_table,
+                self.aba_codigo_original_model,
+                self.cod_original_profile.currentText(),
+                "aba_codigo_original",
+            )
+        )
+        self.btn_cod_original_save_profile.clicked.connect(
+            lambda: self._salvar_perfil_tabela_com_dialogo(
+                "aba_codigo_original",
+                self.aba_codigo_original_table,
+                self.aba_codigo_original_model,
+                self.cod_original_profile,
+                ["Exportar", "Padrao", "Auditoria", "Estoque", "Custos"],
+            )
+        )
+        self.btn_cod_original_colunas.clicked.connect(
+            lambda: self._abrir_menu_colunas_tabela(
+                "aba_codigo_original", self.aba_codigo_original_table
+            )
+        )
+        self.btn_destacar_aba_codigo_original.clicked.connect(
+            lambda: self._destacar_tabela("aba_codigo_original")
+        )
+        self.cod_original_filter_cod.currentTextChanged.connect(
+            lambda _v: self._schedule_debounced(
+                "cod_original_filters", self.aplicar_filtros_aba_codigo_original
+            )
+        )
+        self.cod_original_filter_desc.textChanged.connect(
+            lambda _v: self._schedule_debounced(
+                "cod_original_filters", self.aplicar_filtros_aba_codigo_original
+            )
+        )
+        self.cod_original_filter_ano.currentIndexChanged.connect(
+            lambda _i: self._schedule_debounced(
+                "cod_original_filters", self.aplicar_filtros_aba_codigo_original
+            )
+        )
+        self.cod_original_filter_mes.currentIndexChanged.connect(
+            lambda _i: self._schedule_debounced(
+                "cod_original_filters", self.aplicar_filtros_aba_codigo_original
+            )
+        )
+        self.cod_original_filter_texto.textChanged.connect(
+            lambda _v: self._schedule_debounced(
+                "cod_original_filters", self.aplicar_filtros_aba_codigo_original
+            )
+        )
+        self.cod_original_filter_num_col.currentIndexChanged.connect(
+            lambda _i: self._schedule_debounced(
+                "cod_original_filters", self.aplicar_filtros_aba_codigo_original
+            )
+        )
+        self.cod_original_filter_num_min.textChanged.connect(
+            lambda _v: self._schedule_debounced(
+                "cod_original_filters", self.aplicar_filtros_aba_codigo_original
+            )
+        )
+        self.cod_original_filter_num_max.textChanged.connect(
+            lambda _v: self._schedule_debounced(
+                "cod_original_filters", self.aplicar_filtros_aba_codigo_original
+            )
+        )
+        self.aba_codigo_original_table.horizontalHeader().customContextMenuRequested.connect(
+            lambda pos: self._abrir_menu_colunas_tabela(
+                "aba_codigo_original", self.aba_codigo_original_table, pos
+            )
+        )
+        self.aba_codigo_original_table.horizontalHeader().sectionMoved.connect(
+            lambda *_: self._salvar_preferencias_tabela(
+                "aba_codigo_original", self.aba_codigo_original_table, self.aba_codigo_original_model
+            )
+        )
+        self.aba_codigo_original_table.horizontalHeader().sectionResized.connect(
+            lambda *_: self._salvar_preferencias_tabela(
+                "aba_codigo_original", self.aba_codigo_original_table, self.aba_codigo_original_model
+            )
+        )
+        self.aba_codigo_original_table.horizontalHeader().sortIndicatorChanged.connect(
+            lambda _index, _order: self._salvar_preferencias_tabela(
+                "aba_codigo_original", self.aba_codigo_original_table, self.aba_codigo_original_model
+            )
+        )
+
         self.btn_refresh_produtos_sel.clicked.connect(
             self.atualizar_aba_produtos_selecionados
         )

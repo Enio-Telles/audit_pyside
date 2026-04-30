@@ -72,6 +72,7 @@ class MainWindowNavigationMixin:
         self._reset_table_resize_flag("produtos_selecionados")
         self._reset_table_resize_flag("agregacao_top")
         self._reset_table_resize_flag("agregacao_bottom")
+        self._reset_table_resize_flag("aba_codigo_original")
         self.status.showMessage(f"CNPJ selecionado: {cnpj}")
         self._refresh_profile_combos()
         self.refresh_file_tree(cnpj)
@@ -119,6 +120,8 @@ class MainWindowNavigationMixin:
             self.atualizar_aba_periodos()
         elif "id" in texto_aba and "agrupado" in texto_aba:
             self.atualizar_aba_id_agrupados()
+        elif "codigo" in texto_aba and "original" in texto_aba:
+            self.atualizar_aba_codigo_original()
 
     def refresh_file_tree(self, cnpj: str) -> None:
         self.file_tree.clear()
