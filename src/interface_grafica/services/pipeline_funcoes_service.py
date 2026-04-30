@@ -20,6 +20,17 @@ import polars as pl
 
 from interface_grafica.config import CNPJ_ROOT, SQL_DIR
 
+
+def _parquet_valido_simples(arquivo: Path) -> bool:
+    """Retorna True se o parquet existe, nao esta vazio e pode ser lido sem erro."""
+    if not arquivo.exists() or arquivo.stat().st_size == 0:
+        return False
+    try:
+        pl.scan_parquet(arquivo).collect_schema()
+        return True
+    except Exception:
+        return False
+
 from utilitarios.sql_catalog import list_sql_entries, resolve_sql_path
 from utilitarios.extrair_parametros import extrair_parametros_sql
 from utilitarios.conectar_oracle import obter_conexao_oracle
@@ -279,9 +290,15 @@ class ServicoExtracao:
 
                 nome_consulta = sql_path.stem.lower()
                 arquivo_saida = pasta / f"{nome_consulta}_{cnpj}.parquet"
+                arquivo_tmp = arquivo_saida.with_suffix(".parquet.tmp")
 
-                if pular_existente and arquivo_saida.exists() and arquivo_saida.stat().st_size > 0:
-                    _msg(f"Pulando {sql_path.name} (parquet ja existe: {arquivo_saida.name})")
+                # Remove tmp orphan de execucao anterior interrompida
+                if arquivo_tmp.exists():
+                    arquivo_tmp.unlink(missing_ok=True)
+                    _msg(f"  Removido arquivo temporario incompleto: {arquivo_tmp.name}")
+
+                if pular_existente and _parquet_valido_simples(arquivo_saida):
+                    _msg(f"Pulando {sql_path.name} (parquet valido ja existe: {arquivo_saida.name})")
                     arquivos.append(str(arquivo_saida))
                     continue
 
@@ -311,6 +328,7 @@ class ServicoExtracao:
                         schema_arrow = None
                         schema_polars: dict | None = None
                         total_linhas = 0
+                        concluido = False
 
                         try:
                             while True:
@@ -334,27 +352,36 @@ class ServicoExtracao:
                                 if schema_arrow is None:
                                     schema_arrow = tabela_arrow.schema
                                     writer = pq.ParquetWriter(
-                                        arquivo_saida, schema_arrow, compression="snappy"
+                                        arquivo_tmp, schema_arrow, compression="snappy"
                                     )
                                 elif tabela_arrow.schema != schema_arrow:
                                     tabela_arrow = tabela_arrow.cast(schema_arrow, safe=False)
                                 writer.write_table(tabela_arrow)
                                 total_linhas += df_lote.height
                                 _msg(f"  {sql_path.name}: {total_linhas:,} linhas gravadas...")
+
+                            if schema_arrow is None:
+                                pl.DataFrame({col: [] for col in colunas}).write_parquet(
+                                    arquivo_saida, compression="snappy"
+                                )
+                            else:
+                                writer.close()
+                                writer = None
+                                arquivo_tmp.replace(arquivo_saida)
+                            concluido = True
                         finally:
                             if writer is not None:
-                                writer.close()
-
-                        if schema_arrow is None:
-                            pl.DataFrame({col: [] for col in colunas}).write_parquet(
-                                arquivo_saida, compression="snappy"
-                            )
+                                try:
+                                    writer.close()
+                                except Exception:
+                                    pass
+                            if not concluido:
+                                arquivo_tmp.unlink(missing_ok=True)
 
                     arquivos.append(str(arquivo_saida))
                     _msg(f"OK {sql_path.name}: {total_linhas:,} linhas -> {arquivo_saida.name}")
                 except Exception as exc:
-                    if arquivo_saida.exists() and arquivo_saida.stat().st_size == 0:
-                        arquivo_saida.unlink(missing_ok=True)
+                    arquivo_tmp.unlink(missing_ok=True)
                     _msg(f"Erro em {sql_path.name}: {exc}")
 
         return arquivos

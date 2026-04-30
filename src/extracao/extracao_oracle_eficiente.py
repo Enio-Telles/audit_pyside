@@ -325,6 +325,17 @@ def _escrever_dataframe_vazio(colunas: list[str], arquivo_saida: Path) -> None:
     )
 
 
+def _parquet_valido(arquivo: Path) -> bool:
+    """Retorna True se o arquivo parquet existe, nao esta vazio e pode ser lido sem erro."""
+    if not arquivo.exists() or arquivo.stat().st_size == 0:
+        return False
+    try:
+        pl.scan_parquet(arquivo).collect_schema()
+        return True
+    except Exception:
+        return False
+
+
 def _gravar_cursor_em_parquet(
     cursor,
     arquivo_saida: Path,
@@ -333,15 +344,24 @@ def _gravar_cursor_em_parquet(
     rotulo_consulta: str | None = None,
     forcar_texto: bool = False,
 ) -> int:
-    """Escreve o resultado do cursor em lotes, evitando concentrar toda a consulta em memoria."""
+    """Escreve o resultado do cursor em lotes usando arquivo temporario para gravacao atomica.
 
+    Grava em <arquivo_saida>.tmp e renomeia para o destino final apenas apos o
+    writer.close() bem-sucedido. Interrupcoes deixam apenas o .tmp, nunca um
+    parquet corrompido no lugar definitivo.
+    """
     colunas = [coluna[0].lower() for coluna in cursor.description]
     arquivo_saida.parent.mkdir(parents=True, exist_ok=True)
+    arquivo_tmp = arquivo_saida.with_suffix(".parquet.tmp")
+
+    # Limpa tmp de execucao anterior interrompida
+    arquivo_tmp.unlink(missing_ok=True)
 
     writer: pq.ParquetWriter | None = None
     schema_polars: dict[str, pl.DataType] | None = None
     schema_arrow = None
     total_linhas = 0
+    concluido = False
 
     try:
         while True:
@@ -361,7 +381,7 @@ def _gravar_cursor_em_parquet(
             tabela_arrow = df_lote.to_arrow()
             if schema_arrow is None:
                 schema_arrow = tabela_arrow.schema
-                writer = pq.ParquetWriter(arquivo_saida, schema_arrow, compression="snappy")
+                writer = pq.ParquetWriter(arquivo_tmp, schema_arrow, compression="snappy")
             elif tabela_arrow.schema != schema_arrow:
                 tabela_arrow = tabela_arrow.cast(schema_arrow, safe=False)
 
@@ -370,12 +390,22 @@ def _gravar_cursor_em_parquet(
 
             if progresso and rotulo_consulta:
                 progresso(f"  {rotulo_consulta}: {total_linhas:,} linhas gravadas...")
+
+        if schema_arrow is None:
+            _escrever_dataframe_vazio(colunas, arquivo_saida)
+        else:
+            writer.close()
+            writer = None
+            arquivo_tmp.replace(arquivo_saida)
+        concluido = True
     finally:
         if writer is not None:
-            writer.close()
-
-    if schema_arrow is None:
-        _escrever_dataframe_vazio(colunas, arquivo_saida)
+            try:
+                writer.close()
+            except Exception:
+                pass
+        if not concluido:
+            arquivo_tmp.unlink(missing_ok=True)
 
     return total_linhas
 
@@ -429,17 +459,24 @@ def processar_consulta_oracle(
     )
     rotulo_consulta = _formatar_rotulo_consulta(consulta)
 
-    if pular_existente:
-        arquivo_existente = obter_caminho_saida_parquet(consulta, cnpj_limpo, pasta_saida_base)
-        if arquivo_existente.exists() and arquivo_existente.stat().st_size > 0:
-            if progresso:
-                progresso(f"Pulando {rotulo_consulta} (parquet ja existe: {arquivo_existente.name})")
-            return ResultadoConsultaExtracao(
-                consulta=consulta,
-                ok=True,
-                arquivo_saida=arquivo_existente,
-                ignorada=True,
-            )
+    arquivo_saida_prev = obter_caminho_saida_parquet(consulta, cnpj_limpo, pasta_saida_base)
+
+    # Remove tmp orphan de execucao anterior interrompida antes de qualquer decisao
+    arquivo_tmp_prev = arquivo_saida_prev.with_suffix(".parquet.tmp")
+    if arquivo_tmp_prev.exists():
+        arquivo_tmp_prev.unlink(missing_ok=True)
+        if progresso:
+            progresso(f"  Removido arquivo temporario incompleto: {arquivo_tmp_prev.name}")
+
+    if pular_existente and _parquet_valido(arquivo_saida_prev):
+        if progresso:
+            progresso(f"Pulando {rotulo_consulta} (parquet valido ja existe: {arquivo_saida_prev.name})")
+        return ResultadoConsultaExtracao(
+            consulta=consulta,
+            ok=True,
+            arquivo_saida=arquivo_saida_prev,
+            ignorada=True,
+        )
 
     try:
         conexao = _obter_conexao_thread()
