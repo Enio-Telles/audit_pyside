@@ -76,6 +76,9 @@ SIM_CONFIG = {
     "max_bloco_size": 25,
     # Coesao minima exigida para manter uma linha em um bloco. 0 desativa.
     "min_coesao_intra_bloco": 0,
+    # A partir deste volume, usar o particionamento fiscal ja existente evita
+    # a explosao de pares candidatos do score composto na GUI.
+    "fast_path_min_rows": 1000,
 }
 @dataclass(frozen=True)
 class _RowSimilarityData:
@@ -323,11 +326,11 @@ def _score_composto(a: _RowSimilarityData, b: _RowSimilarityData) -> _ScoreDetal
     # Dynamic scaling for identifier matches.
     # NCM 100/85/70 (item/subposicao/posicao) ativa boost junto com CEST igual.
     if score_cest == 100 and score_ncm in (100, 85, 70) and score_desc >= SIM_CONFIG["min_desc_for_id_boost"]:
-        weight_map["ncm"] = int(round(weight_map["ncm"] * SIM_CONFIG["cest_ncm_scale"]))
-        weight_map["cest"] = int(round(weight_map["cest"] * SIM_CONFIG["cest_ncm_scale"]))
+        weight_map["ncm"] = round(weight_map["ncm"] * SIM_CONFIG["cest_ncm_scale"])
+        weight_map["cest"] = round(weight_map["cest"] * SIM_CONFIG["cest_ncm_scale"])
 
     if score_gtin == 100 and score_desc >= SIM_CONFIG["min_desc_for_id_boost"]:
-        weight_map["gtin"] = int(round(weight_map["gtin"] * SIM_CONFIG["gtin_scale"]))
+        weight_map["gtin"] = round(weight_map["gtin"] * SIM_CONFIG["gtin_scale"])
 
     componentes: list[tuple[int, int]] = [(score_desc, weight_map["desc"])]
     for sc, key in [
@@ -762,6 +765,40 @@ def ordenar_blocos_similaridade_descricao(
 
     janela = max(1, int(janela or 1))
     limite_bloco = max(0, min(100, int(limite_bloco or 0)))
+
+    fast_path_min_rows = int(SIM_CONFIG.get("fast_path_min_rows", 1000) or 0)
+    if usar_ncm_cest and fast_path_min_rows > 0 and df.height >= fast_path_min_rows:
+        from interface_grafica.services.particionamento_fiscal import (
+            ordenar_blocos_por_particionamento_fiscal,
+        )
+
+        out = ordenar_blocos_por_particionamento_fiscal(df)
+        if "sim_motivos" not in out.columns:
+            out = out.with_columns(pl.col("sim_motivo").alias("sim_motivos"))
+        if "sim_chave_ordem" not in out.columns:
+            out = out.with_columns(pl.col("sim_chave_fiscal").alias("sim_chave_ordem"))
+        if "sim_nivel" not in out.columns:
+            out = out.with_columns(
+                pl.when(pl.col("sim_score") >= 90)
+                .then(pl.lit("MUITO PARECIDO"))
+                .when(pl.col("sim_score") >= 82)
+                .then(pl.lit("PARECIDO"))
+                .otherwise(pl.lit("FRACO"))
+                .alias("sim_nivel")
+            )
+        for col, dtype in [
+            ("sim_score_desc", pl.Int64),
+            ("sim_score_tokens", pl.Int64),
+            ("sim_score_numeros", pl.Int64),
+            ("sim_score_ncm", pl.Int64),
+            ("sim_score_cest", pl.Int64),
+            ("sim_score_gtin", pl.Int64),
+        ]:
+            if col not in out.columns:
+                out = out.with_columns(pl.lit(None, dtype=dtype).alias(col))
+        if "sim_desc_referencia" not in out.columns:
+            out = out.with_columns(pl.lit("", dtype=pl.String).alias("sim_desc_referencia"))
+        return out
 
     col_ncm = _resolver_coluna(df, ALIASES_NCM)
     col_cest = _resolver_coluna(df, ALIASES_CEST)

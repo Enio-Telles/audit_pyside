@@ -452,42 +452,37 @@ class RelatoriosProdutosControllerMixin:
             df_periodos = self._filtrar_dataframe_por_ids(
                 self._aba_periodos_df, ids_filtrados
             )
-            col_saida_periodo = (
-                "ICMS_saidas_desac_periodo"
-                if "ICMS_saidas_desac_periodo" in df_periodos.columns
-                else ("ICMS_saidas_desac" if "ICMS_saidas_desac" in df_periodos.columns else None)
-            )
-            col_estoque_periodo = (
-                "ICMS_estoque_desac_periodo"
-                if "ICMS_estoque_desac_periodo" in df_periodos.columns
-                else (
-                    "ICMS_estoque_desac"
-                    if "ICMS_estoque_desac" in df_periodos.columns
-                    else None
-                )
-            )
+            _tem_col_saida_per = "ICMS_saidas_desac_periodo" in df_periodos.columns
+            _tem_col_estoque_per = "ICMS_estoque_desac_periodo" in df_periodos.columns
             if (
                 not df_periodos.is_empty()
                 and {"id_agregado", "descr_padrao"}.issubset(set(df_periodos.columns))
-                and col_saida_periodo is not None
-                and col_estoque_periodo is not None
+                and (_tem_col_saida_per or _tem_col_estoque_per)
             ):
+                aggs_periodo = []
+                if _tem_col_saida_per:
+                    aggs_periodo.append(
+                        pl.col("ICMS_saidas_desac_periodo")
+                        .cast(pl.Float64, strict=False)
+                        .fill_null(0.0)
+                        .sum()
+                        .alias("total_ICMS_saidas_desac_periodo")
+                    )
+                else:
+                    aggs_periodo.append(pl.lit(0.0).alias("total_ICMS_saidas_desac_periodo"))
+                if _tem_col_estoque_per:
+                    aggs_periodo.append(
+                        pl.col("ICMS_estoque_desac_periodo")
+                        .cast(pl.Float64, strict=False)
+                        .fill_null(0.0)
+                        .sum()
+                        .alias("total_ICMS_estoque_desac_periodo")
+                    )
+                else:
+                    aggs_periodo.append(pl.lit(0.0).alias("total_ICMS_estoque_desac_periodo"))
                 resumo_periodos = df_periodos.group_by(
                     ["id_agregado", "descr_padrao"]
-                ).agg(
-                    [
-                        pl.col(col_saida_periodo)
-                        .cast(pl.Float64, strict=False)
-                        .fill_null(0.0)
-                        .sum()
-                        .alias("total_ICMS_saidas_desac_periodo"),
-                        pl.col(col_estoque_periodo)
-                        .cast(pl.Float64, strict=False)
-                        .fill_null(0.0)
-                        .sum()
-                        .alias("total_ICMS_estoque_desac_periodo"),
-                    ]
-                )
+                ).agg(aggs_periodo)
             else:
                 resumo_periodos = pl.DataFrame(
                     schema={
@@ -642,6 +637,38 @@ class RelatoriosProdutosControllerMixin:
             QMessageBox.warning(
                 self, "Erro", f"Erro ao consolidar produtos selecionados: {e}"
             )
+    def limpar_vistos_produtos_selecionados(self) -> None:
+        self.produtos_selecionados_model.clear_checked()
+        self.status.showMessage("Vistos limpos.")
+
+    def selecionar_top20_icms_produtos_selecionados(self) -> None:
+        self._selecionar_top_n_icms_produtos(col="total_ICMS_total", n=20)
+
+    def selecionar_top20_icms_periodo_produtos_selecionados(self) -> None:
+        self._selecionar_top_n_icms_produtos(col="total_ICMS_total_periodo", n=20)
+
+    def _selecionar_top_n_icms_produtos(self, col: str, n: int) -> None:
+        df = self.produtos_selecionados_model.get_dataframe()
+        if df.is_empty() or col not in df.columns:
+            self.status.showMessage(f"Coluna '{col}' nao disponivel.")
+            return
+        top_ids = (
+            df.sort(col, descending=True)
+            .head(n)
+            .get_column("id_agregado")
+            .to_list()
+        )
+        ids_set = set(top_ids)
+        model = self.produtos_selecionados_model
+        model.uncheck_all()
+        for row in range(model.rowCount()):
+            row_data = model.row_as_dict(row)
+            if row_data.get("id_agregado") in ids_set:
+                from PySide6.QtCore import Qt
+                idx = model.index(row, 0)
+                model.setData(idx, Qt.CheckState.Checked, Qt.ItemDataRole.CheckStateRole)
+        self.status.showMessage(f"Top {n} por '{col}' marcados.")
+
     def limpar_filtros_produtos_selecionados(self) -> None:
         self.produtos_sel_filter_id.setCurrentIndex(0)
         self.produtos_sel_filter_desc.clear()

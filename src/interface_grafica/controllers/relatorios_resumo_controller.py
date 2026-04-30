@@ -114,116 +114,112 @@ class RelatoriosResumoControllerMixin:
             anos_base,
             manter_competencias_zeradas=True,
         )
+    def _resumo_global_ids_filtro(self) -> list[str] | None:
+        """Retorna lista de id_agregado dos vistos, ou None se filtro desativado."""
+        if not getattr(self, "chk_resumo_global_so_selecionados", None):
+            return None
+        if not self.chk_resumo_global_so_selecionados.isChecked():
+            return None
+        ids = self._ids_produtos_selecionados_para_exportacao()
+        return ids if ids else []
+
+    def _resumo_global_anos_base(self) -> list[int]:
+        """Retorna intervalo de anos selecionado nos combos da aba Resumo Global."""
+        try:
+            ano_ini = int(self.cmb_resumo_global_ano_ini.currentText())
+            ano_fim = int(self.cmb_resumo_global_ano_fim.currentText())
+        except (AttributeError, ValueError):
+            return list(range(2021, 2026))
+        if ano_ini > ano_fim:
+            ano_ini, ano_fim = ano_fim, ano_ini
+        return list(range(ano_ini, ano_fim + 1))
+
+    def _filtrar_df_por_ids_resumo(
+        self, df: pl.DataFrame, ids: list[str] | None
+    ) -> pl.DataFrame:
+        if ids is None or df.is_empty():
+            return df
+        col = next(
+            (c for c in ("id_agregado", "id_agrupado") if c in df.columns), None
+        )
+        if col is None:
+            return df
+        return df.filter(pl.col(col).is_in(ids))
+
+    def _calcular_e_exibir_resumo_global(self) -> None:
+        ids = self._resumo_global_ids_filtro()
+        anos_base = self._resumo_global_anos_base()
+
+        mensal = self._filtrar_df_por_ids_resumo(self._aba_mensal_df, ids)
+        anual = self._filtrar_df_por_ids_resumo(self._aba_anual_df, ids)
+        periodos = self._filtrar_df_por_ids_resumo(self._aba_periodos_df, ids)
+
+        resumo = self._gerar_resumo_global(mensal, anual, periodos, anos_base)
+        self._resumo_global_df = resumo
+        self.resumo_global_model.set_dataframe(resumo)
+
+        def _soma(col: str) -> float:
+            if col in resumo.columns and resumo.height > 0:
+                return resumo.get_column(col).fill_null(0.0).sum()
+            return 0.0
+
+        total = _soma("Total")
+        total_periodo = _soma("Total_periodo")
+
+        def _fmt(v: float) -> str:
+            return f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+        filtro_desc = ""
+        if ids is not None:
+            filtro_desc = f" | {len(ids)} produto(s) selecionado(s)"
+        self.lbl_resumo_global_status.setText(
+            f"Resumo global consolidado ({resumo.height} competencias"
+            f", {anos_base[0]}-{anos_base[-1]}{filtro_desc})"
+            f" | Total: {_fmt(total)}"
+            f" | Total periodo: {_fmt(total_periodo)}"
+        )
+
     def atualizar_aba_resumo_global(self) -> None:
         cnpj = self.state.current_cnpj
         if not cnpj:
             return
 
-        path = (
-            CNPJ_ROOT
-            / cnpj
-            / "analises"
-            / "produtos"
-            / f"aba_resumo_global_{cnpj}.parquet"
-        )
-
-        def _finalizar_carga_resumo(
-            df: pl.DataFrame | None, uniques: dict | None = None
-        ) -> None:
-            if df is None:
-                self._resumo_global_df = pl.DataFrame()
-                self.resumo_global_model.set_dataframe(pl.DataFrame())
-                self.lbl_resumo_global_status.setText(
-                    "Resumo global nao encontrado para este CNPJ."
+        # Se temos mensal e anual em memória, calcular direto (respeita filtros)
+        if not self._aba_mensal_df.is_empty() and not self._aba_anual_df.is_empty():
+            try:
+                self._calcular_e_exibir_resumo_global()
+            except Exception as e:
+                self.show_error(
+                    "Erro de consolidacao", f"Erro ao calcular Resumo Global: {e}"
                 )
-                return
-            if (
-                not _RESUMO_GLOBAL_PERIODO_COLUMNS.issubset(set(df.columns))
-                and not self._aba_mensal_df.is_empty()
-                and not self._aba_anual_df.is_empty()
-                and {"ano", "mes", "ICMS_entr_desacob"}.issubset(
-                    set(self._aba_mensal_df.columns)
-                )
-                and {"ano", "ICMS_saidas_desac", "ICMS_estoque_desac"}.issubset(
-                    set(self._aba_anual_df.columns)
-                )
-                and (
-                    "ICMS_entr_desacob_periodo" in self._aba_mensal_df.columns
-                    or {
-                        "ICMS_saidas_desac_periodo",
-                        "ICMS_estoque_desac_periodo",
-                    }.issubset(set(self._aba_periodos_df.columns))
-                )
-            ):
-                df = self._gerar_resumo_global(
-                    self._aba_mensal_df,
-                    self._aba_anual_df,
-                    self._aba_periodos_df,
-                )
-            self._resumo_global_df = df
-            self.resumo_global_model.set_dataframe(df)
-            self.lbl_resumo_global_status.setText(
-                f"Resumo global carregado (total {df.height} competencias)."
-            )
-
-        # Tentar carregar o arquivo do resumo global primeiro
-        if path.exists():
-            self.lbl_resumo_global_status.setText("⏳ Carregando resumo global...")
-            self._carregar_dados_parquet_async(
-                path, _finalizar_carga_resumo, "Carregando Resumo Global"
-            )
             return
 
-        # Se não existir resumo global, tentar calcular das abas mensal/anual
-        if self._aba_mensal_df.is_empty() or self._aba_anual_df.is_empty():
-            # Verificar se os arquivos de dependência existem antes de disparar
-            path_mensal = (
-                CNPJ_ROOT
-                / cnpj
-                / "analises"
-                / "produtos"
-                / f"aba_mensal_{cnpj}.parquet"
-            )
-            path_anual = (
-                CNPJ_ROOT / cnpj / "analises" / "produtos" / f"aba_anual_{cnpj}.parquet"
-            )
+        # Sem dados em memória: tentar carregar mensal/anual dos parquets
+        path_mensal = (
+            CNPJ_ROOT / cnpj / "analises" / "produtos" / f"aba_mensal_{cnpj}.parquet"
+        )
+        path_anual = (
+            CNPJ_ROOT / cnpj / "analises" / "produtos" / f"aba_anual_{cnpj}.parquet"
+        )
 
-            needs_load = False
-            if self._aba_mensal_df.is_empty() and path_mensal.exists():
-                self.atualizar_aba_mensal()
-                needs_load = True
-            if self._aba_anual_df.is_empty() and path_anual.exists():
-                self.atualizar_aba_anual()
-                needs_load = True
+        needs_load = False
+        if self._aba_mensal_df.is_empty() and path_mensal.exists():
+            self.atualizar_aba_mensal()
+            needs_load = True
+        if self._aba_anual_df.is_empty() and path_anual.exists():
+            self.atualizar_aba_anual()
+            needs_load = True
 
-            if needs_load:
-                self.lbl_resumo_global_status.setText(
-                    "⏳ Carregando dependências (Mensal/Anual)... Ao terminar, o resumo será atualizado."
-                )
-                return
-            else:
-                self.resumo_global_model.set_dataframe(pl.DataFrame())
-                self._resumo_global_df = pl.DataFrame()
-                self.lbl_resumo_global_status.setText(
-                    "Aguarde o processamento das abas Mensal e Anual."
-                )
-                return
-
-        # Se temos os dados em memória, consolidar em tempo real
-        try:
-            resumo = self._gerar_resumo_global(
-                self._aba_mensal_df,
-                self._aba_anual_df,
-                self._aba_periodos_df,
-            )
-            self._resumo_global_df = resumo
-            self.resumo_global_model.set_dataframe(resumo)
+        if needs_load:
             self.lbl_resumo_global_status.setText(
-                f"Resumo global consolidado ({resumo.height} competencias)."
+                "Carregando dependencias (Mensal/Anual)... "
+                "Ao terminar, o resumo sera atualizado."
             )
-        except Exception as e:
-            self.show_error(
-                "Erro de consolidação", f"Erro ao calcular Resumo Global: {e}"
+        else:
+            self.resumo_global_model.set_dataframe(pl.DataFrame())
+            self._resumo_global_df = pl.DataFrame()
+            self.lbl_resumo_global_status.setText(
+                "Aguarde o processamento das abas Mensal e Anual."
             )
     def exportar_resumo_global_excel(self) -> None:
         if self._resumo_global_df is None or self._resumo_global_df.is_empty():

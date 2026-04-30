@@ -108,6 +108,66 @@ def test_pode_ignorar_priorizacao_ncm_cest():
     assert "sim_bloco" in out.columns
 
 
+def test_base_grande_usa_particionamento_fiscal_com_colunas_compat(monkeypatch):
+    import interface_grafica.services.particionamento_fiscal as particionamento
+    from interface_grafica.services.descricao_similarity_service import SIM_CONFIG
+
+    chamadas = {"n": 0}
+
+    def fake_particionamento(df):
+        chamadas["n"] += 1
+        return df.with_columns(
+            [
+                pl.lit(1).alias("sim_bloco"),
+                pl.lit("ISOLADO").alias("sim_motivo"),
+                pl.lit(4).alias("sim_camada"),
+                pl.lit(0).alias("sim_score"),
+                pl.lit("PRODUTO").alias("sim_desc_norm"),
+                pl.lit("").alias("sim_chave_fiscal"),
+            ]
+        )
+
+    monkeypatch.setattr(
+        particionamento,
+        "ordenar_blocos_por_particionamento_fiscal",
+        fake_particionamento,
+    )
+    original = SIM_CONFIG["fast_path_min_rows"]
+    try:
+        SIM_CONFIG["fast_path_min_rows"] = 3
+        df = pl.DataFrame(
+            {
+                "id_agrupado": ["1", "2", "3"],
+                "descr_padrao": ["Produto A", "Produto B", "Produto C"],
+                "ncm_padrao": ["22030000", "22030000", "22030000"],
+                "cest_padrao": ["0302100", "0302100", "0302100"],
+                "gtin_padrao": ["7891", "7892", "7893"],
+            }
+        )
+
+        out = ordenar_blocos_similaridade_descricao(df)
+
+        assert chamadas["n"] == 1
+        for col in [
+            "sim_bloco",
+            "sim_score",
+            "sim_score_desc",
+            "sim_score_tokens",
+            "sim_score_numeros",
+            "sim_score_ncm",
+            "sim_score_cest",
+            "sim_score_gtin",
+            "sim_nivel",
+            "sim_motivos",
+            "sim_desc_norm",
+            "sim_chave_ordem",
+            "sim_desc_referencia",
+        ]:
+            assert col in out.columns
+    finally:
+        SIM_CONFIG["fast_path_min_rows"] = original
+
+
 def test_ncm_com_mesmos_6_primeiros_digitos_recebe_score_85():
     df = pl.DataFrame(
         {

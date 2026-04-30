@@ -4,6 +4,7 @@ from PySide6.QtCore import QDate, Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
+    QCheckBox,
     QComboBox,
     QDateEdit,
     QHBoxLayout,
@@ -111,6 +112,9 @@ class RelatoriosWindowMixin:
         self.btn_refresh_produtos_sel = QPushButton("Atualizar resumo")
         self.btn_apply_produtos_sel_filters = QPushButton("Aplicar filtros")
         self.btn_clear_produtos_sel_filters = QPushButton("Limpar filtros")
+        self.btn_limpar_vistos_produtos_sel = QPushButton("Limpar vistos")
+        self.btn_top20_icms_produtos_sel = QPushButton("20 maiores ICMS")
+        self.btn_top20_icms_periodo_produtos_sel = QPushButton("20 maiores ICMS periodo")
         self.produtos_sel_profile = QComboBox()
         self.produtos_sel_profile.addItems(["Padrao", "Auditoria", "Estoque", "Custos"])
         self.btn_produtos_sel_profile = QPushButton("Perfil")
@@ -121,6 +125,9 @@ class RelatoriosWindowMixin:
         toolbar.addWidget(self.btn_refresh_produtos_sel)
         toolbar.addWidget(self.btn_apply_produtos_sel_filters)
         toolbar.addWidget(self.btn_clear_produtos_sel_filters)
+        toolbar.addWidget(self.btn_limpar_vistos_produtos_sel)
+        toolbar.addWidget(self.btn_top20_icms_produtos_sel)
+        toolbar.addWidget(self.btn_top20_icms_periodo_produtos_sel)
         toolbar.addStretch()
         toolbar.addWidget(self.produtos_sel_profile)
         toolbar.addWidget(self.btn_produtos_sel_profile)
@@ -570,8 +577,33 @@ class RelatoriosWindowMixin:
 
         toolbar = QHBoxLayout()
         self.btn_refresh_resumo_global = QPushButton("Atualizar Resumo Global")
+
+        self.chk_resumo_global_so_selecionados = QCheckBox("Somente produtos selecionados")
+        self.chk_resumo_global_so_selecionados.setChecked(False)
+        self.chk_resumo_global_so_selecionados.setToolTip(
+            "Quando marcado, consolida apenas os produtos marcados como 'Visto' "
+            "na aba Produtos selecionados."
+        )
+
+        _anos = [str(a) for a in range(2015, 2031)]
+        self.lbl_resumo_global_ano_ini = QLabel("Ano inicial:")
+        self.cmb_resumo_global_ano_ini = QComboBox()
+        self.cmb_resumo_global_ano_ini.addItems(_anos)
+        self.cmb_resumo_global_ano_ini.setCurrentText("2021")
+        self.lbl_resumo_global_ano_fim = QLabel("Ano final:")
+        self.cmb_resumo_global_ano_fim = QComboBox()
+        self.cmb_resumo_global_ano_fim.addItems(_anos)
+        self.cmb_resumo_global_ano_fim.setCurrentText("2025")
+
         self.btn_export_resumo_global = QPushButton("Exportar Excel")
+
         toolbar.addWidget(self.btn_refresh_resumo_global)
+        toolbar.addWidget(self.chk_resumo_global_so_selecionados)
+        toolbar.addSpacing(12)
+        toolbar.addWidget(self.lbl_resumo_global_ano_ini)
+        toolbar.addWidget(self.cmb_resumo_global_ano_ini)
+        toolbar.addWidget(self.lbl_resumo_global_ano_fim)
+        toolbar.addWidget(self.cmb_resumo_global_ano_fim)
         toolbar.addStretch()
         toolbar.addWidget(self.btn_export_resumo_global)
         layout.addLayout(toolbar)

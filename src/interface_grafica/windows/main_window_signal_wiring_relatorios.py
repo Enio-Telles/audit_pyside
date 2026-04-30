@@ -202,6 +202,15 @@ class MainWindowSignalWiringRelatoriosMixin:
 
         self.btn_refresh_resumo_global.clicked.connect(self.atualizar_aba_resumo_global)
         self.btn_export_resumo_global.clicked.connect(self.exportar_resumo_global_excel)
+        self.chk_resumo_global_so_selecionados.toggled.connect(
+            lambda _: self.atualizar_aba_resumo_global()
+        )
+        self.cmb_resumo_global_ano_ini.currentIndexChanged.connect(
+            lambda _: self.atualizar_aba_resumo_global()
+        )
+        self.cmb_resumo_global_ano_fim.currentIndexChanged.connect(
+            lambda _: self.atualizar_aba_resumo_global()
+        )
 
         self.btn_refresh_aba_mensal.clicked.connect(self.atualizar_aba_mensal)
         self.btn_apply_aba_mensal_filters.clicked.connect(
@@ -418,6 +427,15 @@ class MainWindowSignalWiringRelatoriosMixin:
         )
         self.btn_clear_produtos_sel_filters.clicked.connect(
             self.limpar_filtros_produtos_selecionados
+        )
+        self.btn_limpar_vistos_produtos_sel.clicked.connect(
+            self.limpar_vistos_produtos_selecionados
+        )
+        self.btn_top20_icms_produtos_sel.clicked.connect(
+            self.selecionar_top20_icms_produtos_selecionados
+        )
+        self.btn_top20_icms_periodo_produtos_sel.clicked.connect(
+            self.selecionar_top20_icms_periodo_produtos_selecionados
         )
         self.btn_produtos_sel_profile.clicked.connect(
             lambda: self._aplicar_perfil_tabela(
