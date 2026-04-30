@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import concurrent.futures
+import json
 import re
+import shutil
 import threading
 from dataclasses import dataclass
 from decimal import Decimal
@@ -9,6 +11,7 @@ from pathlib import Path, PureWindowsPath
 from typing import Callable, Iterable, Sequence
 
 import polars as pl
+import pyarrow as pa
 import pyarrow.parquet as pq
 from rich import print as rprint
 
@@ -22,6 +25,10 @@ TAMANHO_LOTE_PADRAO = 50_000
 MAX_WORKERS_PADRAO = 5
 
 _thread_local = threading.local()
+
+
+class SchemaMistoExtracaoError(RuntimeError):
+    """Indica incompatibilidade de schema que exige reexecucao em modo texto."""
 
 
 def _looks_like_windows_path(path: Path) -> bool:
@@ -336,6 +343,162 @@ def _parquet_valido(arquivo: Path) -> bool:
         return False
 
 
+def _checkpoint_dir(arquivo_saida: Path) -> Path:
+    return arquivo_saida.with_name(f"{arquivo_saida.name}.resume")
+
+
+def _manifesto_checkpoint_path(diretorio: Path) -> Path:
+    return diretorio / "manifest.json"
+
+
+def _carregar_manifesto_checkpoint(diretorio: Path) -> dict | None:
+    caminho = _manifesto_checkpoint_path(diretorio)
+    if not caminho.exists():
+        return None
+    try:
+        with open(caminho, encoding="utf-8") as f:
+            manifesto = json.load(f)
+        if not isinstance(manifesto, dict) or not isinstance(manifesto.get("chunks"), list):
+            return None
+        return manifesto
+    except Exception:
+        return None
+
+
+def _salvar_manifesto_checkpoint(diretorio: Path, manifesto: dict) -> None:
+    diretorio.mkdir(parents=True, exist_ok=True)
+    caminho = _manifesto_checkpoint_path(diretorio)
+    tmp = caminho.with_suffix(".json.tmp")
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(manifesto, f, ensure_ascii=False, indent=2)
+    tmp.replace(caminho)
+
+
+def _remover_checkpoint(arquivo_saida: Path) -> None:
+    shutil.rmtree(_checkpoint_dir(arquivo_saida), ignore_errors=True)
+
+
+def _preparar_manifesto_checkpoint(
+    arquivo_saida: Path,
+    colunas: list[str],
+    forcar_texto: bool,
+) -> tuple[Path, dict]:
+    diretorio = _checkpoint_dir(arquivo_saida)
+    manifesto = _carregar_manifesto_checkpoint(diretorio)
+    if manifesto is not None:
+        chunks_validos = all((diretorio / item.get("arquivo", "")).exists() for item in manifesto["chunks"])
+        compativel = (
+            manifesto.get("colunas") == colunas
+            and bool(manifesto.get("forcar_texto", False)) == bool(forcar_texto)
+            and chunks_validos
+        )
+        if compativel:
+            return diretorio, manifesto
+
+    shutil.rmtree(diretorio, ignore_errors=True)
+    diretorio.mkdir(parents=True, exist_ok=True)
+    manifesto = {
+        "versao": 1,
+        "colunas": colunas,
+        "forcar_texto": bool(forcar_texto),
+        "chunks": [],
+        "total_linhas": 0,
+    }
+    _salvar_manifesto_checkpoint(diretorio, manifesto)
+    return diretorio, manifesto
+
+
+def _pular_linhas_cursor(
+    cursor,
+    linhas: int,
+    tamanho_lote: int,
+    progresso: Callable[[str], None] | None = None,
+    rotulo_consulta: str | None = None,
+) -> None:
+    restantes = int(linhas)
+    puladas = 0
+    while restantes > 0:
+        lote = cursor.fetchmany(min(tamanho_lote, restantes))
+        if not lote:
+            raise RuntimeError(
+                "Checkpoint de extracao maior que o resultado atual da consulta. "
+                "Remova o checkpoint e execute novamente."
+            )
+        qtd = len(lote)
+        restantes -= qtd
+        puladas += qtd
+        if progresso and rotulo_consulta:
+            progresso(f"  {rotulo_consulta}: {puladas:,}/{linhas:,} linhas retomadas...")
+
+
+def _schema_polars_de_primeiro_chunk(diretorio: Path, manifesto: dict) -> dict[str, pl.DataType] | None:
+    chunks = manifesto.get("chunks") or []
+    if not chunks:
+        return None
+    primeiro = diretorio / chunks[0]["arquivo"]
+    try:
+        return dict(pl.scan_parquet(primeiro).collect_schema())
+    except Exception:
+        return None
+
+
+def _gravar_chunk_checkpoint(
+    diretorio: Path,
+    manifesto: dict,
+    df_lote: pl.DataFrame,
+) -> None:
+    indice = len(manifesto["chunks"]) + 1
+    nome = f"part_{indice:06d}.parquet"
+    destino = diretorio / nome
+    tmp = diretorio / f"{nome}.tmp"
+    df_lote.write_parquet(tmp, compression="snappy")
+    tmp.replace(destino)
+    manifesto["chunks"].append({"arquivo": nome, "linhas": df_lote.height})
+    manifesto["total_linhas"] = int(manifesto.get("total_linhas", 0)) + int(df_lote.height)
+    _salvar_manifesto_checkpoint(diretorio, manifesto)
+
+
+def _consolidar_chunks_checkpoint(
+    diretorio: Path,
+    manifesto: dict,
+    arquivo_saida: Path,
+) -> None:
+    arquivo_tmp = arquivo_saida.with_suffix(".parquet.tmp")
+    arquivo_tmp.unlink(missing_ok=True)
+    chunks = [diretorio / item["arquivo"] for item in manifesto.get("chunks", [])]
+    if not chunks:
+        _escrever_dataframe_vazio(list(manifesto.get("colunas", [])), arquivo_saida)
+        return
+
+    writer: pq.ParquetWriter | None = None
+    schema_arrow: pa.Schema | None = None
+    try:
+        for chunk in chunks:
+            parquet_file = pq.ParquetFile(chunk)
+            for batch in parquet_file.iter_batches():
+                tabela = pa.Table.from_batches([batch])
+                if schema_arrow is None:
+                    schema_arrow = tabela.schema
+                    writer = pq.ParquetWriter(arquivo_tmp, schema_arrow, compression="snappy")
+                elif tabela.schema != schema_arrow:
+                    try:
+                        tabela = tabela.cast(schema_arrow, safe=False)
+                    except Exception as exc:
+                        raise SchemaMistoExtracaoError(str(exc)) from exc
+                writer.write_table(tabela)
+        if writer is not None:
+            writer.close()
+            writer = None
+        arquivo_tmp.replace(arquivo_saida)
+    finally:
+        if writer is not None:
+            try:
+                writer.close()
+            except Exception:
+                pass
+        arquivo_tmp.unlink(missing_ok=True)
+
+
 def _gravar_cursor_em_parquet(
     cursor,
     arquivo_saida: Path,
@@ -344,24 +507,22 @@ def _gravar_cursor_em_parquet(
     rotulo_consulta: str | None = None,
     forcar_texto: bool = False,
 ) -> int:
-    """Escreve o resultado do cursor em lotes usando arquivo temporario para gravacao atomica.
-
-    Grava em <arquivo_saida>.tmp e renomeia para o destino final apenas apos o
-    writer.close() bem-sucedido. Interrupcoes deixam apenas o .tmp, nunca um
-    parquet corrompido no lugar definitivo.
-    """
+    """Escreve o cursor em chunks retomaveis e consolida o parquet ao final."""
     colunas = [coluna[0].lower() for coluna in cursor.description]
     arquivo_saida.parent.mkdir(parents=True, exist_ok=True)
     arquivo_tmp = arquivo_saida.with_suffix(".parquet.tmp")
 
-    # Limpa tmp de execucao anterior interrompida
+    # Limpa tmp de consolidacao anterior interrompida. Chunks de checkpoint sao preservados.
     arquivo_tmp.unlink(missing_ok=True)
 
-    writer: pq.ParquetWriter | None = None
-    schema_polars: dict[str, pl.DataType] | None = None
-    schema_arrow = None
-    total_linhas = 0
-    concluido = False
+    checkpoint, manifesto = _preparar_manifesto_checkpoint(arquivo_saida, colunas, forcar_texto)
+    total_linhas = int(manifesto.get("total_linhas", 0))
+    schema_polars = _schema_polars_de_primeiro_chunk(checkpoint, manifesto)
+
+    if total_linhas > 0:
+        if progresso and rotulo_consulta:
+            progresso(f"Retomando {rotulo_consulta}: {total_linhas:,} linhas ja gravadas.")
+        _pular_linhas_cursor(cursor, total_linhas, tamanho_lote, progresso, rotulo_consulta)
 
     try:
         while True:
@@ -378,34 +539,16 @@ def _gravar_cursor_em_parquet(
             if schema_polars is None:
                 schema_polars = df_lote.schema
 
-            tabela_arrow = df_lote.to_arrow()
-            if schema_arrow is None:
-                schema_arrow = tabela_arrow.schema
-                writer = pq.ParquetWriter(arquivo_tmp, schema_arrow, compression="snappy")
-            elif tabela_arrow.schema != schema_arrow:
-                tabela_arrow = tabela_arrow.cast(schema_arrow, safe=False)
-
-            writer.write_table(tabela_arrow)
+            _gravar_chunk_checkpoint(checkpoint, manifesto, df_lote)
             total_linhas += df_lote.height
 
             if progresso and rotulo_consulta:
-                progresso(f"  {rotulo_consulta}: {total_linhas:,} linhas gravadas...")
+                progresso(f"  {rotulo_consulta}: {total_linhas:,} linhas lidas/gravadas...")
 
-        if schema_arrow is None:
-            _escrever_dataframe_vazio(colunas, arquivo_saida)
-        else:
-            writer.close()
-            writer = None
-            arquivo_tmp.replace(arquivo_saida)
-        concluido = True
-    finally:
-        if writer is not None:
-            try:
-                writer.close()
-            except Exception:
-                pass
-        if not concluido:
-            arquivo_tmp.unlink(missing_ok=True)
+        _consolidar_chunks_checkpoint(checkpoint, manifesto, arquivo_saida)
+        _remover_checkpoint(arquivo_saida)
+    except SchemaMistoExtracaoError:
+        raise
 
     return total_linhas
 
@@ -469,6 +612,7 @@ def processar_consulta_oracle(
             progresso(f"  Removido arquivo temporario incompleto: {arquivo_tmp_prev.name}")
 
     if pular_existente and _parquet_valido(arquivo_saida_prev):
+        _remover_checkpoint(arquivo_saida_prev)
         if progresso:
             progresso(f"Pulando {rotulo_consulta} (parquet valido ja existe: {arquivo_saida_prev.name})")
         return ResultadoConsultaExtracao(
@@ -526,9 +670,10 @@ def processar_consulta_oracle(
                     progresso=progresso,
                     rotulo_consulta=rotulo_consulta,
                 )
-            except Exception as exc:
+            except SchemaMistoExtracaoError as exc:
                 if arquivo_saida.exists():
                     arquivo_saida.unlink(missing_ok=True)
+                _remover_checkpoint(arquivo_saida)
                 if progresso:
                     progresso(
                         f"Aviso {rotulo_consulta}: schema misto detectado; reexecutando consulta em modo texto ({exc})"
@@ -559,6 +704,11 @@ def processar_consulta_oracle(
                 linhas=total_linhas,
             )
     except Exception as exc:
+        if progresso:
+            progresso(
+                f"Extracao interrompida em {rotulo_consulta}. "
+                "Reexecute a mesma consulta para retomar pelos checkpoints gravados."
+            )
         return ResultadoConsultaExtracao(
             consulta=consulta,
             ok=False,

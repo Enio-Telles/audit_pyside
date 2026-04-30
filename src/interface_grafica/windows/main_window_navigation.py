@@ -68,6 +68,7 @@ class MainWindowNavigationMixin:
         self._reset_table_resize_flag("mov_estoque")
         self._reset_table_resize_flag("aba_mensal")
         self._reset_table_resize_flag("aba_anual")
+        self._reset_table_resize_flag("estoque_codigo_produto")
         self._reset_table_resize_flag("nfe_entrada")
         self._reset_table_resize_flag("produtos_selecionados")
         self._reset_table_resize_flag("agregacao_top")

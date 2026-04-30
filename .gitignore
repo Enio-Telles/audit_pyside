@@ -40,6 +40,7 @@ tmp/__pycache__
 
 # Scratch / audit artefacts (not committed)
 scratch/
+.tmp_frontend_refs/
 docstring_audit*.txt
 missing_docstrings.txt
 gh_runs.txt

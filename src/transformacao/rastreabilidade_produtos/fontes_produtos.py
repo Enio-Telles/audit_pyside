@@ -68,13 +68,36 @@ def _detectar_coluna_descricao(df: pl.DataFrame, fonte: str) -> str | None:
     return None
 
 
-def _ler_primeiro(arq_dir: Path, prefix: str) -> pl.DataFrame | None:
+# Colunas usadas pelas etapas downstream (c170_xml, etc.) para fontes grandes.
+# None = carregar todas as colunas (comportamento original para fontes menores).
+# Nfce pode ter 54 M+ linhas e 147 colunas; o pruning reduz a carga de ~1.9 GB para ~600 MB.
+_COLUNAS_FONTE: dict[str, list[str] | None] = {
+    "nfce": [
+        "nsu", "chave_acesso", "prod_nitem", "prod_cprod", "prod_cean", "prod_ceantrib",
+        "prod_ncm", "prod_cest", "prod_xprod", "co_cfop", "prod_ucom", "prod_qcom",
+        "prod_vprod", "prod_vfrete", "prod_vseg", "prod_voutro", "prod_vdesc",
+        "icms_orig", "icms_cst", "icms_csosn", "icms_picms", "icms_vbc", "icms_vicms",
+        "icms_vbcst", "icms_vicmsst", "icms_picmsst", "tipo_operacao", "ide_co_mod",
+        "ide_serie", "nnf", "dhemi", "dhsaient", "co_uf_emit", "co_uf_dest", "co_finnfe",
+    ],
+}
+
+
+def _ler_primeiro(
+    arq_dir: Path, prefix: str, colunas: list[str] | None = None
+) -> pl.DataFrame | None:
+    # Tenta prefixo com separador primeiro para evitar que "nfe" case com "nfce".
+    # Fallback aceita maiusculas (NFe_*.parquet) mas exige separador apos o prefixo.
     arquivos = sorted(arq_dir.glob(f"{prefix}_*.parquet"))
     if not arquivos:
-        arquivos = sorted(arq_dir.glob(f"{prefix}*.parquet"))
+        arquivos = sorted(arq_dir.glob(f"{prefix.upper()}_*.parquet"))
     if not arquivos:
         return None
-    return pl.read_parquet(arquivos[0])
+    if colunas is None:
+        return pl.read_parquet(arquivos[0])
+    schema_cols = set(pl.scan_parquet(arquivos[0]).collect_schema().names())
+    cols_existentes = [c for c in colunas if c in schema_cols]
+    return pl.scan_parquet(arquivos[0]).select(cols_existentes).collect()
 
 
 def _construir_mapas(df_mapa: pl.DataFrame) -> tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame]:
@@ -358,7 +381,7 @@ def gerar_fontes_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
     gerou_algum = False
 
     for fonte in fontes:
-        df_src = _ler_primeiro(pasta_brutos, fonte)
+        df_src = _ler_primeiro(pasta_brutos, fonte, _COLUNAS_FONTE.get(fonte))
         if df_src is None or df_src.is_empty():
             continue
 

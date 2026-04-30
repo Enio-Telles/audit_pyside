@@ -65,9 +65,7 @@ class ImportacaoWindowMixin:
             "Apaga todos os parquets e análises do CNPJ (mantém o registro)"
         )
         self.btn_apagar_cnpj = QPushButton("Apagar CNPJ")
-        self.btn_apagar_cnpj.setStyleSheet(
-            "QPushButton { color: #ef5350; font-weight: bold; }"
-        )
+        self.btn_apagar_cnpj.setStyleSheet("QPushButton { color: #ef5350; font-weight: bold; }")
         self.btn_apagar_cnpj.setToolTip(
             "Remove permanentemente a pasta inteira e os registros no banco"
         )
@@ -77,9 +75,7 @@ class ImportacaoWindowMixin:
 
         actions_row4 = QHBoxLayout()
         self.btn_limpar_tudo = QPushButton("Limpar tudo")
-        self.btn_limpar_tudo.setStyleSheet(
-            "QPushButton { color: #ef5350; font-weight: bold; }"
-        )
+        self.btn_limpar_tudo.setStyleSheet("QPushButton { color: #ef5350; font-weight: bold; }")
         self.btn_limpar_tudo.setToolTip(
             "Remove permanentemente os dados de TODOS os CNPJs cadastrados"
         )
@@ -122,9 +118,7 @@ class ImportacaoWindowMixin:
         root.setSpacing(12)
 
         # ── helpers ──────────────────────────────────────────────────
-        def _field(
-            key: str, placeholder: str = "", password: bool = False
-        ) -> QLineEdit:
+        def _field(key: str, placeholder: str = "", password: bool = False) -> QLineEdit:
             le = QLineEdit()
             le.setText(str(env_vars.get(key, "")))
             if placeholder:
@@ -218,9 +212,7 @@ class ImportacaoWindowMixin:
         form2 = QFormLayout(grp2)
         form2.setLabelAlignment(Qt.AlignRight)
         form2.setFieldGrowthPolicy(QFormLayout.ExpandingFieldsGrow)
-        self._cfg_host_1 = _field(
-            "ORACLE_HOST_1", "ex: exacc-x10-sefinscan.sefin.ro.gov.br"
-        )
+        self._cfg_host_1 = _field("ORACLE_HOST_1", "ex: exacc-x10-sefinscan.sefin.ro.gov.br")
         self._cfg_port_1 = _field("ORACLE_PORT_1", "1521")
         self._cfg_service_1 = _field("ORACLE_SERVICE_1", "ex: svc.bi.users")
         self._cfg_user_1 = _field("DB_USER_1", "CPF ou usuário")
@@ -266,9 +258,7 @@ class ImportacaoWindowMixin:
             self._cfg_log_level.setCurrentIndex(idx)
 
         self._cfg_cache_enabled = QCheckBox("Ativar cache")
-        self._cfg_cache_enabled.setChecked(
-            env_vars.get("CACHE_ENABLED", "true").lower() == "true"
-        )
+        self._cfg_cache_enabled.setChecked(env_vars.get("CACHE_ENABLED", "true").lower() == "true")
 
         self._cfg_cache_ttl = _field("CACHE_TTL", "3600 (segundos)")
 
@@ -326,14 +316,49 @@ class ImportacaoWindowMixin:
     def _build_tab_logs(self) -> QWidget:
         tab = QWidget()
         layout = QVBoxLayout(tab)
+        layout.setContentsMargins(10, 10, 10, 10)
+
+        # Toolbar for log controls
         toolbar = QHBoxLayout()
+
         self.btn_refresh_logs = QPushButton("Atualizar logs")
         self.lbl_logs_status = QLabel("")
+        self.log_search_input = QLineEdit()
+        self.log_search_input.setPlaceholderText("Pesquisar nos logs...")
+        self.log_search_input.setFixedWidth(250)
+
+        self.log_level_filter = QComboBox()
+        self.log_level_filter.addItems(["Todos", "INFO", "WARNING", "ERROR", "DEBUG"])
+        self.log_level_filter.setFixedWidth(100)
+
+        self.btn_clear_logs = QPushButton("Limpar Logs")
+        self.btn_clear_logs.setFixedWidth(120)
+        self.btn_clear_logs.clicked.connect(lambda: self.log_view.clear())
+
+        self.cb_autoscroll = QCheckBox("Auto-scroll")
+        self.cb_autoscroll.setChecked(True)
+
         toolbar.addWidget(self.btn_refresh_logs)
         toolbar.addWidget(self.lbl_logs_status)
+        toolbar.addSpacing(10)
+        toolbar.addWidget(QLabel("Busca:"))
+        toolbar.addWidget(self.log_search_input)
+        toolbar.addSpacing(10)
+        toolbar.addWidget(QLabel("Nível:"))
+        toolbar.addWidget(self.log_level_filter)
         toolbar.addStretch()
+        toolbar.addWidget(self.cb_autoscroll)
+        toolbar.addSpacing(10)
+        toolbar.addWidget(self.btn_clear_logs)
+
         layout.addLayout(toolbar)
+
         self.log_view = QPlainTextEdit()
         self.log_view.setReadOnly(True)
+        self.log_view.setPlaceholderText("Os logs do sistema aparecerão aqui...")
+        self.log_view.setStyleSheet(
+            "font-family: 'Consolas', 'Courier New', monospace; font-size: 11px;"
+        )
         layout.addWidget(self.log_view)
+
         return tab

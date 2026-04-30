@@ -13,6 +13,7 @@ from interface_grafica.controllers.id_agrupados_controller import IdAgrupadosCon
 from interface_grafica.controllers.importacao_controller import ImportacaoControllerMixin
 from interface_grafica.controllers.relatorios_periodos_controller import RelatoriosPeriodosControllerMixin
 from interface_grafica.controllers.relatorios_produtos_controller import RelatoriosProdutosControllerMixin
+from interface_grafica.controllers.relatorios_codigo_produto_controller import RelatoriosCodigoProdutoControllerMixin
 from interface_grafica.controllers.relatorios_resumo_controller import RelatoriosResumoControllerMixin
 from interface_grafica.controllers.relatorios_style_controller import RelatoriosStyleControllerMixin
 from interface_grafica.controllers.shared_state import ViewState
@@ -55,6 +56,7 @@ class MainWindow(
     MainWindowFiltersMixin,
     MainWindowSupportMixin,
     RelatoriosStyleControllerMixin,
+    RelatoriosCodigoProdutoControllerMixin,
     RelatoriosResumoControllerMixin,
     RelatoriosProdutosControllerMixin,
     RelatoriosPeriodosControllerMixin,
@@ -156,6 +158,8 @@ class MainWindow(
         self._produtos_selecionados_periodos_df: pl.DataFrame = pl.DataFrame()
         self.resumo_global_model = PolarsTableModel()
         self._resumo_global_df: pl.DataFrame = pl.DataFrame()
+        self.estoque_codigo_model = PolarsTableModel()
+        self._estoque_codigo_df: pl.DataFrame = pl.DataFrame()
         self._produtos_sel_preselecionado_cnpj: str | None = None
         self._filtro_cruzado_anuais_ids: list[str] = []
         self._aggregation_file_path: Path | None = None

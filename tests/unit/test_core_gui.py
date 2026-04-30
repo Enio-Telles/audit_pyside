@@ -105,6 +105,7 @@ def build_gui_controller(
         lbl_aba_anual_status: TextWidget
         lbl_aba_anual_filtros: TextWidget
         lbl_resumo_global_status: TextWidget
+        lbl_resumo_global_totais: TextWidget
         _aba_periodos_df: pl.DataFrame
         _aba_mensal_df: pl.DataFrame
         _aba_anual_df: pl.DataFrame
@@ -128,6 +129,7 @@ def build_gui_controller(
             self.lbl_aba_anual_status = TextWidget("")
             self.lbl_aba_anual_filtros = TextWidget("")
             self.lbl_resumo_global_status = TextWidget("")
+            self.lbl_resumo_global_totais = TextWidget("")
 
             filter_names = [
                 "periodo_filter_id",
@@ -521,6 +523,11 @@ def test_resumo_global_helpers_cover_empty_and_consolidated(
         ].item()
         == 10.0
     )
+    assert "ICMS entradas: 15,00" in controller.lbl_resumo_global_totais.value
+    assert "ICMS saidas: 7,00" in controller.lbl_resumo_global_totais.value
+    assert "ICMS estoque: 3,00" in controller.lbl_resumo_global_totais.value
+    assert "Total: 25,00" in controller.lbl_resumo_global_totais.value
+    assert "Total periodo: 15,00" in controller.lbl_resumo_global_totais.value
 
 
 def test_resumo_global_cover_branches_sem_parquet(

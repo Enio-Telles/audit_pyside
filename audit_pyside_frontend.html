@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="dark" data-density="comfortable">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Audit Parquet · Frontend</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&family=Fraunces:ital,wght@0,400;0,500;1,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="audit_react/theme.css"/>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="audit_react/data.js"></script>
+<script src="audit_react/table-utils.js"></script>
+<script type="text/babel" src="audit_react/components-base.jsx"></script>
+<script type="text/babel" src="audit_react/tweaks-panel.jsx"></script>
+<script type="text/babel" src="audit_react/tab-similaridade.jsx"></script>
+<script type="text/babel" src="audit_react/data-grid.jsx"></script>
+<script type="text/babel" src="audit_react/tabs-other.jsx"></script>
+<script type="text/babel" src="audit_react/tab-agregacao-unificada.jsx"></script>
+<script type="text/babel" src="audit_react/tab-lote.jsx"></script>
+
+<script type="text/babel" data-presets="react">
+// Note: useState/useEffect referenced via React.* to avoid scope collision
+// with components-base.jsx (Babel wraps all type=text/babel scripts in one scope).
+
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "theme": "dark",
+  "density": "comfortable",
+  "leftPanelOpen": true,
+  "leftPanelWidth": 310,
+  "accent": "amber"
+}/*EDITMODE-END*/;
+
+const ACCENT_PRESETS = {
+  amber:  { accent: "#d4a93a", strong: "#e6bc4a", soft: "rgba(212, 169, 58, 0.12)" },
+  azul:   { accent: "#5b8cc3", strong: "#6fa1d8", soft: "rgba(91, 140, 195, 0.14)" },
+  verde:  { accent: "#5e9a6e", strong: "#73b385", soft: "rgba(94, 154, 110, 0.14)" },
+  ciano:  { accent: "#3fa4a0", strong: "#52bcb8", soft: "rgba(63, 164, 160, 0.14)" },
+  magenta:{ accent: "#b06b9c", strong: "#c483b1", soft: "rgba(176, 107, 156, 0.14)" },
+};
+
+function App() {
+  const [tweaks, setTweak] = useTweaks(TWEAK_DEFAULTS);
+  const [activeTab, setActiveTab] = React.useState("agregacao");
+  const [activeCnpj, setActiveCnpj] = React.useState(window.AUDIT_DATA.CNPJS[0]);
+  // _dataRev dispara re-render quando data.js carrega dados reais do servidor
+  const [_dataRev, _setDataRev] = React.useState(0);
+
+  React.useEffect(() => {
+    const onReload = () => {
+      _setDataRev(r => r + 1);
+      // reaponta activeCnpj para o primeiro CNPJ real se o atual nao existir mais
+      const D = window.AUDIT_DATA;
+      if (!D.CNPJS.find(c => c.id === activeCnpj?.id) && D.CNPJS.length) {
+        setActiveCnpj(D.CNPJS[0]);
+      }
+    };
+    window.addEventListener("audit:data-reload", onReload);
+    return () => window.removeEventListener("audit:data-reload", onReload);
+  }, [activeCnpj]);
+
+  // Apply theme + density + accent globally
+  React.useEffect(() => {
+    document.documentElement.setAttribute("data-theme", tweaks.theme);
+    document.documentElement.setAttribute("data-density", tweaks.density);
+    const preset = ACCENT_PRESETS[tweaks.accent] || ACCENT_PRESETS.amber;
+    document.documentElement.style.setProperty("--accent", preset.accent);
+    document.documentElement.style.setProperty("--accent-strong", preset.strong);
+    document.documentElement.style.setProperty("--accent-soft", preset.soft);
+    document.documentElement.style.setProperty("--left-panel-w", tweaks.leftPanelWidth + "px");
+  }, [tweaks]);
+
+  const tabs = [
+    { id: "configuracoes", label: "Configurações" },
+    { id: "consulta",      label: "Consulta" },
+    { id: "consulta_sql",  label: "Consulta SQL" },
+    { id: "agregacao",     label: "Agregação" },
+    { id: "conversao",     label: "Conversão" },
+    { id: "estoque",       label: "Estoque" },
+    { id: "nfe",           label: "NFe Entrada" },
+    { id: "lote",          label: "Análise Lote CNPJ" },
+    { id: "logs",          label: "Logs" },
+  ];
+
+  const D = window.AUDIT_DATA;
+
+  // Troca de CNPJ: atualiza estado e recarrega parquets + dados de analise do novo CNPJ
+  const handleCnpjChange = React.useCallback(async (id) => {
+    const novo = window.AUDIT_DATA.CNPJS.find(c => c.id === id) || activeCnpj;
+    setActiveCnpj(novo);
+    try {
+      const [pqs] = await Promise.all([
+        window.AUDIT_API.listarParquets(id),
+        window.AUDIT_API.carregarDadosCnpj(id),
+      ]);
+      if (Array.isArray(pqs) && pqs.length && !pqs[0]?.error) {
+        window.AUDIT_DATA.PARQUETS = pqs;
+      }
+      window.dispatchEvent(new CustomEvent("audit:data-reload"));
+    } catch { /* servidor offline */ }
+  }, [activeCnpj]);
+
+  const refreshActiveCnpj = React.useCallback(async (id) => {
+    const target = id || activeCnpj?.id;
+    if (!target) return;
+    const [cnpjsReal, pqs] = await Promise.all([
+      window.AUDIT_API.listarCnpjs(),
+      window.AUDIT_API.listarParquets(target),
+      window.AUDIT_API.carregarDadosCnpj(target),
+    ]);
+    if (Array.isArray(cnpjsReal) && cnpjsReal.length && !cnpjsReal[0]?.error) {
+      window.AUDIT_DATA.CNPJS = cnpjsReal.map(c => ({
+        id: c.id,
+        razao: c.razao || c.id,
+        periodo: c.periodo || "—",
+        uf: c.uf || "—",
+        parquets: c.parquets || 0,
+      }));
+    }
+    if (Array.isArray(pqs) && pqs.length && !pqs[0]?.error) {
+      window.AUDIT_DATA.PARQUETS = pqs;
+    }
+    const atualizado = window.AUDIT_DATA.CNPJS.find(c => c.id === target);
+    if (atualizado) setActiveCnpj(atualizado);
+    window.dispatchEvent(new CustomEvent("audit:data-reload"));
+  }, [activeCnpj]);
+
+  const handlePanelAction = React.useCallback(async (action, payload = {}) => {
+    const target = (payload.cnpj || activeCnpj?.id || "").replace(/\D/g, "");
+    if (!target) {
+      window.auditAppendLog?.("WARN", "frontend", "Informe um CPF/CNPJ antes de executar.");
+      return;
+    }
+    try {
+      if (action === "atualizar") {
+        window.auditAppendLog?.("INFO", "frontend", `Atualizando lista do CNPJ ${target}`);
+        await refreshActiveCnpj(target);
+        return;
+      }
+      if (action === "extrair") {
+        window.auditAppendLog?.("INFO", "frontend", `Iniciando extracao do CNPJ ${target}`);
+        const result = await window.AUDIT_API.extrairCnpj({
+          cnpj: target,
+          data_limite: payload.dataLimite,
+        });
+        const lvl = result.ok ? "INFO" : "ERROR";
+        window.auditAppendLog?.(lvl, "pipeline", result.ok ? `Extracao concluida para ${target}` : `Falha na extracao de ${target}`);
+        await refreshActiveCnpj(target);
+        return;
+      }
+      if (action === "processar") {
+        window.auditAppendLog?.("INFO", "frontend", `Iniciando processamento do CNPJ ${target}`);
+        const result = await window.AUDIT_API.processarCnpj({ cnpj: target });
+        const lvl = result.ok ? "INFO" : "ERROR";
+        window.auditAppendLog?.(lvl, "pipeline", result.ok ? `Processamento concluido para ${target}` : `Falha no processamento de ${target}`);
+        await refreshActiveCnpj(target);
+      }
+    } catch (err) {
+      window.auditAppendLog?.("ERROR", "frontend", err?.message || String(err));
+    }
+  }, [activeCnpj, refreshActiveCnpj]);
+
+  return (
+    <div className="app-shell">
+      <AppHeader
+        activeCnpj={activeCnpj.id}
+        period={activeCnpj.periodo}
+        panelOpen={tweaks.leftPanelOpen}
+        onTogglePanel={() => setTweak("leftPanelOpen", !tweaks.leftPanelOpen)}
+      />
+
+      <div className={`app-body ${tweaks.leftPanelOpen ? "" : "no-panel"}`}>
+        {!tweaks.leftPanelOpen && (
+          <div className="panel-rail">
+            <button className="panel-rail-btn"
+              title="Reabrir painel lateral"
+              onClick={() => setTweak("leftPanelOpen", true)}>
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                <path d="M5 4l4 4-4 4" stroke="currentColor" strokeWidth="1.5"
+                  strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </button>
+            <div className="panel-rail-vlabel">CNPJ • Parquets</div>
+          </div>
+        )}
+        <LeftPanel
+          cnpjs={D.CNPJS}
+          parquets={D.PARQUETS}
+          activeCnpj={activeCnpj.id}
+          setActiveCnpj={handleCnpjChange}
+          onAction={handlePanelAction}
+        />
+
+        <div className="app-main">
+          <TabBar tabs={tabs} active={activeTab} setActive={setActiveTab}/>
+          <div className="tab-content" data-screen-label={activeTab}>
+            {activeTab === "configuracoes" && <ConfiguracoesTab/>}
+            {activeTab === "consulta"      && <ConsultaTab parquets={D.PARQUETS}/>}
+            {activeTab === "consulta_sql"  && <ConsultaSQLTab/>}
+            {activeTab === "agregacao"     && <AgregacaoUnificadaTab rows={D.SIM_ROWS} stats={D.SIM_STATS}/>}
+            {activeTab === "conversao"     && <ConversaoTab rows={D.CONVERSAO_ROWS}/>}
+            {activeTab === "estoque"       && <EstoqueTab rows={D.ESTOQUE_ROWS}/>}
+            {activeTab === "nfe"           && <NFeEntradaTab/>}
+            {activeTab === "lote"          && <LoteTab/>}
+            {activeTab === "logs"          && <LogsTab lines={D.LOG_LINES}/>}
+          </div>
+        </div>
+      </div>
+
+      <TweaksPanel title="Tweaks · audit frontend">
+        <TweakSection label="Aparência">
+          <TweakRadio label="Tema" value={tweaks.theme} options={[
+            { value: "dark",  label: "Dark"  },
+            { value: "light", label: "Light" },
+          ]} onChange={v => setTweak("theme", v)}/>
+          <TweakRadio label="Densidade" value={tweaks.density} options={[
+            { value: "compact",      label: "Compacto"     },
+            { value: "comfortable",  label: "Conforto"     },
+            { value: "spacious",     label: "Espaçoso"     },
+          ]} onChange={v => setTweak("density", v)}/>
+          <TweakSelect label="Cor de acento" value={tweaks.accent} options={[
+            { value: "amber",   label: "Âmbar (institucional)" },
+            { value: "azul",    label: "Azul"     },
+            { value: "verde",   label: "Verde"    },
+            { value: "ciano",   label: "Ciano"    },
+            { value: "magenta", label: "Magenta"  },
+          ]} onChange={v => setTweak("accent", v)}/>
+        </TweakSection>
+        <TweakSection label="Layout">
+          <TweakToggle label="Painel lateral aberto"
+            value={tweaks.leftPanelOpen}
+            onChange={v => setTweak("leftPanelOpen", v)}/>
+          <TweakSlider label="Largura do painel" min={240} max={360} step={10}
+            value={tweaks.leftPanelWidth}
+            onChange={v => setTweak("leftPanelWidth", v)}
+            unit="px"/>
+        </TweakSection>
+      </TweaksPanel>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>

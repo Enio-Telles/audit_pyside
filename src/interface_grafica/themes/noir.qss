@@ -1,76 +1,165 @@
+/* 
+ * Premium Noir Theme for Fiscal Parquet Analyzer 
+ * Focus on readability, modern aesthetics, and subtle transitions.
+ */
+
 QWidget {
-    background: #111315;
-    color: #f3f4f6;
+    background-color: #0f172a;
+    color: #e2e8f0;
+    font-family: "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-size: 13px;
 }
 
 QMainWindow, QSplitter, QScrollArea, QTabWidget::pane {
-    background: #111315;
+    background-color: #0f172a;
+    border: none;
 }
 
-QLabel {
-    color: #e5e7eb;
-}
-
+/* --- Buttons --- */
 QPushButton {
-    background: #1f2937;
-    color: #f9fafb;
+    background-color: #1e293b;
+    color: #f8fafc;
     border: 1px solid #334155;
-    border-radius: 4px;
-    padding: 6px 10px;
+    border-radius: 6px;
+    padding: 8px 16px;
+    font-weight: 500;
 }
 
 QPushButton:hover {
-    background: #283548;
+    background-color: #334155;
+    border-color: #475569;
 }
 
 QPushButton:pressed {
-    background: #17202d;
+    background-color: #0f172a;
+    border-color: #2563eb;
 }
 
 QPushButton:disabled {
-    color: #6b7280;
-    border-color: #374151;
+    background-color: #1e293b;
+    color: #475569;
+    border-color: #1e293b;
 }
 
-QLineEdit,
-QPlainTextEdit,
-QComboBox,
-QDateEdit,
-QListWidget,
-QTreeWidget,
-QTableView {
-    background: #181c20;
-    color: #f9fafb;
-    border: 1px solid #334155;
-    selection-background-color: #1e40af;
-    selection-color: #ffffff;
-}
-
-QHeaderView::section {
-    background: #0f172a;
-    color: #f8fafc;
-    border: 1px solid #334155;
-    padding: 6px 8px;
+/* Primary Action Button (Example for buttons with specific style) */
+QPushButton#btn_run_pipeline, QPushButton#btn_salvar_configuracoes {
+    background-color: #2563eb;
+    border-color: #3b82f6;
     font-weight: bold;
 }
 
-QMenu {
-    background: #111827;
-    color: #f9fafb;
+QPushButton#btn_run_pipeline:hover {
+    background-color: #3b82f6;
+}
+
+/* --- Input Fields --- */
+QLineEdit, QPlainTextEdit, QComboBox, QDateEdit, QListWidget, QTreeWidget, QTableView {
+    background-color: #1e293b;
+    color: #f1f5f9;
     border: 1px solid #334155;
+    border-radius: 6px;
+    padding: 5px;
+    selection-background-color: #2563eb;
+    selection-color: #ffffff;
+}
+
+QLineEdit:focus, QComboBox:focus, QDateEdit:focus {
+    border: 1px solid #3b82f6;
+}
+
+/* --- Tables --- */
+QTableView {
+    gridline-color: #334155;
+    alternate-background-color: #172033;
+}
+
+QHeaderView::section {
+    background-color: #1e293b;
+    color: #94a3b8;
+    padding: 8px;
+    border: none;
+    border-bottom: 1px solid #334155;
+    border-right: 1px solid #334155;
+    font-weight: bold;
+    text-transform: uppercase;
+    font-size: 11px;
+}
+
+/* --- Tabs --- */
+QTabBar::tab {
+    background-color: #0f172a;
+    color: #94a3b8;
+    padding: 10px 20px;
+    border-bottom: 2px solid transparent;
+}
+
+QTabBar::tab:selected {
+    color: #3b82f6;
+    border-bottom: 2px solid #3b82f6;
+    background-color: #1e293b;
+    border-top-left-radius: 4px;
+    border-top-right-radius: 4px;
+}
+
+QTabBar::tab:hover {
+    background-color: #1e293b;
+    color: #f1f5f9;
+}
+
+/* --- Group Boxes --- */
+QGroupBox {
+    border: 1px solid #334155;
+    border-radius: 8px;
+    margin-top: 1.5em;
+    padding-top: 10px;
+    font-weight: bold;
+    color: #3b82f6;
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    left: 10px;
+    padding: 0 5px;
+}
+
+/* --- ScrollBars --- */
+QScrollBar:vertical {
+    border: none;
+    background: #0f172a;
+    width: 10px;
+    margin: 0px 0px 0px 0px;
+}
+
+QScrollBar::handle:vertical {
+    background: #334155;
+    min-height: 20px;
+    border-radius: 5px;
+}
+
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+    border: none;
+    background: none;
+}
+
+/* --- Menus --- */
+QMenu {
+    background-color: #1e293b;
+    border: 1px solid #334155;
+    padding: 5px;
+}
+
+QMenu::item {
+    padding: 5px 25px 5px 20px;
+    border-radius: 4px;
 }
 
 QMenu::item:selected {
-    background: #1e40af;
+    background-color: #2563eb;
 }
 
+/* --- StatusBar --- */
 QStatusBar {
-    background: #101827;
-    color: #dbeafe;
-}
-
-QToolTip {
-    background: #0f172a;
-    color: #f8fafc;
-    border: 1px solid #334155;
+    background-color: #1e293b;
+    color: #94a3b8;
+    border-top: 1px solid #334155;
 }

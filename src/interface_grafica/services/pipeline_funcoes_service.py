@@ -10,6 +10,7 @@ Salva:
 
 from __future__ import annotations
 
+import inspect
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -18,6 +19,7 @@ from typing import Any, Callable
 
 import polars as pl
 
+from extracao.extracao_oracle_eficiente import _gravar_cursor_em_parquet
 from interface_grafica.config import CNPJ_ROOT, SQL_DIR
 
 
@@ -30,6 +32,7 @@ def _parquet_valido_simples(arquivo: Path) -> bool:
         return True
     except Exception:
         return False
+
 
 from utilitarios.sql_catalog import list_sql_entries, resolve_sql_path
 from utilitarios.extrair_parametros import extrair_parametros_sql
@@ -261,8 +264,6 @@ class ServicoExtracao:
         progresso: Callable[[str], None] | None = None,
         pular_existente: bool = False,
     ) -> list[str]:
-        import pyarrow.parquet as pq
-
         def _msg(texto: str) -> None:
             if progresso:
                 progresso(texto)
@@ -298,7 +299,9 @@ class ServicoExtracao:
                     _msg(f"  Removido arquivo temporario incompleto: {arquivo_tmp.name}")
 
                 if pular_existente and _parquet_valido_simples(arquivo_saida):
-                    _msg(f"Pulando {sql_path.name} (parquet valido ja existe: {arquivo_saida.name})")
+                    _msg(
+                        f"Pulando {sql_path.name} (parquet valido ja existe: {arquivo_saida.name})"
+                    )
                     arquivos.append(str(arquivo_saida))
                     continue
 
@@ -322,67 +325,22 @@ class ServicoExtracao:
                         cursor.arraysize = 50_000
                         cursor.prefetchrows = 50_000
                         cursor.execute(sql_text, binds)
-                        colunas = [desc[0].lower() for desc in cursor.description]
-
-                        writer: pq.ParquetWriter | None = None
-                        schema_arrow = None
-                        schema_polars: dict | None = None
-                        total_linhas = 0
-                        concluido = False
-
-                        try:
-                            while True:
-                                lote = cursor.fetchmany(50_000)
-                                if not lote:
-                                    break
-                                try:
-                                    df_lote = pl.DataFrame(lote, schema=colunas, orient="row")
-                                except Exception:
-                                    dados_colunas = {
-                                        col_name: [row[i] for row in lote]
-                                        for i, col_name in enumerate(colunas)
-                                    }
-                                    df_lote = pl.DataFrame(dados_colunas)
-                                if schema_polars is None:
-                                    schema_polars = df_lote.schema
-                                else:
-                                    df_lote = df_lote.cast(schema_polars, strict=False)
-
-                                tabela_arrow = df_lote.to_arrow()
-                                if schema_arrow is None:
-                                    schema_arrow = tabela_arrow.schema
-                                    writer = pq.ParquetWriter(
-                                        arquivo_tmp, schema_arrow, compression="snappy"
-                                    )
-                                elif tabela_arrow.schema != schema_arrow:
-                                    tabela_arrow = tabela_arrow.cast(schema_arrow, safe=False)
-                                writer.write_table(tabela_arrow)
-                                total_linhas += df_lote.height
-                                _msg(f"  {sql_path.name}: {total_linhas:,} linhas gravadas...")
-
-                            if schema_arrow is None:
-                                pl.DataFrame({col: [] for col in colunas}).write_parquet(
-                                    arquivo_saida, compression="snappy"
-                                )
-                            else:
-                                writer.close()
-                                writer = None
-                                arquivo_tmp.replace(arquivo_saida)
-                            concluido = True
-                        finally:
-                            if writer is not None:
-                                try:
-                                    writer.close()
-                                except Exception:
-                                    pass
-                            if not concluido:
-                                arquivo_tmp.unlink(missing_ok=True)
+                        total_linhas = _gravar_cursor_em_parquet(
+                            cursor,
+                            arquivo_saida,
+                            tamanho_lote=50_000,
+                            progresso=_msg,
+                            rotulo_consulta=sql_path.name,
+                        )
 
                     arquivos.append(str(arquivo_saida))
                     _msg(f"OK {sql_path.name}: {total_linhas:,} linhas -> {arquivo_saida.name}")
                 except Exception as exc:
                     arquivo_tmp.unlink(missing_ok=True)
-                    _msg(f"Erro em {sql_path.name}: {exc}")
+                    _msg(
+                        f"Erro em {sql_path.name}: {exc}. "
+                        "Reexecute a mesma extracao para retomar pelos checkpoints gravados."
+                    )
 
         return arquivos
 
@@ -541,18 +499,22 @@ class ServicoPipelineCompleto:
             _msg(f"=== Fase 1: Extracao Oracle ({len(consultas)} consultas) ===")
             inicio_extracao = perf_counter()
             try:
-                arquivos = self.servico_extracao.executar_consultas(
+                executar_consultas = self.servico_extracao.executar_consultas
+                kwargs = (
+                    {"pular_existente": pular_existente}
+                    if "pular_existente" in inspect.signature(executar_consultas).parameters
+                    else {}
+                )
+                arquivos = executar_consultas(
                     cnpj,
                     consultas,
                     data_limite,
                     _msg,
-                    pular_existente=pular_existente,
+                    **kwargs,
                 )
                 resultado.arquivos_gerados.extend(arquivos)
                 resultado.tempos["extracao_oracle"] = perf_counter() - inicio_extracao
-                _msg(
-                    f"Tempo da extracao Oracle: {resultado.tempos['extracao_oracle']:.2f}s"
-                )
+                _msg(f"Tempo da extracao Oracle: {resultado.tempos['extracao_oracle']:.2f}s")
             except Exception as exc:
                 resultado.erros.append(f"Falha na extracao: {exc}")
                 resultado.ok = False
@@ -562,17 +524,13 @@ class ServicoPipelineCompleto:
             _msg(f"=== Fase 2: Geracao de tabelas ({len(tabelas)} selecionadas) ===")
             inicio_tabelas = perf_counter()
             try:
-                resultado_tabelas = self.servico_tabelas.gerar_tabelas(
-                    cnpj, tabelas, _msg
-                )
+                resultado_tabelas = self.servico_tabelas.gerar_tabelas(cnpj, tabelas, _msg)
                 resultado.arquivos_gerados.extend(resultado_tabelas.geradas)
                 resultado.tempos.update(
                     {f"tabela::{k}": v for k, v in resultado_tabelas.tempos.items()}
                 )
                 resultado.tempos["geracao_tabelas"] = perf_counter() - inicio_tabelas
-                _msg(
-                    f"Tempo da geracao de tabelas: {resultado.tempos['geracao_tabelas']:.2f}s"
-                )
+                _msg(f"Tempo da geracao de tabelas: {resultado.tempos['geracao_tabelas']:.2f}s")
                 if not resultado_tabelas.ok:
                     resultado.ok = False
                     resultado.erros.extend(resultado_tabelas.erros)

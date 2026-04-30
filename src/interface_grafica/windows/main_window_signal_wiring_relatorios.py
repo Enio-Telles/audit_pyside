@@ -7,7 +7,9 @@ class MainWindowSignalWiringRelatoriosMixin:
         self.mov_filter_id.currentTextChanged.connect(lambda _value: self._schedule_mov_filters())
         self.mov_filter_desc.textChanged.connect(lambda _value: self._schedule_mov_filters())
         self.mov_filter_ncm.textChanged.connect(lambda _value: self._schedule_mov_filters())
-        self.mov_filter_tipo.currentIndexChanged.connect(lambda _index: self._schedule_mov_filters())
+        self.mov_filter_tipo.currentIndexChanged.connect(
+            lambda _index: self._schedule_mov_filters()
+        )
         self.mov_filter_texto.textChanged.connect(lambda _value: self._schedule_mov_filters())
         self.mov_filter_data_col.currentIndexChanged.connect(
             lambda _index: self._schedule_mov_filters()
@@ -45,17 +47,11 @@ class MainWindowSignalWiringRelatoriosMixin:
             )
         )
         self.btn_mov_colunas.clicked.connect(
-            lambda: self._abrir_menu_colunas_tabela(
-                "mov_estoque", self.mov_estoque_table
-            )
+            lambda: self._abrir_menu_colunas_tabela("mov_estoque", self.mov_estoque_table)
         )
-        self.btn_mov_destacar.clicked.connect(
-            lambda: self._destacar_tabela("mov_estoque")
-        )
+        self.btn_mov_destacar.clicked.connect(lambda: self._destacar_tabela("mov_estoque"))
         self.mov_estoque_table.horizontalHeader().customContextMenuRequested.connect(
-            lambda pos: self._abrir_menu_colunas_tabela(
-                "mov_estoque", self.mov_estoque_table, pos
-            )
+            lambda pos: self._abrir_menu_colunas_tabela("mov_estoque", self.mov_estoque_table, pos)
         )
         self.mov_estoque_table.horizontalHeader().sectionMoved.connect(
             lambda *_: self._salvar_preferencias_tabela(
@@ -77,24 +73,20 @@ class MainWindowSignalWiringRelatoriosMixin:
         self.btn_refresh_aba_anual.clicked.connect(self.atualizar_aba_anual)
         self.btn_apply_aba_anual_filters.clicked.connect(self.aplicar_filtros_aba_anual)
         self.btn_clear_aba_anual_filters.clicked.connect(self.limpar_filtros_aba_anual)
-        self.btn_filtrar_estoque_anual.clicked.connect(
-            self.filtrar_estoque_pela_selecao_anual
-        )
+        self.btn_filtrar_estoque_anual.clicked.connect(self.filtrar_estoque_pela_selecao_anual)
         self.btn_limpar_filtro_cruzado.clicked.connect(self.limpar_filtro_cruzado_anual)
         self.btn_export_aba_anual.clicked.connect(self.exportar_aba_anual_excel)
 
         self.btn_refresh_aba_periodos.clicked.connect(self.atualizar_aba_periodos)
-        self.btn_apply_aba_periodos_filters.clicked.connect(
-            self.aplicar_filtros_aba_periodos
-        )
-        self.btn_clear_aba_periodos_filters.clicked.connect(
-            self.limpar_filtros_aba_periodos
-        )
+        self.btn_apply_aba_periodos_filters.clicked.connect(self.aplicar_filtros_aba_periodos)
+        self.btn_clear_aba_periodos_filters.clicked.connect(self.limpar_filtros_aba_periodos)
         self.btn_export_aba_periodos.clicked.connect(self.exportar_aba_periodos_excel)
         self.periodo_filter_id.currentTextChanged.connect(
             lambda _value: self._schedule_periodos_filters()
         )
-        self.periodo_filter_desc.textChanged.connect(lambda _value: self._schedule_periodos_filters())
+        self.periodo_filter_desc.textChanged.connect(
+            lambda _value: self._schedule_periodos_filters()
+        )
         self.periodo_filter_texto.textChanged.connect(
             lambda _value: self._schedule_periodos_filters()
         )
@@ -117,9 +109,7 @@ class MainWindowSignalWiringRelatoriosMixin:
             )
         )
         self.btn_periodo_colunas.clicked.connect(
-            lambda: self._abrir_menu_colunas_tabela(
-                "aba_periodos", self.aba_periodos_table
-            )
+            lambda: self._abrir_menu_colunas_tabela("aba_periodos", self.aba_periodos_table)
         )
         self.btn_destacar_aba_periodos.clicked.connect(
             lambda: self._destacar_tabela("aba_periodos")
@@ -144,7 +134,9 @@ class MainWindowSignalWiringRelatoriosMixin:
                 "aba_periodos", self.aba_periodos_table, self.aba_periodos_model
             )
         )
-        self.anual_filter_id.currentTextChanged.connect(lambda _value: self._schedule_anual_filters())
+        self.anual_filter_id.currentTextChanged.connect(
+            lambda _value: self._schedule_anual_filters()
+        )
         self.anual_filter_desc.textChanged.connect(lambda _value: self._schedule_anual_filters())
         self.anual_filter_ano.currentIndexChanged.connect(
             lambda _index: self._schedule_anual_filters()
@@ -176,13 +168,9 @@ class MainWindowSignalWiringRelatoriosMixin:
         self.btn_anual_colunas.clicked.connect(
             lambda: self._abrir_menu_colunas_tabela("aba_anual", self.aba_anual_table)
         )
-        self.btn_destacar_aba_anual.clicked.connect(
-            lambda: self._destacar_tabela("aba_anual")
-        )
+        self.btn_destacar_aba_anual.clicked.connect(lambda: self._destacar_tabela("aba_anual"))
         self.aba_anual_table.horizontalHeader().customContextMenuRequested.connect(
-            lambda pos: self._abrir_menu_colunas_tabela(
-                "aba_anual", self.aba_anual_table, pos
-            )
+            lambda pos: self._abrir_menu_colunas_tabela("aba_anual", self.aba_anual_table, pos)
         )
         self.aba_anual_table.horizontalHeader().sectionMoved.connect(
             lambda *_: self._salvar_preferencias_tabela(
@@ -203,28 +191,54 @@ class MainWindowSignalWiringRelatoriosMixin:
         self.btn_refresh_resumo_global.clicked.connect(self.atualizar_aba_resumo_global)
         self.btn_export_resumo_global.clicked.connect(self.exportar_resumo_global_excel)
         self.chk_resumo_global_so_selecionados.toggled.connect(
-            lambda _: self.atualizar_aba_resumo_global()
+            lambda _checked: self.atualizar_aba_resumo_global()
         )
         self.cmb_resumo_global_ano_ini.currentIndexChanged.connect(
-            lambda _: self.atualizar_aba_resumo_global()
+            lambda _index: self.atualizar_aba_resumo_global()
         )
         self.cmb_resumo_global_ano_fim.currentIndexChanged.connect(
-            lambda _: self.atualizar_aba_resumo_global()
+            lambda _index: self.atualizar_aba_resumo_global()
+        )
+        self.btn_resumo_global_limpar_filtro.clicked.connect(
+            lambda: (
+                self.resumo_global_filter_data_ini.setDate(
+                    self.resumo_global_filter_data_ini.minimumDate()
+                ),
+                self.resumo_global_filter_data_fim.setDate(
+                    self.resumo_global_filter_data_fim.minimumDate()
+                ),
+            )
+        )
+
+        self.btn_estoque_codigo_gerar.clicked.connect(
+            lambda: self.calcular_estoque_codigo_produto(recalcular_base=False)
+        )
+        self.btn_estoque_codigo_recalcular_base.clicked.connect(
+            lambda: self.calcular_estoque_codigo_produto(recalcular_base=True)
+        )
+        self.btn_estoque_codigo_atualizar.clicked.connect(
+            self.atualizar_aba_estoque_codigo_produto
+        )
+        self.cmb_estoque_codigo_tabela.currentIndexChanged.connect(
+            lambda _index: self.atualizar_aba_estoque_codigo_produto()
+        )
+        self.btn_estoque_codigo_exportar.clicked.connect(
+            self.exportar_estoque_codigo_produto_excel
         )
 
         self.btn_refresh_aba_mensal.clicked.connect(self.atualizar_aba_mensal)
-        self.btn_apply_aba_mensal_filters.clicked.connect(
-            self.aplicar_filtros_aba_mensal
-        )
-        self.btn_clear_aba_mensal_filters.clicked.connect(
-            self.limpar_filtros_aba_mensal
-        )
+        self.btn_apply_aba_mensal_filters.clicked.connect(self.aplicar_filtros_aba_mensal)
+        self.btn_clear_aba_mensal_filters.clicked.connect(self.limpar_filtros_aba_mensal)
         self.btn_export_aba_mensal.clicked.connect(self.exportar_aba_mensal_excel)
         self.mensal_filter_num_col.currentIndexChanged.connect(
             lambda _index: self._schedule_mensal_filters()
         )
-        self.mensal_filter_num_min.textChanged.connect(lambda _value: self._schedule_mensal_filters())
-        self.mensal_filter_num_max.textChanged.connect(lambda _value: self._schedule_mensal_filters())
+        self.mensal_filter_num_min.textChanged.connect(
+            lambda _value: self._schedule_mensal_filters()
+        )
+        self.mensal_filter_num_max.textChanged.connect(
+            lambda _value: self._schedule_mensal_filters()
+        )
         self.mensal_filter_id.currentTextChanged.connect(
             lambda _value: self._schedule_mensal_filters()
         )
@@ -257,13 +271,9 @@ class MainWindowSignalWiringRelatoriosMixin:
         self.btn_mensal_colunas.clicked.connect(
             lambda: self._abrir_menu_colunas_tabela("aba_mensal", self.aba_mensal_table)
         )
-        self.btn_destacar_aba_mensal.clicked.connect(
-            lambda: self._destacar_tabela("aba_mensal")
-        )
+        self.btn_destacar_aba_mensal.clicked.connect(lambda: self._destacar_tabela("aba_mensal"))
         self.aba_mensal_table.horizontalHeader().customContextMenuRequested.connect(
-            lambda pos: self._abrir_menu_colunas_tabela(
-                "aba_mensal", self.aba_mensal_table, pos
-            )
+            lambda pos: self._abrir_menu_colunas_tabela("aba_mensal", self.aba_mensal_table, pos)
         )
         self.aba_mensal_table.horizontalHeader().sectionMoved.connect(
             lambda *_: self._salvar_preferencias_tabela(
@@ -283,12 +293,8 @@ class MainWindowSignalWiringRelatoriosMixin:
 
         self.btn_extract_nfe_entrada.clicked.connect(self.extrair_dados_nfe_entrada)
         self.btn_refresh_nfe_entrada.clicked.connect(self.atualizar_aba_nfe_entrada)
-        self.btn_apply_nfe_entrada_filters.clicked.connect(
-            self.aplicar_filtros_nfe_entrada
-        )
-        self.btn_clear_nfe_entrada_filters.clicked.connect(
-            self.limpar_filtros_nfe_entrada
-        )
+        self.btn_apply_nfe_entrada_filters.clicked.connect(self.aplicar_filtros_nfe_entrada)
+        self.btn_clear_nfe_entrada_filters.clicked.connect(self.limpar_filtros_nfe_entrada)
         self.btn_nfe_entrada_profile.clicked.connect(
             lambda: self._aplicar_perfil_tabela(
                 "nfe_entrada",
@@ -308,13 +314,9 @@ class MainWindowSignalWiringRelatoriosMixin:
             )
         )
         self.btn_nfe_entrada_colunas.clicked.connect(
-            lambda: self._abrir_menu_colunas_tabela(
-                "nfe_entrada", self.nfe_entrada_table
-            )
+            lambda: self._abrir_menu_colunas_tabela("nfe_entrada", self.nfe_entrada_table)
         )
-        self.btn_nfe_entrada_destacar.clicked.connect(
-            lambda: self._destacar_tabela("nfe_entrada")
-        )
+        self.btn_nfe_entrada_destacar.clicked.connect(lambda: self._destacar_tabela("nfe_entrada"))
         self.btn_export_nfe_entrada.clicked.connect(self.exportar_nfe_entrada_excel)
         self.nfe_entrada_filter_id.currentTextChanged.connect(
             lambda _value: self._schedule_nfe_entrada_filters()
@@ -338,9 +340,7 @@ class MainWindowSignalWiringRelatoriosMixin:
             lambda _date: self._schedule_nfe_entrada_filters()
         )
         self.nfe_entrada_table.horizontalHeader().customContextMenuRequested.connect(
-            lambda pos: self._abrir_menu_colunas_tabela(
-                "nfe_entrada", self.nfe_entrada_table, pos
-            )
+            lambda pos: self._abrir_menu_colunas_tabela("nfe_entrada", self.nfe_entrada_table, pos)
         )
         self.nfe_entrada_table.horizontalHeader().sectionMoved.connect(
             lambda *_: self._salvar_preferencias_tabela(
@@ -359,12 +359,8 @@ class MainWindowSignalWiringRelatoriosMixin:
         )
 
         self.btn_refresh_id_agrupados.clicked.connect(self.atualizar_aba_id_agrupados)
-        self.btn_apply_id_agrupados_filters.clicked.connect(
-            self.aplicar_filtros_id_agrupados
-        )
-        self.btn_clear_id_agrupados_filters.clicked.connect(
-            self.limpar_filtros_id_agrupados
-        )
+        self.btn_apply_id_agrupados_filters.clicked.connect(self.aplicar_filtros_id_agrupados)
+        self.btn_clear_id_agrupados_filters.clicked.connect(self.limpar_filtros_id_agrupados)
         self.btn_id_agrupados_profile.clicked.connect(
             lambda: self._aplicar_perfil_tabela(
                 "id_agrupados",
@@ -384,9 +380,7 @@ class MainWindowSignalWiringRelatoriosMixin:
             )
         )
         self.btn_id_agrupados_colunas.clicked.connect(
-            lambda: self._abrir_menu_colunas_tabela(
-                "id_agrupados", self.id_agrupados_table
-            )
+            lambda: self._abrir_menu_colunas_tabela("id_agrupados", self.id_agrupados_table)
         )
         self.btn_destacar_id_agrupados.clicked.connect(
             lambda: self._destacar_tabela("id_agrupados")
@@ -419,16 +413,14 @@ class MainWindowSignalWiringRelatoriosMixin:
             )
         )
 
-        self.btn_refresh_produtos_sel.clicked.connect(
-            self.atualizar_aba_produtos_selecionados
-        )
+        self.btn_refresh_produtos_sel.clicked.connect(self.atualizar_aba_produtos_selecionados)
         self.btn_apply_produtos_sel_filters.clicked.connect(
             self.aplicar_filtros_produtos_selecionados
         )
         self.btn_clear_produtos_sel_filters.clicked.connect(
             self.limpar_filtros_produtos_selecionados
         )
-        self.btn_limpar_vistos_produtos_sel.clicked.connect(
+        self.btn_clear_produtos_sel_checked.clicked.connect(
             self.limpar_vistos_produtos_selecionados
         )
         self.btn_top20_icms_produtos_sel.clicked.connect(
@@ -463,9 +455,7 @@ class MainWindowSignalWiringRelatoriosMixin:
         self.btn_destacar_produtos_sel.clicked.connect(
             lambda: self._destacar_tabela("produtos_selecionados")
         )
-        self.btn_export_produtos_sel.clicked.connect(
-            self.exportar_produtos_selecionados_excel
-        )
+        self.btn_export_produtos_sel.clicked.connect(self.exportar_produtos_selecionados_excel)
         self.produtos_sel_filter_id.currentTextChanged.connect(
             lambda _value: self._schedule_produtos_sel_filters()
         )
@@ -513,4 +503,3 @@ class MainWindowSignalWiringRelatoriosMixin:
                 self.produtos_selecionados_model,
             )
         )
-

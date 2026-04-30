@@ -34,21 +34,23 @@ class RelatoriosWindowMixin:
         self.tab_aba_anual = self._build_tab_aba_anual()
         self.estoque_tabs.addTab(self.tab_aba_anual, "Tabela anual")
         self.tab_aba_periodos = self._build_tab_aba_periodos()
-        self.estoque_tabs.addTab(self.tab_aba_periodos, "Tabela períodos")
+        self.estoque_tabs.addTab(self.tab_aba_periodos, "Tabela perÃ­odos")
 
         self.tab_resumo_global = self._build_tab_resumo_global()
         self.estoque_tabs.addTab(self.tab_resumo_global, "Resumo Global")
 
+        self.tab_estoque_codigo_produto = self._build_tab_estoque_codigo_produto()
+        self.estoque_tabs.addTab(self.tab_estoque_codigo_produto, "Estoque por codigo")
+
         self.tab_produtos_selecionados = self._build_tab_produtos_selecionados()
-        self.estoque_tabs.addTab(
-            self.tab_produtos_selecionados, "Produtos selecionados"
-        )
+        self.estoque_tabs.addTab(self.tab_produtos_selecionados, "Produtos selecionados")
 
         self.tab_id_agrupados = self._build_tab_id_agrupados()
         self.estoque_tabs.addTab(self.tab_id_agrupados, "id_agrupados")
 
         layout.addWidget(self.estoque_tabs)
         return tab
+
     def _build_tab_produtos_selecionados(self) -> QWidget:
         tab = QWidget()
         layout = QVBoxLayout(tab)
@@ -99,6 +101,14 @@ class RelatoriosWindowMixin:
                 padding: 6px 8px;
                 font-weight: bold;
             }
+            QScrollBar:vertical, QScrollBar:horizontal {
+                background: #252526;
+                border: none;
+            }
+            QScrollBar::handle:vertical, QScrollBar::handle:horizontal {
+                background: #4b5563;
+                border-radius: 5px;
+            }
             """
         )
 
@@ -113,6 +123,7 @@ class RelatoriosWindowMixin:
         self.btn_apply_produtos_sel_filters = QPushButton("Aplicar filtros")
         self.btn_clear_produtos_sel_filters = QPushButton("Limpar filtros")
         self.btn_limpar_vistos_produtos_sel = QPushButton("Limpar vistos")
+        self.btn_clear_produtos_sel_checked = self.btn_limpar_vistos_produtos_sel
         self.btn_top20_icms_produtos_sel = QPushButton("20 maiores ICMS")
         self.btn_top20_icms_periodo_produtos_sel = QPushButton("20 maiores ICMS periodo")
         self.produtos_sel_profile = QComboBox()
@@ -154,17 +165,13 @@ class RelatoriosWindowMixin:
         self.produtos_sel_filter_data_ini.setDisplayFormat("dd/MM/yyyy")
         self.produtos_sel_filter_data_ini.setSpecialValueText("Data inicial")
         self.produtos_sel_filter_data_ini.setMinimumDate(QDate(1900, 1, 1))
-        self.produtos_sel_filter_data_ini.setDate(
-            self.produtos_sel_filter_data_ini.minimumDate()
-        )
+        self.produtos_sel_filter_data_ini.setDate(self.produtos_sel_filter_data_ini.minimumDate())
         self.produtos_sel_filter_data_fim = QDateEdit()
         self.produtos_sel_filter_data_fim.setCalendarPopup(True)
         self.produtos_sel_filter_data_fim.setDisplayFormat("dd/MM/yyyy")
         self.produtos_sel_filter_data_fim.setSpecialValueText("Data final")
         self.produtos_sel_filter_data_fim.setMinimumDate(QDate(1900, 1, 1))
-        self.produtos_sel_filter_data_fim.setDate(
-            self.produtos_sel_filter_data_fim.minimumDate()
-        )
+        self.produtos_sel_filter_data_fim.setDate(self.produtos_sel_filter_data_fim.minimumDate())
         self.produtos_sel_filter_texto = QLineEdit()
         self.produtos_sel_filter_texto.setPlaceholderText("Busca ampla...")
         for widget in [
@@ -197,9 +204,7 @@ class RelatoriosWindowMixin:
         )
         layout.addWidget(self.lbl_produtos_sel_filtros)
 
-        self.lbl_produtos_sel_resumo = QLabel(
-            "Recorte atual: mov_estoque 0 | mensal 0 | anual 0"
-        )
+        self.lbl_produtos_sel_resumo = QLabel("Recorte atual: mov_estoque 0 | mensal 0 | anual 0")
         self.lbl_produtos_sel_resumo.setStyleSheet(
             "QLabel { padding: 4px 8px; color: #fef3c7; background: #2a1f0f; border: 1px solid #7c5a18; border-radius: 4px; }"
         )
@@ -218,15 +223,14 @@ class RelatoriosWindowMixin:
         self.produtos_sel_table.horizontalHeader().setMaximumSectionSize(420)
         self.produtos_sel_table.horizontalHeader().setStretchLastSection(True)
         self.produtos_sel_table.horizontalHeader().setSectionsMovable(True)
-        self.produtos_sel_table.horizontalHeader().setContextMenuPolicy(
-            Qt.CustomContextMenu
-        )
+        self.produtos_sel_table.horizontalHeader().setContextMenuPolicy(Qt.CustomContextMenu)
         self.produtos_sel_table.setStyleSheet(
             "QTableView::item { padding: 4px 2px; }"
             "QTableCornerButton::section { background: #18181b; border: 1px solid #3f3f46; }"
         )
         layout.addWidget(self.produtos_sel_table, 1)
         return tab
+
     def _build_tab_aba_anual(self) -> QWidget:
         tab = QWidget()
         layout = QVBoxLayout(tab)
@@ -297,9 +301,7 @@ class RelatoriosWindowMixin:
         toolbar = QHBoxLayout()
         self.btn_refresh_aba_anual = QPushButton("Recarregar")
         self.btn_refresh_aba_anual.setIcon(
-            QApplication.style().standardIcon(
-                QApplication.style().StandardPixmap.SP_BrowserReload
-            )
+            QApplication.style().standardIcon(QApplication.style().StandardPixmap.SP_BrowserReload)
         )
         self.btn_apply_aba_anual_filters = QPushButton("Aplicar filtros")
         self.btn_clear_aba_anual_filters = QPushButton("Limpar filtros")
@@ -375,9 +377,7 @@ class RelatoriosWindowMixin:
         filtros_avancados.addStretch()
         layout.addLayout(filtros_avancados)
 
-        self.lbl_aba_anual_status = QLabel(
-            "Selecione um CNPJ para carregar a aba anual."
-        )
+        self.lbl_aba_anual_status = QLabel("Selecione um CNPJ para carregar a aba anual.")
         self.lbl_aba_anual_status.setStyleSheet(
             "QLabel { padding: 4px 8px; background: #101827; border: 1px solid #374151; border-radius: 4px; color: #e5e7eb; }"
         )
@@ -402,32 +402,27 @@ class RelatoriosWindowMixin:
         self.aba_anual_table.horizontalHeader().setMaximumSectionSize(380)
         self.aba_anual_table.horizontalHeader().setStretchLastSection(True)
         self.aba_anual_table.horizontalHeader().setSectionsMovable(True)
-        self.aba_anual_table.horizontalHeader().setContextMenuPolicy(
-            Qt.CustomContextMenu
-        )
+        self.aba_anual_table.horizontalHeader().setContextMenuPolicy(Qt.CustomContextMenu)
         self.aba_anual_table.setStyleSheet(
             "QTableView::item { padding: 4px 2px; }"
             "QTableCornerButton::section { background: #18181b; border: 1px solid #3f3f46; }"
         )
         layout.addWidget(self.aba_anual_table, 1)
         return tab
+
     def _build_tab_aba_periodos(self) -> QWidget:
         tab = QWidget()
         layout = QVBoxLayout(tab)
         tab.setStyleSheet(self.tab_aba_anual.styleSheet())
 
         self.lbl_aba_periodos_titulo = QLabel("Tabela: aba_periodos")
-        self.lbl_aba_periodos_titulo.setStyleSheet(
-            self.lbl_aba_anual_titulo.styleSheet()
-        )
+        self.lbl_aba_periodos_titulo.setStyleSheet(self.lbl_aba_anual_titulo.styleSheet())
         layout.addWidget(self.lbl_aba_periodos_titulo)
 
         toolbar = QHBoxLayout()
         self.btn_refresh_aba_periodos = QPushButton("Recarregar")
         self.btn_refresh_aba_periodos.setIcon(
-            QApplication.style().standardIcon(
-                QApplication.style().StandardPixmap.SP_BrowserReload
-            )
+            QApplication.style().standardIcon(QApplication.style().StandardPixmap.SP_BrowserReload)
         )
         self.btn_apply_aba_periodos_filters = QPushButton("Aplicar filtros")
         self.btn_clear_aba_periodos_filters = QPushButton("Limpar filtros")
@@ -495,18 +490,12 @@ class RelatoriosWindowMixin:
         filtros_avancados.addStretch()
         layout.addLayout(filtros_avancados)
 
-        self.lbl_aba_periodos_status = QLabel(
-            "Selecione um CNPJ para carregar a aba períodos."
-        )
-        self.lbl_aba_periodos_status.setStyleSheet(
-            self.lbl_aba_anual_status.styleSheet()
-        )
+        self.lbl_aba_periodos_status = QLabel("Selecione um CNPJ para carregar a aba perÃ­odos.")
+        self.lbl_aba_periodos_status.setStyleSheet(self.lbl_aba_anual_status.styleSheet())
         layout.addWidget(self.lbl_aba_periodos_status)
 
         self.lbl_aba_periodos_filtros = QLabel("Filtros ativos: nenhum")
-        self.lbl_aba_periodos_filtros.setStyleSheet(
-            self.lbl_aba_anual_filtros.styleSheet()
-        )
+        self.lbl_aba_periodos_filtros.setStyleSheet(self.lbl_aba_anual_filtros.styleSheet())
         layout.addWidget(self.lbl_aba_periodos_filtros)
 
         self.aba_periodos_table = QTableView()
@@ -519,12 +508,11 @@ class RelatoriosWindowMixin:
         self.aba_periodos_table.setStyleSheet(self.aba_anual_table.styleSheet())
         self.aba_periodos_table.horizontalHeader().setStretchLastSection(True)
         self.aba_periodos_table.horizontalHeader().setSectionsMovable(True)
-        self.aba_periodos_table.horizontalHeader().setContextMenuPolicy(
-            Qt.CustomContextMenu
-        )
+        self.aba_periodos_table.horizontalHeader().setContextMenuPolicy(Qt.CustomContextMenu)
         layout.addWidget(self.aba_periodos_table, 1)
 
         return tab
+
     def _build_tab_resumo_global(self) -> QWidget:
         tab = QWidget()
         layout = QVBoxLayout(tab)
@@ -577,44 +565,67 @@ class RelatoriosWindowMixin:
 
         toolbar = QHBoxLayout()
         self.btn_refresh_resumo_global = QPushButton("Atualizar Resumo Global")
-
         self.chk_resumo_global_so_selecionados = QCheckBox("Somente produtos selecionados")
         self.chk_resumo_global_so_selecionados.setChecked(False)
         self.chk_resumo_global_so_selecionados.setToolTip(
             "Quando marcado, consolida apenas os produtos marcados como 'Visto' "
             "na aba Produtos selecionados."
         )
-
-        _anos = [str(a) for a in range(2015, 2031)]
-        self.lbl_resumo_global_ano_ini = QLabel("Ano inicial:")
-        self.cmb_resumo_global_ano_ini = QComboBox()
-        self.cmb_resumo_global_ano_ini.addItems(_anos)
-        self.cmb_resumo_global_ano_ini.setCurrentText("2021")
-        self.lbl_resumo_global_ano_fim = QLabel("Ano final:")
-        self.cmb_resumo_global_ano_fim = QComboBox()
-        self.cmb_resumo_global_ano_fim.addItems(_anos)
-        self.cmb_resumo_global_ano_fim.setCurrentText("2025")
-
         self.btn_export_resumo_global = QPushButton("Exportar Excel")
-
         toolbar.addWidget(self.btn_refresh_resumo_global)
         toolbar.addWidget(self.chk_resumo_global_so_selecionados)
-        toolbar.addSpacing(12)
-        toolbar.addWidget(self.lbl_resumo_global_ano_ini)
-        toolbar.addWidget(self.cmb_resumo_global_ano_ini)
-        toolbar.addWidget(self.lbl_resumo_global_ano_fim)
-        toolbar.addWidget(self.cmb_resumo_global_ano_fim)
         toolbar.addStretch()
         toolbar.addWidget(self.btn_export_resumo_global)
         layout.addLayout(toolbar)
 
-        self.lbl_resumo_global_status = QLabel(
-            "Aguardando carregamento da aba mensal e anual..."
-        )
+        filtros = QHBoxLayout()
+        anos = [str(a) for a in range(2015, 2031)]
+        self.lbl_resumo_global_ano_ini = QLabel("Ano inicial")
+        self.cmb_resumo_global_ano_ini = QComboBox()
+        self.cmb_resumo_global_ano_ini.addItems(anos)
+        self.cmb_resumo_global_ano_ini.setCurrentText("2021")
+        self.lbl_resumo_global_ano_fim = QLabel("Ano final")
+        self.cmb_resumo_global_ano_fim = QComboBox()
+        self.cmb_resumo_global_ano_fim.addItems(anos)
+        self.cmb_resumo_global_ano_fim.setCurrentText("2025")
+        self.resumo_global_filter_data_ini = QDateEdit()
+        self.resumo_global_filter_data_ini.setCalendarPopup(True)
+        self.resumo_global_filter_data_ini.setDisplayFormat("dd/MM/yyyy")
+        self.resumo_global_filter_data_ini.setSpecialValueText("Data inicial")
+        self.resumo_global_filter_data_ini.setMinimumDate(QDate(1900, 1, 1))
+        self.resumo_global_filter_data_ini.setDate(self.resumo_global_filter_data_ini.minimumDate())
+        self.resumo_global_filter_data_fim = QDateEdit()
+        self.resumo_global_filter_data_fim.setCalendarPopup(True)
+        self.resumo_global_filter_data_fim.setDisplayFormat("dd/MM/yyyy")
+        self.resumo_global_filter_data_fim.setSpecialValueText("Data final")
+        self.resumo_global_filter_data_fim.setMinimumDate(QDate(1900, 1, 1))
+        self.resumo_global_filter_data_fim.setDate(self.resumo_global_filter_data_fim.minimumDate())
+        self.btn_resumo_global_limpar_filtro = QPushButton("Limpar filtro")
+
+        filtros.addWidget(self.lbl_resumo_global_ano_ini)
+        filtros.addWidget(self.cmb_resumo_global_ano_ini)
+        filtros.addWidget(self.lbl_resumo_global_ano_fim)
+        filtros.addWidget(self.cmb_resumo_global_ano_fim)
+        filtros.addWidget(QLabel("Data inicial"))
+        filtros.addWidget(self.resumo_global_filter_data_ini)
+        filtros.addWidget(QLabel("Data final"))
+        filtros.addWidget(self.resumo_global_filter_data_fim)
+        filtros.addWidget(self.btn_resumo_global_limpar_filtro)
+        filtros.addStretch()
+        layout.addLayout(filtros)
+
+        self.lbl_resumo_global_status = QLabel("Aguardando carregamento da aba mensal e anual...")
         self.lbl_resumo_global_status.setStyleSheet(
             "QLabel { padding: 4px 8px; background: #101827; border: 1px solid #374151; border-radius: 4px; color: #e5e7eb; }"
         )
         layout.addWidget(self.lbl_resumo_global_status)
+
+        self.lbl_resumo_global_totais = QLabel("Totais ICMS: sem dados no recorte atual.")
+        self.lbl_resumo_global_totais.setStyleSheet(
+            "QLabel { padding: 4px 8px; color: #fef3c7; background: #2a1f0f; border: 1px solid #7c5a18; border-radius: 4px; }"
+        )
+        self.lbl_resumo_global_totais.setWordWrap(True)
+        layout.addWidget(self.lbl_resumo_global_totais)
 
         self.resumo_global_table = QTableView()
         self.resumo_global_table.setModel(self.resumo_global_model)
@@ -634,6 +645,67 @@ class RelatoriosWindowMixin:
         layout.addWidget(self.resumo_global_table, 1)
 
         return tab
+
+    def _build_tab_estoque_codigo_produto(self) -> QWidget:
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        tab.setStyleSheet(self.tab_resumo_global.styleSheet())
+
+        self.lbl_estoque_codigo_titulo = QLabel("Tabela: Estoque por codigo do produto")
+        self.lbl_estoque_codigo_titulo.setStyleSheet(self.lbl_resumo_global_titulo.styleSheet())
+        layout.addWidget(self.lbl_estoque_codigo_titulo)
+
+        toolbar = QHBoxLayout()
+        self.btn_estoque_codigo_gerar = QPushButton("Gerar por codigo")
+        self.btn_estoque_codigo_recalcular_base = QPushButton("Recalcular base + codigo")
+        self.btn_estoque_codigo_atualizar = QPushButton("Atualizar")
+        self.cmb_estoque_codigo_tabela = QComboBox()
+        self.cmb_estoque_codigo_tabela.addItems(
+            ["Resumo Global", "Mensal", "Anual", "Periodos", "Mov. Estoque"]
+        )
+        self.btn_estoque_codigo_exportar = QPushButton("Exportar Excel")
+
+        toolbar.addWidget(self.btn_estoque_codigo_gerar)
+        toolbar.addWidget(self.btn_estoque_codigo_recalcular_base)
+        toolbar.addWidget(self.btn_estoque_codigo_atualizar)
+        toolbar.addWidget(QLabel("Tabela"))
+        toolbar.addWidget(self.cmb_estoque_codigo_tabela)
+        toolbar.addStretch()
+        toolbar.addWidget(self.btn_estoque_codigo_exportar)
+        layout.addLayout(toolbar)
+
+        self.lbl_estoque_codigo_status = QLabel(
+            "Gere os artefatos por codigo para visualizar mensal, anual e periodos."
+        )
+        self.lbl_estoque_codigo_status.setStyleSheet(self.lbl_resumo_global_status.styleSheet())
+        layout.addWidget(self.lbl_estoque_codigo_status)
+
+        self.lbl_estoque_codigo_criterio = QLabel(
+            "Criterio: Cod_item normalizado, equivalente a cod_item no C170 e prod_cprod em NFe/NFCe. "
+            "Quantidades usam q_conv/q_conv_fisica ja materializadas com fatores de conversao."
+        )
+        self.lbl_estoque_codigo_criterio.setStyleSheet(
+            "QLabel { padding: 4px 8px; color: #fef3c7; background: #2a1f0f; border: 1px solid #7c5a18; border-radius: 4px; }"
+        )
+        self.lbl_estoque_codigo_criterio.setWordWrap(True)
+        layout.addWidget(self.lbl_estoque_codigo_criterio)
+
+        self.estoque_codigo_table = QTableView()
+        self.estoque_codigo_table.setModel(self.estoque_codigo_model)
+        self.estoque_codigo_table.setSelectionBehavior(QAbstractItemView.SelectItems)
+        self.estoque_codigo_table.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        self.estoque_codigo_table.setAlternatingRowColors(True)
+        self.estoque_codigo_table.setSortingEnabled(True)
+        self.estoque_codigo_table.setWordWrap(True)
+        self.estoque_codigo_table.verticalHeader().setDefaultSectionSize(40)
+        self.estoque_codigo_table.horizontalHeader().setMinimumSectionSize(80)
+        self.estoque_codigo_table.horizontalHeader().setDefaultSectionSize(180)
+        self.estoque_codigo_table.horizontalHeader().setStretchLastSection(True)
+        self.estoque_codigo_table.setStyleSheet(self.resumo_global_table.styleSheet())
+        layout.addWidget(self.estoque_codigo_table, 1)
+
+        return tab
+
     def _build_tab_aba_mensal(self) -> QWidget:
         tab = QWidget()
         layout = QVBoxLayout(tab)
@@ -696,9 +768,7 @@ class RelatoriosWindowMixin:
         toolbar = QHBoxLayout()
         self.btn_refresh_aba_mensal = QPushButton("Recarregar")
         self.btn_refresh_aba_mensal.setIcon(
-            QApplication.style().standardIcon(
-                QApplication.style().StandardPixmap.SP_BrowserReload
-            )
+            QApplication.style().standardIcon(QApplication.style().StandardPixmap.SP_BrowserReload)
         )
         self.btn_apply_aba_mensal_filters = QPushButton("Aplicar filtros")
         self.btn_clear_aba_mensal_filters = QPushButton("Limpar filtros")
@@ -782,9 +852,7 @@ class RelatoriosWindowMixin:
         filtros_avancados.addStretch()
         layout.addLayout(filtros_avancados)
 
-        self.lbl_aba_mensal_status = QLabel(
-            "Selecione um CNPJ para carregar a aba mensal."
-        )
+        self.lbl_aba_mensal_status = QLabel("Selecione um CNPJ para carregar a aba mensal.")
         self.lbl_aba_mensal_status.setStyleSheet(
             "QLabel { padding: 4px 8px; background: #101827; border: 1px solid #374151; border-radius: 4px; color: #e5e7eb; }"
         )
@@ -809,9 +877,7 @@ class RelatoriosWindowMixin:
         self.aba_mensal_table.horizontalHeader().setMaximumSectionSize(380)
         self.aba_mensal_table.horizontalHeader().setStretchLastSection(True)
         self.aba_mensal_table.horizontalHeader().setSectionsMovable(True)
-        self.aba_mensal_table.horizontalHeader().setContextMenuPolicy(
-            Qt.CustomContextMenu
-        )
+        self.aba_mensal_table.horizontalHeader().setContextMenuPolicy(Qt.CustomContextMenu)
         self.aba_mensal_table.setStyleSheet(
             "QTableView::item { padding: 4px 2px; }"
             "QTableCornerButton::section { background: #18181b; border: 1px solid #3f3f46; }"
