@@ -150,13 +150,19 @@ def gerar_enriquecimento(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
             arq_agr = alternativas[0]
 
         rprint(f"[cyan]Enriquecendo {prefix} a partir de {arq_agr.name}...[/cyan]")
-        df_agr = pl.read_parquet(arq_agr)
-
-        if "id_agrupado" not in df_agr.columns:
+        schema_agr = pl.read_parquet_schema(arq_agr)
+        if "id_agrupado" not in schema_agr:
             rprint(
                 f"[yellow]Ignorando {prefix}_agr - Sem coluna id_agrupado (execute fontes_produtos primeiro)[/yellow]"
             )
             return True
+
+        # Carrega apenas as colunas necessarias para o enriquecimento
+        cols_necessarias = ["id_agrupado", col_ucom, col_qcom]
+        if col_vuncom:
+            cols_necessarias.append(col_vuncom)
+        cols_sel = [c for c in cols_necessarias if c in schema_agr]
+        df_agr = pl.scan_parquet(arq_agr).select(cols_sel).collect()
 
         df_enr = enriquecer_a_partir_agr(df_agr, col_ucom, col_qcom, col_vuncom)
         return salvar_para_parquet(df_enr, pasta_analises, f"{prefix}_enriquecido_{cnpj}.parquet")
