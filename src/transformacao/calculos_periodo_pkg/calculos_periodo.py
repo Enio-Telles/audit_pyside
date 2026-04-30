@@ -268,6 +268,18 @@ def calcular_aba_periodos_dataframe(
                 pl.col("__data_efetiva__").min().alias("__data_inicio__"),
                 pl.col("__data_efetiva__").max().alias("__data_fim__"),
                 pl.when(pl.col("Tipo_operacao").str.starts_with("0 - ESTOQUE INICIAL"))
+                .then(pl.col("__data_efetiva__"))
+                .otherwise(None)
+                .drop_nulls()
+                .min()
+                .alias("data_estoque_inicial"),
+                pl.when(pl.col("Tipo_operacao").str.starts_with("3 - ESTOQUE FINAL"))
+                .then(pl.col("__data_efetiva__"))
+                .otherwise(None)
+                .drop_nulls()
+                .max()
+                .alias("data_estoque_final"),
+                pl.when(pl.col("Tipo_operacao").str.starts_with("0 - ESTOQUE INICIAL"))
                 .then(pl.col("q_conv"))
                 .otherwise(0.0)
                 .sum()
@@ -323,11 +335,37 @@ def calcular_aba_periodos_dataframe(
         )
         .with_columns(
             [
-                (
+                pl.when(
+                    pl.col("data_estoque_inicial").is_not_null()
+                    & pl.col("data_estoque_final").is_not_null()
+                    & (pl.col("data_estoque_inicial") != pl.col("data_estoque_final"))
+                )
+                .then(
+                    pl.col("data_estoque_inicial").dt.strftime("%d/%m/%Y")
+                    + " até "
+                    + pl.col("data_estoque_final").dt.strftime("%d/%m/%Y")
+                )
+                .when(
+                    pl.col("data_estoque_inicial").is_not_null()
+                    & pl.col("data_estoque_final").is_not_null()
+                    & (pl.col("data_estoque_inicial") == pl.col("data_estoque_final"))
+                    & (pl.col("estoque_final") > 0)
+                )
+                .then(
+                    pl.col("data_estoque_inicial").dt.strftime("%d/%m/%Y")
+                    + " até "
+                    + pl.col("data_estoque_final").dt.strftime("%d/%m/%Y")
+                )
+                .when(pl.col("data_estoque_inicial").is_not_null())
+                .then(pl.col("data_estoque_inicial").dt.strftime("%d/%m/%Y") + " até ?")
+                .when(pl.col("data_estoque_final").is_not_null())
+                .then("? até " + pl.col("data_estoque_final").dt.strftime("%d/%m/%Y"))
+                .otherwise(
                     pl.col("__data_inicio__").dt.strftime("%d/%m/%Y")
                     + " até "
                     + pl.col("__data_fim__").dt.strftime("%d/%m/%Y")
-                ).alias("periodo_label"),
+                )
+                .alias("periodo_label"),
                 (
                     pl.col("estoque_inicial")
                     + pl.col("entradas")
@@ -436,6 +474,15 @@ def calcular_aba_periodos_dataframe(
         [
             pl.col("periodo_inventario").alias("cod_per"),
             "periodo_label",
+            pl.col("data_estoque_inicial").dt.strftime("%d/%m/%Y").alias("data_estoque_inicial"),
+            pl.when(
+                pl.col("data_estoque_final").is_not_null()
+                & (pl.col("data_estoque_final") == pl.col("data_estoque_inicial"))
+                & (pl.col("estoque_final") == 0)
+            )
+            .then(pl.lit(None))
+            .otherwise(pl.col("data_estoque_final").dt.strftime("%d/%m/%Y"))
+            .alias("data_estoque_final"),
             pl.col("id_agrupado").alias("id_agregado"),
             "descr_padrao",
             "unid_ref",
