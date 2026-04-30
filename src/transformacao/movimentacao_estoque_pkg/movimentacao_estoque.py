@@ -210,7 +210,20 @@ def filtrar_movimentacoes_por_fonte(df: pl.DataFrame) -> pl.DataFrame:
 
 
 def _construir_vinculos_produto(arq_prod_final: Path, arq_mapa: Path):
-    df_prod_base = pl.read_parquet(arq_prod_final)
+    _cols_prod = [
+        "id_agrupado",
+        "descricao_normalizada",
+        "descr_padrao",
+        "ncm_padrao",
+        "cest_padrao",
+        "descricao_final",
+        "co_sefin_final",
+        "unid_ref_sugerida",
+    ]
+    _schema_prod = pl.read_parquet_schema(arq_prod_final)
+    _cols_prod_sel = [c for c in _cols_prod if c in _schema_prod]
+    df_prod_base = pl.scan_parquet(arq_prod_final).select(_cols_prod_sel).collect()
+
     df_prod_por_id = (
         df_prod_base.select(
             [
@@ -272,8 +285,10 @@ def _construir_vinculos_produto(arq_prod_final: Path, arq_mapa: Path):
         }
     )
     if arq_mapa.exists():
+        _schema_mapa = pl.read_parquet_schema(arq_mapa)
+        _cols_mapa = [c for c in ["codigo_fonte", "id_agrupado"] if c in _schema_mapa]
         df_codigo = (
-            pl.read_parquet(arq_mapa)
+            pl.scan_parquet(arq_mapa).select(_cols_mapa).collect()
             .select(
                 [
                     expr_normalizar_codigo_fonte("codigo_fonte"),
@@ -518,25 +533,27 @@ def gerar_movimentacao_estoque(cnpj: str, pasta_cnpj: Path | None = None) -> boo
         rprint(f"[red]{exc}[/red]")
         return False
 
-    df_prod_final = pl.read_parquet(arq_prod_final).select(
-        [
-            "id_agrupado",
-            "descricao_normalizada",
-            "descr_padrao",
-            "ncm_padrao",
-            "cest_padrao",
-            "descricao_final",
-            "co_sefin_final",
-            "unid_ref_sugerida",
-        ]
-    )
+    _cols_prod_final = [
+        "id_agrupado",
+        "descricao_normalizada",
+        "descr_padrao",
+        "ncm_padrao",
+        "cest_padrao",
+        "descricao_final",
+        "co_sefin_final",
+        "unid_ref_sugerida",
+    ]
+    _schema_pf = pl.read_parquet_schema(arq_prod_final)
+    _cols_pf_sel = [c for c in _cols_prod_final if c in _schema_pf]
+    df_prod_final = pl.scan_parquet(arq_prod_final).select(_cols_pf_sel).collect()
 
     # Construir vinculo canonico: prioriza map_produto_agrupado_<cnpj>.parquet
     df_vinculo_produto = _carregar_vinculo_produto_canonico(pasta_analises, cnpj, df_prod_final)
 
+    _schema_fat = pl.read_parquet_schema(arq_fatores)
+    _cols_fat_sel = [c for c in ["id_agrupado", "unid", "unid_ref", "fator"] if c in _schema_fat]
     df_fatores = (
-        pl.read_parquet(arq_fatores)
-        .select(["id_agrupado", "unid", "unid_ref", "fator"])
+        pl.scan_parquet(arq_fatores).select(_cols_fat_sel).collect()
         .rename({"unid": "__unid_fator__"})
         .unique(subset=["id_agrupado", "__unid_fator__"])
     )

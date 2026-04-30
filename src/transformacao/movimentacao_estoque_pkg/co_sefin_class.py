@@ -48,20 +48,26 @@ def _carregar_co_sefin_padrao(cnpj: str) -> pl.DataFrame | None:
     if not path_agrupado.exists():
         return None
 
-    df_agr = pl.read_parquet(path_agrupado)
-    if "id_agrupado" not in df_agr.columns or "co_sefin_padrao" not in df_agr.columns:
+    _schema = pl.read_parquet_schema(path_agrupado)
+    if "id_agrupado" not in _schema or "co_sefin_padrao" not in _schema:
         rprint(
             f"[yellow]Aviso: {path_agrupado.name} nao possui as colunas "
             "'id_agrupado' e 'co_sefin_padrao'.[/yellow]"
         )
         return None
 
-    return df_agr.select(
-        [
-            pl.col("id_agrupado").cast(pl.String, strict=False),
-            pl.col("co_sefin_padrao").cast(pl.String, strict=False),
-        ]
-    ).unique(subset=["id_agrupado"], keep="first")
+    return (
+        pl.scan_parquet(path_agrupado)
+        .select(["id_agrupado", "co_sefin_padrao"])
+        .collect()
+        .select(
+            [
+                pl.col("id_agrupado").cast(pl.String, strict=False),
+                pl.col("co_sefin_padrao").cast(pl.String, strict=False),
+            ]
+        )
+        .unique(subset=["id_agrupado"], keep="first")
+    )
 
 
 def gerar_co_sefin_final(
