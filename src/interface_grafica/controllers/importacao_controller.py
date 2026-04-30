@@ -221,6 +221,7 @@ class ImportacaoControllerMixin:
         if not dlg_sql.exec():
             return
         sql_selecionados = dlg_sql.consultas_selecionadas()
+        pular_existente = not dlg_sql.forcar_reextracao()
         self.selection_service.set_selections("ultimas_consultas", sql_selecionados)
 
         # 2. Selecionar Tabelas
@@ -245,6 +246,7 @@ class ImportacaoControllerMixin:
             sql_selecionados,
             tabelas_selecionadas,
             data_limite,
+            pular_existente=pular_existente,
         )
         self.pipeline_worker.finished_ok.connect(self.on_pipeline_finished)
         self.pipeline_worker.failed.connect(self.on_pipeline_failed)
@@ -309,6 +311,7 @@ class ImportacaoControllerMixin:
         if not dlg_sql.exec():
             return
         sql_selecionados = dlg_sql.consultas_selecionadas()
+        pular_existente = not dlg_sql.forcar_reextracao()
         self.selection_service.set_selections("ultimas_consultas", sql_selecionados)
 
         self.btn_extrair_brutas.setEnabled(False)
@@ -321,6 +324,7 @@ class ImportacaoControllerMixin:
             sql_selecionados,
             [],  # sem tabelas a apenas extracao
             data_limite,
+            pular_existente=pular_existente,
         )
         self.pipeline_worker.finished_ok.connect(self._on_extracao_finished)
         self.pipeline_worker.failed.connect(self._on_extracao_failed)
@@ -531,6 +535,52 @@ class ImportacaoControllerMixin:
                 "Dados apagados", f"Os dados do CNPJ {cnpj} foram removidos."
             )
             self.refresh_file_tree(cnpj)
+
+    def limpar_tudo(self) -> None:
+        """Remove permanentemente as pastas e registros de todos os CNPJs."""
+        from interface_grafica.config import CNPJ_ROOT
+
+        registrados = [r.cnpj for r in self.registry_service.list_records()]
+        em_disco = [p.name for p in CNPJ_ROOT.iterdir() if p.is_dir()] if CNPJ_ROOT.exists() else []
+        cnpjs = sorted(set(registrados) | set(em_disco))
+
+        if not cnpjs:
+            self.show_info("Limpar tudo", "Nenhum CNPJ encontrado para remover.")
+            return
+
+        lista = "\n".join(cnpjs[:20])
+        if len(cnpjs) > 20:
+            lista += f"\n... e mais {len(cnpjs) - 20}"
+
+        ret = QMessageBox.critical(
+            self,
+            "PERIGO: Limpar tudo",
+            f"Isso removera permanentemente TODOS os {len(cnpjs)} CNPJ(s) — pastas e registros:\n\n{lista}\n\nEsta acao NAO pode ser desfeita. Tem certeza absoluta?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if ret != QMessageBox.Yes:
+            return
+
+        erros = []
+        for cnpj in cnpjs:
+            try:
+                self.servico_pipeline_funcoes.servico_extracao.apagar_cnpj_total(cnpj)
+            except Exception as e:
+                erros.append(f"{cnpj} (pasta): {e}")
+            try:
+                self.registry_service.delete_by_cnpj(cnpj)
+            except Exception as e:
+                erros.append(f"{cnpj} (registro): {e}")
+
+        if erros:
+            self.show_error("Erros ao limpar", "\n".join(erros))
+        else:
+            self.show_info("Limpar tudo", f"{len(cnpjs)} CNPJ(s) removidos com sucesso.")
+
+        self.refresh_cnpjs()
+        if hasattr(self, "file_tree"):
+            self.file_tree.clear()
 
     def apagar_cnpj_completo(self) -> None:
         """Remove a pasta inteira do CNPJ do filesystem e do registro SQL."""

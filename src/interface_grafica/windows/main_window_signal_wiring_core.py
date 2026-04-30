@@ -44,6 +44,8 @@ class MainWindowSignalWiringCoreMixin:
         self.btn_processamento.clicked.connect(self.executar_processamento)
         self.btn_apagar_dados.clicked.connect(self.apagar_dados_cnpj)
         self.btn_apagar_cnpj.clicked.connect(self.apagar_cnpj_completo)
+        self.btn_limpar_tudo.clicked.connect(self.limpar_tudo)
+        self.btn_refresh_logs.clicked.connect(self.refresh_logs)
         self.cnpj_list.itemSelectionChanged.connect(self.on_cnpj_selected)
         self.file_tree.itemClicked.connect(self.on_file_activated)
         self.file_tree.itemDoubleClicked.connect(self.on_file_activated)

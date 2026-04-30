@@ -75,6 +75,17 @@ class ImportacaoWindowMixin:
         actions_row3.addWidget(self.btn_apagar_cnpj)
         cnpj_layout.addLayout(actions_row3)
 
+        actions_row4 = QHBoxLayout()
+        self.btn_limpar_tudo = QPushButton("Limpar tudo")
+        self.btn_limpar_tudo.setStyleSheet(
+            "QPushButton { color: #ef5350; font-weight: bold; }"
+        )
+        self.btn_limpar_tudo.setToolTip(
+            "Remove permanentemente os dados de TODOS os CNPJs cadastrados"
+        )
+        actions_row4.addWidget(self.btn_limpar_tudo)
+        cnpj_layout.addLayout(actions_row4)
+
         self.cnpj_list = QListWidget()
         cnpj_layout.addWidget(self.cnpj_list)
         layout.addWidget(cnpj_box)
@@ -315,6 +326,13 @@ class ImportacaoWindowMixin:
     def _build_tab_logs(self) -> QWidget:
         tab = QWidget()
         layout = QVBoxLayout(tab)
+        toolbar = QHBoxLayout()
+        self.btn_refresh_logs = QPushButton("Atualizar logs")
+        self.lbl_logs_status = QLabel("")
+        toolbar.addWidget(self.btn_refresh_logs)
+        toolbar.addWidget(self.lbl_logs_status)
+        toolbar.addStretch()
+        layout.addLayout(toolbar)
         self.log_view = QPlainTextEdit()
         self.log_view.setReadOnly(True)
         layout.addWidget(self.log_view)

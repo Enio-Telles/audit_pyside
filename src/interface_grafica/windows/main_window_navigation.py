@@ -362,16 +362,50 @@ class MainWindowNavigationMixin:
 
     def refresh_logs(self) -> None:
         import json
+        from interface_grafica.config import CNPJ_ROOT
 
-        linhas = self.servico_agregacao.ler_linhas_log()
-        limite = 1000
-        if len(linhas) > limite:
-            linhas = linhas[-limite:]
-            prefixo = [f"... exibindo apenas as ultimas {limite} linhas de log ..."]
-        else:
-            prefixo = []
-        logs = [json.dumps(log, ensure_ascii=False) for log in linhas]
-        self.log_view.setPlainText("\n".join(prefixo + logs))
+        cnpj = self.state.current_cnpj
+        if not cnpj:
+            self.log_view.setPlainText("Nenhum CNPJ selecionado.")
+            return
+
+        pasta = CNPJ_ROOT / cnpj / "analises" / "produtos"
+        if not pasta.exists():
+            self.log_view.setPlainText(f"Pasta de analises nao encontrada para {cnpj}.")
+            return
+
+        arquivos = sorted(pasta.glob("log_*.json"))
+        if not arquivos:
+            self.log_view.setPlainText(f"Nenhum arquivo de log encontrado para {cnpj}.")
+            return
+
+        secoes: list[str] = []
+        for arq in arquivos:
+            try:
+                with open(arq, encoding="utf-8") as f:
+                    dados = json.load(f)
+                conteudo = json.dumps(dados, ensure_ascii=False, indent=2)
+            except Exception as e:
+                conteudo = f"(erro ao ler: {e})"
+            secoes.append(f"=== {arq.name} ===\n{conteudo}")
+
+        # Log de agregacoes (lista de eventos)
+        linhas_agr = self.servico_agregacao.ler_linhas_log(cnpj)
+        if linhas_agr:
+            limite = 1000
+            if len(linhas_agr) > limite:
+                linhas_agr = linhas_agr[-limite:]
+                cabecalho = f"=== log_agregacoes (ultimas {limite} entradas) ==="
+            else:
+                cabecalho = f"=== log_agregacoes ({len(linhas_agr)} entradas) ==="
+            eventos = [json.dumps(e, ensure_ascii=False) for e in linhas_agr]
+            secoes.append(cabecalho + "\n" + "\n".join(eventos))
+
+        self.log_view.setPlainText("\n\n".join(secoes))
+        if hasattr(self, "lbl_logs_status"):
+            self.lbl_logs_status.setText(
+                f"{len(arquivos) + (1 if linhas_agr else 0)} arquivo(s) carregado(s) — CNPJ {cnpj}"
+            )
 
     def open_cnpj_folder(self) -> None:
         if not self.state.current_cnpj:
