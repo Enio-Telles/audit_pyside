@@ -161,12 +161,15 @@ def apply_similarity_patch() -> None:
     def _connect_consulta_agregacao_signals_com_similaridade(self) -> None:
         original_connect_consulta_agregacao(self)
         if hasattr(self, "btn_ordenar_similaridade_desc"):
-            try:
-                self.btn_ordenar_similaridade_desc.clicked.disconnect(
-                    self.ordenar_agregacao_por_similaridade
-                )
-            except Exception:
-                pass
+            import warnings
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", RuntimeWarning)
+                try:
+                    self.btn_ordenar_similaridade_desc.clicked.disconnect(
+                        self.ordenar_agregacao_por_similaridade
+                    )
+                except Exception:
+                    pass
             self.btn_ordenar_similaridade_desc.clicked.connect(
                 self.ordenar_agregacao_por_similaridade
             )

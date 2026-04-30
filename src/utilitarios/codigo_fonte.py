@@ -72,8 +72,6 @@ def normalizar_codigo_fonte(valor: str | None) -> str | None:
 
 def expr_normalizar_codigo_fonte(col: str, alias: str = "codigo_fonte") -> pl.Expr:
     """Cria expressao Polars para normalizar uma coluna de codigo de fonte."""
-    # Nota: A normalizacao de 3 partes em Polars puro e complexa devido ao split.
-    # Por ora, mantemos a compatibilidade com 2 partes ou usamos a lógica expandida.
     def _limpar_parte_expr(expr: pl.Expr) -> pl.Expr:
         return (
             expr.cast(pl.Utf8, strict=False)
