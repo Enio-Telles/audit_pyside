@@ -38,7 +38,30 @@ def calcular_precos_medios_produtos_final(
     pasta_cnpj: Path | None = None,
     salvar_logs: bool = True,
 ) -> tuple[pl.DataFrame, pl.DataFrame]:
-    cnpj = re.sub(r"\D", "", cnpj)
+    """Calcula o preco medio por produto agrupado e unidade a partir da base final.
+
+    Le ``item_unidades_<cnpj>.parquet`` e ``produtos_agrupados_<cnpj>.parquet``
+    (e opcionalmente ``map_produto_agrupado`` e ``produtos_final``), calcula o
+    preco medio de compra por ``id_agrupado`` e unidade, e retorna dois
+    DataFrames: o completo e um subconjunto dos itens sem preco medio de compra.
+    Se ``salvar_logs=True``, salva ``log_sem_preco_medio_compra_<cnpj>.parquet``
+    e o JSON de resumo correspondente.
+
+    Args:
+        cnpj: CPF ou CNPJ do contribuinte (somente digitos ou formatado).
+        pasta_cnpj: Raiz do diretorio do CNPJ. Se ``None``, usa o padrao
+            ``dados/CNPJ/<cnpj>``.
+        salvar_logs: Se ``True`` (padrao), persiste o arquivo de log de itens
+            sem preco de compra em ``analises/produtos``.
+
+    Returns:
+        Tupla ``(df_precos, df_sem_compra)`` onde ``df_precos`` contem os
+        precos medios calculados e ``df_sem_compra`` lista os itens para os
+        quais nao foi possivel calcular preco medio de compra.
+
+    Raises:
+        FileNotFoundError: Se algum arquivo obrigatorio nao for encontrado.
+    """
     if pasta_cnpj is None:
         pasta_cnpj = CNPJ_ROOT / cnpj
 

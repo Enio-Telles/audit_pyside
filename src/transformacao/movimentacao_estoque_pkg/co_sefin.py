@@ -129,6 +129,24 @@ def inferir_co_sefin_dataframe(
 
 
 def co_sefin(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
+    """Infere a coluna ``co_sefin_inferido`` nas tabelas de caracteristicas de itens.
+
+    Processa os arquivos ``tabela_itens_caracteristicas_<cnpj>.parquet`` e
+    ``tab_itens_caract_normalizada_<cnpj>.parquet`` em ``analises/produtos``,
+    adicionando a coluna ``co_sefin_inferido`` calculada a partir das colunas
+    ``ncm`` e ``cest`` com a mesma ordem de fallback do pipeline:
+    1. CEST + NCM; 2. apenas CEST; 3. apenas NCM.
+
+    Args:
+        cnpj: CPF ou CNPJ do contribuinte (somente digitos ou formatado).
+        pasta_cnpj: Raiz do diretorio do CNPJ. Se ``None``, usa o padrao
+            ``dados/CNPJ/<cnpj>``.
+
+    Returns:
+        ``True`` se pelo menos um arquivo foi processado com sucesso;
+        ``False`` se nenhum arquivo alvo foi encontrado ou se ocorreu erro
+        em todos os arquivos processados.
+    """
     import re
 
     cnpj = re.sub(r"[^0-9]", "", cnpj)

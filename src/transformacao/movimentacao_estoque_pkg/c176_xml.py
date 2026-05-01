@@ -55,6 +55,25 @@ def _norm_text_expr(col: str) -> pl.Expr:
 
 
 def gerar_c176_xml(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
+    """Gera a tabela de analise c176_xml para um CNPJ.
+
+    Une os dados do registro C176 (ressarcimento de ST) com o C170
+    agregado e com o XML da NF-e de entrada correspondente, convertendo
+    quantidades e valores unitarios para a unidade de referencia do produto.
+    O resultado e salvo em ``analises/produtos/c176_xml_<cnpj>.parquet``.
+
+    Args:
+        cnpj: CPF ou CNPJ do contribuinte (somente digitos ou formatado).
+        pasta_cnpj: Raiz do diretorio do CNPJ. Se ``None``, usa o padrao
+            ``dados/CNPJ/<cnpj>``.
+
+    Returns:
+        ``True`` se o arquivo foi gerado com sucesso; ``False`` em caso de
+        arquivo ausente ou erro de schema.
+
+    Raises:
+        ValueError: Se ``cnpj`` nao for um CPF (11 digitos) nem CNPJ (14 digitos).
+    """
     cnpj = re.sub(r"\D", "", cnpj or "")
     if len(cnpj) not in {11, 14}:
         raise ValueError("CPF/CNPJ invalido.")
