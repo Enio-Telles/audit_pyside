@@ -121,6 +121,51 @@ O backend FastAPI foi removido em 2026-04-22 — veja [ADR-001](adr/0001-futuro-
 O empacotamento usa **PyInstaller 6+** via `audit_pyside.spec` na raiz do repositório.
 O spec gera uma distribuição **one-dir** (`dist/FiscalParquetAnalyzer/`) pronta para distribuição Windows.
 
+### Release automatizado com assinatura de código (GitHub Actions)
+
+O workflow `.github/workflows/release-windows.yml` é disparado automaticamente em pushes de tags `v*`.
+Ele executa as seguintes etapas em `windows-latest`:
+
+1. Instala dependências com `uv sync`.
+2. Deriva a versão numérica a partir da tag (ex.: `v1.2.3` → `1.2.3.0`).
+3. Gera um arquivo de recurso VERSIONINFO do Windows e embute a versão no `.exe`.
+4. Compila o bundle com `pyinstaller audit_pyside.spec --clean --noconfirm`.
+5. **Assina** `FiscalParquetAnalyzer.exe` com `signtool.exe` usando o certificado PFX configurado nos secrets.
+6. Empacota o bundle assinado em `FiscalParquetAnalyzer-<versao>-windows.zip`.
+7. Faz o upload do zip como asset da **GitHub Release** correspondente à tag.
+
+#### Secrets obrigatórios
+
+Configure os seguintes secrets no repositório (Settings → Secrets and variables → Actions):
+
+| Secret | Descrição |
+|---|---|
+| `WINDOWS_CERT_PFX_BASE64` | Certificado de code-signing PKCS#12 (.pfx) codificado em Base64. Gere com: `[Convert]::ToBase64String([IO.File]::ReadAllBytes("cert.pfx"))` no PowerShell. |
+| `WINDOWS_CERT_PASSWORD` | Senha que protege o arquivo `.pfx`. |
+
+> **Como gerar o Base64 do certificado no PowerShell:**
+> ```powershell
+> [System.Convert]::ToBase64String(
+>     [System.IO.File]::ReadAllBytes("C:\caminho\para\cert.pfx")
+> ) | Set-Clipboard
+> ```
+> Cole o conteúdo copiado no valor do secret `WINDOWS_CERT_PFX_BASE64`.
+
+> **Nota de segurança:** O arquivo PFX temporário é gravado em `${{ runner.temp }}` durante a
+> assinatura e removido imediatamente após, mesmo em caso de falha (step `Remove certificate file`
+> usa `if: always()`). Nunca commite o arquivo `.pfx` diretamente no repositório.
+
+#### Como publicar uma release
+
+```bash
+# Criar e empurrar a tag de versão
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+O workflow `release-windows.yml` será disparado automaticamente.
+Se a GitHub Release não existir, ela será criada pela action com os assets assinados.
+
 ### Pré-requisitos
 
 ```bash

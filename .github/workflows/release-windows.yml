@@ -1,0 +1,167 @@
+name: Release Windows
+
+# Builds the PyInstaller bundle on windows-latest, signs the .exe with a
+# code-signing certificate, and uploads the signed artifact to the GitHub
+# Release that was created by the tag push.
+#
+# Required secrets (repository or environment):
+#   WINDOWS_CERT_PFX_BASE64  - Base64-encoded PKCS#12 (.pfx) certificate file
+#   WINDOWS_CERT_PASSWORD    - Password protecting the .pfx file
+#
+# The workflow is triggered only on version tag pushes (v*).
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write  # required to upload assets to the GitHub Release
+
+jobs:
+  build-sign-release:
+    name: Build, Sign and Release (Windows)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff # v6
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: uv sync
+
+      # Derive a numeric version tuple from the tag (e.g. v1.2.3 -> 1,2,3,0).
+      - name: Derive version from tag
+        id: ver
+        shell: pwsh
+        run: |
+          $tag   = "${{ github.ref_name }}"
+          $bare  = $tag -replace '^v', ''
+          $parts = $bare -split '\.'
+          while ($parts.Count -lt 4) { $parts += '0' }
+          $parts = $parts[0..3]
+          $tuple = $parts -join ','
+          echo "bare=$bare"   >> $env:GITHUB_OUTPUT
+          echo "tuple=$tuple" >> $env:GITHUB_OUTPUT
+
+      # Generate a Windows VERSIONINFO resource file consumed by audit_pyside.spec
+      # via the VERSION_FILE environment variable.
+      - name: Generate version resource file
+        shell: pwsh
+        run: |
+          $tuple = "${{ steps.ver.outputs.tuple }}"
+          $bare  = "${{ steps.ver.outputs.bare }}"
+          @"
+          VSVersionInfo(
+            ffi=FixedFileInfo(
+              filevers=($tuple),
+              prodvers=($tuple),
+              mask=0x3f,
+              flags=0x0,
+              OS=0x40004,
+              fileType=0x1,
+              subtype=0x0,
+              date=(0, 0)
+            ),
+            kids=[
+              StringFileInfo([
+                StringTable(
+                  u'040904B0',
+                  [StringStruct(u'CompanyName',      u'audit_pyside'),
+                   StringStruct(u'FileDescription',  u'Fiscal Parquet Analyzer'),
+                   StringStruct(u'FileVersion',      u'$bare'),
+                   StringStruct(u'InternalName',     u'FiscalParquetAnalyzer'),
+                   StringStruct(u'LegalCopyright',   u''),
+                   StringStruct(u'OriginalFilename', u'FiscalParquetAnalyzer.exe'),
+                   StringStruct(u'ProductName',      u'Fiscal Parquet Analyzer'),
+                   StringStruct(u'ProductVersion',   u'$bare')])
+              ]),
+              VarFileInfo([VarStruct(u'Translation', [1033, 1200])])
+            ]
+          )
+          "@ | Set-Content -Encoding utf8 file_version_info.txt
+          echo "VERSION_FILE=${{ github.workspace }}\file_version_info.txt" >> $env:GITHUB_ENV
+
+      - name: Build PyInstaller bundle
+        run: uv run pyinstaller audit_pyside.spec --clean --noconfirm
+
+      - name: Verify executable exists
+        shell: pwsh
+        run: |
+          $exe = "dist\FiscalParquetAnalyzer\FiscalParquetAnalyzer.exe"
+          if (!(Test-Path $exe)) {
+            Write-Error "Executable not found after build: $exe"
+            exit 1
+          }
+          Write-Host "Executable found: $exe"
+
+      # Decode the base64 PFX and write it to a temporary file that will be
+      # removed in the cleanup step regardless of success or failure.
+      - name: Decode certificate
+        shell: pwsh
+        run: |
+          $pfxBytes = [System.Convert]::FromBase64String("${{ secrets.WINDOWS_CERT_PFX_BASE64 }}")
+          [System.IO.File]::WriteAllBytes("${{ runner.temp }}\cert.pfx", $pfxBytes)
+
+      # signtool.exe is included in the Windows SDK pre-installed on windows-latest.
+      # /tr  - RFC 3161 timestamp server (DigiCert public TSA)
+      # /td  - timestamp digest algorithm (sha256)
+      # /fd  - file digest algorithm (sha256)
+      - name: Sign executable
+        shell: pwsh
+        run: |
+          $signtool = (Get-ChildItem -Recurse -ErrorAction SilentlyContinue `
+            "C:\Program Files (x86)\Windows Kits\10\bin" `
+            -Filter signtool.exe | Sort-Object FullName | Select-Object -Last 1).FullName
+
+          if (-not $signtool) {
+            Write-Error "signtool.exe not found in Windows SDK"
+            exit 1
+          }
+
+          & $signtool sign `
+            /f "${{ runner.temp }}\cert.pfx" `
+            /p "${{ secrets.WINDOWS_CERT_PASSWORD }}" `
+            /tr "http://timestamp.digicert.com" `
+            /td sha256 `
+            /fd sha256 `
+            "dist\FiscalParquetAnalyzer\FiscalParquetAnalyzer.exe"
+
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "signtool failed with exit code $LASTEXITCODE"
+            exit 1
+          }
+          Write-Host "Code signing succeeded"
+
+      - name: Remove certificate file
+        if: always()
+        shell: pwsh
+        run: Remove-Item -ErrorAction SilentlyContinue "${{ runner.temp }}\cert.pfx"
+
+      # Package the entire one-dir bundle into a zip for distribution.
+      - name: Create release archive
+        shell: pwsh
+        run: |
+          $version = "${{ steps.ver.outputs.bare }}"
+          $zipName = "FiscalParquetAnalyzer-$version-windows.zip"
+          Compress-Archive `
+            -Path "dist\FiscalParquetAnalyzer\*" `
+            -DestinationPath $zipName
+          echo "ZIP_NAME=$zipName" >> $env:GITHUB_ENV
+
+      # Upload the signed archive as a release asset.
+      # If the GitHub Release does not exist yet (e.g. when using lightweight tags),
+      # action-gh-release creates it automatically.
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@c95fe1489396fe8a9eb87c0abf8aa5b2ef267fda # v2.2.1
+        with:
+          files: ${{ env.ZIP_NAME }}
+          fail_on_unmatched_files: true

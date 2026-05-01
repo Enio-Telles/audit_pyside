@@ -21,12 +21,18 @@
 #   compressed binaries cause false-positive antivirus alerts and can
 #   corrupt PySide6/Qt shared libraries, leading to startup crashes.
 
+import os
 import sys
 from pathlib import Path
 
 from PyInstaller.utils.hooks import collect_submodules, collect_data_files
 
 ROOT = Path(SPECPATH)  # noqa: F821  (injected by PyInstaller)
+
+# Optional version resource file for Windows.
+# The workflow sets VERSION_FILE to an absolute path before invoking PyInstaller.
+# When building locally without the env var the attribute is omitted.
+_version_file = os.environ.get("VERSION_FILE") or None
 SRC = ROOT / "src"
 
 # sys.path patch so collect_submodules can find src/* packages
@@ -158,6 +164,7 @@ exe = EXE(  # noqa: F821
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    version=_version_file,  # Windows VERSIONINFO resource (set via VERSION_FILE env var)
 )
 
 coll = COLLECT(  # noqa: F821
