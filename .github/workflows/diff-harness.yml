@@ -1,0 +1,87 @@
+name: Differential Harness
+
+on:
+  pull_request:
+    paths:
+      - "src/transformacao/**"
+
+jobs:
+  diff-harness:
+    name: Testes diferenciais (diff_harness)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Instalar dependencias
+        run: pip install polars numpy structlog rich numba pytest
+
+      - name: Rodar diff_harness
+        run: pytest -m diff_harness -q --tb=short
+        env:
+          PYTHONPATH: src
+
+  check-readonly-label:
+    name: Verificar label differential-validated para arquivos read-only
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verificar se PR toca arquivos read-only
+        id: check-readonly
+        uses: actions/github-script@v7
+        with:
+          result-encoding: string
+          script: |
+            const readOnlyFiles = [
+              'src/transformacao/rastreabilidade_produtos/_produtos_final_impl.py',
+              'src/transformacao/rastreabilidade_produtos/fatores_conversao.py',
+              'src/transformacao/fatores_conversao.py',
+              'src/transformacao/movimentacao_estoque.py',
+              'src/transformacao/movimentacao_estoque_pkg/calculo_saldos.py',
+            ];
+            const { data: files } = await github.rest.pulls.listFiles({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.payload.pull_request.number,
+              per_page: 100,
+            });
+            const changedPaths = files.map(f => f.filename);
+            const touched = readOnlyFiles.filter(f => changedPaths.includes(f));
+            if (touched.length > 0) {
+              core.setOutput('readonly_touched', 'true');
+              core.setOutput('touched_files', touched.join(', '));
+            } else {
+              core.setOutput('readonly_touched', 'false');
+              core.setOutput('touched_files', '');
+            }
+            return touched.length > 0 ? 'true' : 'false';
+
+      - name: Verificar label differential-validated
+        if: steps.check-readonly.outputs.readonly_touched == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.payload.pull_request.number,
+            });
+            const labels = pr.labels.map(l => l.name);
+            const hasLabel = labels.includes('differential-validated');
+            const touchedFiles = '${{ steps.check-readonly.outputs.touched_files }}';
+
+            if (!hasLabel) {
+              core.setFailed(
+                `Esta PR toca arquivos read-only (${touchedFiles}) mas nao possui o label "differential-validated".\n` +
+                `Adicione o label apos executar o harness diferencial e anexar o DifferentialReport no corpo da PR.\n` +
+                `Veja docs/diff-harness.md para instrucoes.`
+              );
+            } else {
+              core.info(`Label "differential-validated" presente. Arquivos read-only: ${touchedFiles}`);
+            }

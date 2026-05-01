@@ -51,6 +51,7 @@ markers = [
     "gui: tests that require PySide6 GUI (display server)",
     "gui_smoke: headless GUI smoke tests",
     "slow: tests that are slow to run",
+    "diff_harness: testes diferenciais byte-a-byte para invariantes de src/transformacao/",
 ]
 addopts = ["-m", "not oracle and not gui"]
 

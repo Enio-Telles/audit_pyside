@@ -35,6 +35,18 @@ Atue como engenheiro de planejamento e implementação com foco em:
 - preservar rastreabilidade dos dados apresentados;
 - evitar duplicar lógica já existente no backend ou pipeline.
 
+## Regra para PRs perf/refactor em src/transformacao/
+
+Qualquer PR do tipo `perf` ou `refactor` que toque `src/transformacao/` deve:
+1. Executar `pytest -m diff_harness` e confirmar zero divergencias nas 5 chaves:
+   `id_agrupado`, `id_agregado`, `__qtd_decl_final_audit__`, `q_conv`, `q_conv_fisica`.
+2. Criar um arquivo em `tests/diff_harness/test_<feature>.py` importando a versao
+   antiga via `git show main:...` e a nova versao, usando `run_harness` para comparar.
+3. Anexar o output do `DifferentialReport` no corpo da PR.
+4. Adicionar o label `differential-validated` para PRs que tocam arquivos read-only.
+
+Veja `docs/diff-harness.md` para o passo a passo completo.
+
 ## Como planejar
 Sempre que receber uma demanda:
 1. identificar se ela é de UI, service, integração, dados ou workflow operacional;
