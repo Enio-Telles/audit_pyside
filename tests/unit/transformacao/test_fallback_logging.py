@@ -8,6 +8,7 @@ No Oracle, no real Parquet data, no GUI.
 """
 from __future__ import annotations
 
+import datetime
 from pathlib import Path
 from unittest.mock import patch
 
@@ -200,7 +201,9 @@ def _preparar_contexto_mov_estoque(tmp_path: Path, cnpj: str) -> Path:
         }
     ).write_parquet(pasta_analises / f"fatores_conversao_{cnpj}.parquet")
 
-    # Minimal c170 row — all required mapping columns present (null values ok)
+    # Minimal c170 row — dt_doc and dt_e_s must be real dates so that
+    # calculo_saldos._gerar_eventos_estoque() can call .dt.year() without error.
+    _dt = datetime.date(2023, 6, 15)
     pl.DataFrame(
         {
             "ind_oper": ["1"],
@@ -224,8 +227,8 @@ def _preparar_contexto_mov_estoque(tmp_path: Path, cnpj: str) -> Path:
             "num_doc": [None],
             "num_item": [None],
             "ser": [None],
-            "dt_doc": [None],
-            "dt_e_s": [None],
+            "dt_doc": [_dt],
+            "dt_e_s": [_dt],
             "tipo_item": [None],
             "descr_compl": [None],
             "it_in_st": [None],
