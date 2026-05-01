@@ -31,7 +31,7 @@ def estilo_botao_destacar() -> str:
 # ---------------------------------------------------------------------------
 
 
-def parse_numero_filtro(valor: str) -> float | None:
+def parse_numero_filtro(valor: str | None) -> float | None:
     """Converte string de filtro numerico para float; retorna None se invalido."""
     bruto = (valor or "").strip()
     if not bruto:
@@ -42,7 +42,7 @@ def parse_numero_filtro(valor: str) -> float | None:
         return None
 
 
-def filtrar_texto_em_colunas(df: pl.DataFrame, texto: str) -> pl.DataFrame:
+def filtrar_texto_em_colunas(df: pl.DataFrame, texto: str | None) -> pl.DataFrame:
     """Filtra df mantendo linhas onde alguma coluna texto contem o trecho buscado."""
     texto = (texto or "").strip().lower()
     if not texto or df.is_empty():
@@ -68,8 +68,8 @@ def filtrar_texto_em_colunas(df: pl.DataFrame, texto: str) -> pl.DataFrame:
 def filtrar_intervalo_numerico(
     df: pl.DataFrame,
     coluna: str | None,
-    valor_min: str,
-    valor_max: str,
+    valor_min: str | None,
+    valor_max: str | None,
 ) -> pl.DataFrame:
     """Filtra df por intervalo numerico em coluna; ignora limites vazios."""
     if not coluna or coluna not in df.columns:
@@ -104,7 +104,7 @@ def formatar_resumo_filtros(pares: list[tuple[str, str]]) -> str:
 # ---------------------------------------------------------------------------
 
 
-def split_terms(value: str) -> list[str]:
+def split_terms(value: str | None) -> list[str]:
     """Divide string de busca em termos individuais.
 
     Separa por ponto-e-virgula, virgula ou dois ou mais espacos.
@@ -167,6 +167,7 @@ def aba_anual_background(row: dict, _col_name: str) -> str | None:
     if entradas_desacob > 0 or saidas_desacob > 0 or estoque_final_desacob > 0:
         return "#5b3a06"
     val = str(row.get("id_agregado", ""))
+    # MD5 usado intencionalmente para atribuicao deterministica de cor; nao e uso criptografico.
     h = int(hashlib.md5(val.encode()).hexdigest(), 16)
     return "#1f1f1f" if (h % 2) == 0 else "#262626"
 

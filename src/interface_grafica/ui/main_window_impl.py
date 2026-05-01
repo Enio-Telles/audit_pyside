@@ -3544,21 +3544,21 @@ class MainWindow(QMainWindow):
             combo.setCurrentText(valor_atual)
         combo.blockSignals(False)
 
-    def _filtrar_texto_em_colunas(self, df: pl.DataFrame, texto: str) -> pl.DataFrame:
+    def _filtrar_texto_em_colunas(self, df: pl.DataFrame, texto: str | None) -> pl.DataFrame:
         return filtrar_texto_em_colunas(df, texto)
 
     def _valor_qdate_ativo(self, value: QDate) -> QDate | None:
         return None if not value.isValid() or value == QDate(1900, 1, 1) else value
 
-    def _parse_numero_filtro(self, valor: str) -> float | None:
+    def _parse_numero_filtro(self, valor: str | None) -> float | None:
         return parse_numero_filtro(valor)
 
     def _filtrar_intervalo_numerico(
         self,
         df: pl.DataFrame,
         coluna: str | None,
-        valor_min: str,
-        valor_max: str,
+        valor_min: str | None,
+        valor_max: str | None,
     ) -> pl.DataFrame:
         return filtrar_intervalo_numerico(df, coluna, valor_min, valor_max)
 
