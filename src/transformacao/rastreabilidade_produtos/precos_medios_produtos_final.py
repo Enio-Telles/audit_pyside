@@ -62,6 +62,7 @@ def calcular_precos_medios_produtos_final(
     Raises:
         FileNotFoundError: Se algum arquivo obrigatorio nao for encontrado.
     """
+    cnpj = re.sub(r"\D", "", cnpj)
     if pasta_cnpj is None:
         pasta_cnpj = CNPJ_ROOT / cnpj
 

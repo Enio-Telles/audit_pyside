@@ -476,6 +476,9 @@ def gerar_fontes_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
     Raises:
         ValueError: Se ``cnpj`` nao for um CPF (11 digitos) nem CNPJ (14 digitos).
     """
+    cnpj = re.sub(r"\D", "", cnpj or "")
+    if len(cnpj) not in {11, 14}:
+        raise ValueError("CPF/CNPJ invalido.")
 
     if pasta_cnpj is None:
         pasta_cnpj = CNPJ_ROOT / cnpj
