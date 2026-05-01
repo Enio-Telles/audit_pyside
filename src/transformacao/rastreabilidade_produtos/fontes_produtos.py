@@ -448,9 +448,34 @@ def _anexar_id_agrupado_por_codigo_ou_descricao(
 
 
 def gerar_fontes_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
-    cnpj = re.sub(r"\D", "", cnpj or "")
-    if len(cnpj) not in {11, 14}:
-        raise ValueError("CPF/CNPJ invalido.")
+    """Gera os arquivos de fontes agregadas com ``id_agrupado`` para um CNPJ.
+
+    Processa as fontes brutas (C170, Bloco H, NF-e, NF-Ce) vinculando cada
+    linha ao seu ``id_agrupado`` a partir de ``map_produto_agrupado`` e, como
+    fallback controlado, pela ``descricao_normalizada``. Salva quatro arquivos
+    em ``arquivos_parquet/``:
+
+    - ``c170_agr_<cnpj>.parquet``
+    - ``bloco_h_agr_<cnpj>.parquet``
+    - ``nfe_agr_<cnpj>.parquet``
+    - ``nfce_agr_<cnpj>.parquet``
+
+    Linhas sem ``id_agrupado`` sao exportadas em arquivos de auditoria
+    separados (``<fonte>_agr_sem_id_agrupado_<cnpj>.parquet``) e excluidas
+    da saida principal sem interromper o pipeline.
+
+    Args:
+        cnpj: CPF ou CNPJ do contribuinte (somente digitos ou formatado).
+        pasta_cnpj: Raiz do diretorio do CNPJ. Se ``None``, usa o padrao
+            ``dados/CNPJ/<cnpj>``.
+
+    Returns:
+        ``True`` se todos os arquivos foram gerados com sucesso; ``False`` em
+        caso de arquivos de agregacao ausentes ou falha ao salvar.
+
+    Raises:
+        ValueError: Se ``cnpj`` nao for um CPF (11 digitos) nem CNPJ (14 digitos).
+    """
 
     if pasta_cnpj is None:
         pasta_cnpj = CNPJ_ROOT / cnpj
