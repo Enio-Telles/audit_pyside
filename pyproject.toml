@@ -59,11 +59,8 @@ markers = [
 addopts = ["-m", "not oracle and not gui"]
 
 [tool.coverage.run]
-# main_window_impl.py is generated Qt designer output (~4500 stmts); it has 0%
-# coverage and is exercised only in the gui_smoke job. Omitting it keeps the
-# coverage gate meaningful for the rest of the codebase.
+source = ["src"]
 omit = [
-    "src/interface_grafica/ui/main_window_impl.py",
     "bench/*",
 ]
 

@@ -89,6 +89,20 @@ from interface_grafica.ui.controllers.workers import (
 )
 from interface_grafica.ui.widgets.delegates import FloatDelegate
 from interface_grafica.ui.widgets.detached_table import DetachedTableWindow
+from interface_grafica.ui.main_window_helpers import (
+    aba_anual_background,
+    aba_anual_foreground,
+    aba_mensal_background,
+    aba_mensal_foreground,
+    estilo_botao_destacar,
+    filtrar_intervalo_numerico,
+    filtrar_texto_em_colunas,
+    formatar_resumo_filtros,
+    mov_estoque_background,
+    mov_estoque_foreground,
+    parse_numero_filtro,
+    split_terms,
+)
 from utilitarios.text import (
     display_cell,
     is_year_column_name,
@@ -286,12 +300,7 @@ class MainWindow(QMainWindow):
         self._auto_resized_tables.discard(key)
 
     def _estilo_botao_destacar(self) -> str:
-        return (
-            "QPushButton { background: #0e639c; color: #ffffff; border: 1px solid #1177bb; "
-            "border-radius: 4px; padding: 6px 10px; font-weight: bold; }"
-            "QPushButton:hover { background: #1177bb; }"
-            "QPushButton:pressed { background: #0b4f7c; }"
-        )
+        return estilo_botao_destacar()
 
     def _criar_botao_destacar(self, texto: str = "Destacar") -> QPushButton:
         botao = QPushButton(texto)
@@ -3536,39 +3545,13 @@ class MainWindow(QMainWindow):
         combo.blockSignals(False)
 
     def _filtrar_texto_em_colunas(self, df: pl.DataFrame, texto: str) -> pl.DataFrame:
-        texto = (texto or "").strip().lower()
-        if not texto or df.is_empty():
-            return df
-
-        colunas_busca = [
-            c for c in df.columns if df.schema[c] in [pl.Utf8, pl.Categorical]
-        ]
-        if not colunas_busca:
-            return df
-
-        expr = None
-        for col in colunas_busca:
-            atual = (
-                pl.col(col)
-                .cast(pl.Utf8, strict=False)
-                .fill_null("")
-                .str.to_lowercase()
-                .str.contains(texto, literal=True)
-            )
-            expr = atual if expr is None else (expr | atual)
-        return df.filter(expr) if expr is not None else df
+        return filtrar_texto_em_colunas(df, texto)
 
     def _valor_qdate_ativo(self, value: QDate) -> QDate | None:
         return None if not value.isValid() or value == QDate(1900, 1, 1) else value
 
     def _parse_numero_filtro(self, valor: str) -> float | None:
-        bruto = (valor or "").strip()
-        if not bruto:
-            return None
-        try:
-            return float(bruto.replace(",", "."))
-        except Exception:
-            return None
+        return parse_numero_filtro(valor)
 
     def _filtrar_intervalo_numerico(
         self,
@@ -3577,20 +3560,7 @@ class MainWindow(QMainWindow):
         valor_min: str,
         valor_max: str,
     ) -> pl.DataFrame:
-        if not coluna or coluna not in df.columns:
-            return df
-
-        minimo = self._parse_numero_filtro(valor_min)
-        maximo = self._parse_numero_filtro(valor_max)
-        if minimo is None and maximo is None:
-            return df
-
-        expr_col = pl.col(coluna).cast(pl.Float64, strict=False)
-        if minimo is not None:
-            df = df.filter(expr_col >= minimo)
-        if maximo is not None:
-            df = df.filter(expr_col <= maximo)
-        return df
+        return filtrar_intervalo_numerico(df, coluna, valor_min, valor_max)
 
     def _filtrar_intervalo_data(
         self,
@@ -6817,61 +6787,19 @@ class MainWindow(QMainWindow):
             self.show_error("Erro de exportacao", str(e))
 
     def _aba_mensal_foreground(self, row: dict, _col_name: str):
-        entradas_desacob = float(row.get("entradas_desacob") or 0)
-        icms_entr = float(row.get("ICMS_entr_desacob") or 0)
-        if entradas_desacob > 0 or icms_entr > 0:
-            return "#fff7ed"
-        return "#f5f5f5"
+        return aba_mensal_foreground(row, _col_name)
 
     def _aba_mensal_background(self, row: dict, _col_name: str):
-        entradas_desacob = float(row.get("entradas_desacob") or 0)
-        icms_entr = float(row.get("ICMS_entr_desacob") or 0)
-        if entradas_desacob > 0 or icms_entr > 0:
-            return "#5b3a06"
-        mes = int(row.get("mes") or 0)
-        return "#1f1f1f" if (mes % 2) == 0 else "#262626"
+        return aba_mensal_background(row, _col_name)
 
     def _aba_anual_foreground(self, row: dict, _col_name: str):
-        entradas_desacob = float(row.get("entradas_desacob") or 0)
-        saidas_desacob = float(row.get("saidas_desacob") or 0)
-        estoque_final_desacob = float(row.get("estoque_final_desacob") or 0)
-        if entradas_desacob > 0 or saidas_desacob > 0 or estoque_final_desacob > 0:
-            return "#fff7ed"
-        return "#f5f5f5"
+        return aba_anual_foreground(row, _col_name)
 
     def _aba_anual_background(self, row: dict, _col_name: str):
-        entradas_desacob = float(row.get("entradas_desacob") or 0)
-        saidas_desacob = float(row.get("saidas_desacob") or 0)
-        estoque_final_desacob = float(row.get("estoque_final_desacob") or 0)
-        if entradas_desacob > 0 or saidas_desacob > 0 or estoque_final_desacob > 0:
-            return "#5b3a06"
-        val = str(row.get("id_agregado", ""))
-        import hashlib
-
-        h = int(hashlib.md5(val.encode()).hexdigest(), 16)
-        return "#1f1f1f" if (h % 2) == 0 else "#262626"
+        return aba_anual_background(row, _col_name)
 
     def _mov_estoque_foreground(self, row: dict, _col_name: str):
-        tipo = str(row.get("Tipo_operacao") or "").upper()
-        if float(row.get("entr_desac_anual") or 0) > 0:
-            return "#fdba74"
-        if str(row.get("excluir_estoque", "")).strip().upper() in {
-            "TRUE",
-            "1",
-            "S",
-            "Y",
-            "SIM",
-        }:
-            return "#94a3b8"
-        if "ESTOQUE FINAL" in tipo:
-            return "#fde68a"
-        if "ESTOQUE INICIAL" in tipo:
-            return "#bfdbfe"
-        if "ENTRADA" in tipo:
-            return "#93c5fd"
-        if "SAIDA" in tipo:
-            return "#fca5a5"
-        return None
+        return mov_estoque_foreground(row, _col_name)
 
     def _mov_estoque_font(self, row: dict, _col_name: str):
         if float(row.get("entr_desac_anual") or 0) > 0:
@@ -6881,38 +6809,10 @@ class MainWindow(QMainWindow):
         return None
 
     def _mov_estoque_background(self, row: dict, _col_name: str):
-        tipo = str(row.get("Tipo_operacao") or "").upper()
-        if float(row.get("entr_desac_anual") or 0) > 0:
-            return "#431407"
-        if str(row.get("excluir_estoque", "")).strip().upper() in {
-            "TRUE",
-            "1",
-            "S",
-            "Y",
-            "SIM",
-        }:
-            return "#1e293b"
-        if str(row.get("mov_rep", "")).strip().upper() in {
-            "TRUE",
-            "1",
-            "S",
-            "Y",
-            "SIM",
-        }:
-            return "#111827"
-        if "ESTOQUE FINAL" in tipo:
-            return "#3f2f10"
-        if "ESTOQUE INICIAL" in tipo:
-            return "#0f172a"
-        if "ENTRADA" in tipo:
-            return "#10213f"
-        if "SAIDA" in tipo:
-            return "#3b1212"
-        return None
+        return mov_estoque_background(row, _col_name)
 
     def _formatar_resumo_filtros(self, pares: list[tuple[str, str]]) -> str:
-        ativos = [f"{rotulo}: {valor}" for rotulo, valor in pares if valor]
-        return "Filtros ativos: " + (" | ".join(ativos) if ativos else "nenhum")
+        return formatar_resumo_filtros(pares)
 
     def _obter_cnpj_valido(self) -> str | None:
         if not self.state.current_cnpj:
@@ -7656,17 +7556,6 @@ class MainWindow(QMainWindow):
         else:
             return
 
-        def split_terms(value: str) -> list[str]:
-            texto = (value or "").strip()
-            if not texto:
-                return []
-            # Permite buscar varios trechos no mesmo campo.
-            # Ex.: "buch 18", "buch;18" ou "buch, 18".
-            partes = re.split(r"[;,]+|\s{2,}", texto)
-            if len(partes) == 1 and " " in texto:
-                partes = texto.split()
-            return [p.strip() for p in partes if p and p.strip()]
-
         # Mapas de colunas equivalentes por tipo de filtro rapido.
         # Inclui colunas usadas na aba de Agregacao (ex.: descr_padrao).
         alternatives = {
@@ -7777,15 +7666,6 @@ class MainWindow(QMainWindow):
             "ncm_padrao": self.bqf_ncm.text().strip(),
             "cest_padrao": self.bqf_cest.text().strip(),
         }
-
-        def split_terms(value: str) -> list[str]:
-            texto = (value or "").strip()
-            if not texto:
-                return []
-            partes = re.split(r"[;,]+|\s{2,}", texto)
-            if len(partes) == 1 and " " in texto:
-                partes = texto.split()
-            return [p.strip() for p in partes if p and p.strip()]
 
         alternatives = {
             "ncm_padrao": ["ncm_padrao", "NCM_padrao", "lista_ncm", "ncm_final", "ncm"],
