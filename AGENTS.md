@@ -20,6 +20,67 @@ isso explicitamente para uma área já existente no código.
 
 ---
 
+## For automated agents
+
+Este repositorio e operado por varios agentes automatizados. Trate este arquivo
+como a fonte versionada de regras do repositorio. A cadencia operacional viva fica
+no Hub de Agentes do Notion.
+
+```yaml
+automated_agents:
+  live_coordination:
+    notion_hub: "https://app.notion.com/p/668e144a3db2423cb4bcf8683a34ff73"
+  repository_rules:
+    root: "AGENTS.md"
+    transformacao: "src/transformacao/AGENTS.md"
+    interface_grafica: "src/interface_grafica/AGENTS.md"
+  read_only_files:
+    - "src/transformacao/rastreabilidade_produtos/_produtos_final_impl.py"
+    - "src/transformacao/rastreabilidade_produtos/fatores_conversao.py"
+    - "src/transformacao/movimentacao_estoque_pkg/calculo_saldos.py"
+    - "src/transformacao/movimentacao_estoque_pkg/movimentacao_estoque.py"
+    - "src/transformacao/fatores_conversao.py"
+    - "src/transformacao/movimentacao_estoque.py"
+  invariants:
+    - "id_agrupado"
+    - "id_agregado"
+    - "__qtd_decl_final_audit__"
+    - "q_conv"
+    - "q_conv_fisica"
+  required_local_validation:
+    - "ruff check"
+    - "mypy src/transformacao"
+    - "pytest -q -m \"not gui_smoke\""
+  transformacao_perf_or_refactor_gate:
+    - "differential test byte-a-byte sobre amostra real"
+    - "ADR em docs/adr/ quando tocar regra fiscal"
+    - "aprovacao humana explicita antes do merge"
+  pr_title_format: "tipo(area-fase): descricao"
+```
+
+Regras para Codex, Copilot Agent e Antigravity:
+
+- Nao altere semantica fiscal.
+- Nao modifique os arquivos read-only listados acima.
+- Nao modifique as 5 chaves invariantes listadas acima.
+- Qualquer PR `perf` ou `refactor` em `src/transformacao/` exige differential test
+  byte-a-byte sobre amostra real antes do merge.
+- Use titulos de PR no formato `tipo(area-fase): descricao`.
+- Use PT-BR sem acentos em titulos de PR, corpos de PR e comentarios de review.
+
+---
+
+## Hierarquia de autoridade
+
+1. Humano responsavel pelo repositorio.
+2. Claude Code, somente quando autorizado, com ADR e differential test para regra fiscal.
+3. Codex, GitHub Copilot Agent e Antigravity, restritos a escopo seguro e sem regra fiscal.
+
+Quando houver conflito entre instrucoes, siga a ordem acima. Em caso de duvida sobre
+regra fiscal, pare e solicite decisao humana antes de editar.
+
+---
+
 ## Missão
 
 Atue como agente técnico de implementação, revisão e planejamento com foco em:
