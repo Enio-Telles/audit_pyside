@@ -288,23 +288,53 @@ Antes de contribuir em uma área, leia o AGENTS.md correspondente:
 
 ---
 
-## Status atual (P0–P5)
+## Status atual (P0–P6 concluido)
 
-> Fonte de verdade: [`docs/PLAN.md`](PLAN.md). Esta seção apenas espelha o estado de alto nível.
+> Fonte de verdade: [`docs/PLAN.md`](PLAN.md). Esta seção espelha o estado de alto nível.
 
 | Fase | Descrição | Status |
 |---|---|---|
-| P0 | Estabilização da base (limpeza, compat, CI básico) | Em andamento |
-| P0-04 | Limpeza de artefatos obsoletos (copy dirs, tmp, patch files) | ✅ Concluído (PR atual) |
-| P1 | Consolidação de docs e AGENTS | Em andamento (PR atual) |
-| P1-01 | Consolidação de AGENTS.md (11 → 4) | ✅ Concluído (PR atual) |
-| P1-02 | Índice mestre `docs/README.md` | ✅ Concluído (PR atual) |
-| P1-03 | ADR-001 draft (futuro do backend) | ✅ Concluído (PR atual) |
-| P1-04/05/06 | pyproject+uv, ruff+mypy+pre-commit, CI | Concluído (PR atual) |
-| P2 | Remoção do backend FastAPI (ADR-001 Opção B) | Em andamento (PR atual) |
-| P3 | Decomposição de `main_window.py` | Planejado |
-| P4 | Multi-tenant / autenticação | Não iniciado |
-| P5 | Performance e escalabilidade | Não iniciado |
+| P0 | Estabilização da base (limpeza, compat, CI básico) | ✅ Concluído |
+| P1 | Consolidação de docs e AGENTS | ✅ Concluído |
+| P2 | Remoção do backend FastAPI (ADR-001 Opção B) | ✅ Concluído |
+| P3 | Decomposição parcial de `main_window.py` | ✅ Concluído (parcial) |
+| P4 | structlog em workers/GUI, GUI smoke headless, exception boundaries Qt | ✅ Concluído |
+| P5 | docstrings batch 1–3, Qt exception boundaries, ratchet 27% | ✅ Concluído |
+| P6 | docstrings batch 4, cobertura ≥30%, bundle smoke CI, cleanup periódico, observabilidade fiscal | ✅ Concluído |
+
+### Detalhes P6 (PRs #158–#163, #166–#168)
+
+| Item P6 | Status |
+|---|---|
+| Docstrings batch 4 (`extracao_oracle_eficiente`, helpers) | ✅ PR #158 |
+| Cobertura ≥ 30% (gate subido de 27% → 29%) | ✅ PR #159 |
+| Bundle smoke CI (`--smoke` em PyInstaller) | ✅ PR #160 |
+| Cleanup periódico de branches stale | ✅ PR #161 |
+| Hooks globais de logging structlog | ✅ PR #162 |
+| Fallback observability `fatores_conversao.fallback` e `mov_estoque.fallback` | ✅ Instrumentado em main |
+
+### Cobertura e gate CI
+
+| Métrica | Valor |
+|---|---|
+| Cobertura efetiva | 35.98% |
+| Gate CI (`--cov-fail-under`) | 30% (subido de 29% no PR #171) |
+| `main_window_impl.py` | omitido via `[tool.coverage.run].omit` |
+| Marcadores excluídos no CI | `oracle`, `gui`, `gui_smoke` |
+
+---
+
+## Candidatos P7
+
+| ID | Descrição | Complexidade | Bloqueador |
+|---|---|---|---|
+| P7-CT-SR-03/F3 | Granularidade real por `id_agrupado+unid` na resolução de fatores; testes fiscais dedicados | Alta | Ciclo separado |
+| P7-GUI-OMIT | Refatorar `main_window_impl.py` para sair do `coverage.omit` | Alta | Decomposição GUI |
+| P7-SIGN | Sign & notarize executável Windows | Média | Certificado EV |
+| P7-AUTOUPDATE | Auto-update do executável | Média | P7-SIGN |
+| P7-DOCSTRINGS-5 | Docstrings batch 5 | Baixa | — |
+| P7-SMOKE-HARDENING | Bloquear merge após 5 execuções smoke verdes consecutivas | Baixa | — |
+| P7-WIKI-INIT | Inicializar `wiki.git` no GitHub (tarefa humana) | — | Ação manual |
 
 ---
 
@@ -313,4 +343,4 @@ Antes de contribuir em uma área, leia o AGENTS.md correspondente:
 - `docs/auditoria_conversao_agregacao_estoque.md` — doc consolidado de auditoria de conversão, agregação e estoque.
 - `docs/plano_melhorias_backend_frontend_arquitetura.md` — plano de melhorias consolidado de arquitetura.
 - `docs/runbook_sync_repo.md` — runbook de sincronização do repositório.
-- ADRs adicionais para decisões de P3 (decomposição GUI) e P4 (autenticação).
+- ADRs adicionais para decisões de decomposição GUI e auto-update.
