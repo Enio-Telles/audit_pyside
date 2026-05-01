@@ -53,3 +53,9 @@ mcp_servers.json
 .todo
 desktop-commander-version.txt
 .claude/settings.local.json
+
+# Coverage artefacts (nao commitar)
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
