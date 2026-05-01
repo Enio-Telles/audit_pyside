@@ -34,6 +34,7 @@ dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
     "pytest-mock>=3.10",
+    # pytest-benchmark: P8-01 bench harness (nao roda no CI padrao; ver bench/README.md)
     "pytest-benchmark>=4.0",
     "ruff>=0.4",
     "mypy>=1.10",

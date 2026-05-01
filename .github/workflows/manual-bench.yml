@@ -6,7 +6,7 @@ on:
       min_rounds:
         description: "Numero minimo de rounds por benchmark"
         required: false
-        default: "5"
+        default: "3"
       benchmark_save:
         description: "Nome do arquivo de resultado (vazio = nao salvar)"
         required: false
@@ -37,20 +37,25 @@ jobs:
 
       - name: Executar benchmarks
         id: bench
-        run: |
-          SAVE_ARG=""
-          if [ -n "${{ github.event.inputs.benchmark_save }}" ]; then
-            SAVE_ARG="--benchmark-save=${{ github.event.inputs.benchmark_save }}"
-          fi
-          pytest bench/ \
-            --benchmark-only \
-            --benchmark-min-rounds=${{ github.event.inputs.min_rounds }} \
-            --benchmark-json=bench-report.json \
-            -v \
-            $SAVE_ARG \
-            2>&1 | tee bench-output.txt
         env:
+          MIN_ROUNDS: ${{ inputs.min_rounds }}
+          BENCHMARK_SAVE: ${{ inputs.benchmark_save }}
           PYTHONPATH: src
+        run: |
+          set -euo pipefail
+          if ! [[ "$MIN_ROUNDS" =~ ^[0-9]+$ ]]; then
+            echo "Invalid min_rounds"
+            exit 1
+          fi
+          args=( --benchmark-only "--benchmark-min-rounds=$MIN_ROUNDS" --benchmark-json=bench-report.json -v )
+          if [ -n "$BENCHMARK_SAVE" ]; then
+            if ! [[ "$BENCHMARK_SAVE" =~ ^[a-zA-Z0-9_.-]+$ ]]; then
+              echo "Invalid benchmark_save"
+              exit 1
+            fi
+            args+=( "--benchmark-save=$BENCHMARK_SAVE" )
+          fi
+          pytest bench/ "${args[@]}" 2>&1 | tee bench-output.txt
 
       - name: Upload relatorio JSON
         uses: actions/upload-artifact@v4

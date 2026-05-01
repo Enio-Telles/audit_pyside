@@ -4,7 +4,6 @@ Fixtures deterministicas para benchmarks.
 Seeds fixas garantem reproducibilidade entre execucoes e maquinas.
 Os arquivos .parquet sao gerados on-demand em bench/data/ e nao sao commitados.
 """
-from __future__ import annotations
 
 import random
 from pathlib import Path

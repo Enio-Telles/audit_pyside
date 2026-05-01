@@ -4,7 +4,6 @@ Benchmarks para normalizacao de descricoes de produtos.
 Compara o baseline map_elements+lambda com a implementacao real
 de expr_normalizar_descricao (utilitarios.text).
 """
-from __future__ import annotations
 
 import re
 import unicodedata

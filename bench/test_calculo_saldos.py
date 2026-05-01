@@ -4,7 +4,6 @@ Benchmarks para o pipeline de calculo de saldos de estoque.
 Mede gerar_eventos_estoque e calcular_saldo_estoque_anual
 sobre dataset sintetico de 50k linhas / 1k itens / 12 meses.
 """
-from __future__ import annotations
 
 import polars as pl
 import pytest
