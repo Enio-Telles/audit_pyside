@@ -116,10 +116,24 @@ def gerar_c176_xml(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
     df_saida = pl.read_parquet(arq_c170_agr)
     # Carrega apenas as colunas necessarias do nfe_agr (pode ser grande)
     _nfe_cols_necessarias = [
-        "chave_acesso", "prod_nitem", "prod_cprod", "prod_xprod", "prod_ncm",
-        "prod_cest", "id_agrupado", "prod_ucom", "prod_qcom", "prod_vprod",
-        "prod_vfrete", "prod_vseg", "prod_voutro", "prod_vdesc", "prod_vuncom",
-        "prod_utrib", "prod_qtrib", "prod_vuntrib",
+        "chave_acesso",
+        "prod_nitem",
+        "prod_cprod",
+        "prod_xprod",
+        "prod_ncm",
+        "prod_cest",
+        "id_agrupado",
+        "prod_ucom",
+        "prod_qcom",
+        "prod_vprod",
+        "prod_vfrete",
+        "prod_vseg",
+        "prod_voutro",
+        "prod_vdesc",
+        "prod_vuncom",
+        "prod_utrib",
+        "prod_qtrib",
+        "prod_vuntrib",
     ]
     _nfe_schema = pl.read_parquet_schema(arq_nfe_agr)
     _nfe_cols_sel = [c for c in _nfe_cols_necessarias if c in _nfe_schema]
@@ -243,12 +257,28 @@ def gerar_c176_xml(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
     )
 
     _cols_entrada_xml = [
-        c for c in [
-            "chave_acesso", "prod_nitem", "prod_cprod", "prod_xprod", "prod_ncm",
-            "prod_cest", "id_agrupado", "prod_ucom", "prod_qcom", "prod_vprod",
-            "prod_vfrete", "prod_vseg", "prod_voutro", "prod_vdesc", "prod_vuncom",
-            "prod_utrib", "prod_qtrib", "prod_vuntrib",
-        ] if c in df_nfe.columns
+        c
+        for c in [
+            "chave_acesso",
+            "prod_nitem",
+            "prod_cprod",
+            "prod_xprod",
+            "prod_ncm",
+            "prod_cest",
+            "id_agrupado",
+            "prod_ucom",
+            "prod_qcom",
+            "prod_vprod",
+            "prod_vfrete",
+            "prod_vseg",
+            "prod_voutro",
+            "prod_vdesc",
+            "prod_vuncom",
+            "prod_utrib",
+            "prod_qtrib",
+            "prod_vuntrib",
+        ]
+        if c in df_nfe.columns
     ]
     df_entrada_xml = (
         df_nfe.select(_cols_entrada_xml)

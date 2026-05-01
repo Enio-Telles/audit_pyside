@@ -42,16 +42,8 @@ def _anos_periodos(periodos: pl.DataFrame) -> list[int]:
     # (que pode ser "31/12/YYYY-1", retornando o ano anterior ao periodo de auditoria)
     for coluna in ("cod_per", "periodo_inventario"):
         if not periodos.is_empty() and coluna in periodos.columns:
-            periodos_validos = (
-                periodos.get_column(coluna).cast(pl.Int64, strict=False).drop_nulls()
-            )
-            anos = (
-                (periodos_validos // 100)
-                .cast(pl.Int32, strict=False)
-                .unique()
-                .sort()
-                .to_list()
-            )
+            periodos_validos = periodos.get_column(coluna).cast(pl.Int64, strict=False).drop_nulls()
+            anos = (periodos_validos // 100).cast(pl.Int32, strict=False).unique().sort().to_list()
             if any(a > 100 for a in anos):
                 return anos
     return []
@@ -134,9 +126,7 @@ def gerar_resumo_global_dataframe(
         a_base = (
             anual.select(
                 [
-                    pl.concat_str([pl.col("ano").cast(pl.Utf8), pl.lit("-12")]).alias(
-                        "Ano/Mes"
-                    ),
+                    pl.concat_str([pl.col("ano").cast(pl.Utf8), pl.lit("-12")]).alias("Ano/Mes"),
                     pl.col("ICMS_saidas_desac").cast(pl.Float64, strict=False).fill_null(0.0),
                     pl.col("ICMS_estoque_desac").cast(pl.Float64, strict=False).fill_null(0.0),
                 ]
@@ -175,8 +165,11 @@ def gerar_resumo_global_dataframe(
             if primeiro and primeiro[0] > 100:
                 periodo_int = pl.col(col_periodo).cast(pl.Int64, strict=False)
                 ano_mes_expr = pl.concat_str(
-                    [(periodo_int // 100).cast(pl.Utf8), pl.lit("-"),
-                     (periodo_int % 100).cast(pl.Utf8).str.zfill(2)]
+                    [
+                        (periodo_int // 100).cast(pl.Utf8),
+                        pl.lit("-"),
+                        (periodo_int % 100).cast(pl.Utf8).str.zfill(2),
+                    ]
                 ).alias("Ano/Mes")
             else:
                 col_periodo = None

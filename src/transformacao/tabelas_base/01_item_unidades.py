@@ -579,8 +579,7 @@ def _ler_nfe_ou_nfce(
 
     # Colunas de agrupamento — apenas as que existem no arquivo
     chaves_agrupamento = [
-        c for c in ["prod_cprod", "prod_xprod", "prod_ncm", "prod_cest", "prod_ucom"]
-        if c in schema
+        c for c in ["prod_cprod", "prod_xprod", "prod_ncm", "prod_cest", "prod_ucom"] if c in schema
     ]
     # Coluna GTIN: prod_ceantrib tem prioridade sobre prod_cean
     col_gtin = next((c for c in ["prod_ceantrib", "prod_cean"] if c in schema), None)
@@ -594,9 +593,7 @@ def _ler_nfe_ou_nfce(
     col_cfop = "co_cfop" if "co_cfop" in schema else None
 
     # Expressao de tipo_operacao saida ("1")
-    tipo_saida_expr = (
-        pl.col(col_tp).cast(pl.String, strict=False).str.extract(r"(\d+)") == "1"
-    )
+    tipo_saida_expr = pl.col(col_tp).cast(pl.String, strict=False).str.extract(r"(\d+)") == "1"
 
     # Colunas de valor necessarias
     col_vprod = "prod_vprod" if "prod_vprod" in schema else None
@@ -615,24 +612,24 @@ def _ler_nfe_ou_nfce(
     qtd_venda_expr = _num_expr("prod_qcom") if col_qcom else pl.lit(0.0)
 
     # Filtro de saida do proprio CNPJ — pushdown real sobre colunas nativas
-    lf = (
-        pl.scan_parquet(path)
-        .filter(
-            (pl.col("co_emitente").cast(pl.String, strict=False) == cnpj)
-            & tipo_saida_expr
-        )
+    lf = pl.scan_parquet(path).filter(
+        (pl.col("co_emitente").cast(pl.String, strict=False) == cnpj) & tipo_saida_expr
     )
 
     # Filtro opcional por CFOP mercantil
     if col_cfop is not None and cfop_mercantil is not None:
-        lf = lf.with_columns(
-            pl.col(col_cfop).cast(pl.String).str.strip_chars().alias("__cfop_str__")
-        ).join(
-            cfop_mercantil.lazy().with_columns(pl.lit(True).alias("__cfop_ok__")),
-            left_on="__cfop_str__",
-            right_on="co_cfop",
-            how="left",
-        ).filter(pl.col("__cfop_ok__").fill_null(False))
+        lf = (
+            lf.with_columns(
+                pl.col(col_cfop).cast(pl.String).str.strip_chars().alias("__cfop_str__")
+            )
+            .join(
+                cfop_mercantil.lazy().with_columns(pl.lit(True).alias("__cfop_ok__")),
+                left_on="__cfop_str__",
+                right_on="co_cfop",
+                how="left",
+            )
+            .filter(pl.col("__cfop_ok__").fill_null(False))
+        )
 
     # group_by no LazyFrame: Polars processa via streaming sem materializar linhas
     agg_exprs: list[pl.Expr] = [
@@ -644,12 +641,24 @@ def _ler_nfe_ou_nfce(
     ]
 
     df = (
-        lf.select(chaves_agrupamento + (
-            [col_gtin] if col_gtin and col_gtin not in chaves_agrupamento else []
-        ) + (
-            [c for c in ["prod_vprod","prod_vfrete","prod_vseg","prod_voutro","prod_vdesc","prod_qcom"]
-             if c in schema]
-        ))
+        lf.select(
+            chaves_agrupamento
+            + ([col_gtin] if col_gtin and col_gtin not in chaves_agrupamento else [])
+            + (
+                [
+                    c
+                    for c in [
+                        "prod_vprod",
+                        "prod_vfrete",
+                        "prod_vseg",
+                        "prod_voutro",
+                        "prod_vdesc",
+                        "prod_qcom",
+                    ]
+                    if c in schema
+                ]
+            )
+        )
         .group_by(chaves_agrupamento)
         .agg(agg_exprs)
         .collect()

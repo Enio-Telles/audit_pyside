@@ -58,11 +58,15 @@ def preparar_mov_estoque_por_codigo(mov_estoque: pl.DataFrame) -> pl.DataFrame:
         pl.lit("cod_item/prod_cprod").alias("criterio_calculo_estoque"),
     ]
     if "id_agrupado" in df.columns:
-        exprs.append(pl.col("id_agrupado").cast(pl.Utf8, strict=False).alias("id_agrupado_original"))
+        exprs.append(
+            pl.col("id_agrupado").cast(pl.Utf8, strict=False).alias("id_agrupado_original")
+        )
     else:
         exprs.append(pl.lit(None, dtype=pl.Utf8).alias("id_agrupado_original"))
     if "id_agregado" in df.columns:
-        exprs.append(pl.col("id_agregado").cast(pl.Utf8, strict=False).alias("id_agregado_original"))
+        exprs.append(
+            pl.col("id_agregado").cast(pl.Utf8, strict=False).alias("id_agregado_original")
+        )
     else:
         exprs.append(pl.lit(None, dtype=pl.Utf8).alias("id_agregado_original"))
 
@@ -115,11 +119,14 @@ def gerar_estoque_codigo_produto(cnpj: str, pasta_cnpj: Path | None = None) -> b
     artefatos = calcular_estoque_codigo_produto_dataframe(pl.read_parquet(arq_mov))
     ok = True
     for nome, df in artefatos.items():
-        ok = salvar_para_parquet(
-            df,
-            pasta_analises,
-            ARTEFATOS_ESTOQUE_CODIGO[nome].format(cnpj=cnpj),
-        ) and ok
+        ok = (
+            salvar_para_parquet(
+                df,
+                pasta_analises,
+                ARTEFATOS_ESTOQUE_CODIGO[nome].format(cnpj=cnpj),
+            )
+            and ok
+        )
 
     registrar_evento_performance(
         "estoque_codigo_produto.gerar",

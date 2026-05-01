@@ -288,7 +288,9 @@ def _construir_vinculos_produto(arq_prod_final: Path, arq_mapa: Path):
         _schema_mapa = pl.read_parquet_schema(arq_mapa)
         _cols_mapa = [c for c in ["codigo_fonte", "id_agrupado"] if c in _schema_mapa]
         df_codigo = (
-            pl.scan_parquet(arq_mapa).select(_cols_mapa).collect()
+            pl.scan_parquet(arq_mapa)
+            .select(_cols_mapa)
+            .collect()
             .select(
                 [
                     expr_normalizar_codigo_fonte("codigo_fonte"),
@@ -553,7 +555,9 @@ def gerar_movimentacao_estoque(cnpj: str, pasta_cnpj: Path | None = None) -> boo
     _schema_fat = pl.read_parquet_schema(arq_fatores)
     _cols_fat_sel = [c for c in ["id_agrupado", "unid", "unid_ref", "fator"] if c in _schema_fat]
     df_fatores = (
-        pl.scan_parquet(arq_fatores).select(_cols_fat_sel).collect()
+        pl.scan_parquet(arq_fatores)
+        .select(_cols_fat_sel)
+        .collect()
         .rename({"unid": "__unid_fator__"})
         .unique(subset=["id_agrupado", "__unid_fator__"])
     )

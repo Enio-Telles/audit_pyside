@@ -73,12 +73,41 @@ def _detectar_coluna_descricao(df: pl.DataFrame, fonte: str) -> str | None:
 # Nfce pode ter 54 M+ linhas e 147 colunas; o pruning reduz a carga de ~1.9 GB para ~600 MB.
 _COLUNAS_FONTE: dict[str, list[str] | None] = {
     "nfce": [
-        "nsu", "chave_acesso", "prod_nitem", "prod_cprod", "prod_cean", "prod_ceantrib",
-        "prod_ncm", "prod_cest", "prod_xprod", "co_cfop", "prod_ucom", "prod_qcom",
-        "prod_vprod", "prod_vfrete", "prod_vseg", "prod_voutro", "prod_vdesc",
-        "icms_orig", "icms_cst", "icms_csosn", "icms_picms", "icms_vbc", "icms_vicms",
-        "icms_vbcst", "icms_vicmsst", "icms_picmsst", "tipo_operacao", "ide_co_mod",
-        "ide_serie", "nnf", "dhemi", "dhsaient", "co_uf_emit", "co_uf_dest", "co_finnfe",
+        "nsu",
+        "chave_acesso",
+        "prod_nitem",
+        "prod_cprod",
+        "prod_cean",
+        "prod_ceantrib",
+        "prod_ncm",
+        "prod_cest",
+        "prod_xprod",
+        "co_cfop",
+        "prod_ucom",
+        "prod_qcom",
+        "prod_vprod",
+        "prod_vfrete",
+        "prod_vseg",
+        "prod_voutro",
+        "prod_vdesc",
+        "icms_orig",
+        "icms_cst",
+        "icms_csosn",
+        "icms_picms",
+        "icms_vbc",
+        "icms_vicms",
+        "icms_vbcst",
+        "icms_vicmsst",
+        "icms_picmsst",
+        "tipo_operacao",
+        "ide_co_mod",
+        "ide_serie",
+        "nnf",
+        "dhemi",
+        "dhsaient",
+        "co_uf_emit",
+        "co_uf_dest",
+        "co_finnfe",
     ],
 }
 
@@ -129,7 +158,9 @@ def _processar_fonte_em_batches_anuais(
         cols_sel = list(schema_cols)
 
     if "dhemi" not in schema_cols:
-        rprint(f"[yellow]{fonte}: sem coluna dhemi — batch anual impossivel; carregando completo.[/yellow]")
+        rprint(
+            f"[yellow]{fonte}: sem coluna dhemi — batch anual impossivel; carregando completo.[/yellow]"
+        )
         df_src = pl.scan_parquet(arquivo).select(cols_sel).collect()
         col_desc = _detectar_coluna_descricao(df_src, fonte)
         if not col_desc:
@@ -137,7 +168,9 @@ def _processar_fonte_em_batches_anuais(
         exprs = _preservar_colunas_rastreabilidade(df_src, fonte=fonte)
         if exprs:
             df_src = df_src.with_columns(exprs)
-        df_out = _anexar_id_agrupado_por_codigo_ou_descricao(df_src, df_mapa, df_attrs, col_desc, pasta_analises, cnpj)
+        df_out = _anexar_id_agrupado_por_codigo_ou_descricao(
+            df_src, df_mapa, df_attrs, col_desc, pasta_analises, cnpj
+        )
         return bool(salvar_para_parquet(df_out, pasta_brutos, f"{fonte}_agr_{cnpj}.parquet"))
 
     anos = (
@@ -189,14 +222,19 @@ def _processar_fonte_em_batches_anuais(
 
     faltantes = df_final.filter(pl.col("id_agrupado").is_null())
     if faltantes.height > 0:
-        salvar_para_parquet(faltantes, pasta_analises, f"{fonte}_agr_sem_id_agrupado_{cnpj}.parquet")
+        salvar_para_parquet(
+            faltantes, pasta_analises, f"{fonte}_agr_sem_id_agrupado_{cnpj}.parquet"
+        )
         rprint(f"[yellow]Aviso: {fonte} possui {faltantes.height} linhas sem id_agrupado.[/yellow]")
         df_final = df_final.filter(pl.col("id_agrupado").is_not_null())
 
     if df_final.is_empty():
         return False
 
-    if "descricao_normalizada" not in df_final.columns and "__descricao_normalizada__" in df_final.columns:
+    if (
+        "descricao_normalizada" not in df_final.columns
+        and "__descricao_normalizada__" in df_final.columns
+    ):
         df_final = df_final.rename({"__descricao_normalizada__": "descricao_normalizada"})
     else:
         df_final = df_final.drop("__descricao_normalizada__", strict=False)
