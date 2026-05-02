@@ -64,7 +64,11 @@ Regras para Codex, Copilot Agent e Antigravity:
 - Nao modifique os arquivos read-only listados acima.
 - Nao modifique as 5 chaves invariantes listadas acima.
 - Qualquer PR `perf` ou `refactor` em `src/transformacao/` exige differential test
-  byte-a-byte sobre amostra real antes do merge.
+  byte-a-byte sobre amostra real antes do merge. Use `run_harness` em
+  `tests/diff_harness/run_harness.py` e anexe o `DifferentialReport` no corpo da PR.
+  Veja `docs/diff-harness.md` para o passo a passo completo.
+- PRs que tocam arquivos read-only precisam do label `differential-validated` para
+  passar o check `diff-harness.yml`.
 - Use titulos de PR no formato `tipo(area-fase): descricao`.
 - Use PT-BR sem acentos em titulos de PR, corpos de PR e comentarios de review.
 
