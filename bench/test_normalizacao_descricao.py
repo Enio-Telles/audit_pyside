@@ -6,31 +6,35 @@ de expr_normalizar_descricao (utilitarios.text).
 """
 
 import re
-import unicodedata
 
 import polars as pl
 import pytest
 
-from utilitarios.text import expr_normalizar_descricao
+from utilitarios.text import expr_normalizar_descricao, normalize_desc
 
 
 pytestmark = pytest.mark.bench
+_TOKEN_DELIMITER_RE = re.compile(r"(?<=\w)[-/]|[-/](?=\w)")
 
 
 def _normalize_baseline(s: str) -> str:
-    """Baseline Python puro equivalente ao normalize_desc original."""
+    """Baseline map_elements equivalente a expr_normalizar_descricao."""
     if not s:
         return s
-    t = unicodedata.normalize("NFD", s)
-    t = "".join(c for c in t if unicodedata.category(c) != "Mn")
-    t = t.upper()
-    t = re.sub(r"[^A-Z0-9\s\-\*/]", "", t)
-    t = re.sub(r"\s+", " ", t).strip()
-    return t
+    return normalize_desc(_TOKEN_DELIMITER_RE.sub(" ", s))
 
 
 def _serie(descricoes: list[str]) -> pl.Series:
     return pl.Series("descricao", descricoes)
+
+
+def test_normalize_baseline_matches_expr_delimiters() -> None:
+    descricoes = ["CAFE-100/UN", "ITEM/A-B", "PROD - CX", "MED/10"]
+    baseline = _serie(descricoes).map_elements(_normalize_baseline, return_dtype=pl.Utf8)
+    expr = pl.DataFrame({"descricao": descricoes}).select(
+        expr_normalizar_descricao("descricao").alias("norm")
+    )["norm"]
+    assert baseline.to_list() == expr.to_list()
 
 
 @pytest.mark.benchmark(group="normalizacao_100k")

@@ -33,7 +33,7 @@ jobs:
           pip install "pytest-benchmark>=4.0" polars numpy structlog rich numba
 
       - name: Instalar pacote em modo editable
-        run: pip install -e ".[dev]" --no-deps || pip install pytest
+        run: pip install -e ".[dev]" --no-deps
 
       - name: Executar benchmarks
         id: bench
@@ -67,11 +67,21 @@ jobs:
           retention-days: 30
 
       - name: Comentar na PR
-        if: ${{ github.event.inputs.pr_number != '' }}
+        if: ${{ inputs.pr_number != '' }}
         uses: actions/github-script@v7
+        env:
+          INPUT_PR_NUMBER: ${{ inputs.pr_number }}
         with:
           script: |
             const fs = require('fs');
+            const rawPrNumber = process.env.INPUT_PR_NUMBER || '';
+            if (!/^[1-9][0-9]*$/.test(rawPrNumber)) {
+              throw new Error('Invalid pr_number');
+            }
+            const prNumber = Number.parseInt(rawPrNumber, 10);
+            if (!Number.isSafeInteger(prNumber) || prNumber <= 0) {
+              throw new Error('Invalid pr_number');
+            }
             const output = fs.readFileSync('bench-output.txt', 'utf8');
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
             const body = [
@@ -86,6 +96,6 @@ jobs:
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              issue_number: parseInt('${{ github.event.inputs.pr_number }}'),
+              issue_number: prNumber,
               body: body
             });
