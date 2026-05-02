@@ -50,7 +50,7 @@ PyUpdater espera controlar o ciclo de build completo (substituindo `pyinstaller 
 
 ---
 
-## Opcao 2 — GitHub Releases Poller customizado
+## GitHub Releases Poller
 
 Implementar um worker leve que consulta a ultima release do GitHub, compara com a versao embutida e oferece download/restart quando houver versao nova.
 
@@ -73,18 +73,11 @@ A resposta contem `tag_name` (versao da release) e `assets` (lista de artefatos 
 
 1. Worker `QThread` consulta o endpoint na inicializacao (timeout de 5s; falha silenciosa sem bloquear a UI).
 2. Compara `tag_name` da resposta com `__version__` embutida no bundle.
-3. Se houver versao nova: exibe dialog informativo com descricao da release e pergunta ao usuario se deseja baixar e aplicar — **o consentimento explicito do usuario e obrigatorio antes de qualquer download ou substituicao**.
+3. Se houver versao nova, exibe dialog com descricao e solicita consentimento do usuario antes de qualquer download — veja [Fluxo de consentimento do usuario](#fluxo-de-consentimento-do-usuario).
 4. Apos confirmacao, o worker faz download do artefato `.zip` para diretorio temporario.
-5. **Verificacao de integridade antes da troca:** o artefato baixado deve ter seu hash SHA-256 comparado com o valor publicado na release (campo `body` da release ou arquivo `checksums.txt` publicado como asset). Se o hash nao bater, o update e abortado e o usuario e informado.
+5. Verifica integridade do artefato antes da troca — veja [Hash SHA-256 e assinatura Authenticode](#hash-sha-256-e-assinatura-authenticode).
 6. O app exibe mensagem de "Reinicie o aplicativo para aplicar a atualizacao".
 7. Ao fechar, um script auxiliar (`.bat` gerado dinamicamente no diretorio temporario) aguarda o processo principal encerrar, extrai o novo bundle sobre o diretorio atual — **preservando `dados/`, `workspace/`, `sql/` e `.env`** — e relanca o executavel.
-
-**Caminho de rollback:**
-
-- Antes da troca, o script auxiliar copia o diretorio `FiscalParquetAnalyzer/` atual para `FiscalParquetAnalyzer.bak/` no mesmo nivel.
-- Se o novo bundle falhar ao iniciar (verificado por exit code do processo relanado), o script substitui `FiscalParquetAnalyzer/` pelo conteudo de `FiscalParquetAnalyzer.bak/` e exibe mensagem de erro.
-- O usuario tambem pode restaurar manualmente renomeando o diretorio `.bak`.
-- O diretorio `.bak` e removido somente apos o primeiro lancamento bem-sucedido da nova versao.
 
 Riscos especificos:
 
@@ -95,7 +88,32 @@ Riscos especificos:
 
 ---
 
-## Opcao 3 — MSIX / Windows Package Manager
+## Hash SHA-256 e assinatura Authenticode
+
+**Verificacao de integridade antes da troca:** o artefato baixado deve ter seu hash SHA-256 comparado com o valor publicado na release (campo `body` da release ou arquivo `checksums.txt` publicado como asset). Se o hash nao bater, o update e abortado e o usuario e informado.
+
+**Prerequisito obrigatorio antes da implementacao:** adquirir certificado Code Signing (Authenticode). Sem ele, o `.exe` baixado sera bloqueado pelo SmartScreen independente da opcao escolhida.
+
+---
+
+## Fluxo de consentimento do usuario
+
+Se houver versao nova: exibe dialog informativo com descricao da release e pergunta ao usuario se deseja baixar e aplicar — **o consentimento explicito do usuario e obrigatorio antes de qualquer download ou substituicao**.
+
+---
+
+## Rollback
+
+**Caminho de rollback:**
+
+- Antes da troca, o script auxiliar copia o diretorio `FiscalParquetAnalyzer/` atual para `FiscalParquetAnalyzer.bak/` no mesmo nivel.
+- Se o novo bundle falhar ao iniciar (verificado por exit code do processo relanado), o script substitui `FiscalParquetAnalyzer/` pelo conteudo de `FiscalParquetAnalyzer.bak/` e exibe mensagem de erro.
+- O usuario tambem pode restaurar manualmente renomeando o diretorio `.bak`.
+- O diretorio `.bak` e removido somente apos o primeiro lancamento bem-sucedido da nova versao.
+
+---
+
+## Cobertura MSIX
 
 Empacotar o app como MSIX e distribuir por winget, Store ou canal corporativo.
 
@@ -113,8 +131,12 @@ Riscos especificos:
 - Mudanca de path resolution merece ADR proprio.
 - Exige certificado e pipeline Windows mais formal.
 
+---
+
+## ADR em docs/adr/
+
 **Viabilidade atual — bloqueio formal:**
-A Opcao 3 **nao e viavel no estagio atual sem um ADR formal** que trate:
+A Opcao 3 (MSIX) **nao e viavel no estagio atual sem um ADR formal** que trate:
 (a) a migracao da resolucao de paths em `src/utilitarios/project_paths.py` de `Path(__file__).parents[2]` para caminhos do perfil do usuario (`%LOCALAPPDATA%`, `%APPDATA%`);
 (b) a compatibilidade do sandbox MSIX com os diretorios `dados/`, `sql/`, `workspace/` e `.env` posicionados ao lado do executavel;
 (c) a estrategia de empacotamento MSIX em convivencia com o spec PyInstaller atual.
@@ -160,10 +182,6 @@ PyUpdater pode ser reavaliado se houver necessidade de updates diferenciais. MSI
 | Seguranca | GitHub Releases Poller + Authenticode | Verificacao de hash SHA-256 antes da troca; exige certificado Code Signing para eliminar alertas SmartScreen. |
 | Compatibilidade com PyInstaller one-dir | GitHub Releases Poller | Nenhuma mudanca no spec ou no layout de runtime; `dados/`, `workspace/`, `sql/` e `.env` preservados. |
 | Dependencia de infra externa | GitHub Releases Poller | Apenas GitHub Releases (ja usado) + cliente HTTP; sem servidor de artefatos adicional. |
-
-**Prerequisito obrigatorio antes da implementacao:** adquirir certificado Code Signing (Authenticode). Sem ele, o `.exe` baixado sera bloqueado pelo SmartScreen independente da opcao escolhida.
-
-**Issue de implementacao:** apos aprovacao desta nota, abrir issue `[P7-Autoupdate-impl]` com escopo: worker PySide6 de verificacao de release, fluxo de consentimento do usuario, verificacao de hash, script de troca e rollback automatico.
 
 ---
 
