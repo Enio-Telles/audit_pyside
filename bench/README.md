@@ -6,6 +6,9 @@ o tempo do ciclo de desenvolvimento.
 
 ## Pre-requisitos
 
+`pytest-benchmark>=4.0` foi aprovado para o grupo `dev` pelo plano Notion P8-01
+e pela solicitacao do owner em 2026-05-02. Ele nao roda no CI padrao.
+
 ```bash
 uv pip install pytest-benchmark>=4.0
 # ou
