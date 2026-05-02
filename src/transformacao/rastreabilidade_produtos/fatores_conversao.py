@@ -833,27 +833,6 @@ def _carregar_vinculo_id_agrupado(
 
 
 def calcular_fatores_conversao(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
-    """Calcula os fatores de conversao entre unidades de medida para um CNPJ.
-
-    Deriva a relacao numerica entre cada unidade observada e a unidade de
-    referencia do produto a partir de ``item_unidades_<cnpj>.parquet`` e
-    ``produtos_final_<cnpj>.parquet``. Preserva fatores pre-existentes em
-    ``fatores_conversao_<cnpj>.parquet`` quando disponiveis.
-    O resultado e salvo em ``analises/produtos/fatores_conversao_<cnpj>.parquet``.
-
-    Args:
-        cnpj: CPF ou CNPJ do contribuinte (somente digitos ou formatado).
-        pasta_cnpj: Raiz do diretorio do CNPJ. Se ``None``, usa o padrao
-            ``dados/CNPJ/<cnpj>``; tambem aceita apontar diretamente para a
-            pasta ``analises/produtos`` (detectado automaticamente).
-
-    Returns:
-        ``True`` se o arquivo foi gerado com sucesso; ``False`` em caso de
-        arquivos ausentes ou falha ao salvar.
-
-    Raises:
-        ValueError: Se ``cnpj`` nao for um CPF (11 digitos) nem CNPJ (14 digitos).
-    """
     cnpj = re.sub(r"\D", "", cnpj or "")
     if len(cnpj) not in {11, 14}:
         raise ValueError("CPF/CNPJ invalido.")

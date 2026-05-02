@@ -71,17 +71,6 @@ def _gerar_id_agrupado_automatico_expr(col: str = "descricao_normalizada") -> pl
 
 
 def get_moda_expr(col_nome: str) -> pl.Expr:
-    """Retorna expressao Polars para calcular a moda de uma coluna de strings.
-
-    Filtra valores nulos e strings vazias antes de calcular a moda, retornando
-    o primeiro valor mais frequente encontrado.
-
-    Args:
-        col_nome: Nome da coluna de entrada.
-
-    Returns:
-        Expressao Polars que produz o valor mais frequente (nao vazio) da coluna.
-    """
     return (
         pl.col(col_nome)
         .cast(pl.Utf8, strict=False)
@@ -651,18 +640,6 @@ def produtos_agrupados(cnpj: str, pasta_cnpj: Path | None = None, versao: int = 
 
 
 def gerar_produtos_final(cnpj: str, pasta_cnpj: Path | None = None, versao: int = 1) -> bool:
-    """Alias publico para a funcao ``produtos_agrupados``.
-
-    Args:
-        cnpj: CPF ou CNPJ do contribuinte (somente digitos ou formatado).
-        pasta_cnpj: Raiz do diretorio do CNPJ. Se ``None``, usa o padrao
-            ``dados/CNPJ/<cnpj>``.
-        versao: Versao do algoritmo de agrupamento (padrao: ``1``).
-
-    Returns:
-        ``True`` se todos os artefatos foram gerados com sucesso;
-        ``False`` caso contrario.
-    """
     return produtos_agrupados(cnpj, pasta_cnpj, versao=versao)
 
 

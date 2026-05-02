@@ -455,36 +455,8 @@ def _calc_saldos_loop(df: pl.DataFrame, sufixo: str) -> pl.DataFrame:
 
 
 def calcular_saldo_estoque_anual(df: pl.DataFrame) -> pl.DataFrame:
-    """Calcula o saldo de estoque acumulado no eixo anual para cada linha.
-
-    Executa o loop sequencial de saldo usando o sufixo ``anual``, adicionando
-    ao DataFrame as colunas ``saldo_estoque_anual``, ``entr_desac_anual`` e
-    ``custo_medio_anual``.
-
-    Args:
-        df: DataFrame com movimentacoes ordenadas cronologicamente por produto,
-            contendo pelo menos as colunas ``Tipo_operacao``, ``q_conv`` e
-            ``preco_item``.
-
-    Returns:
-        DataFrame de entrada acrescido das tres colunas de saldo anual.
-    """
     return _calc_saldos_loop(df, "anual")
 
 
 def calcular_saldo_estoque_periodo(df: pl.DataFrame) -> pl.DataFrame:
-    """Calcula o saldo de estoque acumulado no eixo de periodo (mes/EFD) para cada linha.
-
-    Executa o loop sequencial de saldo usando o sufixo ``periodo``, adicionando
-    ao DataFrame as colunas ``saldo_estoque_periodo``, ``entr_desac_periodo`` e
-    ``custo_medio_periodo``.
-
-    Args:
-        df: DataFrame com movimentacoes ordenadas cronologicamente por produto
-            dentro de cada periodo, contendo pelo menos as colunas
-            ``Tipo_operacao``, ``q_conv`` e ``preco_item``.
-
-    Returns:
-        DataFrame de entrada acrescido das tres colunas de saldo por periodo.
-    """
     return _calc_saldos_loop(df, "periodo")
