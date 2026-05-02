@@ -34,6 +34,8 @@ dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
     "pytest-mock>=3.10",
+    # pytest-benchmark: aprovado em P8-01 no Notion e pedido do owner em 2026-05-02.
+    "pytest-benchmark>=4.0",
     "ruff>=0.4",
     "mypy>=1.10",
     "pre-commit>=3.5",
@@ -51,6 +53,7 @@ markers = [
     "gui: tests that require PySide6 GUI (display server)",
     "gui_smoke: headless GUI smoke tests",
     "slow: tests that are slow to run",
+    "bench: benchmark tests (run via pytest bench/ --benchmark-only)",
     "diff_harness: testes diferenciais byte-a-byte para invariantes de src/transformacao/",
 ]
 addopts = ["-m", "not oracle and not gui"]
@@ -59,7 +62,10 @@ addopts = ["-m", "not oracle and not gui"]
 # main_window_impl.py is generated Qt designer output (~4500 stmts); it has 0%
 # coverage and is exercised only in the gui_smoke job. Omitting it keeps the
 # coverage gate meaningful for the rest of the codebase.
-omit = ["src/interface_grafica/ui/main_window_impl.py"]
+omit = [
+    "src/interface_grafica/ui/main_window_impl.py",
+    "bench/*",
+]
 
 [tool.ruff]
 line-length = 100
