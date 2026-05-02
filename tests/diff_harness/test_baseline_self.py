@@ -7,8 +7,6 @@ em todas as 5 chaves invariantes.
 Este teste garante que o harness em si esta correto — se falhar,
 o problema e no harness, nao na implementacao auditada.
 """
-from __future__ import annotations
-
 import polars as pl
 import pytest
 

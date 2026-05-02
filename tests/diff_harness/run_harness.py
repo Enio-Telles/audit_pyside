@@ -4,8 +4,6 @@ run_harness.py
 Compara duas implementacoes byte-a-byte nas 5 colunas invariantes.
 Tolerancia: zero — qualquer diferenca e reportada.
 """
-from __future__ import annotations
-
 from dataclasses import dataclass, field
 from typing import Callable
 
@@ -105,7 +103,7 @@ def run_harness(
             row_input: dict = {}
             for c in dataset.columns:
                 v = dataset[c][idx]
-                row_input[c] = v if not isinstance(v, pl.Series) else v.to_list()
+                row_input[c] = _serialize(v)
             amostras.append(
                 {
                     "linha": idx,

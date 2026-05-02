@@ -114,6 +114,7 @@ a PR toca arquivos read-only.
 | `src/transformacao/fatores_conversao.py` | Fatores canonicos |
 | `src/transformacao/movimentacao_estoque.py` | Orquestrador de estoque |
 | `src/transformacao/movimentacao_estoque_pkg/calculo_saldos.py` | Calculo de saldos (Numba) |
+| `src/transformacao/movimentacao_estoque_pkg/movimentacao_estoque.py` | Pipeline fiscal de estoque |
 
 ## DifferentialReport — estrutura
 
@@ -126,6 +127,9 @@ class DifferentialReport:
 
 # Cada divergencia tem:
 # { "linha": int, "input": dict, "old": valor_antigo, "new": valor_novo }
+#
+# Caso uma coluna exista apenas em uma das implementacoes, a amostra registra:
+# { "erro": "coluna presente em old mas ausente em new" }
 ```
 
 ## FAQ

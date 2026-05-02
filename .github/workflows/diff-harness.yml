@@ -10,31 +10,31 @@ jobs:
     name: Testes diferenciais (diff_harness)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
 
-      - uses: actions/setup-python@v5
+      - name: Set up uv
+        uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff # v6
+
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
         with:
           python-version: "3.11"
-          cache: pip
 
       - name: Instalar dependencias
-        run: pip install polars numpy structlog rich numba pytest
+        run: uv sync --group dev
 
       - name: Rodar diff_harness
-        run: pytest -m diff_harness -q --tb=short
-        env:
-          PYTHONPATH: src
+        run: uv run pytest -m diff_harness -q --tb=short
 
   check-readonly-label:
     name: Verificar label differential-validated para arquivos read-only
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
 
       - name: Verificar se PR toca arquivos read-only
         id: check-readonly
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         with:
           result-encoding: string
           script: |
@@ -44,8 +44,9 @@ jobs:
               'src/transformacao/fatores_conversao.py',
               'src/transformacao/movimentacao_estoque.py',
               'src/transformacao/movimentacao_estoque_pkg/calculo_saldos.py',
+              'src/transformacao/movimentacao_estoque_pkg/movimentacao_estoque.py',
             ];
-            const { data: files } = await github.rest.pulls.listFiles({
+            const files = await github.paginate(github.rest.pulls.listFiles, {
               owner: context.repo.owner,
               repo: context.repo.repo,
               pull_number: context.payload.pull_request.number,
@@ -64,7 +65,7 @@ jobs:
 
       - name: Verificar label differential-validated
         if: steps.check-readonly.outputs.readonly_touched == 'true'
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         with:
           script: |
             const { data: pr } = await github.rest.pulls.get({

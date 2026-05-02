@@ -8,8 +8,6 @@ O dataset cobre as 5 chaves invariantes:
 
 alem de colunas auxiliares realistas para exercitar o pipeline de transformacao.
 """
-from __future__ import annotations
-
 import hashlib
 import random
 from pathlib import Path
@@ -125,9 +123,10 @@ def _gerar_dataset(seed: int, n_rows: int) -> pl.DataFrame:
     fatores = [par[2] for par in unid_pares]
 
     qtd_bruta = rng.uniform(0.01, 500.0, size=n_rows)
-    qtd_decl = (qtd_bruta * rng.uniform(0.95, 1.05, size=n_rows)).tolist()
-    q_conv = [qtd_bruta[i] * fatores[i] for i in range(n_rows)]
-    q_conv_fisica = [qc * py_rng.uniform(0.98, 1.02) for qc in q_conv]
+    fatores_arr = np.array(fatores)
+    qtd_decl = qtd_bruta * rng.uniform(0.95, 1.05, size=n_rows)
+    q_conv = qtd_bruta * fatores_arr
+    q_conv_fisica = q_conv * rng.uniform(0.98, 1.02, size=n_rows)
 
     dt_doc_mask = rng.random(n_rows) < 0.85
     dt_es_mask = rng.random(n_rows) < 0.80
@@ -161,6 +160,6 @@ def _gerar_dataset(seed: int, n_rows: int) -> pl.DataFrame:
             "Dt_doc": pl.Series(dt_doc, dtype=pl.Utf8).cast(pl.Date, strict=False),
             "Dt_e_s": pl.Series(dt_es, dtype=pl.Utf8).cast(pl.Date, strict=False),
             "Tipo_operacao": tipo_op_vals,
-            "qtd_bruta": qtd_bruta.tolist(),
+            "qtd_bruta": qtd_bruta,
         }
     )
