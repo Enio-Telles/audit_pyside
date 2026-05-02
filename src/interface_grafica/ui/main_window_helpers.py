@@ -3,8 +3,6 @@
 Modulo importavel sem PySide6 para permitir cobertura de testes na suite padrao.
 """
 
-from __future__ import annotations
-
 import hashlib
 import re
 
