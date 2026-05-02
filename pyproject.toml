@@ -54,6 +54,7 @@ markers = [
     "gui_smoke: headless GUI smoke tests",
     "slow: tests that are slow to run",
     "bench: benchmark tests (run via pytest bench/ --benchmark-only)",
+    "diff_harness: testes diferenciais byte-a-byte para invariantes de src/transformacao/",
 ]
 addopts = ["-m", "not oracle and not gui"]
 
