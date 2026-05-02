@@ -4,6 +4,31 @@ Esta página documenta `produtos_final`, `fontes_produtos` e `fatores_conversao`
 
 Essas camadas conectam descrições normalizadas a produtos consolidados, propagam o agrupamento para fontes operacionais e calculam fatores de conversão entre unidades.
 
+## Metodologia canônica de identificação
+
+A metodologia vigente de identificação de produtos é determinística e auditável. O agrupamento automático **não** usa similaridade textual livre/fuzzy como regra canônica.
+
+Fluxo base:
+
+```text
+descrição bruta
+  -> descricao_normalizada
+  -> id_descricao
+  -> id_agrupado_base
+  -> id_agrupado
+```
+
+Regra central:
+
+```text
+descrições normalizadas iguais   -> mesmo id_agrupado_base
+descrições normalizadas diferentes -> id_agrupado_base diferente
+```
+
+Ajustes humanos entram depois, por override manual, preservando a chave automática original em `id_agrupado_base`.
+
+O `id_agrupado` é a identidade vigente do produto fiscal consolidado. Ele é propagado para fontes, fatores de conversão, movimentação de estoque e tabelas analíticas.
+
 ---
 
 ## 1. `produtos_final_<cnpj>.parquet`
@@ -22,22 +47,19 @@ Tabela canônica de produto por descrição principal normalizada. Consolida o g
 | `produtos_final` | `fatores_conversao` | `id_agrupado`, `unid_ref_sugerida` | Define produto e unidade de referência sugerida. |
 | `produtos_final` | `movimentacao_estoque` | `id_agrupado`, atributos fiscais | Dá identidade fiscal ao movimento de estoque. |
 
-### Campos
+### Campos principais
 
 | Campo | Tipo | Explicação | Relação/Fórmula |
 |---|---|---|---|
 | `id_descricao` | `str` | Chave da descrição principal normalizada. | Elo entre `descricao_produtos` e `produtos_final`. |
 | `id_agrupado` | `str` | Chave vigente do produto agrupado. | Chave principal para fontes, fatores, estoque e análises. |
-| `id_agrupado_base` | `str` | Chave automática do grupo-base. | Deriva da igualdade de `descricao_normalizada`. |
-| `descricao_normalizada` | `str` | Descrição principal limpa. | Base do agrupamento automático. |
-| `descricao` | `str` | Descrição principal de origem da camada detalhada. | Apoio humano para revisão. |
-| `descricao_final` | `str` | Descrição final consolidada da linha. | Usada para apresentação detalhada. |
-| `descr_padrao` | `str` | Descrição padrão eleita para o grupo vigente. | Propagada para fontes, estoque e relatórios. |
+| `id_agrupado_base` | `str` | Chave automática do grupo-base. | Deriva de SHA1 da `descricao_normalizada`. |
+| `descricao_normalizada` | `str` | Descrição principal limpa. | Base do agrupamento automático determinístico. |
+| `descr_padrao` | `str` | Descrição padrão do grupo vigente. | Propagada para fontes, estoque e relatórios. |
 | `ncm_final` | `str` | NCM consolidado da linha. | Apoia eleição ou propagação do NCM padrão. |
 | `cest_final` | `str` | CEST consolidado da linha. | Apoia classificação fiscal e ST. |
 | `gtin_final` | `str` | GTIN consolidado da linha. | Apoia identificação cadastral do produto. |
 | `co_sefin_final` | `str` | Código SEFIN consolidado da linha. | Apoia classificação SITAFE. |
-| `co_sefin_padrao` | `str` | Código SEFIN padrão do grupo. | Pode originar `co_sefin_agr`. |
 | `unid_ref_sugerida` | `str` | Unidade de referência sugerida. | Consumida por `fatores_conversao`. |
 | `criterio_agrupamento` | `str` | Critério efetivo do agrupamento. | Explica se agrupou por regra automática/manual. |
 | `origem_agrupamento` | `str` | Origem do agrupamento vigente. | Auditoria do agrupamento. |
@@ -47,25 +69,34 @@ Tabela canônica de produto por descrição principal normalizada. Consolida o g
 Grupo-base automático:
 
 ```text
-id_agrupado_base = hash(descricao_normalizada)
+id_agrupado_base = "id_agrupado_auto_" + SHA1(descricao_normalizada)[:12]
 ```
 
 Regra vigente com ajuste manual:
 
 ```text
-se existe override manual para id_descricao ou descricao_normalizada:
+se existe override manual para id_descricao:
+    id_agrupado = id_agrupado_manual
+senão se existe override manual para descricao_normalizada:
     id_agrupado = id_agrupado_manual
 senão:
     id_agrupado = id_agrupado_base
 ```
 
+Interpretação:
+
+```text
+id_agrupado_base = agrupamento automático original
+id_agrupado      = agrupamento vigente, após override manual quando houver
+```
+
 Eleição de descrição padrão:
 
 ```text
-descr_padrao = descrição mais representativa do grupo vigente
+descr_padrao = descrição padrão selecionada para o grupo vigente
 ```
 
-A representatividade pode considerar frequência, qualidade cadastral e revisão manual. Não trate a frequência como verdade fiscal isolada.
+No código atual, a escolha de `descr_padrao` é simples e deriva da primeira descrição disponível no grupo, enquanto NCM, CEST, GTIN e SEFIN usam moda. Se o projeto decidir que `descr_padrao` deve considerar frequência, qualidade cadastral ou revisão manual, isso deve ser implementado e testado em PR própria.
 
 ---
 
@@ -84,28 +115,6 @@ nfe_agr_<cnpj>.parquet
 nfce_agr_<cnpj>.parquet
 ```
 
-### Relações
-
-| Origem | Destino | Campos | Como interpretar |
-|---|---|---|---|
-| `map_produto_agrupado` | `fontes_produtos` | `codigo_fonte`, `descricao_normalizada`, `id_agrupado` | Mapa de ligação entre fonte e produto. |
-| `produtos_final` | `fontes_produtos` | `id_agrupado`, atributos padrão | Injeta descrição, NCM, CEST, SEFIN e unidade sugerida. |
-| `fontes_produtos` | `c170_xml` / `c176_xml` | `codigo_fonte`, `id_agrupado` | Enriquecimento fiscal posterior. |
-| `fontes_produtos` | `movimentacao_estoque` | `id_agrupado`, atributos fiscais | Apoia a montagem do estoque por produto. |
-
-### Campos
-
-| Campo | Tipo | Explicação | Relação/Fórmula |
-|---|---|---|---|
-| `id_agrupado` | `str` | Produto agrupado atribuído à linha da fonte. | Vem do mapa/produto final. |
-| `codigo_fonte` | `str` | Chave operacional da fonte. | Vínculo preferencial com `map_produto_agrupado`. |
-| `descricao_normalizada` | `str` | Descrição limpa usada como fallback. | Usada quando `codigo_fonte` não resolve. |
-| `descr_padrao` | `str` | Descrição padrão do grupo. | Vem de `produtos_final`. |
-| `ncm_padrao` | `str` | NCM padrão do grupo. | Propagado para estoque e relatórios. |
-| `cest_padrao` | `str` | CEST padrão do grupo. | Propagado para estoque e análise ST. |
-| `co_sefin_agr` | `str` | Código SEFIN agrupado. | Chave de cruzamento com SITAFE. |
-| `unid_ref_sugerida` | `str` | Unidade de referência sugerida. | Ajuda no cálculo de fatores. |
-
 ### Regras de vínculo
 
 ```text
@@ -115,6 +124,8 @@ nfce_agr_<cnpj>.parquet
 4. se continuar sem id_agrupado, gerar log de faltantes e remover da saída enriquecida
 ```
 
+A `descricao_normalizada` é fallback controlado. Ela não substitui o `codigo_fonte` como chave preferencial.
+
 ### Relação com rastreabilidade
 
 ```text
@@ -123,6 +134,19 @@ fonte bruta.codigo_fonte
   -> map_produto_agrupado.id_agrupado
   -> produtos_final.id_agrupado
 ```
+
+Campos principais:
+
+| Campo | Explicação |
+|---|---|
+| `id_agrupado` | Produto agrupado atribuído à linha da fonte. |
+| `codigo_fonte` | Chave operacional preferencial da fonte. |
+| `descricao_normalizada` | Descrição limpa usada como fallback controlado. |
+| `descr_padrao` | Descrição padrão do grupo. |
+| `ncm_padrao` | NCM padrão do grupo. |
+| `cest_padrao` | CEST padrão do grupo. |
+| `co_sefin_agr` | Código SEFIN agrupado. |
+| `unid_ref_sugerida` | Unidade de referência sugerida. |
 
 ---
 
@@ -140,24 +164,6 @@ Define como converter as unidades usadas nas fontes para uma unidade de referên
 | `produtos_final` | `fatores_conversao` | `id_agrupado`, `unid_ref_sugerida`, `descr_padrao` | Define produto e unidade sugerida. |
 | `fatores_conversao` | `c170_xml` / `c176_xml` | `id_agrupado`, `unid`, `fator` | Converte quantidades e valores unitários. |
 | `fatores_conversao` | `movimentacao_estoque` | `id_agrupado`, `unid_ref`, `fator` | Padroniza o saldo físico. |
-
-### Campos
-
-| Campo | Tipo | Explicação | Relação/Fórmula |
-|---|---|---|---|
-| `id_agrupado` | `str` | Produto agrupado. | Chave principal do fator. |
-| `id_produtos` | `str` | Alias histórico preenchido com `id_agrupado`. | Compatibilidade legada. |
-| `descr_padrao` | `str` | Descrição padrão do produto. | Vem de `produtos_final`. |
-| `unid` | `str` | Unidade original da linha. | Ex.: UN, CX, KG. |
-| `unid_ref` | `str` | Unidade de referência efetiva. | Unidade para a qual a quantidade será convertida. |
-| `unid_ref_override` | `str` | Unidade de referência manual. | Tem prioridade quando preenchida. |
-| `fator` | `float` | Fator efetivo de conversão. | `qtd_convertida = qtd_original * fator`. |
-| `fator_override` | `float` | Fator manual preservado. | Tem prioridade sobre cálculo automático. |
-| `fator_manual` | `bool` | Indicador de fator manual. | Verdadeiro quando `fator` vem de override. |
-| `unid_ref_manual` | `bool` | Indicador de unidade manual. | Verdadeiro quando `unid_ref` vem de override. |
-| `preco_medio` | `float` | Preço médio usado como base. | Derivado de compra ou venda. |
-| `origem_preco` | `str` | Origem do preço: `COMPRA`, `VENDA`, `SEM_PRECO`. | Auditoria da confiabilidade do fator. |
-| `fator_origem` | `str` | Origem do fator: `manual`, `preco`, `fallback_sem_preco`, etc. | Auditoria do cálculo. |
 
 ### Fórmulas
 
@@ -229,6 +235,24 @@ novo_fator = reconciliar(fator_antigo_manual, agrupamento_atual)
 
 Se o agrupamento mudou, o processo precisa registrar reconciliação para auditoria.
 
+Campos principais:
+
+| Campo | Explicação |
+|---|---|
+| `id_agrupado` | Produto agrupado. |
+| `id_produtos` | Alias histórico preenchido com `id_agrupado`. |
+| `descr_padrao` | Descrição padrão do produto. |
+| `unid` | Unidade original da linha. |
+| `unid_ref` | Unidade de referência efetiva. |
+| `unid_ref_override` | Unidade de referência manual. |
+| `fator` | Fator efetivo de conversão. |
+| `fator_override` | Fator manual preservado. |
+| `fator_manual` | Indica se o fator veio de override manual. |
+| `unid_ref_manual` | Indica se a unidade de referência veio de override manual. |
+| `preco_medio` | Preço médio usado como base. |
+| `origem_preco` | Origem do preço: `COMPRA`, `VENDA`, `SEM_PRECO`. |
+| `fator_origem` | Origem do fator: `manual`, `preco`, `fallback_sem_preco`, etc. |
+
 ---
 
 ## Relação resumida desta camada
@@ -251,3 +275,9 @@ descricao_produtos.descricao_normalizada
 | `unid`, `unid_ref`, `fator` | Base das conversões físicas. |
 | `fator_override`, `unid_ref_override` | Ajustes manuais que não podem ser perdidos. |
 | `co_sefin_agr` / `co_sefin_padrao` | Base para classificação fiscal SITAFE. |
+
+## Frase canônica
+
+```text
+A metodologia do audit_pyside identifica produtos por normalização determinística da descrição, cria uma chave automática estável, permite correção humana controlada via override, propaga a identidade às fontes por codigo_fonte com fallback auditado por descrição, e padroniza quantidades com fatores de conversão preservando ajustes manuais.
+```
