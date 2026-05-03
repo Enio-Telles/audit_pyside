@@ -110,6 +110,35 @@ Para qualquer uma dessas mudanças: declare **Riscos** e **Rollback** na PR.
 
 ---
 
+## Gate transformacao_perf_or_refactor_gate
+
+Qualquer PR `perf`, `refactor` ou `fix` que mude logica de filtro,
+join ou agregacao em `src/transformacao/` precisa anexar um
+`DifferentialReport` que aprove os 3 niveis de gate. Contrato e
+codigo das guardas: ver
+`docs/wiki/Differential-harness-contrato-e-guardas.md`.
+
+Resumo dos 3 niveis:
+
+1. **Divergencias por chave = 0** nas 5 invariantes (em CNPJs amostra `04240370002877` e `84654326000394`).
+2. **Conservacao de massa por fonte** (`nfe`, `nfce`, `c170`, `bloco_h`): `baseline == novo_principal + sem_id + fora_escopo`.
+3. **Detector de colapso + tripwire downstream** em `mov_estoque` (limite 1%).
+
+Reprovacao em qualquer nivel → manter em draft.
+
+Como invocar:
+
+```bash
+uv run python tests/diff_harness/run_harness_cli.py \
+    --baseline-commit <sha-de-main> \
+    --novo-commit HEAD \
+    --cnpj 04240370002877 \
+    --cnpj 84654326000394 \
+    --out reports/diff/
+```
+
+---
+
 ## Validação esperada
 
 Quando aplicável:
