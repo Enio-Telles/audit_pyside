@@ -75,6 +75,7 @@ O backend FastAPI foi removido em 2026-04-22 — veja [ADR-001](adr/0001-futuro-
 |---|---|
 | [PLAN.md](PLAN.md) | Plano de execução P0–P5 (fonte de verdade do roadmap) |
 | [plano_q.md](plano_q.md) | Plano de melhorias da qualidade dos dados |
+| [auto-update-research.md](auto-update-research.md) | Pesquisa e recomendacao do fluxo de auto-update do executavel |
 | [ADR-001](adr/0001-futuro-backend-fastapi.md) | Decisão sobre o futuro do backend FastAPI |
 
 > **Gap de documentação:**

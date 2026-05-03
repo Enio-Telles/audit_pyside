@@ -293,7 +293,7 @@ def extrair_dados_cadastrais(cnpj: str) -> Optional[Dict[str, Any]]:
         with conexao.cursor() as cursor:
             cursor.arraysize = 100
             cursor.prepare(sql_conteudo)
-            cursor.execute(None, {"cnpj": cnpj_limpo})
+            cursor.execute(None, {"CO_CNPJ_CPF": cnpj_limpo})
 
             # ObtÃ©m nomes das colunas originais
             colunas_raw = [col[0] for col in cursor.description]
@@ -449,7 +449,7 @@ def extrair_dados_malha(
             resultados = [
                 {
                     k: (v.strip() if isinstance(v, str) else ("" if v is None else v))
-                    for k, v in zip(colunas, linha)
+                    for k, v in zip(colunas, linha, strict=True)
                 }
                 for linha in cursor.fetchall()
             ]
