@@ -254,7 +254,11 @@ def _dice_score(a: str, b: str) -> int:
 def _jaccard_score(a: set[str] | frozenset[str], b: set[str] | frozenset[str]) -> int:
     if not a or not b:
         return 0
-    return round(100 * len(a & b) / len(a | b))
+    # Optimization: calculate union length via math instead of len(a | b) to avoid allocating a new set
+    len_a = len(a)
+    len_b = len(b)
+    intersection_len = len(a & b)
+    return round(100 * intersection_len / (len_a + len_b - intersection_len))
 
 
 def _codigo_score(a: frozenset[str], b: frozenset[str]) -> int | None:
