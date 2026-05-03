@@ -95,6 +95,46 @@ def test_fontes_separa_fora_escopo_canonico(tmp_path: Path):
     assert df_auditoria["motivo_fora_escopo_canonico"].to_list() == ["fora_escopo_canonico"]
 
 
+def test_fontes_grava_vazio_quando_tudo_vai_para_fora_escopo(tmp_path: Path):
+    cnpj = "12345678000113"
+    pasta_cnpj = _preparar_contexto(tmp_path, cnpj)
+    pasta_analises = pasta_cnpj / "analises" / "produtos"
+    pasta_brutos = pasta_cnpj / "arquivos_parquet"
+
+    pl.DataFrame(
+        {
+            "id_agrupado": ["AGR_1"],
+            "codigo_fonte": ["111|001"],
+            "descricao_normalizada": ["PRODUTO A"],
+        }
+    ).write_parquet(pasta_analises / f"map_produto_agrupado_{cnpj}.parquet")
+
+    # Todas as linhas sao entrada de terceiros — 100% vai para fora_escopo
+    pl.DataFrame(
+        {
+            "codigo_fonte": ["111|001", "111|001"],
+            "prod_xprod": ["Produto A", "Produto A"],
+            "tipo_operacao": ["0 - ENTRADA", "0 - ENTRADA"],
+            "co_emitente": ["99999999000199", "88888888000188"],
+            "chave_acesso": ["NFE1", "NFE2"],
+        }
+    ).write_parquet(pasta_brutos / f"nfe_{cnpj}.parquet")
+
+    assert gerar_fontes_produtos(cnpj, pasta_cnpj=pasta_cnpj)
+
+    # Arquivo principal deve existir e ser vazio (nao stale de run anterior)
+    arq_principal = pasta_brutos / f"nfe_agr_{cnpj}.parquet"
+    assert arq_principal.exists(), "nfe_agr deve existir mesmo quando vazio"
+    df_saida = pl.read_parquet(arq_principal)
+    assert df_saida.height == 0, f"esperado 0 linhas, obtido {df_saida.height}"
+
+    # Auditoria deve conter as 2 linhas descartadas
+    df_auditoria = pl.read_parquet(
+        pasta_analises / f"nfe_agr_fora_escopo_canonico_{cnpj}.parquet"
+    )
+    assert df_auditoria.height == 2
+
+
 def test_fontes_gera_auditoria_para_descricao_ambigua(tmp_path: Path):
     cnpj = "12345678000111"
     pasta_cnpj = _preparar_contexto(tmp_path, cnpj)

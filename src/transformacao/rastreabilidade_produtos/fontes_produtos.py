@@ -154,6 +154,19 @@ def _candidatos_cfop_bi() -> list[Path]:
     ]
 
 
+def _salvar_agr_vazio(pasta_brutos: Path, fonte: str, cnpj: str) -> bool:
+    """Grava parquet vazio quando todas as linhas foram para fora_escopo_canonico.
+
+    Substitui qualquer arquivo stale de run anterior, garantindo que o estado
+    em disco reflita o run atual.
+    """
+    colunas = _deduplicar_colunas_preservando_ordem(
+        list(COLUNAS_OBRIGATORIAS_FONTES_AGR) + list(COLUNAS_RASTREABILIDADE_FONTES)
+    )
+    df_vazio = pl.DataFrame({col: pl.Series([], dtype=pl.Utf8) for col in colunas})
+    return bool(salvar_para_parquet(df_vazio, pasta_brutos, f"{fonte}_agr_{cnpj}.parquet"))
+
+
 def _carregar_cfops_mercantis() -> pl.DataFrame | None:
     caminho = next((p for p in _candidatos_cfop_bi() if p.exists()), None)
     if caminho is None:
@@ -352,6 +365,13 @@ def _processar_fonte_em_batches_anuais(
             return False
 
     if not batches:
+        if batches_fora_escopo:
+            ok = _salvar_agr_vazio(pasta_brutos, fonte, cnpj)
+            rprint(
+                f"[yellow]Aviso: todas as linhas de {fonte} foram para "
+                f"fora_escopo_canonico. {fonte}_agr_{cnpj}.parquet gravado vazio.[/yellow]"
+            )
+            return ok
         return False
 
     df_final = pl.concat(batches, how="diagonal_relaxed")
@@ -366,7 +386,12 @@ def _processar_fonte_em_batches_anuais(
         df_final = df_final.filter(pl.col("id_agrupado").is_not_null())
 
     if df_final.is_empty():
-        return False
+        ok = _salvar_agr_vazio(pasta_brutos, fonte, cnpj)
+        rprint(
+            f"[yellow]Aviso: {fonte} — todas as linhas restantes eram sem id_agrupado. "
+            f"{fonte}_agr_{cnpj}.parquet gravado vazio.[/yellow]"
+        )
+        return ok
 
     if (
         "descricao_normalizada" not in df_final.columns
@@ -748,6 +773,14 @@ def gerar_fontes_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
             return False
 
         if df_src.is_empty():
+            if df_fora_escopo is not None:
+                ok = _salvar_agr_vazio(pasta_brutos, fonte, cnpj)
+                rprint(
+                    f"[yellow]Aviso: todas as linhas de {fonte} foram para "
+                    f"fora_escopo_canonico. {fonte}_agr_{cnpj}.parquet gravado vazio.[/yellow]"
+                )
+                if ok:
+                    gerou_algum = True
             continue
 
         df_out = _anexar_id_agrupado_por_codigo_ou_descricao(
