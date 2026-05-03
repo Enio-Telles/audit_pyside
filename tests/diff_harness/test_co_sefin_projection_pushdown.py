@@ -74,13 +74,10 @@ def _dataset_com_bordas() -> pl.DataFrame:
 
 def _materializar_invariantes(df: pl.DataFrame) -> pl.DataFrame:
     marcador = pl.coalesce([pl.col("co_sefin_inferido"), pl.lit("sem_co_sefin")])
-    return (
-        df.with_columns(
-            pl.format("{}|{}", pl.col("id_agrupado"), marcador).alias("id_agrupado"),
-            pl.format("{}|{}", pl.col("id_agregado"), marcador).alias("id_agregado"),
-        )
-        .select(INVARIANTS)
-    )
+    return df.with_columns(
+        pl.format("{}|{}", pl.col("id_agrupado"), marcador).alias("id_agrupado"),
+        pl.format("{}|{}", pl.col("id_agregado"), marcador).alias("id_agregado"),
+    ).select(INVARIANTS)
 
 
 def _impl_old(df: pl.DataFrame, refs_dir: Path) -> pl.DataFrame:
@@ -105,6 +102,4 @@ def test_projection_pushdown_preserva_co_sefin_byte_a_byte(refs_dir: Path) -> No
     assert report.total_rows == 100_000
     assert not report.tem_divergencia, report.resumo()
     for chave in INVARIANTS:
-        assert report.divergentes[chave] == 0, (
-            f"Divergencia em {chave}: {report.amostras[chave]}"
-        )
+        assert report.divergentes[chave] == 0, f"Divergencia em {chave}: {report.amostras[chave]}"
