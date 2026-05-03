@@ -1,10 +1,13 @@
 """Testes do DifferentialReport: estrutura, render e estabilidade de snapshot."""
+
 from datetime import datetime
 
 from tests.diff_harness.differential_report import (
     DifferentialReport,
     DownstreamResultado,
     FonteResultado,
+    StatusFonte,
+    StatusFonteAnalise,
 )
 
 _GERADO_EM = datetime(2026, 5, 3, 13, 45, 0)
@@ -17,7 +20,12 @@ def _report_aprovado() -> DifferentialReport:
         baseline_commit="40daa7f",
         novo_commit="4bd4bf2",
         gerado_em=_GERADO_EM,
-        harness_version="1.0.0",
+        harness_version="1.1.0",
+        statuses_por_fonte=[
+            StatusFonteAnalise("nfe", True, True, True),
+            StatusFonteAnalise("nfce", True, True, True),
+        ],
+        tripwire_mov_estoque=True,
         fontes=[
             FonteResultado(
                 fonte="nfe",
@@ -29,7 +37,7 @@ def _report_aprovado() -> DifferentialReport:
                 conservacao_ok=True,
                 colapso_ok=True,
                 divergencias_por_invariante={"id_agrupado": 0},
-                status="APROVADO",
+                status=StatusFonte.APROVADO,
             ),
             FonteResultado(
                 fonte="nfce",
@@ -41,7 +49,7 @@ def _report_aprovado() -> DifferentialReport:
                 conservacao_ok=True,
                 colapso_ok=True,
                 divergencias_por_invariante={"id_agrupado": 0},
-                status="APROVADO",
+                status=StatusFonte.APROVADO,
             ),
         ],
         downstream=[],
@@ -52,7 +60,7 @@ def _report_aprovado() -> DifferentialReport:
             "q_conv": 0,
             "q_conv_fisica": 0,
         },
-        resultado_final="APROVADO",
+        resultado_final=StatusFonte.APROVADO,
     )
 
 
@@ -80,7 +88,8 @@ def test_render_estavel_byte_a_byte() -> None:
 
 def test_render_reprovado_indica_reprovado() -> None:
     r = _report_aprovado()
-    r.resultado_final = "REPROVADO"
+    r.resultado_final = StatusFonte.REPROVADO
+    r.tripwire_mov_estoque = False
     assert "REPROVADO" in r.render()
 
 
@@ -93,9 +102,10 @@ def test_downstream_aparece_no_render() -> None:
             novo=29395,
             delta_pct=-0.0191,
             tripwire_ok=False,
-            status="REPROVADO",
+            status=StatusFonte.REPROVADO,
         )
     )
+    r.tripwire_mov_estoque = False
     txt = r.render()
     assert "mov_estoque" in txt
     assert "REPROVADO" in txt

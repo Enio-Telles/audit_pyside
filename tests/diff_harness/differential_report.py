@@ -1,11 +1,29 @@
 """DifferentialReport: dataclass + renderizador no formato canonico do gate."""
-from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
+from enum import Enum
 from typing import Literal
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
+
+
+class StatusFonte(str, Enum):
+    APROVADO = "APROVADO"
+    REPROVADO = "REPROVADO"
+    STALE = "STALE"
+
+
+@dataclass(frozen=True)
+class StatusFonteAnalise:
+    fonte: str
+    nivel_1: bool
+    nivel_2: bool
+    nivel_3: bool
+
+    @property
+    def aprovado(self) -> bool:
+        return self.nivel_1 and self.nivel_2 and self.nivel_3
 
 
 @dataclass(frozen=True)
@@ -19,7 +37,7 @@ class FonteResultado:
     conservacao_ok: bool
     colapso_ok: bool
     divergencias_por_invariante: dict[str, int]
-    status: Literal["APROVADO", "REPROVADO"]
+    status: StatusFonte
     motivo_reprovacao: str | None = None
 
 
@@ -30,7 +48,7 @@ class DownstreamResultado:
     novo: int
     delta_pct: float
     tripwire_ok: bool
-    status: Literal["APROVADO", "REPROVADO"]
+    status: StatusFonte
 
 
 @dataclass
@@ -41,10 +59,18 @@ class DifferentialReport:
     novo_commit: str
     gerado_em: datetime
     harness_version: str
+    statuses_por_fonte: list[StatusFonteAnalise] = field(default_factory=list)
+    tripwire_mov_estoque: bool = True
     fontes: list[FonteResultado] = field(default_factory=list)
     downstream: list[DownstreamResultado] = field(default_factory=list)
     divergencias_globais: dict[str, int] = field(default_factory=dict)
-    resultado_final: Literal["APROVADO", "REPROVADO"] = "APROVADO"
+    resultado_final: StatusFonte = StatusFonte.APROVADO
+
+    @property
+    def aprovado_global(self) -> bool:
+        """Veredito final do gate."""
+        fontes_ok = all(s.aprovado for s in self.statuses_por_fonte)
+        return fontes_ok and self.tripwire_mov_estoque
 
     def render(self) -> str:
         linhas: list[str] = []
@@ -68,33 +94,41 @@ class DifferentialReport:
                 f"Conservacao de massa:      {'OK' if fr.conservacao_ok else 'FALHOU'}"
                 f" ({soma_base} == {soma_novo})"
             )
-            linhas.append(f"Colapso:                   {'OK' if fr.colapso_ok else 'FALHOU'}"
-                          f" (novo > 0)" if fr.novo_principal > 0 else
-                          f"Colapso:                   {'OK' if fr.colapso_ok else 'FALHOU'}")
+            linhas.append(
+                f"Colapso:                   {'OK' if fr.colapso_ok else 'FALHOU'}"
+            )
             for inv, n_div in fr.divergencias_por_invariante.items():
-                intersecao = fr.novo_principal  # linhas comparadas
+                intersecao = fr.novo_principal
                 linhas.append(
                     f"Divergencias {inv[:20]:<20}: {n_div} / {intersecao} intersecao"
                 )
-            linhas.append(f"STATUS: {fr.status}"
-                          + (f": {fr.motivo_reprovacao}" if fr.motivo_reprovacao else ""))
+            linhas.append(
+                f"STATUS: {fr.status.value}"
+                + (f": {fr.motivo_reprovacao}" if fr.motivo_reprovacao else "")
+            )
 
         for dr in self.downstream:
             linhas.append(f"DOWNSTREAM: {dr.nome} " + "—" * 40)
             linhas.append(f"Baseline:                  {dr.baseline:>7} linhas")
             linhas.append(f"Novo:                      {dr.novo:>7} linhas")
-            linhas.append(f"Delta:                     {dr.delta_pct:+.2%}"
-                          + (" (excede tripwire 1%)" if not dr.tripwire_ok else ""))
-            linhas.append(f"STATUS: {dr.status}")
+            linhas.append(
+                f"Delta:                     {dr.delta_pct:+.2%}"
+                + (" (excede tripwire 1%)" if not dr.tripwire_ok else "")
+            )
+            linhas.append(f"STATUS: {dr.status.value}")
 
         linhas.append("DIVERGENCIAS POR CHAVE (5 invariantes) " + "—" * 38)
         inv_ordem = [
-            "id_agrupado", "id_agregado", "__qtd_decl_final_audit__",
-            "q_conv", "q_conv_fisica",
+            "id_agrupado",
+            "id_agregado",
+            "__qtd_decl_final_audit__",
+            "q_conv",
+            "q_conv_fisica",
         ]
         for inv in inv_ordem:
             v = self.divergencias_globais.get(inv, 0)
             linhas.append(f"{inv:<30}: {v}")
 
-        linhas.append(f"RESULTADO FINAL: {self.resultado_final}")
+        viva_aprovado = "APROVADO" if self.aprovado_global else "REPROVADO"
+        linhas.append(f"RESULTADO FINAL: {viva_aprovado}")
         return "\n".join(linhas)

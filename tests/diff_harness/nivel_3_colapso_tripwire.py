@@ -1,4 +1,7 @@
-"""Nivel 3 do gate: detector de colapso e tripwire downstream em mov_estoque."""
+"""Nivel 3 do gate: detector de colapso, tripwire e artefatos stale."""
+
+from pathlib import Path
+
 import polars as pl
 
 MOV_ESTOQUE_TRIPWIRE_PADRAO: float = 0.01
@@ -10,6 +13,7 @@ def assert_nao_colapsou(
     fonte: str,
 ) -> None:
     """Falha se baseline tinha linhas e novo tem zero (colapso silencioso)."""
+
     if baseline_principal.height > 0:
         assert novo_principal.height > 0, (
             f"[{fonte}] colapso: baseline={baseline_principal.height}, novo=0. "
@@ -27,6 +31,7 @@ def assert_tripwire_mov_estoque(
     Uma reducao superior ao limite indica efeito downstream significativo
     e exige aprovacao humana explicita + ADR antes do merge.
     """
+
     if baseline_mov.height == 0:
         return
     delta = abs(novo_mov.height - baseline_mov.height) / baseline_mov.height
@@ -34,3 +39,20 @@ def assert_tripwire_mov_estoque(
         f"mov_estoque tripwire: delta={delta:.2%} > {tolerancia:.0%}. "
         f"baseline={baseline_mov.height} novo={novo_mov.height}"
     )
+
+
+def assert_artefato_nao_stale(caminho: Path, inicio_do_run: float, fonte: str) -> None:
+    """Falha se o arquivo existe mas nao foi regravado neste run.
+
+    Arquivo ausente e noop — fonte legitimamente vazia nao deve ter artefato.
+    """
+
+    if not caminho.exists():
+        return
+
+    mtime = caminho.stat().st_mtime
+    if mtime < inicio_do_run:
+        raise AssertionError(
+            f"[{fonte}] artefato stale: {caminho.name} mtime={mtime:.0f} < "
+            f"inicio_run={inicio_do_run:.0f}. Pipeline nao regravou."
+        )
