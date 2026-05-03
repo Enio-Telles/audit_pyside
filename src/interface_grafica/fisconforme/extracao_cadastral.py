@@ -125,7 +125,7 @@ def extrair_dados_cadastrais_oracle(cnpj: str) -> Optional[Dict[str, Any]]:
     try:
         with conexao.cursor() as cursor:
             cursor.arraysize = 10
-            cursor.execute(sql, {"cnpj": cnpj})
+            cursor.execute(sql, {"CO_CNPJ_CPF": cnpj})
 
             colunas = [col[0] for col in cursor.description]
             resultado = cursor.fetchone()
