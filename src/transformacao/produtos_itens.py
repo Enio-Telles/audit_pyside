@@ -24,6 +24,10 @@ from __future__ import annotations
 import re
 from pathlib import Path
 from utilitarios.project_paths import PROJECT_ROOT
+from utilitarios.validacao_schema import (
+    SchemaValidacaoError,
+    garantir_colunas_obrigatorias,
+)
 
 import polars as pl
 
@@ -64,6 +68,17 @@ def gerar_produtos_itens(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
 
     df_unid = pl.read_parquet(arq_unid)
     df_prod = pl.read_parquet(arq_prod)
+
+    if "chave_item" not in df_prod.columns and "chave_produto" not in df_prod.columns:
+        raise SchemaValidacaoError(
+            f"produtos_itens: {arq_prod.name} requer 'chave_item' ou 'chave_produto'"
+        )
+    garantir_colunas_obrigatorias(
+        df_prod,
+        ["descricao_normalizada"],
+        contexto=f"produtos_itens.{arq_prod.name}",
+    )
+
     if "chave_item" not in df_prod.columns and "chave_produto" in df_prod.columns:
         df_prod = df_prod.with_columns(pl.col("chave_produto").alias("chave_item"))
     if "chave_produto" not in df_prod.columns and "chave_item" in df_prod.columns:
