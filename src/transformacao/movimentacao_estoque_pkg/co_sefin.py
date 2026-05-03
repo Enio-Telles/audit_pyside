@@ -75,7 +75,7 @@ def inferir_co_sefin_dataframe(
         df_base = df_base.with_columns(pl.lit(None, dtype=pl.String).alias(col_cest))
 
     ref_cn = (
-        pl.read_parquet(ref_cest_ncm_path)
+        pl.scan_parquet(ref_cest_ncm_path)
         .select(["it_nu_cest", "it_nu_ncm", "it_co_sefin"])
         .with_columns(
             [
@@ -85,22 +85,25 @@ def inferir_co_sefin_dataframe(
             ]
         )
         .drop(["it_nu_cest", "it_nu_ncm"])
+        .collect()
     )
 
     ref_c = (
-        pl.read_parquet(ref_cest_path)
+        pl.scan_parquet(ref_cest_path)
         .select(["cest", "co-sefin"])
         .with_columns(_limpar_expr("cest").alias("ref_cest"))
         .drop("cest")
         .rename({"co-sefin": "co_sefin_cest"})
+        .collect()
     )
 
     ref_n = (
-        pl.read_parquet(ref_ncm_path)
+        pl.scan_parquet(ref_ncm_path)
         .select(["ncm", "co-sefin"])
         .with_columns(_limpar_expr("ncm").alias("ref_ncm"))
         .drop("ncm")
         .rename({"co-sefin": "co_sefin_ncm"})
+        .collect()
     )
 
     df_join = df_base.with_columns(

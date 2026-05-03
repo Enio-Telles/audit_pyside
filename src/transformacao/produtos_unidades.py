@@ -60,13 +60,13 @@ def _inferir_co_sefin(df: pl.DataFrame) -> pl.DataFrame:
     )
 
     if path_cn is not None:
-        ref_cn = pl.read_parquet(path_cn).select(
+        ref_cn = pl.scan_parquet(path_cn).select(
             [
                 _limpar_expr("it_nu_cest").alias("ref_cest"),
                 _limpar_expr("it_nu_ncm").alias("ref_ncm"),
                 pl.col("it_co_sefin").cast(pl.String).alias("co_sefin_cn"),
             ]
-        )
+        ).collect()
         df_join = df_join.join(
             ref_cn,
             left_on=["_cest_j", "_ncm_j"],
@@ -77,23 +77,23 @@ def _inferir_co_sefin(df: pl.DataFrame) -> pl.DataFrame:
         df_join = df_join.with_columns(pl.lit(None, pl.String).alias("co_sefin_cn"))
 
     if path_c is not None:
-        ref_c = pl.read_parquet(path_c).select(
+        ref_c = pl.scan_parquet(path_c).select(
             [
                 _limpar_expr("cest").alias("ref_cest_only"),
                 pl.col("co-sefin").cast(pl.String).alias("co_sefin_c"),
             ]
-        )
+        ).collect()
         df_join = df_join.join(ref_c, left_on="_cest_j", right_on="ref_cest_only", how="left")
     else:
         df_join = df_join.with_columns(pl.lit(None, pl.String).alias("co_sefin_c"))
 
     if path_n is not None:
-        ref_n = pl.read_parquet(path_n).select(
+        ref_n = pl.scan_parquet(path_n).select(
             [
                 _limpar_expr("ncm").alias("ref_ncm_only"),
                 pl.col("co-sefin").cast(pl.String).alias("co_sefin_n"),
             ]
-        )
+        ).collect()
         df_join = df_join.join(ref_n, left_on="_ncm_j", right_on="ref_ncm_only", how="left")
     else:
         df_join = df_join.with_columns(pl.lit(None, pl.String).alias("co_sefin_n"))
@@ -127,10 +127,11 @@ def gerar_produtos_unidades(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
     cfop_df = None
     if cfop_bi_path.exists():
         cfop_df = (
-            pl.read_parquet(cfop_bi_path)
+            pl.scan_parquet(cfop_bi_path)
             .filter(pl.col("operacao_mercantil") == "X")
             .select(["co_cfop"])
             .with_columns(pl.col("co_cfop").cast(pl.String))
+            .collect()
         )
 
     # 2. Leitura de fontes
