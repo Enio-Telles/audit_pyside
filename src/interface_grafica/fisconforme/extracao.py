@@ -449,7 +449,7 @@ def extrair_dados_malha(
             resultados = [
                 {
                     k: (v.strip() if isinstance(v, str) else ("" if v is None else v))
-                    for k, v in zip(colunas, linha)
+                    for k, v in zip(colunas, linha, strict=True)
                 }
                 for linha in cursor.fetchall()
             ]
