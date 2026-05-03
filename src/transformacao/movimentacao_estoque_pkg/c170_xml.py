@@ -248,6 +248,26 @@ def _prepare_xml_candidates(
 
 
 def gerar_c170_xml(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
+    """Gera a tabela padronizada c170_xml para um CNPJ.
+
+    Combina o C170 com o XML das NF-e e NF-Ce correspondentes, priorizando
+    os dados do XML quando disponivel e completando com os campos do C170
+    quando necessario. O item XML mais aderente e selecionado por score que
+    considera ``id_agrupado``, descricao, NCM, CEST, GTIN, quantidade e preco.
+    O resultado e salvo em ``arquivos_parquet/c170_xml_<cnpj>.parquet``.
+
+    Args:
+        cnpj: CPF ou CNPJ do contribuinte (somente digitos ou formatado).
+        pasta_cnpj: Raiz do diretorio do CNPJ. Se ``None``, usa o padrao
+            ``dados/CNPJ/<cnpj>``.
+
+    Returns:
+        ``True`` se o arquivo foi gerado com sucesso; ``False`` em caso de
+        arquivo ausente ou erro de schema.
+
+    Raises:
+        ValueError: Se ``cnpj`` nao for um CPF (11 digitos) nem CNPJ (14 digitos).
+    """
     cnpj = re.sub(r"\D", "", cnpj or "")
     if len(cnpj) not in {11, 14}:
         raise ValueError("CPF/CNPJ invalido.")
