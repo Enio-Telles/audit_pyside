@@ -62,6 +62,25 @@ def _carregar_codigos_da_ponte(pasta_analises: Path, cnpj: str) -> pl.DataFrame:
 
 
 def gerar_id_agrupados(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
+    """Gera a tabela de referencia ``id_agrupados`` para um CNPJ.
+
+    Le ``produtos_final_<cnpj>.parquet``, consolida listas de codigos de
+    fonte (da tabela ponte ``map_produto_agrupado``), listas de descricoes,
+    unidades e unidades agregadas por ``id_agrupado``, e salva o resultado
+    em ``analises/produtos/id_agrupados_<cnpj>.parquet``.
+
+    Args:
+        cnpj: CPF ou CNPJ do contribuinte (somente digitos ou formatado).
+        pasta_cnpj: Raiz do diretorio do CNPJ. Se ``None``, usa o padrao
+            ``dados/CNPJ/<cnpj>``.
+
+    Returns:
+        ``True`` se o arquivo foi gerado com sucesso; ``False`` em caso de
+        arquivo base ausente, DataFrame vazio ou coluna ``id_agrupado`` ausente.
+
+    Raises:
+        ValueError: Se ``cnpj`` nao for um CPF (11 digitos) nem CNPJ (14 digitos).
+    """
     cnpj = re.sub(r"\D", "", cnpj or "")
     if len(cnpj) not in {11, 14}:
         raise ValueError("CPF/CNPJ invalido.")

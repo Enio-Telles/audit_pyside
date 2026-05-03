@@ -21,6 +21,20 @@ DADOS_DIR = ROOT_DIR / "dados"
 
 
 def normalizar_descricao_expr(col: str) -> pl.Expr:
+    """Retorna expressao Polars para normalizar uma coluna de descricao de produto.
+
+    A normalizacao consiste em: cast para Utf8, fill_null com string vazia,
+    uppercase, substituicao de caracteres acentuados por suas versoes sem acento,
+    strip de espacos e colapso de espacos multiplos em um unico espaco.
+    O alias da expressao resultante e ``__descricao_normalizada__``.
+
+    Args:
+        col: Nome da coluna de entrada a ser normalizada.
+
+    Returns:
+        Expressao Polars que produz a descricao normalizada com alias
+        ``__descricao_normalizada__``.
+    """
     # Optimization: Replace .map_elements with native Polars string operations to preserve vectorization
     return (
         pl.col(col)
@@ -41,6 +55,20 @@ def normalizar_descricao_expr(col: str) -> pl.Expr:
 
 
 def detectar_coluna_descricao(df: pl.DataFrame, fonte: str) -> str | None:
+    """Detecta o nome da coluna de descricao de produto para uma dada fonte.
+
+    Pesquisa uma lista de candidatos por ordem de preferencia de acordo com
+    a fonte informada. As fontes reconhecidas sao ``c170``, ``bloco_h``,
+    ``nfe`` e ``nfce``.
+
+    Args:
+        df: DataFrame da fonte a ser inspecionado.
+        fonte: Identificador da fonte de dados (ex.: ``"c170"``, ``"nfe"``).
+
+    Returns:
+        Nome da primeira coluna candidata encontrada em ``df``, ou ``None``
+        se nenhuma coluna candidata estiver presente.
+    """
     candidatos = {
         "c170": ["descr_item", "descricao", "prod_xprod"],
         "bloco_h": ["descricao_produto", "descr_item", "descricao", "prod_xprod"],
@@ -54,6 +82,20 @@ def detectar_coluna_descricao(df: pl.DataFrame, fonte: str) -> str | None:
 
 
 def detectar_coluna_unidade(df: pl.DataFrame, fonte: str) -> str | None:
+    """Detecta o nome da coluna de unidade de medida para uma dada fonte.
+
+    Pesquisa uma lista de candidatos por ordem de preferencia de acordo com
+    a fonte informada. As fontes reconhecidas sao ``c170``, ``bloco_h``,
+    ``nfe`` e ``nfce``.
+
+    Args:
+        df: DataFrame da fonte a ser inspecionado.
+        fonte: Identificador da fonte de dados (ex.: ``"c170"``, ``"nfe"``).
+
+    Returns:
+        Nome da primeira coluna candidata encontrada em ``df``, ou ``None``
+        se nenhuma coluna candidata estiver presente.
+    """
     candidatos = {
         "c170": ["unid"],
         "bloco_h": ["unidade_medida", "unidade_media", "unid", "unidade"],
