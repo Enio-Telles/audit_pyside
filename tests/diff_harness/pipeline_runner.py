@@ -130,20 +130,31 @@ def carregar_artefatos_fonte(
 
 
 def _garantir_worktree(commit_sha: str, caminho: Path) -> None:
-    if caminho.exists():
-        return
-    caminho.parent.mkdir(parents=True, exist_ok=True)
-    subprocess.run(
-        [
-            "git",
-            "worktree",
-            "add",
-            "--detach",
-            str(caminho),
-            commit_sha,
-        ],
-        check=True,
-    )
+    if not caminho.exists():
+        caminho.parent.mkdir(parents=True, exist_ok=True)
+        subprocess.run(
+            [
+                "git",
+                "worktree",
+                "add",
+                "--detach",
+                str(caminho),
+                commit_sha,
+            ],
+            check=True,
+        )
+
+    # Symlink dados para o worktree conseguir ler os parquets
+    main_dados = Path(__file__).resolve().parents[2] / "dados"
+    worktree_dados = caminho / "dados"
+    
+    if main_dados.exists() and not worktree_dados.exists():
+        try:
+            # No Windows, os.symlink pode precisar de privilégios ou modo desenvolvedor.
+            # Se falhar, tentamos via cmd mklink ou apenas ignoramos (o script falhará depois).
+            os.symlink(main_dados, worktree_dados, target_is_directory=True)
+        except OSError:
+            subprocess.run(["cmd", "/c", "mklink", "/D", str(worktree_dados), str(main_dados)], check=False)
 
 
 def _carregar_fontes(

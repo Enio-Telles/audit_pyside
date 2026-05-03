@@ -30,12 +30,10 @@ from typing import cast
 import polars as pl
 from rich import print as rprint
 
-from utilitarios.project_paths import CFOP_BI_PATH, PROJECT_ROOT
+from utilitarios.project_paths import CFOP_BI_PATH, CNPJ_ROOT, DADOS_DIR, PROJECT_ROOT
 
 ROOT_DIR = PROJECT_ROOT
 SRC_DIR = ROOT_DIR / "src"
-DADOS_DIR = ROOT_DIR / "dados"
-CNPJ_ROOT = DADOS_DIR / "CNPJ"
 
 try:
     from utilitarios.codigo_fonte import expr_gerar_codigo_fonte, expr_normalizar_codigo_fonte
