@@ -10,6 +10,8 @@ Saidas (em arquivos_parquet):
 - bloco_h_agr_<cnpj>.parquet
 - nfe_agr_<cnpj>.parquet
 - nfce_agr_<cnpj>.parquet
+- nfe_agr_fora_escopo_canonico_<cnpj>.parquet
+- nfce_agr_fora_escopo_canonico_<cnpj>.parquet
 
 Regra de consistencia:
 - idealmente, toda linha deve possuir `id_agrupado`.
@@ -23,11 +25,12 @@ from __future__ import annotations
 import re
 import sys
 from pathlib import Path
+from typing import cast
 
 import polars as pl
 from rich import print as rprint
 
-from utilitarios.project_paths import PROJECT_ROOT
+from utilitarios.project_paths import CFOP_BI_PATH, PROJECT_ROOT
 
 ROOT_DIR = PROJECT_ROOT
 SRC_DIR = ROOT_DIR / "src"
@@ -52,7 +55,28 @@ except ImportError as e:
 
 
 def _normalizar_descricao_expr(col: str) -> pl.Expr:
-    return expr_normalizar_descricao(col).alias("__descricao_normalizada__")
+    return cast(pl.Expr, expr_normalizar_descricao(col).alias("__descricao_normalizada__"))
+
+
+_TOKENS_SAIDA: frozenset[str] = frozenset({"1", "S", "SAIDA", "SA\u00cdDA"})
+
+
+def _tipo_operacao_indica_saida(col_name: str) -> pl.Expr:
+    """Retorna expressao booleana que indica saida do emitente."""
+
+    return (
+        pl.col(col_name)
+        .cast(pl.String, strict=False)
+        .str.strip_chars()
+        .str.to_uppercase()
+        .str.extract(r"^([^\s\-/]+)")
+        .fill_null("")
+        .is_in(list(_TOKENS_SAIDA))
+    )
+
+
+def _deduplicar_colunas_preservando_ordem(colunas: list[str]) -> list[str]:
+    return list(dict.fromkeys(colunas))
 
 
 def _detectar_coluna_descricao(df: pl.DataFrame, fonte: str) -> str | None:
@@ -66,6 +90,130 @@ def _detectar_coluna_descricao(df: pl.DataFrame, fonte: str) -> str | None:
         if col in df.columns:
             return col
     return None
+
+
+def _predicado_fora_escopo_canonico(
+    df_src: pl.DataFrame, fonte: str, cnpj: str, cfops_mercantis: set[str] | None = None
+) -> pl.Expr | None:
+    """Marca como fora_escopo_canonico apenas terceiro->terceiro ou CFOP nao mercantil."""
+
+    if fonte not in {"nfe", "nfce"}:
+        return None
+
+    criterios: list[pl.Expr] = []
+
+    col_tp = next((c for c in ["tipo_operacao", "co_tp_nf", "tp_nf"] if c in df_src.columns), None)
+
+    if "co_emitente" in df_src.columns and col_tp is not None:
+        co_emitente = pl.col("co_emitente").cast(pl.String, strict=False).str.strip_chars()
+        emitente_terceiro = co_emitente.is_not_null() & (co_emitente != "") & (co_emitente != cnpj)
+        criterios.append(emitente_terceiro & _tipo_operacao_indica_saida(col_tp))
+
+    if cfops_mercantis and "co_cfop" in df_src.columns:
+        cfop_expr = pl.col("co_cfop").cast(pl.String, strict=False).str.strip_chars()
+        criterios.append(
+            cfop_expr.is_not_null() & (cfop_expr != "") & (~cfop_expr.is_in(cfops_mercantis))
+        )
+
+    if not criterios:
+        return None
+
+    predicado = criterios[0]
+    for criterio in criterios[1:]:
+        predicado = predicado | criterio
+    return predicado
+
+
+def _separar_fora_escopo_canonico(
+    df_src: pl.DataFrame,
+    fonte: str,
+    cnpj: str,
+    cfops_mercantis: set[str] | None = None,
+) -> tuple[pl.DataFrame, pl.DataFrame | None]:
+    predicado = _predicado_fora_escopo_canonico(df_src, fonte, cnpj, cfops_mercantis)
+    if predicado is None:
+        return df_src, None
+
+    df_fora_escopo = df_src.filter(predicado)
+    if df_fora_escopo.is_empty():
+        return df_src, None
+
+    df_fora_escopo = df_fora_escopo.with_columns(
+        pl.lit("fora_escopo_canonico").alias("motivo_fora_escopo_canonico")
+    )
+    return df_src.filter(~predicado), df_fora_escopo
+
+
+def _salvar_auditoria_fora_escopo(
+    df_fora_escopo: pl.DataFrame,
+    pasta_analises: Path,
+    fonte: str,
+    cnpj: str,
+) -> bool:
+    if df_fora_escopo.is_empty():
+        return True
+
+    nome_arquivo = f"{fonte}_agr_fora_escopo_canonico_{cnpj}.parquet"
+    ok: bool = bool(salvar_para_parquet(df_fora_escopo, pasta_analises, nome_arquivo))
+    if ok:
+        rprint(
+            f"[yellow]Aviso: {fonte} possui {df_fora_escopo.height} linhas fora do escopo canonico. "
+            f"Detalhes em {nome_arquivo}.[/yellow]"
+        )
+    return ok
+
+
+def _candidatos_cfop_bi() -> list[Path]:
+    return [
+        CFOP_BI_PATH,
+        DADOS_DIR / "referencias" / "referencias" / "cfop" / "cfop_bi.parquet",
+        ROOT_DIR / "referencias" / "cfop" / "cfop_bi.parquet",
+    ]
+
+
+def _salvar_agr_vazio(
+    pasta_brutos: Path,
+    fonte: str,
+    cnpj: str,
+    schema: pl.Schema | None = None,
+) -> bool:
+    """Grava parquet vazio quando todas as linhas foram para fora_escopo_canonico.
+
+    Substitui qualquer arquivo stale de run anterior, garantindo que o estado
+    em disco reflita o run atual.
+    """
+    if schema is None:
+        colunas = _deduplicar_colunas_preservando_ordem(
+            list(COLUNAS_OBRIGATORIAS_FONTES_AGR) + list(COLUNAS_RASTREABILIDADE_FONTES)
+        )
+        df_vazio = pl.DataFrame({col: pl.Series([], dtype=pl.Utf8) for col in colunas})
+    else:
+        df_vazio = pl.DataFrame(schema=schema)
+    return bool(salvar_para_parquet(df_vazio, pasta_brutos, f"{fonte}_agr_{cnpj}.parquet"))
+
+
+def _carregar_cfops_mercantis() -> pl.DataFrame | None:
+    caminho = next((p for p in _candidatos_cfop_bi() if p.exists()), None)
+    if caminho is None:
+        return None
+
+    df = pl.read_parquet(caminho)
+    if "co_cfop" not in df.columns or "operacao_mercantil" not in df.columns:
+        return None
+
+    return (
+        df.select(
+            [
+                pl.col("co_cfop").cast(pl.String).str.strip_chars().alias("co_cfop"),
+                pl.col("operacao_mercantil")
+                .cast(pl.String)
+                .str.strip_chars()
+                .alias("operacao_mercantil"),
+            ]
+        )
+        .filter(pl.col("operacao_mercantil") == "X")
+        .unique(subset=["co_cfop"])
+    )
 
 
 # Colunas usadas pelas etapas downstream (c170_xml, etc.) para fontes grandes.
@@ -90,6 +238,10 @@ _COLUNAS_FONTE: dict[str, list[str] | None] = {
         "prod_vseg",
         "prod_voutro",
         "prod_vdesc",
+        "co_emitente",
+        "co_tp_nf",
+        "tp_nf",
+        "tipo_operacao",
         "icms_orig",
         "icms_cst",
         "icms_csosn",
@@ -99,7 +251,6 @@ _COLUNAS_FONTE: dict[str, list[str] | None] = {
         "icms_vbcst",
         "icms_vicmsst",
         "icms_picmsst",
-        "tipo_operacao",
         "ide_co_mod",
         "ide_serie",
         "nnf",
@@ -129,7 +280,9 @@ def _ler_primeiro(
     if colunas is None:
         return pl.read_parquet(arquivos[0])
     schema_cols = set(pl.scan_parquet(arquivos[0]).collect_schema().names())
-    cols_existentes = [c for c in colunas if c in schema_cols]
+    cols_existentes = _deduplicar_colunas_preservando_ordem(
+        [c for c in colunas if c in schema_cols]
+    )
     return pl.scan_parquet(arquivos[0]).select(cols_existentes).collect()
 
 
@@ -149,11 +302,12 @@ def _processar_fonte_em_batches_anuais(
     pasta_brutos: Path,
     cnpj: str,
     fonte: str,
+    cfops_mercantis: set[str] | None = None,
 ) -> bool:
     """Processa fonte com muitas linhas ano a ano, concatenando no parquet de saida."""
     schema_cols = set(pl.scan_parquet(arquivo).collect_schema().names())
     if colunas is not None:
-        cols_sel = [c for c in colunas if c in schema_cols]
+        cols_sel = _deduplicar_colunas_preservando_ordem([c for c in colunas if c in schema_cols])
     else:
         cols_sel = list(schema_cols)
 
@@ -168,6 +322,27 @@ def _processar_fonte_em_batches_anuais(
         exprs = _preservar_colunas_rastreabilidade(df_src, fonte=fonte)
         if exprs:
             df_src = df_src.with_columns(exprs)
+        df_src, df_fora_escopo = _separar_fora_escopo_canonico(
+            df_src,
+            fonte=fonte,
+            cnpj=cnpj,
+            cfops_mercantis=cfops_mercantis,
+        )
+        if df_fora_escopo is not None and not _salvar_auditoria_fora_escopo(
+            df_fora_escopo, pasta_analises, fonte, cnpj
+        ):
+            return False
+        if df_src.is_empty():
+            if df_fora_escopo is not None:
+                schema_canonico = df_fora_escopo.drop("motivo_fora_escopo_canonico").schema
+                ok = _salvar_agr_vazio(pasta_brutos, fonte, cnpj, schema=schema_canonico)
+                if ok:
+                    rprint(
+                        f"[yellow]Aviso: todas as linhas de {fonte} foram para "
+                        f"fora_escopo_canonico. {fonte}_agr_{cnpj}.parquet gravado vazio.[/yellow]"
+                    )
+                return ok
+            return False
         df_out = _anexar_id_agrupado_por_codigo_ou_descricao(
             df_src, df_mapa, df_attrs, col_desc, pasta_analises, cnpj
         )
@@ -185,6 +360,7 @@ def _processar_fonte_em_batches_anuais(
     rprint(f"[cyan]{fonte}: processamento em batches para anos {anos}[/cyan]")
 
     batches: list[pl.DataFrame] = []
+    batches_fora_escopo: list[pl.DataFrame] = []
     for ano in anos:
         rprint(f"  [dim]batch {ano}...[/dim]", end=" ")
         df_ano = (
@@ -202,6 +378,17 @@ def _processar_fonte_em_batches_anuais(
         exprs = _preservar_colunas_rastreabilidade(df_ano, fonte=fonte)
         if exprs:
             df_ano = df_ano.with_columns(exprs)
+        df_ano, df_fora_escopo = _separar_fora_escopo_canonico(
+            df_ano,
+            fonte=fonte,
+            cnpj=cnpj,
+            cfops_mercantis=cfops_mercantis,
+        )
+        if df_fora_escopo is not None and not df_fora_escopo.is_empty():
+            batches_fora_escopo.append(df_fora_escopo)
+
+        if df_ano.is_empty():
+            continue
 
         df_out_ano = _anexar_id_agrupado_por_codigo_ou_descricao(
             df_src=df_ano,
@@ -214,7 +401,20 @@ def _processar_fonte_em_batches_anuais(
         batches.append(df_out_ano)
         del df_ano, df_out_ano
 
+    if batches_fora_escopo:
+        df_fora_escopo_total = pl.concat(batches_fora_escopo, how="diagonal_relaxed")
+        if not _salvar_auditoria_fora_escopo(df_fora_escopo_total, pasta_analises, fonte, cnpj):
+            return False
+
     if not batches:
+        if batches_fora_escopo:
+            schema_canonico = df_fora_escopo_total.drop("motivo_fora_escopo_canonico").schema
+            ok = _salvar_agr_vazio(pasta_brutos, fonte, cnpj, schema=schema_canonico)
+            rprint(
+                f"[yellow]Aviso: todas as linhas de {fonte} foram para "
+                f"fora_escopo_canonico. {fonte}_agr_{cnpj}.parquet gravado vazio.[/yellow]"
+            )
+            return ok
         return False
 
     df_final = pl.concat(batches, how="diagonal_relaxed")
@@ -229,7 +429,12 @@ def _processar_fonte_em_batches_anuais(
         df_final = df_final.filter(pl.col("id_agrupado").is_not_null())
 
     if df_final.is_empty():
-        return False
+        ok = _salvar_agr_vazio(pasta_brutos, fonte, cnpj, schema=df_final.schema)
+        rprint(
+            f"[yellow]Aviso: {fonte} — todas as linhas restantes eram sem id_agrupado. "
+            f"{fonte}_agr_{cnpj}.parquet gravado vazio.[/yellow]"
+        )
+        return ok
 
     if (
         "descricao_normalizada" not in df_final.columns
@@ -551,6 +756,13 @@ def gerar_fontes_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         .unique(subset=["id_agrupado"])
     )
 
+    cfop_mercantil = _carregar_cfops_mercantis()
+    cfops_mercantis = None
+    if cfop_mercantil is not None and "co_cfop" in cfop_mercantil.columns:
+        cfops_mercantis = set(
+            cfop_mercantil.get_column("co_cfop").drop_nulls().cast(pl.String).to_list()
+        )
+
     fontes = ["c170", "bloco_h", "nfe", "nfce"]
     gerou_algum = False
 
@@ -572,6 +784,7 @@ def gerar_fontes_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
                 pasta_brutos=pasta_brutos,
                 cnpj=cnpj,
                 fonte=fonte,
+                cfops_mercantis=cfops_mercantis,
             )
             if ok:
                 gerou_algum = True
@@ -589,6 +802,29 @@ def gerar_fontes_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         exprs_rastreabilidade = _preservar_colunas_rastreabilidade(df_src, fonte=fonte)
         if exprs_rastreabilidade:
             df_src = df_src.with_columns(exprs_rastreabilidade)
+
+        df_src, df_fora_escopo = _separar_fora_escopo_canonico(
+            df_src,
+            fonte=fonte,
+            cnpj=cnpj,
+            cfops_mercantis=cfops_mercantis,
+        )
+        if df_fora_escopo is not None and not _salvar_auditoria_fora_escopo(
+            df_fora_escopo, pasta_analises, fonte, cnpj
+        ):
+            return False
+
+        if df_src.is_empty():
+            if df_fora_escopo is not None:
+                schema_canonico = df_fora_escopo.drop("motivo_fora_escopo_canonico").schema
+                ok = _salvar_agr_vazio(pasta_brutos, fonte, cnpj, schema=schema_canonico)
+                rprint(
+                    f"[yellow]Aviso: todas as linhas de {fonte} foram para "
+                    f"fora_escopo_canonico. {fonte}_agr_{cnpj}.parquet gravado vazio.[/yellow]"
+                )
+                if ok:
+                    gerou_algum = True
+            continue
 
         df_out = _anexar_id_agrupado_por_codigo_ou_descricao(
             df_src=df_src,

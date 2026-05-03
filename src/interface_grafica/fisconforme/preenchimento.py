@@ -122,6 +122,7 @@ def preencher_modelo(
     conteudo_modelo: str,
     dados: Dict[str, Any],
     dados_manuais: Optional[Dict[str, str]] = None,
+    incluir_imagens_dsf: bool = True,
 ) -> str:
     """
     Substitui todos os placeholders no modelo pelos dados fornecidos.
@@ -162,22 +163,26 @@ def preencher_modelo(
 
     # Processamento especial para {{DSF_IMAGENS}}
     if "DSF_IMAGENS" in placeholders:
-        dsf_num = dados_completos.get("DSF", "").strip()
-        if dsf_num and dsf_num != "[DADO NÃO DISPONÍVEL]":
-            try:
-                imagens_html = converter_pdf_para_base64_html(dsf_num)
-                if imagens_html:
-                    dados_completos["DSF_IMAGENS"] = imagens_html
-                    logger.info(f"Imagens da DSF {dsf_num} convertidas com sucesso")
-                else:
-                    dados_completos["DSF_IMAGENS"] = ""
-                    logger.warning(f"Nenhuma imagem gerada para DSF {dsf_num}")
-            except Exception as e:
-                dados_completos["DSF_IMAGENS"] = ""
-                logger.error(f"Erro ao converter PDF da DSF {dsf_num}: {e}")
-        else:
+        if not incluir_imagens_dsf:
             dados_completos["DSF_IMAGENS"] = ""
-            logger.warning(f"DSF não disponível ou inválida: {dsf_num}")
+            logger.info("Insercao de imagens da DSF desativada por configuracao.")
+        else:
+            dsf_num = dados_completos.get("DSF", "").strip()
+            if dsf_num and dsf_num != "[DADO NÃO DISPONÍVEL]":
+                try:
+                    imagens_html = converter_pdf_para_base64_html(dsf_num)
+                    if imagens_html:
+                        dados_completos["DSF_IMAGENS"] = imagens_html
+                        logger.info(f"Imagens da DSF {dsf_num} convertidas com sucesso")
+                    else:
+                        dados_completos["DSF_IMAGENS"] = ""
+                        logger.warning(f"Nenhuma imagem gerada para DSF {dsf_num}")
+                except Exception as e:
+                    dados_completos["DSF_IMAGENS"] = ""
+                    logger.error(f"Erro ao converter PDF da DSF {dsf_num}: {e}")
+            else:
+                dados_completos["DSF_IMAGENS"] = ""
+                logger.warning(f"DSF não disponível ou inválida: {dsf_num}")
 
     # Realiza as substituições
     conteudo_preenchido = conteudo_modelo
@@ -286,6 +291,7 @@ def processar_notificacao(
     caminho_modelo: Optional[Path] = None,
     diretorio_saida: Optional[Path] = None,
     dados_manuais: Optional[Dict[str, str]] = None,
+    incluir_imagens_dsf: bool = True,
 ) -> Optional[Path]:
     """
     Orquestra o processo para um CNPJ.
@@ -296,7 +302,12 @@ def processar_notificacao(
         if not conteudo_modelo:
             return None
 
-        conteudo_preenchido = preencher_modelo(conteudo_modelo, dados, dados_manuais)
+        conteudo_preenchido = preencher_modelo(
+            conteudo_modelo,
+            dados,
+            dados_manuais,
+            incluir_imagens_dsf=incluir_imagens_dsf,
+        )
         return salvar_notificacao(conteudo_preenchido, cnpj, diretorio_saida)
     except Exception as e:
         logger.error(f"Erro ao processar CNPJ {cnpj}: {e}")

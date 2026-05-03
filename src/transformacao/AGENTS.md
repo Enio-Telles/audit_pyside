@@ -124,20 +124,18 @@ Resumo dos 3 niveis:
 2. **Conservacao de massa por fonte** (`nfe`, `nfce`, `c170`, `bloco_h`): `baseline == novo_principal + sem_id + fora_escopo`.
 3. **Detector de colapso + tripwire downstream** em `mov_estoque` (limite 1%).
 
-Reprovacao em qualquer nivel → manter em draft.
+Reprovacao em qualquer nivel => manter em draft.
 
 Como invocar:
 
 ```bash
-uv run python tests/diff_harness/run_harness_cli.py \
-    --baseline-commit <sha-de-main> \
-    --novo-commit HEAD \
-    --cnpj 04240370002877 \
-    --cnpj 84654326000394 \
-    --out reports/diff/
+python tests/diff_harness/run_harness_cli.py \
+  --baseline-commit <sha-de-main> \
+  --novo-commit HEAD \
+  --cnpj 04240370002877 \
+  --cnpj 84654326000394 \
+  --out reports/diff/
 ```
-
----
 
 ## Validação esperada
 

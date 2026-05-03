@@ -22,6 +22,7 @@ from audit_pyside_perf_mcp.tools_oracle import register_oracle_tools
 from audit_pyside_perf_mcp.tools_pyside import register_pyside_tools
 from audit_pyside_perf_mcp.tools_perf import register_perf_tools
 from audit_pyside_perf_mcp.tools_polars import register_polars_tools
+from audit_pyside_perf_mcp.tools_gates import register_gates_tools
 
 # Cria o servidor MCP
 mcp = FastMCP("audit-pyside-perf-mcp")
@@ -32,6 +33,7 @@ register_oracle_tools(mcp)
 register_pyside_tools(mcp)
 register_perf_tools(mcp)
 register_polars_tools(mcp)
+register_gates_tools(mcp)
 
 
 def main():

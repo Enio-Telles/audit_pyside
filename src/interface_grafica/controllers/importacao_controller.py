@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+from hashlib import sha1
 import re
 
+import structlog
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QLabel, QLineEdit, QMessageBox, QPushButton
 
@@ -12,7 +15,50 @@ from interface_grafica.utils.safe_slot import safe_slot
 from interface_grafica.utils.validators import validate_cnpj
 
 
+log = structlog.get_logger(__name__)
+
+
+@dataclass(frozen=True)
+class OracleConnectionTestCacheEntry:
+    password_fingerprint: str
+    ok: bool
+    code: str
+    message: str
+
+
 class ImportacaoControllerMixin:
+    def _oracle_connection_signature(
+        self,
+        f_host: QLineEdit,
+        f_port: QLineEdit,
+        f_service: QLineEdit,
+        f_user: QLineEdit,
+    ) -> str:
+        host = f_host.text().strip()
+        porta = f_port.text().strip() or "1521"
+        service = f_service.text().strip()
+        user = f_user.text().strip()
+        return f"{host}:{porta}/{service}|{user}"
+
+    def _oracle_password_fingerprint(self, password: str) -> str:
+        return sha1(password.encode("utf-8")).hexdigest()[:12]
+
+    def _oracle_connection_test_cache(
+        self,
+    ) -> dict[str, OracleConnectionTestCacheEntry]:
+        cache = getattr(self, "_oracle_connection_test_cache_map", None)
+        if cache is None:
+            cache = {}
+            setattr(self, "_oracle_connection_test_cache_map", cache)
+        return cache
+
+    def _oracle_connection_test_inflight(self) -> dict[str, object]:
+        inflight = getattr(self, "_oracle_connection_test_inflight_map", None)
+        if inflight is None:
+            inflight = {}
+            setattr(self, "_oracle_connection_test_inflight_map", inflight)
+        return inflight
+
     def _validar_cpf_cnpj_pipeline(self, value: str) -> str:
         digits = self.servico_pipeline_funcoes.servico_extracao.sanitizar_cnpj(value)
         if len(digits) == 14:
@@ -25,7 +71,7 @@ class ImportacaoControllerMixin:
         """Testa ambas as conexões Oracle e atualiza o painel de status no topo da aba."""
         if not hasattr(self, "_cfg_host"):
             return  # aba ainda não construída
-        self._testar_conexao_para_status(
+        self._iniciar_teste_conexao_oracle(
             self._cfg_host,
             self._cfg_port,
             self._cfg_service,
@@ -33,8 +79,10 @@ class ImportacaoControllerMixin:
             self._cfg_password,
             self._cfg_conn_lbl_1,
             "_oracle_verify_worker_1",
+            mensagem_inicial="⏳ verificando...",
+            permitir_reteste_manual=False,
         )
-        self._testar_conexao_para_status(
+        self._iniciar_teste_conexao_oracle(
             self._cfg_host_1,
             self._cfg_port_1,
             self._cfg_service_1,
@@ -42,9 +90,79 @@ class ImportacaoControllerMixin:
             self._cfg_password_1,
             self._cfg_conn_lbl_2,
             "_oracle_verify_worker_2",
+            mensagem_inicial="⏳ verificando...",
+            permitir_reteste_manual=False,
         )
 
-    def _testar_conexao_para_status(
+    def _aplicar_estado_teste_oracle(
+        self,
+        lbl: QLabel,
+        btn: QPushButton | None,
+        ok: bool,
+        code: str,
+        message: str,
+        signature: str,
+        worker_attr: str,
+        password_fingerprint: str,
+        from_cache: bool,
+    ) -> None:
+        primeiro_texto = message.splitlines()[0] if message else ""
+        if ok:
+            lbl.setText(f"✔ {primeiro_texto}")
+            lbl.setStyleSheet("color: #4caf50; font-weight: bold;")
+        else:
+            lbl.setText(f"✖ {primeiro_texto}")
+            lbl.setStyleSheet("color: #e57373;")
+
+        if btn is not None:
+            btn.setEnabled(True)
+
+        inflight = self._oracle_connection_test_inflight()
+        inflight.pop(signature, None)
+
+        worker = getattr(self, worker_attr, None)
+        if worker is not None:
+            worker.deleteLater()
+            setattr(self, worker_attr, None)
+
+        if not from_cache:
+            self._oracle_connection_test_cache()[signature] = OracleConnectionTestCacheEntry(
+                password_fingerprint=password_fingerprint,
+                ok=ok,
+                code=code,
+                message=message,
+            )
+
+        status_prefix = "OK" if ok else code
+        self.status.showMessage(f"[Oracle] {status_prefix} — {primeiro_texto}", 5000 if ok else 7000)
+        log.info(
+            "oracle.connection.test_result",
+            signature=signature,
+            code=code,
+            ok=ok,
+            source="cache" if from_cache else "worker",
+        )
+
+    def _solicitar_reteste_oracle(self, signature: str, message: str) -> bool:
+        resp = QMessageBox.question(
+            self,
+            "Credenciais Oracle invalidas",
+            (
+                "A ultima tentativa para esta conexao falhou com credenciais invalidas.\n"
+                "Deseja limpar o cache e testar novamente?"
+            ),
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if resp == QMessageBox.Yes:
+            self._oracle_connection_test_cache().pop(signature, None)
+            log.info("oracle.connection.cache_cleared", signature=signature, reason=message)
+            return True
+
+        log.info("oracle.connection.cache_reused", signature=signature, reason=message)
+        return False
+
+    def _iniciar_teste_conexao_oracle(
         self,
         f_host: QLineEdit,
         f_port: QLineEdit,
@@ -53,17 +171,68 @@ class ImportacaoControllerMixin:
         f_password: QLineEdit,
         lbl: QLabel,
         worker_attr: str,
+        mensagem_inicial: str,
+        btn: QPushButton | None = None,
+        permitir_reteste_manual: bool = False,
     ) -> None:
-        """Worker isolado que atualiza apenas o label de status (sem botão dedicado)."""
+        """Worker isolado que atualiza apenas o label de status."""
+        signature = self._oracle_connection_signature(f_host, f_port, f_service, f_user)
+        password_fingerprint = self._oracle_password_fingerprint(f_password.text())
+
+        inflight = self._oracle_connection_test_inflight()
+        existing = inflight.get(signature)
+        if existing is not None and getattr(existing, "isRunning", lambda: False)():
+            return
+
+        cached = self._oracle_connection_test_cache().get(signature)
+        if cached is not None and cached.password_fingerprint == password_fingerprint:
+            if cached.ok:
+                self._aplicar_estado_teste_oracle(
+                    lbl,
+                    btn,
+                    cached.ok,
+                    cached.code,
+                    cached.message,
+                    signature,
+                    worker_attr,
+                    password_fingerprint,
+                    from_cache=True,
+                )
+                return
+
+            if not permitir_reteste_manual:
+                self._aplicar_estado_teste_oracle(
+                    lbl,
+                    btn,
+                    cached.ok,
+                    cached.code,
+                    cached.message,
+                    signature,
+                    worker_attr,
+                    password_fingerprint,
+                    from_cache=True,
+                )
+                return
+
+            if not self._solicitar_reteste_oracle(signature, cached.message):
+                self._aplicar_estado_teste_oracle(
+                    lbl,
+                    btn,
+                    cached.ok,
+                    cached.code,
+                    cached.message,
+                    signature,
+                    worker_attr,
+                    password_fingerprint,
+                    from_cache=True,
+                )
+                return
+
         from interface_grafica.services.oracle_test_worker import (
             OracleConnectionTestWorker,
         )
 
-        existing = getattr(self, worker_attr, None)
-        if existing is not None and existing.isRunning():
-            return
-
-        lbl.setText("⏳ verificando…")
+        lbl.setText(mensagem_inicial)
         lbl.setStyleSheet("color: #ccaa00;")
 
         worker = OracleConnectionTestWorker(
@@ -75,22 +244,20 @@ class ImportacaoControllerMixin:
             parent=self,
         )
         setattr(self, worker_attr, worker)
+        inflight[signature] = worker
 
-        def _on(ok: bool, msg: str, ms: int) -> None:
-            first_line = msg.splitlines()[0] if msg else ""
-            if ok:
-                lbl.setText(f"✔ {first_line}")
-                lbl.setStyleSheet("color: #4caf50; font-weight: bold;")
-                self.status.showMessage(
-                    f"[Oracle] {lbl.parent().parent().parent().title() if False else worker_attr.replace('_oracle_verify_worker_','Conexão ')} — OK ({ms} ms)",
-                    5000,
-                )
-            else:
-                short = first_line[:100]
-                lbl.setText(f"✖ {short}")
-                lbl.setStyleSheet("color: #e57373;")
-            worker.deleteLater()
-            setattr(self, worker_attr, None)
+        def _on(ok: bool, code: str, msg: str) -> None:
+            self._aplicar_estado_teste_oracle(
+                lbl,
+                btn,
+                ok,
+                code,
+                msg,
+                signature,
+                worker_attr,
+                password_fingerprint,
+                from_cache=False,
+            )
 
         worker.resultado.connect(_on)
         worker.start()
@@ -107,42 +274,19 @@ class ImportacaoControllerMixin:
         worker_attr: str,
     ) -> None:
         """Lança o teste de conexão Oracle em background (não bloqueia a UI)."""
-        from interface_grafica.services.oracle_test_worker import (
-            OracleConnectionTestWorker,
-        )
-
-        # evitar múltiplos testes simultâneos no mesmo slot
-        existing: OracleConnectionTestWorker | None = getattr(self, worker_attr, None)
-        if existing is not None and existing.isRunning():
-            return
-
         btn.setEnabled(False)
-        lbl.setText("⏳ Testando…")
-        lbl.setStyleSheet("color: #ccaa00;")
-
-        worker = OracleConnectionTestWorker(
-            host=f_host.text(),
-            port=f_port.text(),
-            service=f_service.text(),
-            user=f_user.text(),
-            password=f_password.text(),
-            parent=self,
+        self._iniciar_teste_conexao_oracle(
+            f_host,
+            f_port,
+            f_service,
+            f_user,
+            f_password,
+            lbl,
+            worker_attr,
+            mensagem_inicial="⏳ Testando...",
+            btn=btn,
+            permitir_reteste_manual=True,
         )
-        setattr(self, worker_attr, worker)
-
-        def _on_result(ok: bool, msg: str, _ms: int) -> None:
-            if ok:
-                lbl.setText(f"✔ {msg}")
-                lbl.setStyleSheet("color: #4caf50;")
-            else:
-                lbl.setText(f"✖ {msg}")
-                lbl.setStyleSheet("color: #e57373;")
-            btn.setEnabled(True)
-            worker.deleteLater()
-            setattr(self, worker_attr, None)
-
-        worker.resultado.connect(_on_result)
-        worker.start()
 
     def _salvar_configuracoes(self) -> None:
         """Escreve todos os campos do painel de configurações no arquivo .env."""

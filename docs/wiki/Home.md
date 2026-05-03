@@ -10,6 +10,7 @@ pipeline Python/Polars e persistencia em Parquet.
 | Pagina | O que encontrar |
 |---|---|
 | [Catalogo de Tabelas e Campos](Catalogo-de-Tabelas-e-Campos) | Mapa central das tabelas Parquet, relacoes e formulas globais |
+| [Differential harness - contrato e guardas](Differential-harness-contrato-e-guardas) | Contrato canonico do gate em 3 niveis e anti-stale guard |
 | [Tabelas Base — Campos e Formulas](Tabelas-Base-Campos-e-Formulas) | `tb_documentos`, `item_unidades`, `itens`, `descricao_produtos` |
 | [Tabelas de Agrupamento — Campos e Formulas](Tabelas-de-Agrupamento-Campos-e-Formulas) | `produtos_final`, `fontes_produtos`, `fatores_conversao` |
 | [Tabelas de Estoque e Enriquecimento — Campos e Formulas](Tabelas-de-Estoque-e-Enriquecimento-Campos-e-Formulas) | `c170_xml`, `c176_xml`, `movimentacao_estoque` |
