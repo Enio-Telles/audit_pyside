@@ -64,7 +64,6 @@ O backend FastAPI foi removido em 2026-04-22 — veja [ADR-001](adr/0001-futuro-
 |---|---|
 | [metodologia_mds_plan.md](metodologia_mds_plan.md) | Plano da Metodologia MDS |
 | [analise_metodologia_mds_runtime_2026-04-20.md](analise_metodologia_mds_runtime_2026-04-20.md) | Análise de runtime da MDS (2026-04-20) |
-| [diff-harness.md](diff-harness.md) | Guia do harness diferencial para validar invariantes em PRs `perf`/`refactor` de `src/transformacao/` |
 | [tabela_mensal.md](tabela_mensal.md) | Estrutura da tabela mensal |
 | [tabela_anual.md](tabela_anual.md) | Estrutura da tabela anual |
 | [tabela_periodo.md](tabela_periodo.md) | Estrutura da tabela por período |
@@ -75,7 +74,7 @@ O backend FastAPI foi removido em 2026-04-22 — veja [ADR-001](adr/0001-futuro-
 |---|---|
 | [PLAN.md](PLAN.md) | Plano de execução P0–P5 (fonte de verdade do roadmap) |
 | [plano_q.md](plano_q.md) | Plano de melhorias da qualidade dos dados |
-| [auto-update-research.md](auto-update-research.md) | Pesquisa e recomendação do fluxo de auto-update do executável |
+| [auto-update-research.md](auto-update-research.md) | Pesquisa e recomendacao do fluxo de auto-update do executavel |
 | [ADR-001](adr/0001-futuro-backend-fastapi.md) | Decisão sobre o futuro do backend FastAPI |
 
 > **Gap de documentação:**
