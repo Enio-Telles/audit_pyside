@@ -43,7 +43,7 @@ def validar_parquet_essencial(
     if not path.exists():
         raise FileNotFoundError(f"{_prefixo_contexto(contexto)}arquivo nao encontrado: {path}")
 
-    schema_cols = list(pl.read_parquet_schema(path).names())
+    schema_cols = list(pl.read_parquet_schema(path).keys())
     colunas_ausentes = [col for col in colunas if col not in schema_cols]
     if colunas_ausentes:
         raise SchemaValidacaoError(

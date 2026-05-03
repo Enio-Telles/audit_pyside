@@ -26,6 +26,9 @@ def _get_required_env(key: str) -> str:
     return val.strip()
 
 
+HOST: str | None = None
+PORTA: int | None = None
+SERVICO: str | None = None
 try:
     HOST = _get_required_env("ORACLE_HOST")
     PORTA = int(_get_required_env("ORACLE_PORT"))

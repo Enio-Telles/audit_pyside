@@ -8,7 +8,9 @@ from __future__ import annotations
 
 import polars as pl
 
-SCHEMA_PRODUTOS_AGRUPADOS: dict[str, pl.DataType] = {
+PolarsDataType = type[pl.DataType] | pl.DataType
+
+SCHEMA_PRODUTOS_AGRUPADOS: dict[str, PolarsDataType] = {
     "id_agrupado": pl.Utf8,
     "lista_chave_produto": pl.List(pl.Utf8),
     "descr_padrao": pl.Utf8,
@@ -54,7 +56,7 @@ COLUNAS_OBRIGATORIAS_AGRUPADOS: list[str] = [
     "origem_agrupamento",
 ]
 
-SCHEMA_MAP_PRODUTO_AGRUPADO: dict[str, pl.DataType] = {
+SCHEMA_MAP_PRODUTO_AGRUPADO: dict[str, PolarsDataType] = {
     "chave_produto": pl.Utf8,
     "id_agrupado": pl.Utf8,
     "codigo_fonte": pl.Utf8,
@@ -66,7 +68,7 @@ COLUNAS_OBRIGATORIAS_MAP: list[str] = [
     "id_agrupado",
 ]
 
-SCHEMA_PRODUTOS_FINAL: dict[str, pl.DataType] = {
+SCHEMA_PRODUTOS_FINAL: dict[str, PolarsDataType] = {
     "id_descricao": pl.Utf8,
     "id_agrupado": pl.Utf8,
     "id_agrupado_base": pl.Utf8,
@@ -98,7 +100,7 @@ COLUNAS_OBRIGATORIAS_FINAL: list[str] = [
     "unid_ref_sugerida",
 ]
 
-SCHEMA_ID_AGRUPADOS: dict[str, pl.DataType] = {
+SCHEMA_ID_AGRUPADOS: dict[str, PolarsDataType] = {
     "id_agrupado": pl.Utf8,
     "descr_padrao": pl.Utf8,
     "lista_descricoes": pl.List(pl.Utf8),

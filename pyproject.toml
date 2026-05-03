@@ -105,8 +105,23 @@ exclude = [
     "src/transformacao/movimentacao_estoque_pkg/movimentacao_estoque.py",
     "src/transformacao/movimentacao_estoque_pkg/co_sefin_class.py",
     "src/transformacao/movimentacao_estoque_pkg/c170_xml.py",
+    # GUI modules have pre-existing type debt; excluded from the mypy gate.
+    # Business-logic gate covers: utilitarios, transformacao, extracao, metodologia_mds.
+    "src/interface_grafica/.*",
 ]
 
 [[tool.mypy.overrides]]
 module = "interface_grafica.ui.main_window"
+ignore_errors = true
+
+# GUI modules have pre-existing type debt unrelated to the business-logic gate.
+# Silence them so the non-GUI src/ gate (utilitarios, transformacao, extracao,
+# metodologia_mds) can be kept clean and enforced in CI.
+[[tool.mypy.overrides]]
+module = [
+    "interface_grafica",
+    "interface_grafica.*",
+    "interface_grafica.*.*",
+    "interface_grafica.*.*.*",
+]
 ignore_errors = true

@@ -6,9 +6,9 @@ def aux_classif_merc(
     df: pl.DataFrame,
     col_ncm: str = "ncm",
     col_cest: str = "cest",
-    col_sefin_adicional: str = None,
-    col_dhemi: str = None,
-    col_dhsaient: str = None,
+    col_sefin_adicional: str | None = None,
+    col_dhemi: str | None = None,
+    col_dhsaient: str | None = None,
 ) -> pl.DataFrame:
     """
     Função auxiliar para identificar o co_sefin (co_sefin_inferido) cruzando
@@ -35,6 +35,8 @@ def aux_classif_merc(
     _spec = importlib.util.spec_from_file_location(
         "sefin_config_local", str(_config_path)
     )
+    if _spec is None or _spec.loader is None:
+        raise ImportError(f"Nao foi possivel carregar {_config_path}")
     _sefin_config = importlib.util.module_from_spec(_spec)
     _spec.loader.exec_module(_sefin_config)
 

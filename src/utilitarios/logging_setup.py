@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Optional
+from typing import Any, Optional
 
 import structlog
 
@@ -15,7 +15,7 @@ import structlog
 def configure_structlog(level: str = "INFO", json: bool = False) -> None:
     log_level = getattr(logging, level.upper(), logging.INFO)
 
-    processors = [
+    processors: list[Any] = [
         structlog.processors.TimeStamper(fmt="iso"),
         structlog.processors.StackInfoRenderer(),
         structlog.processors.format_exc_info,

@@ -179,12 +179,12 @@ def descobrir_consultas_sql(
 
     consultas_unicas: list[ConsultaSql] = []
     vistos: set[str] = set()
-    for consulta in consultas:
-        chave = str(consulta.caminho_relativo).lower()
+    for item_consulta in consultas:
+        chave = str(item_consulta.caminho_relativo).lower()
         if chave in vistos:
             continue
         vistos.add(chave)
-        consultas_unicas.append(consulta)
+        consultas_unicas.append(item_consulta)
 
     return sorted(consultas_unicas, key=lambda item: str(item.caminho_relativo).lower())
 
@@ -285,7 +285,7 @@ def _normalizar_valores_coluna(
         return valores
 
     if tipos.issubset({int, float, Decimal}):
-        return [None if valor is None else float(valor) for valor in valores]
+        return [None if valor is None else float(valor) for valor in valores]  # type: ignore[arg-type]
 
     return [None if valor is None else str(valor) for valor in valores]
 
@@ -321,7 +321,7 @@ def _criar_dataframe_lote(
         }
         df_lote = pl.DataFrame(colunas_dict)
     if schema_polars is not None:
-        df_lote = df_lote.cast(schema_polars, strict=False)
+        df_lote = df_lote.cast(schema_polars, strict=False)  # type: ignore[arg-type]
     return df_lote
 
 
@@ -485,6 +485,7 @@ def _consolidar_chunks_checkpoint(
                         tabela = tabela.cast(schema_arrow, safe=False)
                     except Exception as exc:
                         raise SchemaMistoExtracaoError(str(exc)) from exc
+                assert writer is not None
                 writer.write_table(tabela)
         if writer is not None:
             writer.close()

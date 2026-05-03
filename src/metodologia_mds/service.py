@@ -1,7 +1,7 @@
 """Serviços mínimos para aplicar a metodologia MDS (derivação de quantidades)."""
 from __future__ import annotations
 from pathlib import Path
-from typing import Union
+from typing import Any, Union
 
 try:
     import polars as pl
@@ -152,7 +152,7 @@ class MovimentacaoService:
 
         # construir expressão para fator_conversao
         if "fator_conversao_override" in cols:
-            fator_expr = (
+            fator_expr: Any = (
                 pl.when(pl.col("fator_conversao_override").is_not_null())
                 .then(pl.col("fator_conversao_override").cast(pl.Float64))
             )
