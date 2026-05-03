@@ -78,6 +78,29 @@ def _gerar_id_agrupado_automatico_expr(col: str = "descricao_normalizada") -> pl
 
 
 def descricao_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
+    """Gera a tabela consolidada de descricoes normalizadas de produtos para um CNPJ.
+
+    Combina ``item_unidades_<cnpj>.parquet`` e ``itens_<cnpj>.parquet`` para
+    produzir uma tabela unica com descricoes normalizadas, IDs automaticos
+    (``id_agrupado_auto_<sha1[:12]>``), listas de GTINs, unidades e codigos
+    de fonte. O resultado e salvo em
+    ``analises/produtos/descricao_produtos_<cnpj>.parquet``.
+
+    Gera os arquivos dependentes (``item_unidades``, ``itens``) caso ainda nao
+    existam.
+
+    Args:
+        cnpj: CPF ou CNPJ do contribuinte (somente digitos ou formatado).
+        pasta_cnpj: Raiz do diretorio do CNPJ. Se ``None``, usa o padrao
+            ``dados/CNPJ/<cnpj>``.
+
+    Returns:
+        ``True`` se o arquivo foi gerado com sucesso; ``False`` em caso de
+        arquivos base ausentes ou falha ao salvar.
+
+    Raises:
+        ValueError: Se ``cnpj`` nao for um CPF (11 digitos) nem CNPJ (14 digitos).
+    """
     cnpj = re.sub(r"\D", "", cnpj or "")
     if len(cnpj) not in {11, 14}:
         raise ValueError("CPF/CNPJ invalido.")
@@ -218,6 +241,16 @@ def descricao_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
 
 
 def gerar_descricao_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
+    """Alias publico para :func:`descricao_produtos`.
+
+    Args:
+        cnpj: CPF ou CNPJ do contribuinte (somente digitos ou formatado).
+        pasta_cnpj: Raiz do diretorio do CNPJ. Se ``None``, usa o padrao
+            ``dados/CNPJ/<cnpj>``.
+
+    Returns:
+        ``True`` se o arquivo foi gerado com sucesso; ``False`` caso contrario.
+    """
     return descricao_produtos(cnpj, pasta_cnpj)
 
 
