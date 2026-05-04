@@ -23,6 +23,7 @@ from interface_grafica.models.table_model import PolarsTableModel
 from interface_grafica.services.aggregation_service import ServicoAgregacao
 from interface_grafica.services.export_service import ExportService
 from interface_grafica.services.parquet_service import FilterCondition, ParquetService
+from interface_grafica.services.parquet_query_service import ParquetQueryService
 from interface_grafica.services.pipeline_funcoes_service import ServicoPipelineCompleto
 from interface_grafica.services.pipeline_service import PipelineService
 from interface_grafica.services.query_worker import QueryWorker
@@ -86,6 +87,7 @@ class MainWindow(
         self.registry_service = RegistryService()
         self.selection_service = SelectionPersistenceService()
         self.parquet_service = ParquetService(root=CNPJ_ROOT)
+        self.query_service = ParquetQueryService(polars_service=self.parquet_service)
         self.pipeline_service = PipelineService(output_root=CONSULTAS_ROOT)
         self.servico_pipeline_funcoes = ServicoPipelineCompleto()
         self.export_service = ExportService()
