@@ -61,11 +61,18 @@ def _gerar_id_agrupado_automatico(texto_normalizado: str | None) -> str:
 
 
 def _gerar_id_agrupado_automatico_expr(col: str = "descricao_normalizada") -> pl.Expr:
+    # map_batches: uma chamada Python por coluna vs. uma por elemento (map_elements)
+    def _batch(s: pl.Series) -> pl.Series:
+        return pl.Series(
+            [_gerar_id_agrupado_automatico(x) for x in s],
+            dtype=pl.Utf8,
+        )
+
     return (
         pl.col(col)
         .cast(pl.Utf8, strict=False)
         .fill_null("")
-        .map_elements(_gerar_id_agrupado_automatico, return_dtype=pl.Utf8)
+        .map_batches(_batch, return_dtype=pl.Utf8)
         .alias("id_agrupado_base")
     )
 
