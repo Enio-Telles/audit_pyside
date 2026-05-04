@@ -48,6 +48,7 @@ class WizardState:
     cnpj_records: List[CNPJRecord] = field(default_factory=list)
     auditor_data: Dict[str, str] = field(default_factory=dict)
     pdf_dsf: Optional[Path] = None
+    incluir_imagens_dsf: bool = True
     periodo_inicio: str = "01/2021"
     periodo_fim: str = "12/2025"
     diretorio_saida: Optional[Path] = None

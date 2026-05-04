@@ -254,6 +254,31 @@ Restrito a:
 
 ---
 
+### 2.6 Grupo F — PR Gates / Orquestracao
+
+**O que faz:** centraliza a pergunta operacional do projeto: esta PR pode sair de draft? pode ser recomendada para merge? quais gates faltam? quais evidencias existem?
+
+| Tool | O que faz |
+|---|---|
+| `classify_pr_tool()` | Classifica a PR e indica os gates esperados |
+| `run_pr_gate_tool()` | Executa o pacote de validacoes da PR |
+| `run_differential_harness_tool()` | Roda o harness byte-a-byte quando configurado |
+| `check_readonly_files_tool()` | Detecta arquivos read-only tocados |
+| `check_docs_only_tool()` | Verifica docs/docstrings only de verdade |
+| `check_gui_gate_tool()` | Gate de GUI, coverage e smoke |
+| `check_oracle_gate_tool()` | Gate Oracle/Fisconforme |
+| `generate_notion_report_tool()` | Consolida o status para a pagina do Notion |
+| `branch_cleanup_report_tool()` | Gera relatorio de branches candidatas a limpeza |
+
+**Uso:**
+```
+"Esta PR pode sair de draft?"
+  → audit-pyside-perf-mcp.classify_pr_tool(193)
+  → audit-pyside-perf-mcp.run_pr_gate_tool(193)
+```
+
+---
+
 ## Configuração (já feita)
 
 ### `mcp_servers.json`

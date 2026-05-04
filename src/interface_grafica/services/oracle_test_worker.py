@@ -7,18 +7,69 @@ para que o teste reflita exatamente o que está digitado nos campos.
 
 from __future__ import annotations
 
+import re
 from time import perf_counter
 
+import structlog
 from PySide6.QtCore import QThread, Signal
 
-from transformacao.auxiliares.logs import log_exception
+
+_LOG = structlog.get_logger(__name__)
+_ORA_CODE_RE = re.compile(r"ORA-\d{5}", re.IGNORECASE)
+
+
+def _extrair_codigo_oracle(exc: Exception) -> str | None:
+    for arg in getattr(exc, "args", () ):
+        codigo = getattr(arg, "code", None)
+        if isinstance(codigo, int):
+            return f"ORA-{codigo:05d}"
+
+        full_code = getattr(arg, "full_code", None)
+        if isinstance(full_code, str):
+            texto = full_code.strip().upper()
+            if texto:
+                match = _ORA_CODE_RE.search(texto)
+                if match is not None:
+                    return match.group(0).upper()
+
+        if isinstance(arg, str):
+            match = _ORA_CODE_RE.search(arg)
+            if match is not None:
+                return match.group(0).upper()
+
+        texto = str(arg).strip()
+        if texto:
+            match = _ORA_CODE_RE.search(texto)
+            if match is not None:
+                return match.group(0).upper()
+
+    texto = str(exc).strip()
+    if texto:
+        match = _ORA_CODE_RE.search(texto)
+        if match is not None:
+            return match.group(0).upper()
+
+    return None
+
+
+def _classificar_erro_oracle(exc: Exception) -> tuple[str, str, str]:
+    codigo = _extrair_codigo_oracle(exc) or "ORACLE-ERROR"
+    if codigo == "ORA-01017":
+        return codigo, "Credenciais Oracle invalidas.", "oracle.connection.invalid_credentials"
+    if codigo == "ORA-12541":
+        return codigo, "Listener/host indisponivel.", "oracle.connection.listener_unavailable"
+    if codigo == "ORA-12170":
+        return codigo, "Tempo esgotado na conexao Oracle.", "oracle.connection.connect_timeout"
+
+    mensagem = str(exc).strip() or "Falha ao testar a conexao Oracle."
+    return codigo, mensagem, "oracle.connection.database_error"
 
 
 class OracleConnectionTestWorker(QThread):
     """Testa uma conexão Oracle em background e emite o resultado."""
 
-    # (sucesso: bool, mensagem: str, tempo_ms: int)
-    resultado = Signal(bool, str, int)
+    # (sucesso: bool, codigo: str, mensagem: str)
+    resultado = Signal(bool, str, str)
 
     def __init__(
         self,
@@ -39,17 +90,18 @@ class OracleConnectionTestWorker(QThread):
     def cancelar(self) -> None:
         self.requestInterruption()
 
-    def _emitir_resultado(self, sucesso: bool, mensagem: str, tempo_ms: int) -> None:
+    def _emitir_resultado(self, sucesso: bool, codigo: str, mensagem: str) -> None:
         if self.isInterruptionRequested():
-            self.resultado.emit(False, "Teste de conexão cancelado.", tempo_ms)
+            self.resultado.emit(False, "CANCELADO", "Teste de conexao cancelado.")
             return
-        self.resultado.emit(sucesso, mensagem, tempo_ms)
+        self.resultado.emit(sucesso, codigo, mensagem)
 
     def run(self) -> None:
         t0 = perf_counter()
+        dsn = ""
         try:
             if self.isInterruptionRequested():
-                self._emitir_resultado(False, "Teste de conexão cancelado.", 0)
+                self._emitir_resultado(False, "CANCELADO", "Teste de conexao cancelado.")
                 return
 
             import oracledb  # lazy import — safe inside thread
@@ -61,7 +113,9 @@ class OracleConnectionTestWorker(QThread):
                 or not self._password
             ):
                 self._emitir_resultado(
-                    False, "Preencha host, serviço, usuário e senha antes de testar.", 0
+                    False,
+                    "VALIDACAO",
+                    "Preencha host, servico, usuario e senha antes de testar.",
                 )
                 return
 
@@ -73,16 +127,17 @@ class OracleConnectionTestWorker(QThread):
                 dsn=dsn,
                 tcp_connect_timeout=8,
             )
+
             if self.isInterruptionRequested():
                 try:
                     conn.close()
                 except Exception as close_exc:  # pragma: no cover - caminho operacional
-                    log_exception(close_exc)
-                self._emitir_resultado(
-                    False,
-                    "Teste de conexão cancelado.",
-                    int((perf_counter() - t0) * 1000),
-                )
+                    _LOG.warning(
+                        "oracle.connection.close_failed",
+                        dsn=dsn,
+                        erro=str(close_exc),
+                    )
+                self._emitir_resultado(False, "CANCELADO", "Teste de conexao cancelado.")
                 return
 
             versao = ""
@@ -93,19 +148,60 @@ class OracleConnectionTestWorker(QThread):
                     if row:
                         versao = row[0]
             finally:
-                conn.close()
+                try:
+                    conn.close()
+                except Exception as close_exc:  # pragma: no cover - limpeza operacional
+                    _LOG.warning(
+                        "oracle.connection.close_failed",
+                        dsn=dsn,
+                        erro=str(close_exc),
+                    )
 
             tempo_ms = int((perf_counter() - t0) * 1000)
-            msg = f"Conexão OK ({tempo_ms} ms)"
+            mensagem = f"Conexao OK ({tempo_ms} ms)"
             if versao:
-                # exibe apenas a primeira linha da banner
-                msg += f"\n{versao.splitlines()[0]}"
-            self._emitir_resultado(True, msg, tempo_ms)
+                mensagem += f"\n{versao.splitlines()[0]}"
+            self._emitir_resultado(True, "OK", mensagem)
 
         except Exception as exc:  # noqa: BLE001
-            log_exception(exc)
             tempo_ms = int((perf_counter() - t0) * 1000)
             if self.isInterruptionRequested():
-                self._emitir_resultado(False, "Teste de conexão cancelado.", tempo_ms)
+                self._emitir_resultado(False, "CANCELADO", "Teste de conexao cancelado.")
                 return
-            self._emitir_resultado(False, str(exc), tempo_ms)
+
+            try:
+                import oracledb  # lazy import — safe inside thread
+
+                if isinstance(exc, oracledb.DatabaseError):
+                    codigo, mensagem, evento = _classificar_erro_oracle(exc)
+                    if codigo in {"ORA-01017", "ORA-12541", "ORA-12170"}:
+                        _LOG.warning(
+                            evento,
+                            dsn=dsn,
+                            codigo=codigo,
+                            tempo_ms=tempo_ms,
+                        )
+                    else:
+                        _LOG.error(
+                            evento,
+                            dsn=dsn,
+                            codigo=codigo,
+                            tempo_ms=tempo_ms,
+                            exc_info=exc,
+                        )
+                    self._emitir_resultado(False, codigo, mensagem)
+                    return
+            except Exception:
+                pass
+
+            _LOG.error(
+                "oracle.connection.unexpected_error",
+                dsn=dsn,
+                tempo_ms=tempo_ms,
+                exc_info=exc,
+            )
+            self._emitir_resultado(
+                False,
+                "UNEXPECTED",
+                "Falha inesperada ao testar a conexao Oracle.",
+            )
