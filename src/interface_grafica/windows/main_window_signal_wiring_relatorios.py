@@ -91,6 +91,8 @@ class MainWindowSignalWiringRelatoriosMixin:
             self.limpar_filtros_aba_periodos
         )
         self.btn_export_aba_periodos.clicked.connect(self.exportar_aba_periodos_excel)
+        self.btn_aba_periodos_prev_page.clicked.connect(self._prev_page_aba_periodos)
+        self.btn_aba_periodos_next_page.clicked.connect(self._next_page_aba_periodos)
         self.periodo_filter_id.currentTextChanged.connect(
             lambda _value: self._schedule_periodos_filters()
         )
