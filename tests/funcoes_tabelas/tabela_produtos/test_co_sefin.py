@@ -58,7 +58,19 @@ def test_co_sefin_happy_path(mocker):
         else:
             return df_target
 
+    def mock_scan_parquet(source, **kwargs):
+        source_str = str(source)
+        if "sitafe_cest_ncm.parquet" in source_str:
+            return df_ref_cn.lazy()
+        elif "sitafe_cest.parquet" in source_str:
+            return df_ref_c.lazy()
+        elif "sitafe_ncm.parquet" in source_str:
+            return df_ref_n.lazy()
+        else:
+            return df_target.lazy()
+
     mocker.patch("polars.read_parquet", side_effect=mock_read_parquet)
+    mocker.patch("polars.scan_parquet", side_effect=mock_scan_parquet)
 
     def mock_exists(self):
         return True
