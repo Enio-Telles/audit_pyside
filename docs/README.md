@@ -29,6 +29,7 @@ O backend FastAPI foi removido em 2026-04-22 — veja [ADR-001](adr/0001-futuro-
 |---|---|
 | [conversao_unidades.md](conversao_unidades.md) | Regras de conversão de unidades (`q_conv`, `q_conv_fisica`), fatores e casos especiais |
 | [agregacao_produtos_canonico.md](agregacao_produtos_canonico.md) | Regras canônicas de agrupamento de produtos (`id_agrupado`) |
+| [diagnostico_codigo_fonte_sem_mapeamento_84654326000394_2026-05-03.md](diagnostico_codigo_fonte_sem_mapeamento_84654326000394_2026-05-03.md) | Diagnostico versionado do bucket residual de `nfe` sem `id_agrupado` causado por `codigo_fonte_sem_mapeamento` em cobertura zero no mapa de produtos |
 | [mov_estoque.md](mov_estoque.md) | Movimentação de estoque — eventos, saldos, C170/NF-e |
 | [abordagem_qconv_fisica.md](abordagem_qconv_fisica.md) | Detalhamento da abordagem para `q_conv_fisica` |
 | [tabelas/c176_xml.md](tabelas/c176_xml.md) | Schema e regras do Registro C176 (PMU) |
@@ -65,6 +66,7 @@ O backend FastAPI foi removido em 2026-04-22 — veja [ADR-001](adr/0001-futuro-
 | [metodologia_mds_plan.md](metodologia_mds_plan.md) | Plano da Metodologia MDS |
 | [analise_metodologia_mds_runtime_2026-04-20.md](analise_metodologia_mds_runtime_2026-04-20.md) | Análise de runtime da MDS (2026-04-20) |
 | [diff-harness.md](diff-harness.md) | Guia do harness diferencial para validar invariantes em PRs `perf`/`refactor` de `src/transformacao/` |
+| [wiki/Differential-harness-contrato-e-guardas.md](wiki/Differential-harness-contrato-e-guardas.md) | Contrato canonico do gate diferencial em 3 niveis |
 | [tabela_mensal.md](tabela_mensal.md) | Estrutura da tabela mensal |
 | [tabela_anual.md](tabela_anual.md) | Estrutura da tabela anual |
 | [tabela_periodo.md](tabela_periodo.md) | Estrutura da tabela por período |
@@ -113,6 +115,7 @@ O backend FastAPI foi removido em 2026-04-22 — veja [ADR-001](adr/0001-futuro-
 | Documento | Descrição |
 |---|---|
 | [analise_audit_pyside.md](analise_audit_pyside.md) | Análise geral do projeto |
+| [diagnostico_id_agrupado_fallback_84654326000394_2026-05-03.md](diagnostico_id_agrupado_fallback_84654326000394_2026-05-03.md) | Diagnóstico versionado do descarte de `nfe`/`nfce` sem `id_agrupado` e do evento `fallback_sem_preco`, com proposta ampla de correção |
 | [agente_audit_pyside.md](agente_audit_pyside.md) | Descrição do agente audit_pyside |
 | [agente_audit_pyside_pyside_only.md](agente_audit_pyside_pyside_only.md) | Configuração do agente PySide-only |
 

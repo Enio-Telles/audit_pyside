@@ -28,6 +28,7 @@ class PipelineWorker(QThread):
         self.tabelas = tabelas
         self.data_limite = data_limite
         self.pular_existente = pular_existente
+        self.finished.connect(self.deleteLater)
 
     def run(self) -> None:
         try:
@@ -67,6 +68,7 @@ class ServiceTaskWorker(QThread):
         self.func = func
         self.args = args
         self.kwargs = kwargs
+        self.finished.connect(self.deleteLater)
 
     def run(self) -> None:
         try:

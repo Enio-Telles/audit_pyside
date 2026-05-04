@@ -2,11 +2,11 @@
 
 **Servidor MCP para auditoria, performance e otimização do projeto audit_pyside.**
 
-Fornece ferramentas seguras e controladas para agentes de IA (Claude, Codex, Copilot, Antigravity) executarem diagnósticos, medições e validações sem permitir comandos perigosos ou acesso não autorizado.
+Fornece ferramentas seguras e controladas para agentes de IA (Claude, Codex, Copilot, Antigravity) executarem diagnósticos, medições, validações e gates de PR sem permitir comandos perigosos ou acesso não autorizado.
 
 ## O que faz
 
-Expõe **40+ ferramentas** organizadas em 5 grupos:
+Expõe **45+ ferramentas** organizadas em 6 grupos:
 
 ### 1. **Projeto Python** (4 tools)
 - `run_ruff()` — Lint do projeto
@@ -44,6 +44,17 @@ Expõe **40+ ferramentas** organizadas em 5 grupos:
 - `polars_compare_exports()` — Compara dois arquivos
 - `polars_run_lazy_query()` — Query lazy contra Parquet
 
+### 6. **PR Gates / Orquestracao** (9 tools)
+- `classify_pr_tool()` — Classifica PR e devolve gates esperados
+- `run_pr_gate_tool()` — Executa o gate consolidado da PR
+- `run_differential_harness_tool()` — Harness byte-a-byte com baseline real
+- `check_readonly_files_tool()` — Detecta arquivos read-only tocados
+- `check_docs_only_tool()` — Verifica docs/docstrings only de verdade
+- `check_gui_gate_tool()` — Gate de GUI e coverage
+- `check_oracle_gate_tool()` — Gate Oracle/Fisconforme
+- `generate_notion_report_tool()` — Consolida status para o Notion
+- `branch_cleanup_report_tool()` — Relatorio de branches candidatas a limpeza
+
 ## Segurança explícita
 
 ### O que permite
@@ -75,7 +86,8 @@ mcp_server/
       ├─ tools_oracle.py     (Oracle read-only)
       ├─ tools_pyside.py     (Detecção PySide)
       ├─ tools_perf.py       (Profiling)
-      └─ tools_polars.py     (Análise de dados)
+      ├─ tools_polars.py     (Análise de dados)
+      └─ tools_gates.py      (Classificacao e orquestracao de gates de PR)
 ```
 
 ## Configuração

@@ -219,6 +219,7 @@ def gerar_notificacao_para_cnpj(
     diretorio_saida: Optional[Path] = None,
     forcar_reatribuicao: bool = False,
     periodo_analise: Optional[tuple[str, str]] = None,
+    incluir_imagens_dsf: bool = True,
 ) -> Dict[str, Any]:
     """
     Gera uma notificação fiscal para um único CNPJ.
@@ -402,6 +403,7 @@ def gerar_notificacao_para_cnpj(
             dados=dados_completos,
             diretorio_saida=diretorio_saida,
             dados_manuais=dados_manuais,
+            incluir_imagens_dsf=incluir_imagens_dsf,
         )
 
         if not caminho_arquivo:
@@ -430,6 +432,7 @@ def gerar_notificacoes_em_lote(
     periodo_analise: Optional[tuple[str, str]] = None,
     parar_no_primeiro_erro: bool = False,
     arquivo_dsf: Optional[Path] = None,
+    incluir_imagens_dsf: bool = True,
 ) -> Dict[str, Any]:
     """
     Gera notificações fiscais para múltiplos CNPJs em lote.
@@ -521,6 +524,7 @@ def gerar_notificacoes_em_lote(
             diretorio_saida=dir_saida_base,  # Salva diretamente na pasta notificacoes/
             forcar_reatribuicao=False,
             periodo_analise=periodo_analise,
+            incluir_imagens_dsf=incluir_imagens_dsf,
         )
         cnpj_result = resultado["cnpj"]
 
