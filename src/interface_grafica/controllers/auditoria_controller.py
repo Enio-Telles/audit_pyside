@@ -237,7 +237,8 @@ class AuditoriaControllerMixin:
             self.mov_estoque_table.setColumnHidden(idx, False)
 
     def exportar_mov_estoque_excel(self) -> None:
-        if self.mov_estoque_model.dataframe.is_empty():
+        df_filtrado = self._tab_df_filtrado.get("mov_estoque", pl.DataFrame())
+        if df_filtrado.is_empty():
             QMessageBox.information(
                 self,
                 "Exportacao",
@@ -251,7 +252,7 @@ class AuditoriaControllerMixin:
             df_to_export = self._dataframe_colunas_visiveis(
                 self.mov_estoque_table,
                 self.mov_estoque_model,
-                self.mov_estoque_model.dataframe,
+                df_filtrado,
             )
             self.export_service.export_excel(
                 target, df_to_export, sheet_name="Mov_Estoque"

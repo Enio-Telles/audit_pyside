@@ -180,8 +180,9 @@ class RelatoriosPeriodosControllerMixin:
             f"Sucesso! {self._aba_periodos_df.height} registros carregados."
         )
     def exportar_aba_periodos_excel(self) -> None:
-        if self.aba_periodos_model.df_filtered.is_empty():
-            QMessageBox.warning(self, "Aviso", "Não há dados filtrados para exportar.")
+        df_filtrado = self._tab_df_filtrado.get("aba_periodos", pl.DataFrame())
+        if df_filtrado.is_empty():
+            QMessageBox.warning(self, "Aviso", "Nao ha dados filtrados para exportar.")
             return
 
         path, _ = QFileDialog.getSaveFileName(
@@ -198,7 +199,7 @@ class RelatoriosPeriodosControllerMixin:
         service = ExportService()
         try:
             service.export_excel(
-                Path(path), self.aba_periodos_model.df_filtered, "Aba Periodos"
+                Path(path), df_filtrado, "Aba Periodos"
             )
             QMessageBox.information(
                 self, "Sucesso", f"Arquivo exportado com sucesso: {path}"
@@ -433,7 +434,7 @@ class RelatoriosPeriodosControllerMixin:
             "aba_mensal",
             "aba_mensal",
             self.aba_mensal_model,
-            self.aba_mensal_model.dataframe,
+            self._tab_df_filtrado.get("aba_mensal", pl.DataFrame()),
             perfil="Exportar",
         )
         if df.is_empty():
@@ -595,7 +596,7 @@ class RelatoriosPeriodosControllerMixin:
             "aba_anual",
             "aba_anual",
             self.aba_anual_model,
-            self.aba_anual_model.dataframe,
+            self._tab_df_filtrado.get("aba_anual", pl.DataFrame()),
             perfil="Exportar",
         )
         if df.is_empty():
