@@ -232,7 +232,7 @@ class DatabaseConfigPage(BaseWizardPage):
 
     def footer_context(self, state: WizardState) -> str:
         return (
-            "Etapa 1 de 5  •  Configure a base de conexão para as próximas consultas."
+            "Etapa 1 de 5  \u2022  Configure a base de conexão para as próximas consultas."
         )
 
 
@@ -387,7 +387,7 @@ class CNPJsPage(BaseWizardPage):
         return "Confirmar CNPJs e seguir"
 
     def footer_context(self, state: WizardState) -> str:
-        return "Etapa 2 de 5  •  Organize a base de contribuintes com ordenação e tooltips completos."
+        return "Etapa 2 de 5  \u2022  Organize a base de contribuintes com ordenação e tooltips completos."
 
     def _load_file(self):
         caminho, _ = QFileDialog.getOpenFileName(
@@ -606,7 +606,7 @@ class CNPJsPage(BaseWizardPage):
         validos = len(
             [registro for registro in self.model.records() if registro.valido]
         )
-        self.lbl_count.setText(f"{total} registro(s) na grade  •  {validos} válido(s)")
+        self.lbl_count.setText(f"{total} registro(s) na grade  \u2022  {validos} válido(s)")
 
 
 class AuditorPage(BaseWizardPage):
@@ -985,7 +985,7 @@ class AuditorPage(BaseWizardPage):
 
     def footer_context(self, state: WizardState) -> str:
         return (
-            "Etapa 3 de 5  •  Cadastre o responsável e a referência documental da DSF."
+            "Etapa 3 de 5  \u2022  Cadastre o responsável e a referência documental da DSF."
         )
 
 
@@ -1034,10 +1034,35 @@ class PeriodPage(BaseWizardPage):
         state.periodo_fim = self.input_fim.text().strip()
         self._refresh_metadata(state)
 
+    _PADRAO_PERIODO = re.compile(r"^(\d{2})/(\d{4})$")
+
     def validate(self, state: WizardState) -> bool:
         if not state.periodo_inicio or not state.periodo_fim:
             QMessageBox.warning(
-                self, "Atenção", "Informe data inicial e data final antes de continuar."
+                self, "Atencao", "Informe data inicial e data final antes de continuar."
+            )
+            return False
+        m_ini = self._PADRAO_PERIODO.match(state.periodo_inicio)
+        m_fim = self._PADRAO_PERIODO.match(state.periodo_fim)
+        if not m_ini or not m_fim:
+            QMessageBox.warning(
+                self,
+                "Formato invalido",
+                "As datas devem estar no formato MM/AAAA (ex.: 01/2021).",
+            )
+            return False
+        mes_ini, ano_ini = int(m_ini.group(1)), int(m_ini.group(2))
+        mes_fim, ano_fim = int(m_fim.group(1)), int(m_fim.group(2))
+        if not (1 <= mes_ini <= 12) or not (1 <= mes_fim <= 12):
+            QMessageBox.warning(
+                self, "Mes invalido", "O mes deve estar entre 01 e 12."
+            )
+            return False
+        if ano_ini * 100 + mes_ini >= ano_fim * 100 + mes_fim:
+            QMessageBox.warning(
+                self,
+                "Periodo invalido",
+                "A data inicial deve ser anterior a data final.",
             )
             return False
         return True
@@ -1049,7 +1074,7 @@ class PeriodPage(BaseWizardPage):
         return "SuccessButton"
 
     def footer_context(self, state: WizardState) -> str:
-        return "Etapa 4 de 5  •  Revise os dados agregados antes de abrir a etapa operacional."
+        return "Etapa 4 de 5  \u2022  Revise os dados agregados antes de abrir a etapa operacional."
 
     def _refresh_metadata(self, state: WizardState):
         itens = [
@@ -1196,10 +1221,10 @@ class ProcessingPage(BaseWizardPage):
 
     def footer_context(self, state: WizardState) -> str:
         if self._completed:
-            return "Etapa 5 de 5  •  Execução concluída. Revise resultados e abra a pasta de saída se necessário."
+            return "Etapa 5 de 5  \u2022  Execução concluída. Revise resultados e abra a pasta de saída se necessário."
         if self._running:
-            return "Etapa 5 de 5  •  Processamento em andamento. A navegação foi bloqueada para preservar o contexto."
-        return "Etapa 5 de 5  •  Inicie a geração e acompanhe log e resultados na mesma tela."
+            return "Etapa 5 de 5  \u2022  Processamento em andamento. A navegação foi bloqueada para preservar o contexto."
+        return "Etapa 5 de 5  \u2022  Inicie a geração e acompanhe log e resultados na mesma tela."
 
     def _prepare_execution(self, state: WizardState):
         total = len(state.cnpjs_validos())
