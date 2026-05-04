@@ -4,7 +4,8 @@ from collections.abc import Callable
 from pathlib import Path
 
 import polars as pl
-from interface_grafica.services.parquet_service import FilterCondition
+from interface_grafica.config import LARGE_PARQUET_THRESHOLD_MB
+from interface_grafica.services.parquet_service import FilterCondition, ParquetService
 from interface_grafica.services.query_worker import QueryWorker
 from interface_grafica.controllers.workers import ServiceTaskWorker
 
@@ -40,6 +41,15 @@ class MainWindowLoadingMixin:
         conditions: list[FilterCondition] | None = None,
         columns: list[str] | None = None,
     ) -> pl.DataFrame:
+        if ParquetService.is_large_parquet(path) and hasattr(self, "status"):
+            try:
+                size_mb = path.stat().st_size / (1024 * 1024)
+                self.status.showMessage(
+                    f"Arquivo grande ({size_mb:.0f} MB > {LARGE_PARQUET_THRESHOLD_MB} MB):"
+                    " use filtros ou paginacao para melhor desempenho."
+                )
+            except Exception:
+                pass
         colunas_solicitadas = columns
         if columns is not None:
             schema = set(self.parquet_service.get_schema(path))
@@ -58,11 +68,20 @@ class MainWindowLoadingMixin:
     ) -> None:
         """
         Carrega um arquivo Parquet em background.
-        Se unique_cols for fornecido, extrai valores únicos dessas colunas no background.
-        O callback será chamado como callback(df) ou callback(df, uniques_dict).
+        Se unique_cols for fornecido, extrai valores unicos dessas colunas no background.
+        O callback sera chamado como callback(df) ou callback(df, uniques_dict).
         """
+        if ParquetService.is_large_parquet(path) and hasattr(self, "status"):
+            try:
+                size_mb = path.stat().st_size / (1024 * 1024)
+                self.status.showMessage(
+                    f"Arquivo grande ({size_mb:.0f} MB > {LARGE_PARQUET_THRESHOLD_MB} MB):"
+                    " carregamento pode ser lento. Use filtros ou paginacao."
+                )
+            except Exception:
+                pass
         if status_msg:
-            self.status.showMessage(f"⏳ {status_msg}...")
+            self.status.showMessage(f"Carregando {status_msg}...")
 
         def _worker_load():
             if not path.exists():
