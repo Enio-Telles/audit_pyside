@@ -567,12 +567,19 @@ def test_workers_and_query_worker_threads(
         def emit(self, value: Any = None) -> None:
             self.values.append(value)
 
+        def connect(self, *_args: Any, **_kwargs: Any) -> None:
+            pass  # no-op: suporte a deleteLater connect em testes sem QApplication
+
     class ThreadStub:
         def __init__(self, *_args: Any, **_kwargs: Any) -> None:
             self._cancel = False
+            self.finished: SignalStub = SignalStub()
 
         def isInterruptionRequested(self) -> bool:
             return self._cancel
+
+        def deleteLater(self) -> None:
+            pass  # no-op: suporte a finished.connect(deleteLater)
 
     qtcore = ModuleType("PySide6.QtCore")
     qtcore.QThread = ThreadStub

@@ -210,9 +210,10 @@ def gerar_resumo_global_dataframe(
         )
 
     resumo = (
-        base_df.join(m_base, on="Ano/Mes", how="left")
-        .join(a_base, on="Ano/Mes", how="left")
-        .join(p_base, on="Ano/Mes", how="left")
+        base_df.lazy()
+        .join(m_base.lazy(), on="Ano/Mes", how="left")
+        .join(a_base.lazy(), on="Ano/Mes", how="left")
+        .join(p_base.lazy(), on="Ano/Mes", how="left")
         .fill_null(0.0)
         .with_columns(
             [
@@ -231,6 +232,7 @@ def gerar_resumo_global_dataframe(
         .with_columns([pl.col(c).round(2) for c in RESUMO_GLOBAL_COLUMNS if c != "Ano/Mes"])
         .sort("Ano/Mes")
         .select(RESUMO_GLOBAL_COLUMNS)
+        .collect()
     )
 
     if manter_competencias_zeradas:
