@@ -20,7 +20,7 @@ Agente → audit-pyside-perf-mcp (tools explícitas) → Ações seguras e audit
 
 ---
 
-## 5 Grupos de Ferramentas
+## 6 Grupos de Ferramentas
 
 ### Grupo A: Qualidade do Projeto (5 tools)
 **O que faz:** Roda linters, testes, type checking, lista estrutura.
@@ -173,6 +173,18 @@ Agente → audit-pyside-perf-mcp (tools explícitas) → Ações seguras e audit
       └─ register_polars_tools()
          ├─ @mcp.tool() polars_profile_parquet()  ← usa guard_path()
          └─ ...
+
+└─ tools_gates.py
+   └─ register_gates_tools()
+      ├─ @mcp.tool() classify_pr_tool()
+      ├─ @mcp.tool() run_pr_gate_tool()
+      ├─ @mcp.tool() run_differential_harness_tool()
+      ├─ @mcp.tool() check_readonly_files_tool()
+      ├─ @mcp.tool() check_docs_only_tool()
+      ├─ @mcp.tool() check_gui_gate_tool()
+      ├─ @mcp.tool() check_oracle_gate_tool()
+      ├─ @mcp.tool() generate_notion_report_tool()
+      └─ @mcp.tool() branch_cleanup_report_tool()
 ```
 
 ---

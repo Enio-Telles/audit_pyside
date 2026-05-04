@@ -1,4 +1,5 @@
 import os
+from collections import OrderedDict as _OrderedDict
 
 try:
     import psutil
@@ -115,9 +116,33 @@ except ImportError:
 from utilitarios.compat import ensure_id_aliases
 
 
+class _BoundedLRUDict(_OrderedDict):
+    """OrderedDict com limite de entradas (LRU eviction, stdlib apenas).
+
+    Usado como cache global de DataFrames Parquet por CNPJ, evitando crescimento
+    ilimitado ao alternar entre CNPJs em sessoes longas.
+    """
+
+    def __init__(self, maxsize: int = 8) -> None:
+        super().__init__()
+        self._maxsize = maxsize
+
+    def __setitem__(self, key, value) -> None:  # type: ignore[override]
+        if key in self:
+            self.move_to_end(key)
+        super().__setitem__(key, value)
+        if len(self) > self._maxsize:
+            self.popitem(last=False)
+
+    def __getitem__(self, key):
+        value = super().__getitem__(key)
+        self.move_to_end(key)
+        return value
+
+
 class ServicoAgregacao:
-    # Cache global de DataFrames por CNPJ
-    _global_df_cache: dict[str, dict[Path, pl.DataFrame]] = {}
+    # Cache global de DataFrames por CNPJ — limitado a 8 entradas (LRU)
+    _global_df_cache: _BoundedLRUDict = _BoundedLRUDict(maxsize=8)
 
     def _ler_parquet_com_cache(
         self,

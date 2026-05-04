@@ -126,6 +126,12 @@ def carregar_dados_salvos() -> Dict[str, Dict[str, str]]:
                         env_vars.get(f"CONFIG_{nome_config}_CONTATO", "") or ""
                     ),
                     "ORGAO": str(env_vars.get(f"CONFIG_{nome_config}_ORGAO", "") or ""),
+                    "INCLUIR_IMAGENS_DSF": str(
+                        env_vars.get(
+                            f"CONFIG_{nome_config}_INCLUIR_IMAGENS_DSF", "True"
+                        )
+                        or "True"
+                    ),
                 }
 
         return configs
@@ -148,7 +154,14 @@ def salvar_dados_manuais(nome_config: str, dados: Dict[str, str]) -> None:
         nome_config_sanitizado = re.sub(r"[^a-zA-Z0-9_]", "_", nome_config).strip("_")
         nome_config_sanitizado = re.sub(r"_+", "_", nome_config_sanitizado)
 
-        campos = ["AUDITOR", "MATRICULA", "DSF", "CONTATO", "ORGAO"]
+        campos = [
+            "AUDITOR",
+            "MATRICULA",
+            "DSF",
+            "CONTATO",
+            "ORGAO",
+            "INCLUIR_IMAGENS_DSF",
+        ]
         linhas_config = [
             f"CONFIG_{nome_config_sanitizado}_{campo}={dados.get(campo, '')}"
             for campo in campos

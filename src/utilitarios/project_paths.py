@@ -4,12 +4,22 @@ import shutil
 from pathlib import Path
 
 
+import os
+
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 SRC_ROOT = PROJECT_ROOT / "src"
 SQL_ROOT = PROJECT_ROOT / "sql"
 SQL_ARCHIVE_ROOT = SQL_ROOT / "archive"
-DATA_ROOT = PROJECT_ROOT / "dados"
-CNPJ_ROOT = DATA_ROOT / "CNPJ"
+
+# Override para suportar Differential Harness em worktrees isolados
+_override_root = os.environ.get("CNPJ_ROOT_OVERRIDE")
+if _override_root:
+    DATA_ROOT = Path(_override_root).parent
+    CNPJ_ROOT = Path(_override_root)
+else:
+    DATA_ROOT = PROJECT_ROOT / "dados"
+    CNPJ_ROOT = DATA_ROOT / "CNPJ"
+
 DADOS_DIR = DATA_ROOT
 WORKSPACE_ROOT = PROJECT_ROOT / "workspace"
 CONSULTAS_ROOT = WORKSPACE_ROOT / "consultas"
