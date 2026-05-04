@@ -11,6 +11,7 @@ A Wiki do GitHub usa arquivos Markdown por página. Os arquivos deste diretório
 | `Home.md` | Página inicial da Wiki |
 | `Arquitetura-e-Pipeline.md` | Visão de arquitetura, camadas, dependências e fio de rastreabilidade |
 | `Catalogo-de-Tabelas-e-Campos.md` | Explicação de cada tabela documentada e de seus campos canônicos |
+| `Differential-harness-contrato-e-guardas.md` | Contrato canônico do gate diferencial em 3 níveis |
 | `Instalacao-e-Execucao.md` | Como instalar dependências, rodar testes e iniciar a aplicação |
 | `Operacao-e-Scripts.md` | Runbook dos scripts e geração de artefatos |
 | `Desenvolvimento-e-Contribuicao.md` | Fluxo de contribuição, branches, PRs, testes e qualidade |

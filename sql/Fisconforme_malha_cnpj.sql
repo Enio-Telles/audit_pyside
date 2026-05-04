@@ -38,8 +38,7 @@ WITH PendenciasRankeadas AS (
     WHERE dp.cpf_cnpj = :CNPJ
     AND dp.malhas_id IN (10061, 10120, 10140, 10220, 10240, 10260, 10300, 10320, 10340, 10420, 10440, 10500, 10580, 10600, 10780, 10820, 10900, 10960)
     AND dp.status IN (0, 4)
-    AND dp.periodo >= :data_inicio
-    AND dp.periodo <= :data_fim
+    AND dp.periodo BETWEEN :data_inicio AND :data_fim
 )
 -- Consulta final filtrando apenas a linha mais recente (Ranking = 1)
 SELECT /*+ MONITOR */
