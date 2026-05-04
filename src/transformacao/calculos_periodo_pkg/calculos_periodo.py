@@ -80,7 +80,7 @@ def _carregar_referencia_st_periodo(df_periodo: pl.DataFrame) -> pl.DataFrame:
         )
 
     df_aux = (
-        pl.read_parquet(caminho_aux)
+        pl.scan_parquet(caminho_aux)
         .select(["it_co_sefin", "it_da_inicio", "it_da_final", "it_pc_interna", "it_in_st"])
         .with_columns(
             [
@@ -102,6 +102,7 @@ def _carregar_referencia_st_periodo(df_periodo: pl.DataFrame) -> pl.DataFrame:
                 .alias("it_in_st"),
             ]
         )
+        .collect()
     )
 
     df_ref = (
