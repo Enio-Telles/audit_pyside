@@ -145,16 +145,38 @@ def _garantir_worktree(commit_sha: str, caminho: Path) -> None:
         )
 
     # Symlink dados para o worktree conseguir ler os parquets
-    main_dados = Path(__file__).resolve().parents[2] / "dados"
-    worktree_dados = caminho / "dados"
+    # Precisamos ser especificos pois 'dados' ja existe no worktree (tem arquivos no git)
+    data_paths = ["CNPJ", "dsf", "referencias"]
+    main_root = Path(__file__).resolve().parents[2]
     
-    if main_dados.exists() and not worktree_dados.exists():
-        try:
-            # No Windows, os.symlink pode precisar de privilégios ou modo desenvolvedor.
-            # Se falhar, tentamos via cmd mklink ou apenas ignoramos (o script falhará depois).
-            os.symlink(main_dados, worktree_dados, target_is_directory=True)
-        except OSError:
-            subprocess.run(["cmd", "/c", "mklink", "/D", str(worktree_dados), str(main_dados)], check=False)
+    for folder in data_paths:
+        source = main_root / "dados" / folder
+        target = caminho / "dados" / folder
+        
+        if not source.exists():
+            continue
+            
+        # Se o target ja existe e nao eh um link, e esta vazio, removemos para linkar
+        if target.exists() and not target.is_symlink():
+            # No Windows, junctions nao sao detectados por is_symlink() em versoes antigas de python
+            # mas vamos tentar detectar se eh um diretorio normal vazio
+            if target.is_dir() and not any(target.iterdir()):
+                print(f"[DEBUG] Removendo pasta vazia para linkar: {target}")
+                target.rmdir()
+        
+        if not target.exists():
+            target.parent.mkdir(parents=True, exist_ok=True)
+            print(f"[DEBUG] Tentando linkar {source} -> {target}")
+            try:
+                os.symlink(source, target, target_is_directory=True)
+                print(f"[DEBUG] os.symlink OK: {folder}")
+            except OSError:
+                # /J (junction) funciona melhor no Windows
+                res = subprocess.run(["cmd", "/c", "mklink", "/J", str(target), str(source)], capture_output=True, text=True)
+                if res.returncode == 0:
+                    print(f"[DEBUG] mklink /J OK: {folder}")
+                else:
+                    print(f"[DEBUG] mklink /J falhou para {folder}: {res.stderr}")
 
 
 def _carregar_fontes(
