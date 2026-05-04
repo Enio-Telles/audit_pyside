@@ -91,7 +91,9 @@ def build_gui_controller(
     periodos_module: ModuleType,
     resumo_mixin: type[Any],
 ) -> Any:
-    class Gui(periodos_module.RelatoriosPeriodosControllerMixin, resumo_mixin):
+    from interface_grafica.controllers.paginacao_tabs_mixin import PaginacaoTabsMixin
+
+    class Gui(PaginacaoTabsMixin, periodos_module.RelatoriosPeriodosControllerMixin, resumo_mixin):
         state: SimpleNamespace
         results_table_model: ModelStub
         aba_periodos_model: ModelStub
@@ -169,6 +171,13 @@ def build_gui_controller(
             self._filtro_cruzado_anuais_ids = []
             self.aba_mensal_table = object()
             self.aba_anual_table = object()
+            self.lbl_aba_mensal_page = TextWidget("")
+            self.btn_aba_mensal_prev_page = SimpleNamespace(setEnabled=lambda _: None)
+            self.btn_aba_mensal_next_page = SimpleNamespace(setEnabled=lambda _: None)
+            self.lbl_aba_anual_page = TextWidget("")
+            self.btn_aba_anual_prev_page = SimpleNamespace(setEnabled=lambda _: None)
+            self.btn_aba_anual_next_page = SimpleNamespace(setEnabled=lambda _: None)
+            self._init_paginacao_tabs()
 
         def _filtrar_texto_em_colunas(
             self,

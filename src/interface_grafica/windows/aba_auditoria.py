@@ -259,6 +259,21 @@ class AuditoriaWindowMixin:
         )
         layout.addWidget(self.lbl_mov_estoque_filtros)
 
+        paginacao_mov = QHBoxLayout()
+        self.btn_mov_estoque_prev_page = QPushButton("< Anterior")
+        self.btn_mov_estoque_prev_page.setEnabled(False)
+        self.lbl_mov_estoque_page = QLabel("Pagina 1/1 | 0 linhas filtradas")
+        self.lbl_mov_estoque_page.setStyleSheet(
+            "QLabel { padding: 4px 8px; color: #94a3b8; }"
+        )
+        self.btn_mov_estoque_next_page = QPushButton("Proximo >")
+        self.btn_mov_estoque_next_page.setEnabled(False)
+        paginacao_mov.addWidget(self.btn_mov_estoque_prev_page)
+        paginacao_mov.addWidget(self.lbl_mov_estoque_page)
+        paginacao_mov.addStretch()
+        paginacao_mov.addWidget(self.btn_mov_estoque_next_page)
+        layout.addLayout(paginacao_mov)
+
         self.mov_estoque_table = QTableView()
         self.mov_estoque_table.setModel(self.mov_estoque_model)
         self.mov_estoque_table.setSelectionBehavior(QAbstractItemView.SelectItems)

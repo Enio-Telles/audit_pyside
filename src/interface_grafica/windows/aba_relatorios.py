@@ -392,6 +392,21 @@ class RelatoriosWindowMixin:
         )
         layout.addWidget(self.lbl_aba_anual_filtros)
 
+        paginacao_anual = QHBoxLayout()
+        self.btn_aba_anual_prev_page = QPushButton("< Anterior")
+        self.btn_aba_anual_prev_page.setEnabled(False)
+        self.lbl_aba_anual_page = QLabel("Pagina 1/1 | 0 linhas filtradas")
+        self.lbl_aba_anual_page.setStyleSheet(
+            "QLabel { padding: 4px 8px; color: #94a3b8; }"
+        )
+        self.btn_aba_anual_next_page = QPushButton("Proximo >")
+        self.btn_aba_anual_next_page.setEnabled(False)
+        paginacao_anual.addWidget(self.btn_aba_anual_prev_page)
+        paginacao_anual.addWidget(self.lbl_aba_anual_page)
+        paginacao_anual.addStretch()
+        paginacao_anual.addWidget(self.btn_aba_anual_next_page)
+        layout.addLayout(paginacao_anual)
+
         self.aba_anual_table = QTableView()
         self.aba_anual_table.setModel(self.aba_anual_model)
         self.aba_anual_table.setSelectionBehavior(QAbstractItemView.SelectItems)
@@ -798,6 +813,21 @@ class RelatoriosWindowMixin:
             "QLabel { padding: 4px 8px; color: #dbeafe; background: #0f1b33; border: 1px solid #334155; border-radius: 4px; }"
         )
         layout.addWidget(self.lbl_aba_mensal_filtros)
+
+        paginacao_mensal = QHBoxLayout()
+        self.btn_aba_mensal_prev_page = QPushButton("< Anterior")
+        self.btn_aba_mensal_prev_page.setEnabled(False)
+        self.lbl_aba_mensal_page = QLabel("Pagina 1/1 | 0 linhas filtradas")
+        self.lbl_aba_mensal_page.setStyleSheet(
+            "QLabel { padding: 4px 8px; color: #94a3b8; }"
+        )
+        self.btn_aba_mensal_next_page = QPushButton("Proximo >")
+        self.btn_aba_mensal_next_page.setEnabled(False)
+        paginacao_mensal.addWidget(self.btn_aba_mensal_prev_page)
+        paginacao_mensal.addWidget(self.lbl_aba_mensal_page)
+        paginacao_mensal.addStretch()
+        paginacao_mensal.addWidget(self.btn_aba_mensal_next_page)
+        layout.addLayout(paginacao_mensal)
 
         self.aba_mensal_table = QTableView()
         self.aba_mensal_table.setModel(self.aba_mensal_model)
