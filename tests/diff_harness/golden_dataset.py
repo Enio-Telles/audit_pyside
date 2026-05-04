@@ -1,10 +1,9 @@
-"""
-golden_dataset.py
+"""golden_dataset.py
 
 Gera (ou le de Parquet) dataset deterministico para testes diferenciais.
 
 O dataset cobre as 5 chaves invariantes:
-  id_agrupado, id_agregado, __qtd_decl_final_audit__, q_conv, q_conv_fisica
+    id_agrupado, id_agregado, __qtd_decl_final_audit__, q_conv, q_conv_fisica
 
 alem de colunas auxiliares realistas para exercitar o pipeline de transformacao.
 """
@@ -14,16 +13,12 @@ from pathlib import Path
 
 import polars as pl
 
+from tests.diff_harness.invariantes import INVARIANTES_FISCAIS
+
 _GOLDEN_DIR = Path(__file__).parent / "golden"
 _GOLDEN_PATH = _GOLDEN_DIR / "golden_dataset.parquet"
 
-INVARIANTS = [
-    "id_agrupado",
-    "id_agregado",
-    "__qtd_decl_final_audit__",
-    "q_conv",
-    "q_conv_fisica",
-]
+INVARIANTS = INVARIANTES_FISCAIS
 
 _UNIDADES_PARES: list[tuple[str, str, float]] = [
     ("ITEM_KG", "kg", 1.0),

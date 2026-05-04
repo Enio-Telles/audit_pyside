@@ -9,7 +9,9 @@ from typing import Callable
 
 import polars as pl
 
-from tests.diff_harness.golden_dataset import INVARIANTS, load_golden
+from tests.diff_harness.golden_dataset import load_golden
+from tests.diff_harness.invariantes import INVARIANTES_FISCAIS
+from tests.diff_harness.nivel_1_divergencias import _eq_nan_safe
 
 ImplFn = Callable[[pl.DataFrame], pl.DataFrame]
 
@@ -67,7 +69,7 @@ def run_harness(
     n = len(df_old)
     report = DifferentialReport(total_rows=n)
 
-    for chave in INVARIANTS:
+    for chave in INVARIANTES_FISCAIS:
         old_has = chave in df_old.columns
         new_has = chave in df_new.columns
 
@@ -85,33 +87,30 @@ def run_harness(
             ]
             continue
 
-        col_old = df_old[chave]
-        col_new = df_new[chave]
+        col_old = df_old[chave].to_list()
+        col_new = df_new[chave].to_list()
 
-        if col_old.equals(col_new, null_equal=True):
-            report.divergentes[chave] = 0
-            report.amostras[chave] = []
-            continue
-
-        mask_diff = (col_old != col_new) | (col_old.is_null() != col_new.is_null())
-        n_diff = int(mask_diff.sum())
-        report.divergentes[chave] = n_diff
-
-        idx_diff = mask_diff.arg_true().head(n_amostras).to_list()
+        diff_indices: list[int] = []
         amostras: list[dict] = []
-        for idx in idx_diff:
-            row_input: dict = {}
-            for c in dataset.columns:
-                v = dataset[c][idx]
-                row_input[c] = _serialize(v)
-            amostras.append(
-                {
-                    "linha": idx,
-                    "input": row_input,
-                    "old": _serialize(col_old[idx]),
-                    "new": _serialize(col_new[idx]),
-                }
-            )
+        for idx, (valor_old, valor_new) in enumerate(zip(col_old, col_new)):
+            if _eq_nan_safe(valor_old, valor_new):
+                continue
+            diff_indices.append(idx)
+            if len(amostras) < n_amostras:
+                row_input: dict = {}
+                for c in dataset.columns:
+                    v = dataset[c][idx]
+                    row_input[c] = _serialize(v)
+                amostras.append(
+                    {
+                        "linha": idx,
+                        "input": row_input,
+                        "old": _serialize(valor_old),
+                        "new": _serialize(valor_new),
+                    }
+                )
+
+        report.divergentes[chave] = len(diff_indices)
         report.amostras[chave] = amostras
 
     return report
