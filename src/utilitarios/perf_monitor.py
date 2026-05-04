@@ -6,6 +6,23 @@ from pathlib import Path
 from threading import Lock
 from typing import Any
 
+try:
+    import psutil as _psutil
+    _HAS_PSUTIL = True
+except ImportError:
+    _psutil = None  # type: ignore[assignment]
+    _HAS_PSUTIL = False
+
+
+def _rss_bytes() -> int:
+    """Retorna RSS do processo atual em bytes. Retorna -1 se psutil nao disponivel."""
+    if not _HAS_PSUTIL:
+        return -1
+    try:
+        return _psutil.Process().memory_info().rss
+    except Exception:
+        return -1
+
 _WRITE_LOCK = Lock()
 
 
@@ -121,3 +138,45 @@ def registrar_evento_performance(
     except Exception:
         # Instrumentacao de performance nunca deve interromper o fluxo principal.
         return
+
+
+def log_parquet_open(
+    path: Path | str,
+    method: str,
+    rows: int,
+    cols: int,
+    elapsed_ms: float,
+    rss_before: int = -1,
+    rss_after: int = -1,
+) -> None:
+    """Registra abertura de Parquet com metricas de tamanho, tempo e memoria.
+
+    Parametros:
+        path: caminho do arquivo ou diretorio Parquet.
+        method: nome do metodo que realizou a leitura (ex.: 'load_dataset', 'get_page').
+        rows: numero de linhas carregadas (0 se nao coletado).
+        cols: numero de colunas carregadas (0 se nao coletado).
+        elapsed_ms: tempo decorrido em milissegundos.
+        rss_before: RSS em bytes antes da leitura (-1 se indisponivel).
+        rss_after: RSS em bytes apos a leitura (-1 se indisponivel).
+    """
+    path = Path(path) if not isinstance(path, Path) else path
+    try:
+        size_mb = round(path.stat().st_size / (1024 * 1024), 3) if path.is_file() else -1.0
+    except Exception:
+        size_mb = -1.0
+
+    registrar_evento_performance(
+        "parquet_open",
+        elapsed_ms / 1000.0,
+        {
+            "path": path,
+            "method": method,
+            "rows": rows,
+            "cols": cols,
+            "elapsed_ms": round(elapsed_ms, 2),
+            "size_mb": size_mb,
+            "rss_before_mb": round(rss_before / (1024 * 1024), 3) if rss_before >= 0 else -1,
+            "rss_after_mb": round(rss_after / (1024 * 1024), 3) if rss_after >= 0 else -1,
+        },
+    )

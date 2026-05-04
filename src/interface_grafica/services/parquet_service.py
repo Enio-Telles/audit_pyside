@@ -8,8 +8,12 @@ from typing import Iterable
 
 import polars as pl
 
-from interface_grafica.config import CNPJ_ROOT as CONSULTAS_ROOT, DEFAULT_PAGE_SIZE
-from utilitarios.perf_monitor import registrar_evento_performance
+from interface_grafica.config import (
+    CNPJ_ROOT as CONSULTAS_ROOT,
+    DEFAULT_PAGE_SIZE,
+    LARGE_PARQUET_THRESHOLD_MB,
+)
+from utilitarios.perf_monitor import log_parquet_open, registrar_evento_performance
 
 
 @dataclass
@@ -72,6 +76,15 @@ class ParquetService:
             pl.DataFrame,
         ] = OrderedDict()
         self._dataset_cache_limit = 6
+
+    @staticmethod
+    def is_large_parquet(parquet_path: Path) -> bool:
+        """Retorna True se o arquivo excede LARGE_PARQUET_THRESHOLD_MB."""
+        try:
+            size_mb = parquet_path.stat().st_size / (1024 * 1024)
+            return size_mb > LARGE_PARQUET_THRESHOLD_MB
+        except OSError:
+            return False
 
     @staticmethod
     def _path_signature(parquet_path: Path) -> tuple[str, int, int]:
@@ -309,7 +322,20 @@ class ParquetService:
         sort_by: str | None = None,
         sort_desc: bool = False,
     ) -> PageResult:
+        from utilitarios.perf_monitor import _rss_bytes
         inicio_total = perf_counter()
+        arquivo_grande = self.is_large_parquet(parquet_path)
+        if arquivo_grande and page == 1:
+            registrar_evento_performance(
+                "parquet_service.get_page.arquivo_grande",
+                0.0,
+                {
+                    "parquet_path": parquet_path,
+                    "threshold_mb": LARGE_PARQUET_THRESHOLD_MB,
+                    "aviso": "arquivo acima do threshold; use DuckDB backend",
+                },
+                status="aviso",
+            )
         page = max(page, 1)
         path_signature = self._path_signature(parquet_path)
         page_cache_key = (
@@ -338,6 +364,7 @@ class ParquetService:
                 },
             )
             return cached_page
+        rss_antes = _rss_bytes()
         inicio_lf = perf_counter()
         lf_all = self.build_lazyframe(parquet_path, conditions)
         registrar_evento_performance(
@@ -398,9 +425,10 @@ class ParquetService:
             },
         )
         df_visible = df_all.select([c for c in visible_columns if c in df_all.columns])
+        elapsed_total_ms = (perf_counter() - inicio_total) * 1000.0
         registrar_evento_performance(
             "parquet_service.get_page.total",
-            perf_counter() - inicio_total,
+            elapsed_total_ms / 1000.0,
             {
                 "parquet_path": parquet_path,
                 "page": page,
@@ -409,7 +437,17 @@ class ParquetService:
                 "linhas_pagina": df_all.height,
                 "colunas_visiveis": len(df_visible.columns),
                 "cache_hit": False,
+                "arquivo_grande": arquivo_grande,
             },
+        )
+        log_parquet_open(
+            parquet_path,
+            "get_page",
+            rows=df_all.height,
+            cols=df_all.width,
+            elapsed_ms=elapsed_total_ms,
+            rss_before=rss_antes,
+            rss_after=_rss_bytes(),
         )
         result = PageResult(
             total_rows=total_rows,
@@ -430,7 +468,20 @@ class ParquetService:
         conditions: list[FilterCondition] | None = None,
         columns: list[str] | None = None,
     ) -> pl.DataFrame:
+        from utilitarios.perf_monitor import _rss_bytes
         inicio = perf_counter()
+        arquivo_grande = self.is_large_parquet(parquet_path)
+        if arquivo_grande:
+            registrar_evento_performance(
+                "parquet_service.load_dataset.arquivo_grande",
+                0.0,
+                {
+                    "parquet_path": parquet_path,
+                    "threshold_mb": LARGE_PARQUET_THRESHOLD_MB,
+                    "aviso": "arquivo acima do threshold; use filtros ou paginacao",
+                },
+                status="aviso",
+            )
         cache_key = (
             *self._path_signature(parquet_path),
             self._conditions_key(conditions),
@@ -449,20 +500,24 @@ class ParquetService:
                     "linhas": cached.height,
                     "colunas": cached.width,
                     "cache_hit": True,
+                    "arquivo_grande": arquivo_grande,
                 },
             )
             return cached
+        rss_antes = _rss_bytes()
         lf = self.build_lazyframe(parquet_path, conditions or [])
         if columns:
             lf = lf.select(columns)
         df = lf.collect()
+        rss_depois = _rss_bytes()
+        elapsed_ms = (perf_counter() - inicio) * 1000.0
         self._dataset_cache[cache_key] = df
         self._dataset_cache.move_to_end(cache_key)
         while len(self._dataset_cache) > self._dataset_cache_limit:
             self._dataset_cache.popitem(last=False)
         registrar_evento_performance(
             "parquet_service.load_dataset",
-            perf_counter() - inicio,
+            elapsed_ms / 1000.0,
             {
                 "parquet_path": parquet_path,
                 "quantidade_filtros": len(conditions or []),
@@ -470,7 +525,17 @@ class ParquetService:
                 "linhas": df.height,
                 "colunas": df.width,
                 "cache_hit": False,
+                "arquivo_grande": arquivo_grande,
             },
+        )
+        log_parquet_open(
+            parquet_path,
+            "load_dataset",
+            rows=df.height,
+            cols=df.width,
+            elapsed_ms=elapsed_ms,
+            rss_before=rss_antes,
+            rss_after=rss_depois,
         )
         return df
 
