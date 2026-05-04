@@ -201,7 +201,7 @@ class MainWindowNavigationMixin:
         if self.state.current_file is None:
             return
         try:
-            all_columns = self.parquet_service.get_schema(self.state.current_file)
+            all_columns = self.query_service.get_schema(self.state.current_file)
         except Exception as exc:
             self.show_error("Erro ao abrir Parquet", str(exc))
             return
@@ -227,9 +227,9 @@ class MainWindowNavigationMixin:
 
         if not update_main_view:
             try:
-                page_result = self.parquet_service.get_page(
-                    parquet_path=self.state.current_file,
-                    conditions=self.state.filters or [],
+                page_result = self.query_service.get_page(
+                    path=self.state.current_file,
+                    filters=self.state.filters or [],
                     visible_columns=self.state.visible_columns or [],
                     page=self.state.current_page,
                     page_size=self.state.page_size,
@@ -253,9 +253,9 @@ class MainWindowNavigationMixin:
             self.status.showMessage("Nova carga solicitada; resultado anterior sera ignorado.")
 
         def _load_page():
-            return self.parquet_service.get_page(
-                parquet_path=parquet_path,
-                conditions=conditions,
+            return self.query_service.get_page(
+                path=parquet_path,
+                filters=conditions,
                 visible_columns=visible_columns,
                 page=page,
                 page_size=page_size,
