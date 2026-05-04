@@ -5,7 +5,11 @@ from pathlib import Path
 
 import polars as pl
 from interface_grafica.config import LARGE_PARQUET_THRESHOLD_MB
-from interface_grafica.services.parquet_service import FilterCondition, ParquetService
+from interface_grafica.services.parquet_service import (
+    FilterCondition,
+    LargeParquetForbiddenError,
+    ParquetService,
+)
 from interface_grafica.services.query_worker import QueryWorker
 from interface_grafica.controllers.workers import ServiceTaskWorker
 
@@ -41,24 +45,23 @@ class MainWindowLoadingMixin:
         conditions: list[FilterCondition] | None = None,
         columns: list[str] | None = None,
     ) -> pl.DataFrame:
-        if ParquetService.is_large_parquet(path) and hasattr(self, "status"):
-            try:
-                size_mb = path.stat().st_size / (1024 * 1024)
-                self.status.showMessage(
-                    f"Arquivo grande ({size_mb:.0f} MB > {LARGE_PARQUET_THRESHOLD_MB} MB):"
-                    " use filtros ou paginacao para melhor desempenho."
-                )
-            except Exception:
-                pass
         colunas_solicitadas = columns
         if columns is not None:
             schema = set(self.parquet_service.get_schema(path))
             colunas_solicitadas = [coluna for coluna in columns if coluna in schema]
             if not colunas_solicitadas:
                 return pl.DataFrame()
-        return self.parquet_service.load_dataset(
-            path, conditions or [], colunas_solicitadas
-        )
+        try:
+            return self.parquet_service.load_dataset(
+                path, conditions or [], colunas_solicitadas
+            )
+        except LargeParquetForbiddenError as exc:
+            if hasattr(self, "status"):
+                self.status.showMessage(
+                    f"Arquivo grande ({exc.size_mb:.0f} MB): use filtros ou paginacao.",
+                    12000,
+                )
+            return pl.DataFrame()
     def _carregar_dados_parquet_async(
         self,
         path: Path,
@@ -70,30 +73,35 @@ class MainWindowLoadingMixin:
         Carrega um arquivo Parquet em background.
         Se unique_cols for fornecido, extrai valores unicos dessas colunas no background.
         O callback sera chamado como callback(df) ou callback(df, uniques_dict).
+        Arquivos acima de LARGE_PARQUET_THRESHOLD_MB sao bloqueados (exibem mensagem e retornam).
         """
-        if ParquetService.is_large_parquet(path) and hasattr(self, "status"):
+        if ParquetService.is_large_parquet(path):
             try:
                 size_mb = path.stat().st_size / (1024 * 1024)
+            except OSError:
+                size_mb = float(LARGE_PARQUET_THRESHOLD_MB) + 1
+            if hasattr(self, "status"):
                 self.status.showMessage(
-                    f"Arquivo grande ({size_mb:.0f} MB > {LARGE_PARQUET_THRESHOLD_MB} MB):"
-                    " carregamento pode ser lento. Use filtros ou paginacao."
+                    f"Arquivo grande ({size_mb:.0f} MB): use filtros ou paginacao.",
+                    12000,
                 )
-            except Exception:
-                pass
+            return
         if status_msg:
             self.status.showMessage(f"Carregando {status_msg}...")
+
+        parquet_service = self.parquet_service
 
         def _worker_load():
             if not path.exists():
                 return None
-            df = pl.read_parquet(path)
+            df = parquet_service.load_dataset(path, allow_full_load=False)
             if not unique_cols:
                 return df
 
             uniques = {}
             for col in unique_cols:
                 if col in df.columns:
-                    # Extração pesada feita no worker (background thread)
+                    # Extracao pesada feita no worker (background thread)
                     uniques[col] = (
                         df.get_column(col)
                         .cast(pl.Utf8, strict=False)
@@ -109,7 +117,7 @@ class MainWindowLoadingMixin:
         def _on_success(result):
             if status_msg:
                 self.status.showMessage(
-                    f"✔ {status_msg.replace('Carregando', 'Feito')}", 3000
+                    f"\u2714 {status_msg.replace('Carregando', 'Feito')}", 3000
                 )
 
             if isinstance(result, dict) and "df" in result:
