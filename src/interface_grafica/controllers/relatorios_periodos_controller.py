@@ -148,13 +148,24 @@ class RelatoriosPeriodosControllerMixin:
             )
             filtros.append(f"{num_col} entre [{v_min or '-inf'}, {v_max or '+inf'}]")
 
-        self.aba_periodos_model.set_dataframe(df_filtrado)
+        self._armazenar_pagina("aba_periodos", df_filtrado)
+        self._renderizar_pagina_aba_periodos()
         self.lbl_aba_periodos_filtros.setText(
             f"Filtros ativos: {', '.join(filtros) if filtros else 'nenhum'}"
         )
         self.lbl_aba_periodos_status.setText(
             f"Exibindo {df_filtrado.height:,} de {self._aba_periodos_df.height:,} registros."
         )
+
+    def _renderizar_pagina_aba_periodos(self) -> None:
+        df_page = self._fatia_pagina("aba_periodos")
+        self.aba_periodos_model.set_dataframe(df_page)
+        self.lbl_aba_periodos_page.setText(self._texto_lbl_pagina("aba_periodos"))
+        total_pag = self._total_paginas("aba_periodos")
+        pag_atual = self._tab_page.get("aba_periodos", 1)
+        self.btn_aba_periodos_prev_page.setEnabled(pag_atual > 1)
+        self.btn_aba_periodos_next_page.setEnabled(pag_atual < total_pag)
+
     def limpar_filtros_aba_periodos(self) -> None:
         self.periodo_filter_id.setCurrentText("")
         self.periodo_filter_desc.clear()
@@ -162,7 +173,8 @@ class RelatoriosPeriodosControllerMixin:
         self.periodo_filter_num_min.clear()
         self.periodo_filter_num_max.clear()
 
-        self.aba_periodos_model.set_dataframe(self._aba_periodos_df)
+        self._armazenar_pagina("aba_periodos", self._aba_periodos_df)
+        self._renderizar_pagina_aba_periodos()
         self.lbl_aba_periodos_filtros.setText("Filtros ativos: nenhum")
         self.lbl_aba_periodos_status.setText(
             f"Sucesso! {self._aba_periodos_df.height} registros carregados."

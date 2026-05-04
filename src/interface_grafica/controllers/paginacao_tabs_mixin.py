@@ -16,7 +16,7 @@ import polars as pl
 
 from interface_grafica.config import DEFAULT_PAGE_SIZE
 
-_TAB_KEYS = ("mov_estoque", "aba_mensal", "aba_anual")
+_TAB_KEYS = ("mov_estoque", "aba_mensal", "aba_anual", "aba_periodos")
 
 
 class PaginacaoTabsMixin:
@@ -75,6 +75,8 @@ class PaginacaoTabsMixin:
             self._renderizar_pagina_aba_mensal()
         elif key == "aba_anual":
             self._renderizar_pagina_aba_anual()
+        elif key == "aba_periodos":
+            self._renderizar_pagina_aba_periodos()
 
     # ------------------------------------------------------------------
     # Slots conectados aos botoes de cada tab
@@ -97,3 +99,9 @@ class PaginacaoTabsMixin:
 
     def _next_page_aba_anual(self) -> None:
         self._next_page_tab("aba_anual")
+
+    def _prev_page_aba_periodos(self) -> None:
+        self._prev_page_tab("aba_periodos")
+
+    def _next_page_aba_periodos(self) -> None:
+        self._next_page_tab("aba_periodos")

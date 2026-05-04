@@ -177,6 +177,9 @@ def build_gui_controller(
             self.lbl_aba_anual_page = TextWidget("")
             self.btn_aba_anual_prev_page = SimpleNamespace(setEnabled=lambda _: None)
             self.btn_aba_anual_next_page = SimpleNamespace(setEnabled=lambda _: None)
+            self.lbl_aba_periodos_page = TextWidget("")
+            self.btn_aba_periodos_prev_page = SimpleNamespace(setEnabled=lambda _: None)
+            self.btn_aba_periodos_next_page = SimpleNamespace(setEnabled=lambda _: None)
             self._init_paginacao_tabs()
 
         def _filtrar_texto_em_colunas(
