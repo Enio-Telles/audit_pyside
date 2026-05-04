@@ -157,7 +157,8 @@ class AuditoriaControllerMixin:
             if texto:
                 df_filtrado = self._filtrar_texto_em_colunas(df_filtrado, texto)
 
-            self.mov_estoque_model.set_dataframe(df_filtrado)
+            self._armazenar_pagina("mov_estoque", df_filtrado)
+            self._renderizar_pagina_mov_estoque()
             self._resize_table_once(self.mov_estoque_table, "mov_estoque")
             if not self._aplicar_preferencias_tabela(
                 "mov_estoque", self.mov_estoque_table, self.mov_estoque_model
@@ -168,15 +169,6 @@ class AuditoriaControllerMixin:
                     ["ordem_operacoes", "Dt_doc", "Dt_e_s", "id_agrupado"],
                 )
                 self._aplicar_preset_mov_estoque()
-            if "ordem_operacoes" in self.mov_estoque_model.dataframe.columns:
-                offset = (
-                    1 if getattr(self.mov_estoque_model, "_checkable", False) else 0
-                )
-                idx_ordem = (
-                    self.mov_estoque_model.dataframe.columns.index("ordem_operacoes")
-                    + offset
-                )
-                self.mov_estoque_table.setColumnHidden(idx_ordem, False)
             self.lbl_mov_estoque_status.setText(
                 f"Movimentacoes: {df_filtrado.height:,} de {self._mov_estoque_df.height:,} linhas."
                 + (" (FILTRO CRUZADO ATIVO)" if self._filtro_cruzado_anuais_ids else "")
@@ -229,6 +221,21 @@ class AuditoriaControllerMixin:
             )
         except Exception as e:
             QMessageBox.warning(self, "Erro", f"Erro ao filtrar mov_estoque: {e}")
+
+    def _renderizar_pagina_mov_estoque(self) -> None:
+        """Renderiza a pagina atual de mov_estoque sem re-filtrar."""
+        df_page = self._fatia_pagina("mov_estoque")
+        self.mov_estoque_model.set_dataframe(df_page)
+        self.lbl_mov_estoque_page.setText(self._texto_lbl_pagina("mov_estoque"))
+        total_pag = self._total_paginas("mov_estoque")
+        pag_atual = self._tab_page.get("mov_estoque", 1)
+        self.btn_mov_estoque_prev_page.setEnabled(pag_atual > 1)
+        self.btn_mov_estoque_next_page.setEnabled(pag_atual < total_pag)
+        if "ordem_operacoes" in df_page.columns:
+            ck_offset = 1 if getattr(self.mov_estoque_model, "_checkable", False) else 0
+            idx = df_page.columns.index("ordem_operacoes") + ck_offset
+            self.mov_estoque_table.setColumnHidden(idx, False)
+
     def exportar_mov_estoque_excel(self) -> None:
         if self.mov_estoque_model.dataframe.is_empty():
             QMessageBox.information(

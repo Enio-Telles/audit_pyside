@@ -96,6 +96,13 @@ class MainWindowSignalWiringCoreMixin:
         self.btn_prev_page.clicked.connect(self.prev_page)
         self.btn_next_page.clicked.connect(self.next_page)
 
+        self.btn_mov_estoque_prev_page.clicked.connect(self._prev_page_mov_estoque)
+        self.btn_mov_estoque_next_page.clicked.connect(self._next_page_mov_estoque)
+        self.btn_aba_mensal_prev_page.clicked.connect(self._prev_page_aba_mensal)
+        self.btn_aba_mensal_next_page.clicked.connect(self._next_page_aba_mensal)
+        self.btn_aba_anual_prev_page.clicked.connect(self._prev_page_aba_anual)
+        self.btn_aba_anual_next_page.clicked.connect(self._next_page_aba_anual)
+
         self.btn_export_excel_full.clicked.connect(lambda: self.export_excel("full"))
         self.btn_export_excel_filtered.clicked.connect(
             lambda: self.export_excel("filtered")

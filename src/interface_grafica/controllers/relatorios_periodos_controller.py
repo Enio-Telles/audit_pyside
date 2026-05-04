@@ -354,7 +354,8 @@ class RelatoriosPeriodosControllerMixin:
             if texto:
                 df_filtrado = self._filtrar_texto_em_colunas(df_filtrado, texto)
 
-            self.aba_mensal_model.set_dataframe(df_filtrado)
+            self._armazenar_pagina("aba_mensal", df_filtrado)
+            self._renderizar_pagina_aba_mensal()
             self._resize_table_once(self.aba_mensal_table, "aba_mensal")
             if not self._aplicar_preferencias_tabela(
                 "aba_mensal", self.aba_mensal_table, self.aba_mensal_model
@@ -395,6 +396,17 @@ class RelatoriosPeriodosControllerMixin:
             )
         except Exception as e:
             QMessageBox.warning(self, "Erro", f"Erro ao filtrar aba mensal: {e}")
+
+    def _renderizar_pagina_aba_mensal(self) -> None:
+        """Renderiza a pagina atual de aba_mensal sem re-filtrar."""
+        df_page = self._fatia_pagina("aba_mensal")
+        self.aba_mensal_model.set_dataframe(df_page)
+        self.lbl_aba_mensal_page.setText(self._texto_lbl_pagina("aba_mensal"))
+        total_pag = self._total_paginas("aba_mensal")
+        pag_atual = self._tab_page.get("aba_mensal", 1)
+        self.btn_aba_mensal_prev_page.setEnabled(pag_atual > 1)
+        self.btn_aba_mensal_next_page.setEnabled(pag_atual < total_pag)
+
     def limpar_filtros_aba_mensal(self) -> None:
         self.mensal_filter_id.setCurrentIndex(0)
         self.mensal_filter_desc.clear()
@@ -470,7 +482,8 @@ class RelatoriosPeriodosControllerMixin:
             if texto:
                 df_filtrado = self._filtrar_texto_em_colunas(df_filtrado, texto)
 
-            self.aba_anual_model.set_dataframe(df_filtrado)
+            self._armazenar_pagina("aba_anual", df_filtrado)
+            self._renderizar_pagina_aba_anual()
             self._resize_table_once(self.aba_anual_table, "aba_anual")
             if not self._aplicar_preferencias_tabela(
                 "aba_anual", self.aba_anual_table, self.aba_anual_model
@@ -524,6 +537,17 @@ class RelatoriosPeriodosControllerMixin:
             )
         except Exception as e:
             QMessageBox.warning(self, "Erro", f"Erro ao filtrar aba anual: {e}")
+
+    def _renderizar_pagina_aba_anual(self) -> None:
+        """Renderiza a pagina atual de aba_anual sem re-filtrar."""
+        df_page = self._fatia_pagina("aba_anual")
+        self.aba_anual_model.set_dataframe(df_page)
+        self.lbl_aba_anual_page.setText(self._texto_lbl_pagina("aba_anual"))
+        total_pag = self._total_paginas("aba_anual")
+        pag_atual = self._tab_page.get("aba_anual", 1)
+        self.btn_aba_anual_prev_page.setEnabled(pag_atual > 1)
+        self.btn_aba_anual_next_page.setEnabled(pag_atual < total_pag)
+
     def limpar_filtros_aba_anual(self) -> None:
         self.anual_filter_id.setCurrentIndex(0)
         self.anual_filter_desc.clear()

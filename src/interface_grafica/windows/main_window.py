@@ -16,6 +16,7 @@ from interface_grafica.controllers.relatorios_periodos_controller import Relator
 from interface_grafica.controllers.relatorios_produtos_controller import RelatoriosProdutosControllerMixin
 from interface_grafica.controllers.relatorios_resumo_controller import RelatoriosResumoControllerMixin
 from interface_grafica.controllers.relatorios_style_controller import RelatoriosStyleControllerMixin
+from interface_grafica.controllers.paginacao_tabs_mixin import PaginacaoTabsMixin
 from interface_grafica.controllers.shared_state import ViewState
 from interface_grafica.controllers.sql_query_controller import SqlQueryControllerMixin
 from interface_grafica.controllers.workers import PipelineWorker, ServiceTaskWorker
@@ -48,6 +49,7 @@ from PySide6.QtWidgets import QHBoxLayout, QLabel, QMainWindow, QPushButton, QSp
 
 
 class MainWindow(
+    PaginacaoTabsMixin,
     MainWindowSignalWiringCoreMixin,
     MainWindowSignalWiringRelatoriosMixin,
     MainWindowNavigationMixin,
@@ -178,6 +180,7 @@ class MainWindow(
         self._closing_after_workers = False
 
         self._build_ui()
+        self._init_paginacao_tabs()
         self._connect_signals()
         self._setup_copy_shortcut()
         self._refresh_profile_combos()
