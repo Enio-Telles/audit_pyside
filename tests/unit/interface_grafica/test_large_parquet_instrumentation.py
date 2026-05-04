@@ -186,38 +186,29 @@ def test_is_large_parquet_false_para_path_inexistente(tmp_path: Path):
 
 
 # ---------------------------------------------------------------------------
-# Testes: load_dataset nao bloqueia arquivo grande
+# Testes: load_dataset bloqueia arquivo grande (PR 0.2 substituiu comportamento PR 0.1)
 # ---------------------------------------------------------------------------
 
 
 def test_load_dataset_nao_bloqueia_arquivo_grande(
     parquet_grande_simulado: Path, tmp_path: Path
 ):
-    """Arquivo grande deve ser carregado normalmente (PR 0.1 so loga, nao bloqueia)."""
-    import interface_grafica.services.parquet_service as mod
+    """A partir da PR 0.2 load_dataset levanta LargeParquetForbiddenError para arquivo grande.
 
-    eventos: list[str] = []
+    O nome do teste e preservado para compatibilidade de historico, mas a expectativa mudou:
+    arquivos grandes sao bloqueados por padrao (allow_full_load=False).
+    """
+    from interface_grafica.services.parquet_service import LargeParquetForbiddenError, ParquetService
 
-    def fake_registrar(evento, duracao_s=None, contexto=None, status="ok"):
-        eventos.append(evento)
-
-    def fake_log_open(*args, **kwargs):
-        pass
-
-    with patch.object(mod, "registrar_evento_performance", fake_registrar):
-        with patch.object(mod, "log_parquet_open", fake_log_open):
-            svc = mod.ParquetService(root=tmp_path)
-            df = svc.load_dataset(parquet_grande_simulado)
-
-    assert isinstance(df, pl.DataFrame)
-    assert df.height > 0
-    assert any("arquivo_grande" in ev for ev in eventos)
+    svc = ParquetService(root=tmp_path)
+    with pytest.raises(LargeParquetForbiddenError):
+        svc.load_dataset(parquet_grande_simulado)
 
 
 def test_load_dataset_arquivo_grande_evento_tem_status_aviso(
     parquet_grande_simulado: Path, tmp_path: Path
 ):
-    """O evento 'arquivo_grande' deve ser emitido com status='aviso'."""
+    """O evento 'arquivo_grande' deve ser emitido com status='aviso' mesmo ao bloquear."""
     import interface_grafica.services.parquet_service as mod
 
     eventos_completos: list[dict] = []
@@ -225,9 +216,11 @@ def test_load_dataset_arquivo_grande_evento_tem_status_aviso(
     def fake_registrar(evento, duracao_s=None, contexto=None, status="ok"):
         eventos_completos.append({"evento": evento, "status": status, "contexto": contexto})
 
+    from interface_grafica.services.parquet_service import LargeParquetForbiddenError, ParquetService
+
     with patch.object(mod, "registrar_evento_performance", fake_registrar):
-        with patch.object(mod, "log_parquet_open", lambda *a, **kw: None):
-            svc = mod.ParquetService(root=tmp_path)
+        svc = ParquetService(root=tmp_path)
+        with pytest.raises(LargeParquetForbiddenError):
             svc.load_dataset(parquet_grande_simulado)
 
     avisos = [e for e in eventos_completos if e["status"] == "aviso"]

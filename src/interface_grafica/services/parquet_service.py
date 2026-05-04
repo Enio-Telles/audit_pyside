@@ -23,6 +23,19 @@ class FilterCondition:
     value: str = ""
 
 
+class LargeParquetForbiddenError(Exception):
+    """Levantado quando load_dataset tenta ler arquivo acima do threshold sem allow_full_load=True."""
+
+    def __init__(self, parquet_path: Path, size_mb: float, threshold_mb: int) -> None:
+        self.parquet_path = parquet_path
+        self.size_mb = size_mb
+        self.threshold_mb = threshold_mb
+        super().__init__(
+            f"Parquet grande ({size_mb:.0f} MB > {threshold_mb} MB): "
+            "use filtros ou paginacao, ou passe allow_full_load=True para exportacao explicita."
+        )
+
+
 @dataclass
 class PageResult:
     total_rows: int
@@ -467,10 +480,31 @@ class ParquetService:
         parquet_path: Path,
         conditions: list[FilterCondition] | None = None,
         columns: list[str] | None = None,
+        *,
+        allow_full_load: bool = False,
     ) -> pl.DataFrame:
         from utilitarios.perf_monitor import _rss_bytes
         inicio = perf_counter()
         arquivo_grande = self.is_large_parquet(parquet_path)
+        if arquivo_grande and not allow_full_load:
+            try:
+                size_mb = parquet_path.stat().st_size / (1024 * 1024)
+            except OSError:
+                size_mb = float(LARGE_PARQUET_THRESHOLD_MB) + 1
+            registrar_evento_performance(
+                "parquet_service.load_dataset.arquivo_grande",
+                0.0,
+                {
+                    "parquet_path": parquet_path,
+                    "size_mb": size_mb,
+                    "threshold_mb": LARGE_PARQUET_THRESHOLD_MB,
+                    "bloqueado": True,
+                },
+                status="aviso",
+            )
+            raise LargeParquetForbiddenError(
+                parquet_path, size_mb, LARGE_PARQUET_THRESHOLD_MB
+            )
         if arquivo_grande:
             registrar_evento_performance(
                 "parquet_service.load_dataset.arquivo_grande",
@@ -479,6 +513,7 @@ class ParquetService:
                     "parquet_path": parquet_path,
                     "threshold_mb": LARGE_PARQUET_THRESHOLD_MB,
                     "aviso": "arquivo acima do threshold; use filtros ou paginacao",
+                    "allow_full_load": True,
                 },
                 status="aviso",
             )
