@@ -16,12 +16,14 @@ class AuditoriaControllerMixin:
         def _limpar_estoque_status(message: str) -> None:
             self.mov_estoque_model.set_dataframe(pl.DataFrame())
             self._mov_estoque_df = pl.DataFrame()
+            self._limpar_pagina_tab("mov_estoque")
             self.lbl_mov_estoque_status.setText(message)
             self._atualizar_titulo_aba_mov_estoque()
             self.atualizar_aba_produtos_selecionados()
 
         cnpj = self.state.current_cnpj
         if not cnpj:
+            self._limpar_pagina_tab("mov_estoque")
             self._atualizar_titulo_aba_mov_estoque()
             return
         try:
@@ -53,6 +55,7 @@ class AuditoriaControllerMixin:
                 self.mov_estoque_model.set_dataframe(pl.DataFrame())
                 self._mov_estoque_df = pl.DataFrame()
                 self._mov_estoque_file_path = None
+                self._limpar_pagina_tab("mov_estoque")
                 self.lbl_mov_estoque_status.setText(
                     "Arquivo 'mov_estoque' nao encontrado para este CNPJ."
                 )
@@ -237,11 +240,12 @@ class AuditoriaControllerMixin:
             self.mov_estoque_table.setColumnHidden(idx, False)
 
     def exportar_mov_estoque_excel(self) -> None:
-        if self.mov_estoque_model.dataframe.is_empty():
+        df_filtrado = self._tab_df_filtrado.get("mov_estoque", pl.DataFrame())
+        if df_filtrado.is_empty():
             QMessageBox.information(
                 self,
-                "Exportacao",
-                "Nao ha dados filtrados na mov_estoque para exportar.",
+                "Exportação",
+                "Não há dados filtrados na mov_estoque para exportar.",
             )
             return
         target = self._save_dialog("Exportar Movimentacao de Estoque", "Excel (*.xlsx)")
@@ -251,7 +255,7 @@ class AuditoriaControllerMixin:
             df_to_export = self._dataframe_colunas_visiveis(
                 self.mov_estoque_table,
                 self.mov_estoque_model,
-                self.mov_estoque_model.dataframe,
+                df_filtrado,
             )
             self.export_service.export_excel(
                 target, df_to_export, sheet_name="Mov_Estoque"

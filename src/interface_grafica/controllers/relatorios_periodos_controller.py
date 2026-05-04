@@ -19,6 +19,7 @@ class RelatoriosPeriodosControllerMixin:
     def atualizar_aba_periodos(self) -> None:
         cnpj = self.state.current_cnpj
         if not cnpj:
+            self._limpar_pagina_tab("aba_periodos")
             self._atualizar_titulo_aba_periodos()
             return
 
@@ -29,6 +30,7 @@ class RelatoriosPeriodosControllerMixin:
             self.aba_periodos_model.set_dataframe(pl.DataFrame())
             self._aba_periodos_df = pl.DataFrame()
             self._aba_periodos_file_path = None
+            self._limpar_pagina_tab("aba_periodos")
             self.lbl_aba_periodos_status.setText(
                 "⏳ Arquivo ausente. Iniciando geração automática..."
             )
@@ -43,6 +45,7 @@ class RelatoriosPeriodosControllerMixin:
                 self.aba_periodos_model.set_dataframe(pl.DataFrame())
                 self._aba_periodos_df = pl.DataFrame()
                 self._aba_periodos_file_path = None
+                self._limpar_pagina_tab("aba_periodos")
                 self.lbl_aba_periodos_status.setText("Tabela periodos nao encontrada.")
                 self._atualizar_titulo_aba_periodos()
                 return
@@ -180,7 +183,8 @@ class RelatoriosPeriodosControllerMixin:
             f"Sucesso! {self._aba_periodos_df.height} registros carregados."
         )
     def exportar_aba_periodos_excel(self) -> None:
-        if self.aba_periodos_model.df_filtered.is_empty():
+        df_filtrado = self._tab_df_filtrado.get("aba_periodos", pl.DataFrame())
+        if df_filtrado.is_empty():
             QMessageBox.warning(self, "Aviso", "Não há dados filtrados para exportar.")
             return
 
@@ -198,7 +202,7 @@ class RelatoriosPeriodosControllerMixin:
         service = ExportService()
         try:
             service.export_excel(
-                Path(path), self.aba_periodos_model.df_filtered, "Aba Periodos"
+                Path(path), df_filtrado, "Aba Periodos"
             )
             QMessageBox.information(
                 self, "Sucesso", f"Arquivo exportado com sucesso: {path}"
@@ -209,10 +213,12 @@ class RelatoriosPeriodosControllerMixin:
     def atualizar_aba_anual(self) -> None:
         cnpj = self.state.current_cnpj
         if not cnpj:
+            self._limpar_pagina_tab("aba_anual")
             self._atualizar_titulo_aba_anual()
             return
 
         if not self._garantir_resumos_estoque_atualizados(cnpj):
+            self._limpar_pagina_tab("aba_anual")
             self._limpar_aba_resumo_estoque(
                 "aba_anual", "Sincronizando tabela anual com a mov_estoque atual..."
             )
@@ -222,6 +228,7 @@ class RelatoriosPeriodosControllerMixin:
         if not path.exists():
             self.aba_anual_model.set_dataframe(pl.DataFrame())
             self._aba_anual_df = pl.DataFrame()
+            self._limpar_pagina_tab("aba_anual")
             self.lbl_aba_anual_status.setText("Tabela Anual nao encontrada.")
             self._atualizar_titulo_aba_anual()
             self.atualizar_aba_produtos_selecionados()
@@ -233,6 +240,7 @@ class RelatoriosPeriodosControllerMixin:
             if df is None:
                 self.aba_anual_model.set_dataframe(pl.DataFrame())
                 self._aba_anual_df = pl.DataFrame()
+                self._limpar_pagina_tab("aba_anual")
                 self.lbl_aba_anual_status.setText("Tabela anual nao encontrada.")
                 self._atualizar_titulo_aba_anual()
                 return
@@ -267,10 +275,12 @@ class RelatoriosPeriodosControllerMixin:
     def atualizar_aba_mensal(self) -> None:
         cnpj = self.state.current_cnpj
         if not cnpj:
+            self._limpar_pagina_tab("aba_mensal")
             self._atualizar_titulo_aba_mensal()
             return
 
         if not self._garantir_resumos_estoque_atualizados(cnpj):
+            self._limpar_pagina_tab("aba_mensal")
             self._limpar_aba_resumo_estoque(
                 "aba_mensal", "Sincronizando tabela mensal com a mov_estoque atual..."
             )
@@ -280,6 +290,7 @@ class RelatoriosPeriodosControllerMixin:
         if not path.exists():
             self.aba_mensal_model.set_dataframe(pl.DataFrame())
             self._aba_mensal_df = pl.DataFrame()
+            self._limpar_pagina_tab("aba_mensal")
             self.lbl_aba_mensal_status.setText("Tabela Mensal nao encontrada.")
             self._atualizar_titulo_aba_mensal()
             self.atualizar_aba_produtos_selecionados()
@@ -291,6 +302,7 @@ class RelatoriosPeriodosControllerMixin:
             if df is None:
                 self.aba_mensal_model.set_dataframe(pl.DataFrame())
                 self._aba_mensal_df = pl.DataFrame()
+                self._limpar_pagina_tab("aba_mensal")
                 self.lbl_aba_mensal_status.setText("Tabela mensal nao encontrada.")
                 self._atualizar_titulo_aba_mensal()
                 return
@@ -433,7 +445,7 @@ class RelatoriosPeriodosControllerMixin:
             "aba_mensal",
             "aba_mensal",
             self.aba_mensal_model,
-            self.aba_mensal_model.dataframe,
+            self._tab_df_filtrado.get("aba_mensal", pl.DataFrame()),
             perfil="Exportar",
         )
         if df.is_empty():
@@ -595,7 +607,7 @@ class RelatoriosPeriodosControllerMixin:
             "aba_anual",
             "aba_anual",
             self.aba_anual_model,
-            self.aba_anual_model.dataframe,
+            self._tab_df_filtrado.get("aba_anual", pl.DataFrame()),
             perfil="Exportar",
         )
         if df.is_empty():
