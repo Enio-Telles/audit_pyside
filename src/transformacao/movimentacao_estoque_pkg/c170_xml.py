@@ -282,7 +282,7 @@ def gerar_c170_xml(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
     arq_nfe_agr = pasta_brutos / f"nfe_agr_{cnpj}.parquet"
     arq_nfce_agr = pasta_brutos / f"nfce_agr_{cnpj}.parquet"
 
-    for arq in (arq_c170, arq_c170_agr, arq_nfe_agr, arq_nfce_agr):
+    for arq in (arq_c170, arq_c170_agr):
         if not arq.exists():
             rprint(f"[red]Arquivo necessario nao encontrado:[/red] {arq}")
             return False
@@ -300,16 +300,18 @@ def gerar_c170_xml(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
             ["chv_nfe", "num_item", "cod_item", "id_agrupado", "co_sefin_agr"],
             contexto="c170_xml/c170_agr",
         )
-        validar_parquet_essencial(
-            arq_nfe_agr,
-            ["chave_acesso", "id_agrupado"],
-            contexto="c170_xml/nfe_agr",
-        )
-        validar_parquet_essencial(
-            arq_nfce_agr,
-            ["chave_acesso", "id_agrupado"],
-            contexto="c170_xml/nfce_agr",
-        )
+        if arq_nfe_agr.exists():
+            validar_parquet_essencial(
+                arq_nfe_agr,
+                ["chave_acesso", "id_agrupado"],
+                contexto="c170_xml/nfe_agr",
+            )
+        if arq_nfce_agr.exists():
+            validar_parquet_essencial(
+                arq_nfce_agr,
+                ["chave_acesso", "id_agrupado"],
+                contexto="c170_xml/nfce_agr",
+            )
     except SchemaValidacaoError as exc:
         rprint(f"[red]{exc}[/red]")
         return False
@@ -317,8 +319,16 @@ def gerar_c170_xml(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
     # T01: Usar scan_parquet para processamento lazy
     df_c170_lazy = pl.scan_parquet(arq_c170)
     df_c170_agr_lazy = pl.scan_parquet(arq_c170_agr)
-    df_nfe_agr_lazy = pl.scan_parquet(arq_nfe_agr)
-    df_nfce_agr_lazy = pl.scan_parquet(arq_nfce_agr)
+    
+    if arq_nfe_agr.exists():
+        df_nfe_agr_lazy = pl.scan_parquet(arq_nfe_agr)
+    else:
+        df_nfe_agr_lazy = pl.LazyFrame({"chave_acesso": [], "id_agrupado": []}, schema={"chave_acesso": pl.Utf8, "id_agrupado": pl.Utf8})
+        
+    if arq_nfce_agr.exists():
+        df_nfce_agr_lazy = pl.scan_parquet(arq_nfce_agr)
+    else:
+        df_nfce_agr_lazy = pl.LazyFrame({"chave_acesso": [], "id_agrupado": []}, schema={"chave_acesso": pl.Utf8, "id_agrupado": pl.Utf8})
 
     if df_c170_lazy.select(pl.len()).collect().item() == 0:
         return salvar_para_parquet(pl.DataFrame(), pasta_brutos, f"c170_xml_{cnpj}.parquet")
