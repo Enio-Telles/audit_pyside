@@ -1,0 +1,71 @@
+DifferentialReport — CLI · 84654326000394 · HEAD~1 vs HEAD
+Gerado em: 2026-05-05T16:40:33Z
+Harness: tests/diff_harness/run_harness.py v1.1.0
+FONTE: nfe —————————————————————————————————————————————
+Baseline principal:              5 linhas
+Baseline sem_id_agrupado:        0 linhas
+Novo principal:                  5 linhas
+Novo sem_id_agrupado:            0 linhas
+Novo fora_escopo_canonico:       0 linhas
+Conservacao de massa:      OK (5 == 5)
+Colapso:                   OK
+Divergencias id_agrupado         : 0 / 5 intersecao
+Divergencias id_agregado         : 0 / 5 intersecao
+Divergencias __qtd_decl_final_aud: 0 / 5 intersecao
+Divergencias q_conv              : 0 / 5 intersecao
+Divergencias q_conv_fisica       : 0 / 5 intersecao
+STATUS: APROVADO
+FONTE: nfce —————————————————————————————————————————————
+Baseline principal:              5 linhas
+Baseline sem_id_agrupado:        0 linhas
+Novo principal:                  5 linhas
+Novo sem_id_agrupado:            0 linhas
+Novo fora_escopo_canonico:       0 linhas
+Conservacao de massa:      OK (5 == 5)
+Colapso:                   OK
+Divergencias id_agrupado         : 0 / 5 intersecao
+Divergencias id_agregado         : 0 / 5 intersecao
+Divergencias __qtd_decl_final_aud: 0 / 5 intersecao
+Divergencias q_conv              : 0 / 5 intersecao
+Divergencias q_conv_fisica       : 0 / 5 intersecao
+STATUS: APROVADO
+FONTE: c170 —————————————————————————————————————————————
+Baseline principal:              5 linhas
+Baseline sem_id_agrupado:        0 linhas
+Novo principal:                  5 linhas
+Novo sem_id_agrupado:            0 linhas
+Novo fora_escopo_canonico:       0 linhas
+Conservacao de massa:      OK (5 == 5)
+Colapso:                   OK
+Divergencias id_agrupado         : 0 / 5 intersecao
+Divergencias id_agregado         : 0 / 5 intersecao
+Divergencias __qtd_decl_final_aud: 0 / 5 intersecao
+Divergencias q_conv              : 0 / 5 intersecao
+Divergencias q_conv_fisica       : 0 / 5 intersecao
+STATUS: APROVADO
+FONTE: bloco_h —————————————————————————————————————————————
+Baseline principal:              5 linhas
+Baseline sem_id_agrupado:        0 linhas
+Novo principal:                  5 linhas
+Novo sem_id_agrupado:            0 linhas
+Novo fora_escopo_canonico:       0 linhas
+Conservacao de massa:      OK (5 == 5)
+Colapso:                   OK
+Divergencias id_agrupado         : 0 / 5 intersecao
+Divergencias id_agregado         : 0 / 5 intersecao
+Divergencias __qtd_decl_final_aud: 0 / 5 intersecao
+Divergencias q_conv              : 0 / 5 intersecao
+Divergencias q_conv_fisica       : 0 / 5 intersecao
+STATUS: APROVADO
+DOWNSTREAM: mov_estoque ————————————————————————————————————————
+Baseline:                        5 linhas
+Novo:                            5 linhas
+Delta:                     +0.00%
+STATUS: APROVADO
+DIVERGENCIAS POR CHAVE (5 invariantes) ——————————————————————————————————————
+id_agrupado                   : 0
+id_agregado                   : 0
+__qtd_decl_final_audit__      : 0
+q_conv                        : 0
+q_conv_fisica                 : 0
+RESULTADO FINAL: APROVADO
