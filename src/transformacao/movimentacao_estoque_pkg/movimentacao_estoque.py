@@ -194,6 +194,21 @@ def marcar_mov_rep_por_chave_item(df: pl.DataFrame) -> pl.DataFrame:
 
 
 def filtrar_movimentacoes_por_fonte(df: pl.DataFrame) -> pl.DataFrame:
+    """Filtra movimentacoes de estoque pelo tipo de operacao esperado para cada fonte.
+
+    Aplica a regra: fonte ``c170`` aceita apenas ``1 - ENTRADA``; fontes ``nfe``
+    e ``nfce`` aceitam apenas ``2 - SAIDAS``; demais fontes nao sao filtradas.
+    Retorna o DataFrame intacto se estiver vazio ou se faltar a coluna ``fonte``
+    ou ``Tipo_operacao``.
+
+    Args:
+        df: DataFrame de movimentacoes consolidadas com as colunas ``fonte`` e
+            ``Tipo_operacao``.
+
+    Returns:
+        DataFrame filtrado contendo apenas as linhas compativeis com o tipo de
+        operacao esperado para cada fonte.
+    """
     if df.is_empty() or "fonte" not in df.columns or "Tipo_operacao" not in df.columns:
         return df
 
@@ -480,6 +495,24 @@ def _carregar_vinculo_produto_canonico(
 
 
 def gerar_movimentacao_estoque(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
+    """Gera a tabela consolidada de movimentacao de estoque para um CNPJ.
+
+    Le as fontes brutas mapeadas em ``map_estoque.json`` (C170, NF-e, NF-Ce,
+    Bloco H), vincula cada item ao seu ``id_agrupado`` via tabela de produtos
+    final e mapa de codigos, converte quantidades para a unidade de referencia,
+    calcula saldos anuais e por periodo (usando Numba) e enriquece com a
+    classificacao ``co_sefin``. O resultado e salvo em
+    ``analises/produtos/movimentacao_estoque_<cnpj>.parquet``.
+
+    Args:
+        cnpj: CPF ou CNPJ do contribuinte (somente digitos ou formatado).
+        pasta_cnpj: Raiz do diretorio do CNPJ. Se ``None``, usa o padrao
+            ``dados/CNPJ/<cnpj>``.
+
+    Returns:
+        ``True`` se o arquivo foi gerado com sucesso; ``False`` em caso de
+        arquivos ausentes, erros de schema ou falha ao salvar.
+    """
     cnpj = re.sub(r"\D", "", cnpj)
     if pasta_cnpj is None:
         pasta_cnpj = CNPJ_ROOT / cnpj
