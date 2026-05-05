@@ -125,6 +125,6 @@ jobs:
         run: uv sync
 
       - name: Pytest
-        # gui_smoke runs in the dedicated ubuntu smoke job to avoid flaky Windows Qt headless runs.
-        # No coverage on Windows to keep the job fast; coverage is collected on ubuntu.
-        run: uv run pytest -q -m "not oracle and not gui and not gui_smoke"
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: uv run pytest -q -m "not oracle and not gui"

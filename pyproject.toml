@@ -33,6 +33,7 @@ dependencies = [
 [dependency-groups]
 dev = [
     "pytest>=7.0",
+    "pytest-qt>=4.2.0",
     "pytest-cov>=4.0",
     "pytest-mock>=3.10",
     # pytest-benchmark: aprovado em P8-01 no Notion e pedido do owner em 2026-05-02.
