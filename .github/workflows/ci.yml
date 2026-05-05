@@ -53,6 +53,15 @@ jobs:
       - name: Install dependencies
         run: uv sync
 
+      - name: Install Qt system libraries
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y --no-install-recommends \
+            libegl1 libgl1-mesa-dri libxkbcommon0 libdbus-1-3 \
+            libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 \
+            libxcb-render-util0 libxcb-shape0 libxcb-xinerama0 libxcb-xkb1 \
+            libxkbcommon-x11-0 libfontconfig1 libfreetype6
+
       - name: Pytest with coverage
         # gui_smoke runs in the dedicated ubuntu smoke job to keep coverage isolated.
         # main_window_impl.py (~4500 stmts, 0%) is omitted via [tool.coverage.run].
@@ -128,3 +137,8 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
         run: uv run pytest -q -m "not oracle and not gui"
+
+      - name: GUI Smoke
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: uv run pytest -v -m gui_smoke tests/ui/test_main_window_smoke.py
