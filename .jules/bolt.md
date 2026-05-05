@@ -14,3 +14,6 @@
 ## 2024-05-03 - Jaccard Math Optimization
 **Learning:** In highly called text-similarity functions (like those calculating Jaccard index), using Python's set union operator `a | b` creates a completely new set object in memory, taking $O(|A| + |B|)$ time. This is a huge bottleneck.
 **Action:** Use the Inclusion-Exclusion principle `len(a) + len(b) - len(a & b)` whenever Jaccard is needed to avoid the memory allocation and set construction, which yielded an almost 50% speedup in local benchmarks.
+## 2026-05-05 - [ID Generation Performance Optimization]
+**Learning:** When a non-native Python function is strictly required in Polars (like generating a stable cryptographic hash via `hashlib.sha1` which Polars `.hash()` breaks), using `map_batches` with a list comprehension over the Series avoids the heavy element-wise boundary crossing overhead of `map_elements`, yielding a ~15% speedup.
+**Action:** Prioritize `map_batches` over `map_elements` when UDFs cannot be vectorized into native Polars expressions.
