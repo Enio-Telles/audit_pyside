@@ -165,7 +165,8 @@ class QueryWorker(QThread):
                     if cursor.description
                     else []
                 )
-                all_rows: list[tuple] = []
+                chunks: list[pl.DataFrame] = []
+                total_linhas = 0
 
                 batch_num = 0
                 inicio_fetch = perf_counter()
@@ -174,33 +175,35 @@ class QueryWorker(QThread):
                     rows = cursor.fetchmany(self.fetch_size)
                     if not rows:
                         break
-                    all_rows.extend(rows)
+
+                    chunk_df = pl.DataFrame(
+                        rows,
+                        schema=columns,
+                        orient="row",
+                        infer_schema_length=min(len(rows), 1000),
+                    )
+                    chunks.append(chunk_df)
+                    total_linhas += chunk_df.height
                     batch_num += 1
-                    self.progress.emit(f"Lidas {len(all_rows):,} linhas...")
+                    self.progress.emit(f"Lidas {total_linhas:,} linhas...")
                 registrar_evento_performance(
                     "query_worker.fetchmany",
                     perf_counter() - inicio_fetch,
                     {
                         "fetch_size": self.fetch_size,
                         "batches": batch_num,
-                        "linhas": len(all_rows),
+                        "linhas": total_linhas,
                         "colunas": len(columns),
                     },
                 )
 
             self._raise_if_cancelled()
             inicio_dataframe = perf_counter()
-            if not all_rows:
+            if not chunks:
                 self.progress.emit("Consulta retornou 0 linhas.")
                 df = pl.DataFrame({col: [] for col in columns})
             else:
-                # Otimizacao Bolt: criar DataFrame diretamente de tuplas (muito mais rapido)
-                df = pl.DataFrame(
-                    all_rows,
-                    schema=columns,
-                    orient="row",
-                    infer_schema_length=min(len(all_rows), 1000),
-                )
+                df = pl.concat(chunks)
             registrar_evento_performance(
                 "query_worker.build_dataframe",
                 perf_counter() - inicio_dataframe,
