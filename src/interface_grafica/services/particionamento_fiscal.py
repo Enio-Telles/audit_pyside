@@ -219,6 +219,51 @@ def _subdividir_por_descricao(
     return [c for c in componentes.values() if len(c) >= 1]
 
 
+
+class _ContextoParticionamento:
+    def __init__(self, pendentes: set[int]):
+        self.bloco_por_idx: dict[int, int] = {}
+        self.motivo_por_idx: dict[int, str] = {}
+        self.camada_por_idx: dict[int, int] = {}
+        self.score_por_idx: dict[int, int] = {}
+        self.chave_fiscal_por_idx: dict[int, str] = {}
+        self.proximo_bloco = 1
+        self.pendentes: set[int] = pendentes
+
+    def atribuir(
+        self,
+        comp: list[_Linha],
+        motivo: str,
+        camada: int,
+        score_base: int,
+        chave: str,
+    ) -> None:
+        for l in comp:
+            self.bloco_por_idx[l.idx] = self.proximo_bloco
+            self.motivo_por_idx[l.idx] = motivo
+            self.camada_por_idx[l.idx] = camada
+            self.score_por_idx[l.idx] = score_base
+            self.chave_fiscal_por_idx[l.idx] = chave
+            self.pendentes.discard(l.idx)
+        self.proximo_bloco += 1
+
+
+def _processar_camada_subdividida(
+    linhas: list[_Linha],
+    ctx: _ContextoParticionamento,
+    chave_fn: callable,
+    chave_str_fn: callable,
+    motivo: str,
+    camada: int,
+    score: int,
+    threshold: float,
+    max_bucket_size: int,
+) -> None:
+    grupos = _agrupar_por_chave(linhas, chave_fn=chave_fn, pendentes=ctx.pendentes)
+    for grupo in grupos:
+        for comp in _subdividir_por_descricao(grupo, threshold, max_bucket_size):
+            ctx.atribuir(comp, motivo, camada, score, chave_str_fn(grupo[0]))
+
 def ordenar_blocos_por_particionamento_fiscal(
     df: pl.DataFrame,
     *,
@@ -270,128 +315,86 @@ def ordenar_blocos_por_particionamento_fiscal(
         df, col_desc, col_ncm, col_cest, col_gtin, col_unidade
     )
 
-    bloco_por_idx: dict[int, int] = {}
-    motivo_por_idx: dict[int, str] = {}
-    camada_por_idx: dict[int, int] = {}
-    score_por_idx: dict[int, int] = {}
-    chave_fiscal_por_idx: dict[int, str] = {}
-    proximo_bloco = 1
-    pendentes: set[int] = {l.idx for l in linhas}
-
-    def _atribuir(
-        comp: list[_Linha],
-        bloco_id: int,
-        motivo: str,
-        camada: int,
-        score_base: int,
-        chave: str,
-    ) -> None:
-        for l in comp:
-            bloco_por_idx[l.idx] = bloco_id
-            motivo_por_idx[l.idx] = motivo
-            camada_por_idx[l.idx] = camada
-            score_por_idx[l.idx] = score_base
-            chave_fiscal_por_idx[l.idx] = chave
-            pendentes.discard(l.idx)
+    ctx = _ContextoParticionamento({l.idx for l in linhas})
 
     # --- Camada 0: GTIN igual ---
     grupos = _agrupar_por_chave(
         linhas,
         chave_fn=lambda l: l.gtin if l.gtin else None,
-        pendentes=pendentes,
+        pendentes=ctx.pendentes,
     )
     for grupo in grupos:
-        _atribuir(grupo, proximo_bloco, "GTIN_IGUAL", 0, 100, f"GTIN={grupo[0].gtin}")
-        proximo_bloco += 1
+        ctx.atribuir(grupo, "GTIN_IGUAL", 0, 100, f"GTIN={grupo[0].gtin}")
 
     # --- Camada 1: NCM + CEST + UNIDADE ---
-    grupos = _agrupar_por_chave(
-        linhas,
-        chave_fn=lambda l: f"{l.ncm}|{l.cest}|{l.unidade}"
-                            if (l.ncm and l.cest and l.unidade) else None,
-        pendentes=pendentes,
+    _processar_camada_subdividida(
+        linhas, ctx,
+        chave_fn=lambda l: f"{l.ncm}|{l.cest}|{l.unidade}" if (l.ncm and l.cest and l.unidade) else None,
+        chave_str_fn=lambda l: f"NCM={l.ncm}|CEST={l.cest}|UN={l.unidade}",
+        motivo="NCM+CEST+UNID", camada=1, score=85,
+        threshold=cfg["camada_1"] / 100, max_bucket_size=cfg["max_bucket_size"],
     )
-    for grupo in grupos:
-        for comp in _subdividir_por_descricao(grupo, cfg["camada_1"] / 100, cfg["max_bucket_size"]):
-            _atribuir(
-                comp, proximo_bloco, "NCM+CEST+UNID", 1, 85,
-                f"NCM={grupo[0].ncm}|CEST={grupo[0].cest}|UN={grupo[0].unidade}",
-            )
-            proximo_bloco += 1
 
     # --- Camada 2: NCM + UNIDADE (sem CEST) ---
-    grupos = _agrupar_por_chave(
-        linhas,
-        chave_fn=lambda l: f"{l.ncm}|{l.unidade}"
-                            if (l.ncm and l.unidade) else None,
-        pendentes=pendentes,
+    _processar_camada_subdividida(
+        linhas, ctx,
+        chave_fn=lambda l: f"{l.ncm}|{l.unidade}" if (l.ncm and l.unidade) else None,
+        chave_str_fn=lambda l: f"NCM={l.ncm}|UN={l.unidade}",
+        motivo="NCM+UNID", camada=2, score=75,
+        threshold=cfg["camada_2"] / 100, max_bucket_size=cfg["max_bucket_size"],
     )
-    for grupo in grupos:
-        for comp in _subdividir_por_descricao(grupo, cfg["camada_2"] / 100, cfg["max_bucket_size"]):
-            _atribuir(
-                comp, proximo_bloco, "NCM+UNID", 2, 75,
-                f"NCM={grupo[0].ncm}|UN={grupo[0].unidade}",
-            )
-            proximo_bloco += 1
 
     # --- Camada 3: NCM4 + UNIDADE ---
-    grupos = _agrupar_por_chave(
-        linhas,
-        chave_fn=lambda l: f"{l.ncm4}|{l.unidade}"
-                            if (l.ncm4 and l.unidade) else None,
-        pendentes=pendentes,
+    _processar_camada_subdividida(
+        linhas, ctx,
+        chave_fn=lambda l: f"{l.ncm4}|{l.unidade}" if (l.ncm4 and l.unidade) else None,
+        chave_str_fn=lambda l: f"NCM4={l.ncm4}|UN={l.unidade}",
+        motivo="NCM4+UNID", camada=3, score=65,
+        threshold=cfg["camada_3"] / 100, max_bucket_size=cfg["max_bucket_size"],
     )
-    for grupo in grupos:
-        for comp in _subdividir_por_descricao(grupo, cfg["camada_3"] / 100, cfg["max_bucket_size"]):
-            _atribuir(
-                comp, proximo_bloco, "NCM4+UNID", 3, 65,
-                f"NCM4={grupo[0].ncm4}|UN={grupo[0].unidade}",
-            )
-            proximo_bloco += 1
 
     # --- Camada 5 (opcional): inverted index sobre descricao ---
     if incluir_camada_so_descricao:
         from interface_grafica.services.inverted_index_descricao import (
             agrupar_por_inverted_index,
         )
-        pendentes_lista = [l for l in linhas if l.idx in pendentes]
+        pendentes_lista = [l for l in linhas if l.idx in ctx.pendentes]
         for comp in agrupar_por_inverted_index(
             pendentes_lista, threshold=cfg.get("camada_5", 70) / 100
         ):
             if len(comp) >= 2:
-                _atribuir(
-                    comp, proximo_bloco, "DESC_TOKENS", 5, 60,
+                ctx.atribuir(
+                    comp, "DESC_TOKENS", 5, 60,
                     "INVERTED_INDEX",
                 )
-                proximo_bloco += 1
 
     # --- Camada 4: residual (singletons) ---
-    for idx in sorted(pendentes):
-        bloco_por_idx[idx] = proximo_bloco
-        motivo_por_idx[idx] = "ISOLADO"
-        camada_por_idx[idx] = 4
-        score_por_idx[idx] = 0
-        chave_fiscal_por_idx[idx] = ""
-        proximo_bloco += 1
+    for idx in sorted(ctx.pendentes):
+        ctx.bloco_por_idx[idx] = ctx.proximo_bloco
+        ctx.motivo_por_idx[idx] = "ISOLADO"
+        ctx.camada_por_idx[idx] = 4
+        ctx.score_por_idx[idx] = 0
+        ctx.chave_fiscal_por_idx[idx] = ""
+        ctx.proximo_bloco += 1
 
     # --- Materializa colunas e ordena ---
     n = df.height
     df_out = df.with_columns([
-        pl.Series("sim_bloco", [bloco_por_idx[i] for i in range(n)]),
-        pl.Series("sim_motivo", [motivo_por_idx[i] for i in range(n)]),
-        pl.Series("sim_camada", [camada_por_idx[i] for i in range(n)]),
-        pl.Series("sim_score", [score_por_idx[i] for i in range(n)]),
+        pl.Series("sim_bloco", [ctx.bloco_por_idx[i] for i in range(n)]),
+        pl.Series("sim_motivo", [ctx.motivo_por_idx[i] for i in range(n)]),
+        pl.Series("sim_camada", [ctx.camada_por_idx[i] for i in range(n)]),
+        pl.Series("sim_score", [ctx.score_por_idx[i] for i in range(n)]),
         pl.Series("sim_desc_norm", [linhas[i].desc_norm for i in range(n)]),
-        pl.Series("sim_chave_fiscal", [chave_fiscal_por_idx[i] for i in range(n)]),
+        pl.Series("sim_chave_fiscal", [ctx.chave_fiscal_por_idx[i] for i in range(n)]),
     ])
 
     distribuicao_camada: dict[int, int] = defaultdict(int)
-    for c in camada_por_idx.values():
+    for c in ctx.camada_por_idx.values():
         distribuicao_camada[c] += 1
     _LOG.info(
         "particionamento_fiscal_executado",
         n_linhas=n,
-        n_blocos=proximo_bloco - 1,
+        n_blocos=ctx.proximo_bloco - 1,
         distribuicao_camada=dict(distribuicao_camada),
         incluir_camada_so_descricao=incluir_camada_so_descricao,
     )
