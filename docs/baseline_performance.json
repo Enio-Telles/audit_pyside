@@ -1,78 +1,141 @@
 {
   "meta": {
-    "timestamp": "2026-05-04T20:32:53",
-    "hostname": "NOTEBOOKVAIO",
-    "python": "3.13.9",
-    "threshold_mb": 512,
-    "page_size": 200,
-    "rounds": 5
+    "timestamp": "2026-05-05T16:50:56",
+    "python": "3.12.13",
+    "rounds": 1
   },
   "results": [
     {
       "size_mb": 256,
       "backend": "polars",
       "operation": "ttfp",
-      "mean_s": 0.0613,
-      "median_s": 0.0036,
-      "p95_s": 0.292,
-      "cv_pct": 210.32,
-      "mean_rss_delta_mb": 4.8,
-      "rounds": 5
+      "mean_s": 0.0387,
+      "median_s": 0.0387,
+      "p95_s": 0.0387,
+      "cv_pct": 0.0,
+      "mean_rss_delta_mb": 24.54,
+      "rounds": 1
     },
     {
       "size_mb": 256,
       "backend": "polars",
-      "operation": "page_2",
-      "mean_s": 0.005,
-      "median_s": 0.0012,
-      "p95_s": 0.0203,
-      "cv_pct": 172.75,
-      "mean_rss_delta_mb": 1.33,
-      "rounds": 5
+      "operation": "page_change",
+      "mean_s": 0.0267,
+      "median_s": 0.0267,
+      "p95_s": 0.0267,
+      "cv_pct": 0.0,
+      "mean_rss_delta_mb": 6.88,
+      "rounds": 1
     },
     {
       "size_mb": 256,
       "backend": "polars",
-      "operation": "page_3",
-      "mean_s": 0.0051,
-      "median_s": 0.0008,
-      "p95_s": 0.0223,
-      "cv_pct": 186.97,
-      "mean_rss_delta_mb": 1.35,
-      "rounds": 5
+      "operation": "filter_apply",
+      "mean_s": 0.3182,
+      "median_s": 0.3182,
+      "p95_s": 0.3182,
+      "cv_pct": 0.0,
+      "mean_rss_delta_mb": 343.94,
+      "rounds": 1
     },
     {
       "size_mb": 256,
       "backend": "polars",
-      "operation": "page_10",
-      "mean_s": 0.0049,
-      "median_s": 0.001,
-      "p95_s": 0.0202,
-      "cv_pct": 176.76,
-      "mean_rss_delta_mb": 1.29,
-      "rounds": 5
+      "operation": "export_50k",
+      "mean_s": 0.0628,
+      "median_s": 0.0628,
+      "p95_s": 0.0628,
+      "cv_pct": 0.0,
+      "mean_rss_delta_mb": -230.94,
+      "rounds": 1
     },
     {
-      "size_mb": 256,
-      "backend": "polars",
-      "operation": "filter_contem",
-      "mean_s": 0.3842,
-      "median_s": 0.2006,
-      "p95_s": 1.1383,
-      "cv_pct": 109.76,
-      "mean_rss_delta_mb": 330.92,
-      "rounds": 5
+      "size_mb": 1000,
+      "backend": "duckdb",
+      "operation": "ttfp",
+      "mean_s": 0.1207,
+      "median_s": 0.1207,
+      "p95_s": 0.1207,
+      "cv_pct": 0.0,
+      "mean_rss_delta_mb": -72.99,
+      "rounds": 1
     },
     {
-      "size_mb": 256,
-      "backend": "polars",
-      "operation": "distinct",
-      "mean_s": 0.3585,
-      "median_s": 0.338,
-      "p95_s": 0.5041,
-      "cv_pct": 23.79,
-      "mean_rss_delta_mb": 99.64,
-      "rounds": 5
+      "size_mb": 1000,
+      "backend": "duckdb",
+      "operation": "page_change",
+      "mean_s": 0.062,
+      "median_s": 0.062,
+      "p95_s": 0.062,
+      "cv_pct": 0.0,
+      "mean_rss_delta_mb": 15.43,
+      "rounds": 1
+    },
+    {
+      "size_mb": 1000,
+      "backend": "duckdb",
+      "operation": "filter_apply",
+      "mean_s": 0.9477,
+      "median_s": 0.9477,
+      "p95_s": 0.9477,
+      "cv_pct": 0.0,
+      "mean_rss_delta_mb": 16.48,
+      "rounds": 1
+    },
+    {
+      "size_mb": 1000,
+      "backend": "duckdb",
+      "operation": "export_50k",
+      "mean_s": 0.0772,
+      "median_s": 0.0772,
+      "p95_s": 0.0772,
+      "cv_pct": 0.0,
+      "mean_rss_delta_mb": 45.06,
+      "rounds": 1
+    },
+    {
+      "size_mb": 1500,
+      "backend": "duckdb",
+      "operation": "ttfp",
+      "mean_s": 0.5008,
+      "median_s": 0.5008,
+      "p95_s": 0.5008,
+      "cv_pct": 0.0,
+      "mean_rss_delta_mb": 70.88,
+      "rounds": 1
+    },
+    {
+      "size_mb": 1500,
+      "backend": "duckdb",
+      "operation": "page_change",
+      "mean_s": 0.0776,
+      "median_s": 0.0776,
+      "p95_s": 0.0776,
+      "cv_pct": 0.0,
+      "mean_rss_delta_mb": 4.73,
+      "rounds": 1
+    },
+    {
+      "size_mb": 1500,
+      "backend": "duckdb",
+      "operation": "filter_apply",
+      "mean_s": 2.1735,
+      "median_s": 2.1735,
+      "p95_s": 2.1735,
+      "cv_pct": 0.0,
+      "mean_rss_delta_mb": -3.57,
+      "rounds": 1
+    },
+    {
+      "size_mb": 1500,
+      "backend": "duckdb",
+      "operation": "export_50k",
+      "mean_s": 0.1413,
+      "median_s": 0.1413,
+      "p95_s": 0.1413,
+      "cv_pct": 0.0,
+      "mean_rss_delta_mb": 45.33,
+      "rounds": 1
     }
   ]
 }
