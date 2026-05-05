@@ -1,7 +1,11 @@
-💡 What: Translated the Python string normalization logic inside `expr_normalizar_codigo_fonte` to native, vectorized Polars expressions.
+🧪 Add Unit Tests for QueryWorker
 
-🎯 Why: The original implementation used `.map_elements` to call a Python function (`normalizar_codigo_fonte`) on every row. In Polars, this breaks vectorization by repeatedly serializing data from Rust/Arrow to Python objects and back, causing a massive performance bottleneck on large datasets.
+🎯 **What:** Implemented the missing unit tests for `src/interface_grafica/services/query_worker.py`. The `QueryWorker` manages asynchronous database queries using PySide6's `QThread`.
 
-📊 Impact: Complete elimination of Python overhead. Native Polars expressions run 10x-100x faster, directly inside Rust. The transformation mirrors the original edge cases exactly without compromising schema integrity.
+📊 **Coverage:** The new test file `tests/ui/test_query_worker.py` covers the following key scenarios:
+- **Happy Path**: Verifies successful execution, DataFrame construction, and signal emission (`progress`, `finished_ok`).
+- **Cancellation**: Ensures that queries interrupted by the user (`isInterruptionRequested` returning True) gracefully abort and emit the appropriate `failed` signal.
+- **Error Path (Sentinel Check)**: Validates that exceptions raised during query execution are caught and a generic, sanitized error message is emitted to the UI via the `failed` signal, ensuring internal database details are not leaked.
+- **Fallback Path**: Confirms that when the main connection import fails, the worker seamlessly delegates to the fallback mechanism `_conectar_oracle_fallback`.
 
-🔬 Measurement: Review code to confirm the vectorized logic matches the intent of `normalizar_codigo_fonte`. Performance benefits can be measured directly against any large dataset run using the function.
+✨ **Result:** Test coverage for `query_worker.py` is established. The testing approach synchronously invokes `.run()` while mocking threading dependencies to keep tests fast, robust, and deterministic. Also addressed an environment issue causing PySide6 tests to abort in CI by dynamically installing `pytest-qt` and forcing headless mode (`QT_QPA_PLATFORM=offscreen`).
