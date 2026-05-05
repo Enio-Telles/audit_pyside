@@ -127,7 +127,14 @@ def ordenar_blocos_apenas_por_descricao(
     )
 
     if df.is_empty():
-        return df
+        return df.with_columns(
+            [
+                pl.lit(1, dtype=pl.Int64).alias("sim_bloco"),
+                pl.lit("DESC_TOKENS", dtype=pl.Utf8).alias("sim_motivo"),
+                pl.lit(5, dtype=pl.Int64).alias("sim_camada"),
+                pl.lit("", dtype=pl.Utf8).alias("sim_desc_norm"),
+            ]
+        )
 
     col_desc = _resolver_coluna(df, COLUNAS_DESCRICAO)
     if col_desc is None:
