@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 import re
 from pathlib import Path
 from typing import Any
@@ -17,16 +16,6 @@ router = APIRouter()
 # Arquivos protegidos — não podem ser excluídos pela API
 _PROTECTED_PREFIX = "arquivos_parquet"
 _VALID_NAME_RE = re.compile(r"^[\w\-\.]+$")
-
-
-def _safe_value(v: Any) -> Any:
-    if v is None:
-        return None
-    if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
-        return None
-    if isinstance(v, list):
-        return [_safe_value(x) for x in v]
-    return v
 
 
 @router.get("/files")
@@ -49,7 +38,7 @@ def execute_sql(req: SqlRequest):
         sql = SqlService.read_sql(req.sql_id)
         svc = SqlService()
         result = svc.executar_sql(sql, params=req.params, cnpj=req.cnpj)
-        rows = [_safe_value(dict(row)) for row in (result or [])]
+        rows = result or []
         return {"rows": rows, "count": len(rows)}
     except Exception as exc:
         raise HTTPException(500, "Erro interno ao executar SQL.") from exc
