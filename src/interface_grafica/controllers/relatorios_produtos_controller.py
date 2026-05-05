@@ -11,102 +11,82 @@ from interface_grafica.controllers.workers import ServiceTaskWorker
 
 
 class RelatoriosProdutosControllerMixin:
-    def atualizar_aba_produtos_selecionados(self) -> None:
-        cnpj = self.state.current_cnpj
-        if not cnpj:
+
+    def _limpar_dados_produtos_selecionados(self) -> None:
+        self.produtos_selecionados_model.set_dataframe(pl.DataFrame())
+        self._produtos_selecionados_df = pl.DataFrame()
+        self._produtos_selecionados_mov_df = pl.DataFrame()
+        self._produtos_selecionados_mensal_df = pl.DataFrame()
+        self._produtos_selecionados_anual_df = pl.DataFrame()
+        self.lbl_produtos_sel_status.setText(
+            "Selecione um CNPJ para consolidar os produtos analisados."
+        )
+        self.lbl_produtos_sel_resumo.setText(
+            "Recorte atual: mov_estoque 0 | mensal 0 | anual 0"
+        )
+        self._atualizar_titulo_aba_produtos_selecionados()
+
+    def _finalizar_carga_produtos_sel(self, df: pl.DataFrame | None, uniques: dict | None = None) -> None:
+        if df is None:
             self.produtos_selecionados_model.set_dataframe(pl.DataFrame())
             self._produtos_selecionados_df = pl.DataFrame()
-            self._produtos_selecionados_mov_df = pl.DataFrame()
-            self._produtos_selecionados_mensal_df = pl.DataFrame()
-            self._produtos_selecionados_anual_df = pl.DataFrame()
             self.lbl_produtos_sel_status.setText(
-                "Selecione um CNPJ para consolidar os produtos analisados."
-            )
-            self.lbl_produtos_sel_resumo.setText(
-                "Recorte atual: mov_estoque 0 | mensal 0 | anual 0"
+                "Tabela de produtos selecionados nao encontrada para este CNPJ."
             )
             self._atualizar_titulo_aba_produtos_selecionados()
             return
+        self._produtos_selecionados_df = df
+        self._reset_table_resize_flag("produtos_selecionados")
 
-        path = (
-            CNPJ_ROOT / cnpj / "analises" / "produtos" / f"aba_produtos_selecionados_{cnpj}.parquet"
+        id_atual = self.produtos_sel_filter_id.currentText()
+        if uniques and "id_agregado" in uniques:
+            self._popular_combo_texto(
+                self.produtos_sel_filter_id,
+                [str(i) for i in uniques["id_agregado"]],
+                id_atual,
+                "",
+            )
+
+        anos = self._anos_disponiveis_produtos_selecionados()
+        anos_texto = [str(a) for a in anos]
+        self._popular_combo_texto(
+            self.produtos_sel_filter_ano_ini,
+            anos_texto,
+            self.produtos_sel_filter_ano_ini.currentText(),
+            "Todos",
+        )
+        self._popular_combo_texto(
+            self.produtos_sel_filter_ano_fim,
+            anos_texto,
+            self.produtos_sel_filter_ano_fim.currentText(),
+            "Todos",
         )
 
-        def _finalizar_carga_produtos_sel(
-            df: pl.DataFrame | None, uniques: dict | None = None
-        ) -> None:
-            if df is None:
-                self.produtos_selecionados_model.set_dataframe(pl.DataFrame())
-                self._produtos_selecionados_df = pl.DataFrame()
-                self.lbl_produtos_sel_status.setText(
-                    "Tabela de produtos selecionados nao encontrada para este CNPJ."
-                )
-                self._atualizar_titulo_aba_produtos_selecionados()
-                return
-            self._produtos_selecionados_df = df
-            self._reset_table_resize_flag("produtos_selecionados")
+        self.aplicar_filtros_produtos_selecionados()
+        self._atualizar_titulo_aba_produtos_selecionados()
 
-            id_atual = self.produtos_sel_filter_id.currentText()
-            if uniques and "id_agregado" in uniques:
-                self._popular_combo_texto(
-                    self.produtos_sel_filter_id,
-                    [str(i) for i in uniques["id_agregado"]],
-                    id_atual,
-                    "",
-                )
+    def _worker_consolidar_produtos_selecionados(self) -> dict:
+        df = self._coletar_base_produtos_selecionados()
+        # Extração de IDs únicos igual ao async loader
+        ids = (
+            df.get_column("id_agrupado")
+            .cast(pl.Utf8, strict=False)
+            .drop_nulls()
+            .unique()
+            .sort()
+            .to_list()
+            if "id_agrupado" in df.columns
+            else []
+        )
+        return {"df": df, "uniques": {"id_agregado": ids}}
 
-            anos = self._anos_disponiveis_produtos_selecionados()
-            anos_texto = [str(a) for a in anos]
-            self._popular_combo_texto(
-                self.produtos_sel_filter_ano_ini,
-                anos_texto,
-                self.produtos_sel_filter_ano_ini.currentText(),
-                "Todos",
-            )
-            self._popular_combo_texto(
-                self.produtos_sel_filter_ano_fim,
-                anos_texto,
-                self.produtos_sel_filter_ano_fim.currentText(),
-                "Todos",
-            )
-
-            self.aplicar_filtros_produtos_selecionados()
-            self._atualizar_titulo_aba_produtos_selecionados()
-
-        if path.exists():
-            self.lbl_id_agrupados_status.setText(
-                "⏳ Carregando base de produtos selecionados em segundo plano..."
-            )
-            self._carregar_dados_parquet_async(
-                path,
-                _finalizar_carga_produtos_sel,
-                "Carregando Produtos Selecionados",
-                unique_cols=["id_agregado"],
-            )
-            return
-
-        # Fallback para consolidar em tempo real (também em background para não travar)
-        def _worker_consolidar():
-            df = self._coletar_base_produtos_selecionados()
-            # Extração de IDs únicos igual ao async loader
-            ids = (
-                df.get_column("id_agrupado")
-                .cast(pl.Utf8, strict=False)
-                .drop_nulls()
-                .unique()
-                .sort()
-                .to_list()
-                if "id_agrupado" in df.columns
-                else []
-            )
-            return {"df": df, "uniques": {"id_agregado": ids}}
-
+    def _iniciar_consolidacao_produtos_background(self) -> None:
         self.lbl_produtos_sel_status.setText(
             "⏳ Consolidando produtos em tempo real no background..."
         )
-        worker = ServiceTaskWorker(_worker_consolidar)
+        worker = ServiceTaskWorker(self._worker_consolidar_produtos_selecionados)
         worker.finished_ok.connect(
-            lambda res: _finalizar_carga_produtos_sel(res["df"], res["uniques"])
+            lambda res: self._finalizar_carga_produtos_sel(res["df"], res["uniques"])
         )
         worker.failed.connect(
             lambda err: self.show_error(
@@ -122,6 +102,30 @@ class RelatoriosProdutosControllerMixin:
         worker.finished.connect(lambda: self._active_load_workers.discard(worker))
         worker.finished.connect(worker.deleteLater)
         worker.start()
+
+    def atualizar_aba_produtos_selecionados(self) -> None:
+        cnpj = self.state.current_cnpj
+        if not cnpj:
+            self._limpar_dados_produtos_selecionados()
+            return
+
+        path = (
+            CNPJ_ROOT / cnpj / "analises" / "produtos" / f"aba_produtos_selecionados_{cnpj}.parquet"
+        )
+
+        if path.exists():
+            self.lbl_id_agrupados_status.setText(
+                "⏳ Carregando base de produtos selecionados em segundo plano..."
+            )
+            self._carregar_dados_parquet_async(
+                path,
+                self._finalizar_carga_produtos_sel,
+                "Carregando Produtos Selecionados",
+                unique_cols=["id_agregado"],
+            )
+            return
+
+        self._iniciar_consolidacao_produtos_background()
 
     def _coletar_base_produtos_selecionados(self) -> pl.DataFrame:
         bases: list[pl.DataFrame] = []
