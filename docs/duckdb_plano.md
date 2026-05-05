@@ -76,26 +76,26 @@ exportacoes.
 |----|--------|----------|
 | 5.1 | `perf/export-duckdb-copy-large-results` | Exportar via `COPY (...) TO ... (FORMAT PARQUET, COMPRESSION ZSTD)`. Excel bloqueado acima do limite. |
 
-### Fase 6 — Parquet particionado
+### Fase 6 — MCP DuckDB e benchmarks grandes
 
 | PR | Branch | Objetivo |
 |----|--------|----------|
-| 6.1 | `feat/parquet-query-file-or-dataset-dir` | Servico aceita arquivo unico ou diretorio particionado. Hive partitioning. |
-| 6.2 | `feat/parquet-partition-mov-estoque` | Salvar mov_estoque particionado por `ano / id_bucket`. |
-| 6.3 | `feat/parquet-partition-large-source-tables` | Aplicar particionamento a fontes grandes (>= 2 GB). |
+| 6.1 | `feat/tools-duckdb-mcp` | MCP DuckDB local (`mcp_server/server_duck.py`) com tools: `healthcheck`, `execute_sql`, `query_preview`, `explain_sql`, `list_tables`, `describe_table`, `create_table_from_file`, `export_query`, `run_maintenance`, `inspect_parquet`, `preview_parquet`. Ver D6 em `docs/Plano_duck/01_decisoes_pendentes.md`. |
+| 6.2 | `test/large-parquet-mcp-benchmarks` | Benchmarks reproduziveis para arquivos 256 MB / 1 GB / 2 GB via MCP. |
 
-### Fase 7 — Escrita streaming
-
-| PR | Branch | Objetivo |
-|----|--------|----------|
-| 7.1 | `perf/parquet-streaming-writes` | `salvar_para_parquet_streaming(lf, path, ...)` via `sink_parquet` ou PyArrow Dataset. |
-
-### Fase 8 — MCP DuckDB e benchmarks grandes
+### Fase 7 — Parquet particionado
 
 | PR | Branch | Objetivo |
 |----|--------|----------|
-| 8.1 | `feat/tools-duckdb-mcp` | MCP DuckDB local (`tools/duckdb-mcp/server.py`) com tools: `healthcheck`, `execute_sql`, `query_preview`, `explain_sql`, `list_tables`, `describe_table`, `create_table_from_file`, `export_query`, `run_maintenance`, `inspect_parquet`, `preview_parquet`. |
-| 8.2 | `test/large-parquet-gui-benchmarks` | Benchmarks reproduziveis para arquivos 256 MB / 1 GB / 2 GB. |
+| 7.1 | `feat/parquet-query-file-or-dataset-dir` | Servico aceita arquivo unico ou diretorio particionado. Hive partitioning. |
+| 7.2 | `feat/parquet-partition-mov-estoque` | Salvar mov_estoque particionado por `ano / id_bucket`. |
+| 7.3 | `feat/parquet-partition-large-source-tables` | Aplicar particionamento a fontes grandes (>= 2 GB). |
+
+### Fase 8 — Escrita streaming
+
+| PR | Branch | Objetivo |
+|----|--------|----------|
+| 8.1 | `perf/parquet-streaming-writes` | `salvar_para_parquet_streaming(lf, path, ...)` via `sink_parquet` ou PyArrow Dataset. |
 
 ---
 
@@ -165,8 +165,8 @@ lf.sink_parquet(
 | Pacote | Versao minima | Adicionado em |
 |--------|--------------|---------------|
 | `duckdb` | `>=1.1.0` | PR 1.1 |
-| `mcp` | `>=1.7.0` | PR 8.1 |
-| `pydantic` | `>=2.0.0` | PR 8.1 |
+| `mcp` | `>=1.7.0` | PR 6.1 |
+| `pydantic` | `>=2.0.0` | PR 6.1 |
 
 `python-dotenv>=1.0.0` ja esta em `pyproject.toml`.
 
@@ -182,7 +182,7 @@ source = str(path / "**/*.parquet") if path.is_dir() else str(path)
 
 ---
 
-## Criterios de performance (benchmarks — Fase 8.2)
+## Criterios de performance (benchmarks — Fase 6.2)
 
 | Operacao | Criterio |
 |----------|----------|
