@@ -9,6 +9,7 @@ import structlog
 from typing import Callable
 
 import polars as pl
+from interface_grafica.utils.parquet_guard import log_parquet_open
 from openpyxl import Workbook
 from openpyxl.styles import Font as OpenPyxlFont
 from PySide6.QtCore import QDate, QThread, Qt, Signal, QUrl, QByteArray, QTimer
@@ -4934,6 +4935,7 @@ class MainWindow(QMainWindow):
         def _worker_load():
             if not path.exists():
                 return None
+            log_parquet_open(path)
             df = pl.read_parquet(path)
             if not unique_cols:
                 return df

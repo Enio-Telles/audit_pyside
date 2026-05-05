@@ -18,6 +18,7 @@ from time import perf_counter
 from typing import Any, Callable
 
 import polars as pl
+from interface_grafica.utils.parquet_guard import log_parquet_open
 
 from extracao.extracao_oracle_eficiente import _gravar_cursor_em_parquet
 from interface_grafica.config import CNPJ_ROOT, SQL_DIR
@@ -230,6 +231,7 @@ class ServicoExtracao:
         if not arquivo.exists():
             return None
         try:
+            log_parquet_open(arquivo)
             df = pl.read_parquet(arquivo, columns=["data_entrega"])
             if df.is_empty():
                 return None

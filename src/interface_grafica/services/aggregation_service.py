@@ -17,6 +17,7 @@ from utilitarios.perf_monitor import registrar_evento_performance
 from utilitarios.text import expr_normalizar_descricao
 
 from interface_grafica.config import CNPJ_ROOT
+from interface_grafica.utils.parquet_guard import log_parquet_open
 
 
 try:
@@ -184,6 +185,7 @@ class ServicoAgregacao:
             if progresso:
                 progresso(f"[MEM] Antes de ler {nome}: {meminfo()}")
             t0 = perf_counter()
+            log_parquet_open(path)
             df = pl.read_parquet(path)
             t1 = perf_counter()
             cache[path] = df
@@ -740,6 +742,7 @@ class ServicoAgregacao:
         selecionadas = [col for col in colunas if col in schema_cols]
         if not selecionadas:
             return pl.DataFrame()
+        log_parquet_open(path)
         return pl.read_parquet(path, columns=selecionadas)
 
     @staticmethod
@@ -975,6 +978,7 @@ class ServicoAgregacao:
         try:
             path_base = self.caminho_tabela_base(cnpj)
             if path_base.exists():
+                log_parquet_open(path_base)
                 df_base = pl.read_parquet(path_base)
                 df_existentes = df_base.select([c for c in ["id_descricao", "descricao_normalizada"] if c in df_base.columns]).unique()
                 cols_join = [c for c in ["id_descricao", "descricao_normalizada"] if c in df_out.columns]
@@ -1243,6 +1247,7 @@ class ServicoAgregacao:
         if not path.exists():
             return pl.DataFrame()
 
+        log_parquet_open(path)
         df_agrup = pl.read_parquet(path)
         arq_pont = (
             CNPJ_ROOT
@@ -1252,6 +1257,7 @@ class ServicoAgregacao:
             / f"map_produto_agrupado_{cnpj}.parquet"
         )
         if arq_pont.exists() and "lista_chave_produto" not in df_agrup.columns:
+            log_parquet_open(arq_pont)
             df_pont = pl.read_parquet(arq_pont)
             df_list = df_pont.group_by("id_agrupado").agg(
                 pl.col("chave_produto").alias("lista_chave_produto")

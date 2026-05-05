@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from collections import OrderedDict
 from dataclasses import dataclass
@@ -467,9 +467,33 @@ class ParquetService:
         parquet_path: Path,
         conditions: list[FilterCondition] | None = None,
         columns: list[str] | None = None,
+        allow_full_load: bool = False,
     ) -> pl.DataFrame:
+        from interface_grafica.exceptions import LargeParquetForbiddenError
         from utilitarios.perf_monitor import _rss_bytes
         inicio = perf_counter()
+        
+        # Guard rail: Verifica tamanho do arquivo antes de carregar
+        try:
+            size_mb = parquet_path.stat().st_size / (1024 * 1024)
+            if size_mb > LARGE_PARQUET_THRESHOLD_MB and not allow_full_load:
+                registrar_evento_performance(
+                    "parquet_service.load_dataset.blocked",
+                    0.0,
+                    {
+                        "parquet_path": parquet_path,
+                        "size_mb": round(size_mb, 2),
+                        "threshold_mb": LARGE_PARQUET_THRESHOLD_MB,
+                    },
+                    status="error",
+                )
+                raise LargeParquetForbiddenError(
+                    str(parquet_path), round(size_mb, 2), LARGE_PARQUET_THRESHOLD_MB
+                )
+        except OSError:
+            # Se não conseguir ler o tamanho, prossegue com cautela (ou loga erro)
+            pass
+
         arquivo_grande = self.is_large_parquet(parquet_path)
         if arquivo_grande:
             registrar_evento_performance(
