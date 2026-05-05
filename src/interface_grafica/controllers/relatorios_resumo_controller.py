@@ -193,83 +193,51 @@ class RelatoriosResumoControllerMixin:
             return None
         return value
 
-    def atualizar_aba_resumo_global(self) -> None:
-        cnpj = self.state.current_cnpj
-        if not cnpj:
-            return
+    def _processar_resumo_global_produtos_selecionados(
+        self, ids_marcados: list[str], dt_ini, dt_fim, tem_filtro_data: bool
+    ) -> None:
+        try:
+            n = len(ids_marcados)
+            ini_str = dt_ini.toString("dd/MM/yyyy") if dt_ini else "inicio"
+            fim_str = dt_fim.toString("dd/MM/yyyy") if dt_fim else "fim"
+            partes = [f"{n} produtos marcados"]
+            if tem_filtro_data:
+                partes.append(f"periodo {ini_str} a {fim_str}")
+            self.lbl_resumo_global_status.setText(f"⏳ Consolidando resumo: {', '.join(partes)}...")
 
-        dt_ini = self._resumo_global_qdate_ativo("resumo_global_filter_data_ini")
-        dt_fim = self._resumo_global_qdate_ativo("resumo_global_filter_data_fim")
-        tem_filtro_data = dt_ini is not None or dt_fim is not None
-
-        filtrar_selecionados = self._resumo_global_filtrar_selecionados()
-        ids_marcados = (
-            self._ids_produtos_selecionados_para_exportacao() if filtrar_selecionados else []
-        )
-        tem_aba_produtos = (
-            filtrar_selecionados
-            and hasattr(self, "_produtos_selecionados_df")
-            and not self._produtos_selecionados_df.is_empty()
-        )
-
-        if tem_aba_produtos and not ids_marcados:
-            self.lbl_resumo_global_status.setText(
-                "Marque produtos na aba 'Produtos selecionados' para exibir o resumo."
+            mensal = self._filtrar_dataframe_por_ids(
+                self._produtos_selecionados_mensal_df, ids_marcados
             )
-            self._resumo_global_df = pl.DataFrame()
-            self.resumo_global_model.set_dataframe(pl.DataFrame())
-            self._atualizar_totais_resumo_global(pl.DataFrame())
-            return
+            anual = self._filtrar_dataframe_por_ids(
+                self._produtos_selecionados_anual_df, ids_marcados
+            )
+            periodos = self._filtrar_dataframe_por_ids(
+                self._produtos_selecionados_periodos_df, ids_marcados
+            )
 
-        if ids_marcados:
-            try:
-                n = len(ids_marcados)
-                ini_str = dt_ini.toString("dd/MM/yyyy") if dt_ini else "inicio"
-                fim_str = dt_fim.toString("dd/MM/yyyy") if dt_fim else "fim"
-                partes = [f"{n} produtos marcados"]
-                if tem_filtro_data:
-                    partes.append(f"periodo {ini_str} a {fim_str}")
-                self.lbl_resumo_global_status.setText(
-                    f"⏳ Consolidando resumo: {', '.join(partes)}..."
+            if tem_filtro_data:
+                mensal = self._filtrar_dataframe_produtos_selecionados_por_data(
+                    mensal, dt_ini, dt_fim, "mensal"
+                )
+                anual = self._filtrar_dataframe_produtos_selecionados_por_data(
+                    anual, dt_ini, dt_fim, "anual"
                 )
 
-                mensal = self._filtrar_dataframe_por_ids(
-                    self._produtos_selecionados_mensal_df, ids_marcados
-                )
-                anual = self._filtrar_dataframe_por_ids(
-                    self._produtos_selecionados_anual_df, ids_marcados
-                )
-                periodos = self._filtrar_dataframe_por_ids(
-                    self._produtos_selecionados_periodos_df, ids_marcados
-                )
+            anos_base = self._anos_base_resumo(dt_ini, dt_fim)
+            resumo = self._gerar_resumo_global(mensal, anual, periodos, anos_base)
+            self._resumo_global_df = resumo
+            self.resumo_global_model.set_dataframe(resumo)
+            self._atualizar_totais_resumo_global(resumo)
 
-                if tem_filtro_data:
-                    mensal = self._filtrar_dataframe_produtos_selecionados_por_data(
-                        mensal, dt_ini, dt_fim, "mensal"
-                    )
-                    anual = self._filtrar_dataframe_produtos_selecionados_por_data(
-                        anual, dt_ini, dt_fim, "anual"
-                    )
+            partes_label = [f"Resumo global: {n} produtos marcados"]
+            if tem_filtro_data:
+                partes_label.append(f"periodo {ini_str} a {fim_str}")
+            partes_label.append(f"{resumo.height} competencias")
+            self.lbl_resumo_global_status.setText(", ".join(partes_label) + ".")
+        except Exception as e:
+            self.show_error("Erro de consolidacao", f"Erro ao filtrar Resumo Global: {e}")
 
-                anos_base = self._anos_base_resumo(dt_ini, dt_fim)
-                resumo = self._gerar_resumo_global(mensal, anual, periodos, anos_base)
-                self._resumo_global_df = resumo
-                self.resumo_global_model.set_dataframe(resumo)
-                self._atualizar_totais_resumo_global(resumo)
-
-                partes_label = [f"Resumo global: {n} produtos marcados"]
-                if tem_filtro_data:
-                    partes_label.append(f"periodo {ini_str} a {fim_str}")
-                partes_label.append(f"{resumo.height} competencias")
-                self.lbl_resumo_global_status.setText(", ".join(partes_label) + ".")
-                return
-            except Exception as e:
-                self.show_error("Erro de consolidacao", f"Erro ao filtrar Resumo Global: {e}")
-                return
-
-        # Sem produtos selecionados: comportamento anterior (parquet ou calculo em tempo real)
-        path = CNPJ_ROOT / cnpj / "analises" / "produtos" / f"aba_resumo_global_{cnpj}.parquet"
-
+    def _carregar_resumo_global_parquet(self, path: Path, dt_ini, dt_fim) -> None:
         def _finalizar_carga_resumo(df: pl.DataFrame | None, uniques: dict | None = None) -> None:
             if df is None:
                 self._resumo_global_df = pl.DataFrame()
@@ -309,13 +277,12 @@ class RelatoriosResumoControllerMixin:
                 f"Resumo global carregado (total {df.height} competencias)."
             )
 
-        if path.exists():
-            self.lbl_resumo_global_status.setText("⏳ Carregando resumo global...")
-            self._carregar_dados_parquet_async(
-                path, _finalizar_carga_resumo, "Carregando Resumo Global"
-            )
-            return
+        self.lbl_resumo_global_status.setText("⏳ Carregando resumo global...")
+        self._carregar_dados_parquet_async(
+            path, _finalizar_carga_resumo, "Carregando Resumo Global"
+        )
 
+    def _verificar_dependencias_resumo_global(self, cnpj: str) -> bool:
         if self._aba_mensal_df.is_empty() or self._aba_anual_df.is_empty():
             path_mensal = CNPJ_ROOT / cnpj / "analises" / "produtos" / f"aba_mensal_{cnpj}.parquet"
             path_anual = CNPJ_ROOT / cnpj / "analises" / "produtos" / f"aba_anual_{cnpj}.parquet"
@@ -332,7 +299,7 @@ class RelatoriosResumoControllerMixin:
                 self.lbl_resumo_global_status.setText(
                     "⏳ Carregando dependencias (Mensal/Anual)... Ao terminar, o resumo sera atualizado."
                 )
-                return
+                return True
             else:
                 self.resumo_global_model.set_dataframe(pl.DataFrame())
                 self._resumo_global_df = pl.DataFrame()
@@ -340,8 +307,10 @@ class RelatoriosResumoControllerMixin:
                 self.lbl_resumo_global_status.setText(
                     "Aguarde o processamento das abas Mensal e Anual."
                 )
-                return
+                return True
+        return False
 
+    def _calcular_resumo_global(self, dt_ini, dt_fim, tem_filtro_data: bool) -> None:
         try:
             mensal = self._aba_mensal_df
             anual = self._aba_anual_df
@@ -363,6 +332,52 @@ class RelatoriosResumoControllerMixin:
             )
         except Exception as e:
             self.show_error("Erro de consolidacao", f"Erro ao calcular Resumo Global: {e}")
+
+    def atualizar_aba_resumo_global(self) -> None:
+        cnpj = self.state.current_cnpj
+        if not cnpj:
+            return
+
+        dt_ini = self._resumo_global_qdate_ativo("resumo_global_filter_data_ini")
+        dt_fim = self._resumo_global_qdate_ativo("resumo_global_filter_data_fim")
+        tem_filtro_data = dt_ini is not None or dt_fim is not None
+
+        filtrar_selecionados = self._resumo_global_filtrar_selecionados()
+        ids_marcados = (
+            self._ids_produtos_selecionados_para_exportacao() if filtrar_selecionados else []
+        )
+        tem_aba_produtos = (
+            filtrar_selecionados
+            and hasattr(self, "_produtos_selecionados_df")
+            and not self._produtos_selecionados_df.is_empty()
+        )
+
+        if tem_aba_produtos and not ids_marcados:
+            self.lbl_resumo_global_status.setText(
+                "Marque produtos na aba 'Produtos selecionados' para exibir o resumo."
+            )
+            self._resumo_global_df = pl.DataFrame()
+            self.resumo_global_model.set_dataframe(pl.DataFrame())
+            self._atualizar_totais_resumo_global(pl.DataFrame())
+            return
+
+        if ids_marcados:
+            self._processar_resumo_global_produtos_selecionados(
+                ids_marcados, dt_ini, dt_fim, tem_filtro_data
+            )
+            return
+
+        # Sem produtos selecionados: comportamento anterior (parquet ou calculo em tempo real)
+        path = CNPJ_ROOT / cnpj / "analises" / "produtos" / f"aba_resumo_global_{cnpj}.parquet"
+
+        if path.exists():
+            self._carregar_resumo_global_parquet(path, dt_ini, dt_fim)
+            return
+
+        if self._verificar_dependencias_resumo_global(cnpj):
+            return
+
+        self._calcular_resumo_global(dt_ini, dt_fim, tem_filtro_data)
 
     def _aplicar_filtro_data_resumo_global(self, df: pl.DataFrame, dt_ini, dt_fim) -> pl.DataFrame:
         if df.is_empty() or "Ano/Mes" not in df.columns:
