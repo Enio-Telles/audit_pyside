@@ -7,8 +7,8 @@ from pathlib import Path
 from typing import Dict, Optional
 
 import pymupdf as fitz
-from PySide6.QtCore import Qt, QThreadPool, Signal
-from PySide6.QtGui import QImage, QPixmap
+from PySide6.QtCore import Qt, QThreadPool, Signal, QUrl
+from PySide6.QtGui import QImage, QPixmap, QDesktopServices
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -187,9 +187,7 @@ class DatabaseConfigPage(BaseWizardPage):
             conexao = conectar_oracle()
             if conexao:
                 conexao.close()
-                self.status_banner.set_status(
-                    "success", "Conexão estabelecida com sucesso."
-                )
+                self.status_banner.set_status("success", "Conexão estabelecida com sucesso.")
             else:
                 self.status_banner.set_status(
                     "danger", "Falha na conexão. Revise host, usuário e senha."
@@ -206,9 +204,7 @@ class DatabaseConfigPage(BaseWizardPage):
             self._load_config()
 
     def persist_state(self, state: WizardState):
-        state.db_config = {
-            key: widget.text().strip() for key, widget in self.inputs.items()
-        }
+        state.db_config = {key: widget.text().strip() for key, widget in self.inputs.items()}
 
     def validate(self, state: WizardState) -> bool:
         db_user = state.db_config.get("DB_USER", "")
@@ -231,9 +227,7 @@ class DatabaseConfigPage(BaseWizardPage):
         return "Confirmar banco e seguir"
 
     def footer_context(self, state: WizardState) -> str:
-        return (
-            "Etapa 1 de 5  \u2022  Configure a base de conexão para as próximas consultas."
-        )
+        return "Etapa 1 de 5  \u2022  Configure a base de conexão para as próximas consultas."
 
 
 class CNPJsPage(BaseWizardPage):
@@ -308,25 +302,13 @@ class CNPJsPage(BaseWizardPage):
         self.view = DataTable()
         self.view.setModel(self.model)
         self.view.setSelectionMode(QAbstractItemView.ExtendedSelection)
-        self.view.horizontalHeader().setSectionResizeMode(
-            0, QHeaderView.ResizeToContents
-        )
-        self.view.horizontalHeader().setSectionResizeMode(
-            1, QHeaderView.ResizeToContents
-        )
+        self.view.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        self.view.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
         self.view.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
-        self.view.horizontalHeader().setSectionResizeMode(
-            3, QHeaderView.ResizeToContents
-        )
-        self.view.horizontalHeader().setSectionResizeMode(
-            4, QHeaderView.ResizeToContents
-        )
-        self.view.horizontalHeader().setSectionResizeMode(
-            5, QHeaderView.ResizeToContents
-        )
-        self.view.horizontalHeader().setSectionResizeMode(
-            6, QHeaderView.ResizeToContents
-        )
+        self.view.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)
+        self.view.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeToContents)
+        self.view.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeToContents)
+        self.view.horizontalHeader().setSectionResizeMode(6, QHeaderView.ResizeToContents)
         tabela_layout.addWidget(self.view, 1)
 
         bottom_row = QHBoxLayout()
@@ -371,9 +353,7 @@ class CNPJsPage(BaseWizardPage):
     def validate(self, state: WizardState) -> bool:
         validos = state.cnpjs_validos()
         if not validos:
-            QMessageBox.warning(
-                self, "Atenção", "Adicione ao menos um CNPJ válido para continuar."
-            )
+            QMessageBox.warning(self, "Atenção", "Adicione ao menos um CNPJ válido para continuar.")
             return False
         resposta = QMessageBox.question(
             self,
@@ -407,9 +387,7 @@ class CNPJsPage(BaseWizardPage):
                     linha = linha.strip()
                     if linha and not linha.startswith("#"):
                         self._add_cnpj(linha)
-            self.status_banner.set_status(
-                "success", f"Arquivo carregado: {arquivo.name}"
-            )
+            self.status_banner.set_status("success", f"Arquivo carregado: {arquivo.name}")
         except Exception as exc:
             self.status_banner.set_status("danger", f"Erro ao ler arquivo: {exc}")
 
@@ -431,9 +409,7 @@ class CNPJsPage(BaseWizardPage):
                 adicionados += 1
         self.input_cnpj.clear()
         if adicionados:
-            self.status_banner.set_status(
-                "success", f"{adicionados} CNPJ(s) adicionados à grade."
-            )
+            self.status_banner.set_status("success", f"{adicionados} CNPJ(s) adicionados à grade.")
         else:
             self.status_banner.set_status(
                 "warning",
@@ -485,9 +461,7 @@ class CNPJsPage(BaseWizardPage):
                 f"Razão Social: {razao_social}",
                 f"CNPJ: {cnpj}",
                 f"Fantasia: {dados.get('NOME_FANTASIA', '—')}",
-                f"Município/UF: {dados.get('MUNICIPIO', '—')}/{dados.get('UF', '')}".rstrip(
-                    "/"
-                ),
+                f"Município/UF: {dados.get('MUNICIPIO', '—')}/{dados.get('UF', '')}".rstrip("/"),
                 f"Situação: {dados.get('SITUACAO_DA_IE', '—')}",
                 f"Regime: {dados.get('REGIME_DE_PAGAMENTO', '—')}",
                 f"Origem: {origem}",
@@ -522,9 +496,7 @@ class CNPJsPage(BaseWizardPage):
         if self._pending_lookups > 0:
             self.lookup_progress.setVisible(True)
             self.lookup_progress.setRange(0, 0)
-            self.lbl_loading.setText(
-                f"Consultando {self._pending_lookups} cadastro(s)..."
-            )
+            self.lbl_loading.setText(f"Consultando {self._pending_lookups} cadastro(s)...")
         else:
             self.lookup_progress.setVisible(False)
             self.lbl_loading.setText("")
@@ -597,15 +569,11 @@ class CNPJsPage(BaseWizardPage):
                 f"Cache exportado com sucesso para {Path(caminho_saida).name} ({stats['total']} linha(s)).",
             )
         else:
-            self.status_banner.set_status(
-                "danger", "Não foi possível exportar o cache cadastral."
-            )
+            self.status_banner.set_status("danger", "Não foi possível exportar o cache cadastral.")
 
     def _update_count(self):
         total = self.model.rowCount()
-        validos = len(
-            [registro for registro in self.model.records() if registro.valido]
-        )
+        validos = len([registro for registro in self.model.records() if registro.valido])
         self.lbl_count.setText(f"{total} registro(s) na grade  \u2022  {validos} válido(s)")
 
 
@@ -687,9 +655,7 @@ class AuditorPage(BaseWizardPage):
         pdf_row.addWidget(btn_pdf)
         dsf_layout.addLayout(pdf_row)
 
-        self.chk_incluir_imagens_dsf = QCheckBox(
-            "Incluir imagens da DSF na notificação"
-        )
+        self.chk_incluir_imagens_dsf = QCheckBox("Incluir imagens da DSF na notificação")
         self.chk_incluir_imagens_dsf.setChecked(True)
         dsf_layout.addWidget(self.chk_incluir_imagens_dsf)
 
@@ -786,9 +752,7 @@ class AuditorPage(BaseWizardPage):
             return
         self._pdf_path = Path(caminho)
         self.lbl_pdf.setText(str(self._pdf_path))
-        self.status_banner.set_status(
-            "success", f"PDF selecionado: {self._pdf_path.name}"
-        )
+        self.status_banner.set_status("success", f"PDF selecionado: {self._pdf_path.name}")
         self._renderizar_preview_pdf(self._pdf_path)
         self.action_updated.emit()
 
@@ -819,9 +783,7 @@ class AuditorPage(BaseWizardPage):
             documento = fitz.open(str(caminho_pdf))
         except Exception as exc:
             self._preview_card.setVisible(False)
-            self.status_banner.set_status(
-                "danger", f"Nao foi possivel abrir o PDF da DSF: {exc}"
-            )
+            self.status_banner.set_status("danger", f"Nao foi possivel abrir o PDF da DSF: {exc}")
             return
 
         try:
@@ -850,9 +812,7 @@ class AuditorPage(BaseWizardPage):
                 label = QLabel()
                 label.setAlignment(Qt.AlignCenter)
                 label.setPixmap(
-                    QPixmap.fromImage(imagem).scaledToWidth(
-                        780, Qt.SmoothTransformation
-                    )
+                    QPixmap.fromImage(imagem).scaledToWidth(780, Qt.SmoothTransformation)
                 )
                 label.setStyleSheet("background: transparent;")
                 self._preview_container_layout.addWidget(label)
@@ -879,9 +839,7 @@ class AuditorPage(BaseWizardPage):
         if pasta_selecionada:
             self._output_dir = Path(pasta_selecionada)
             self.lbl_output.setText(str(self._output_dir))
-            self.lbl_output.setStyleSheet(
-                f"color: {COLORS['secondary']}; font-weight: 600;"
-            )
+            self.lbl_output.setStyleSheet(f"color: {COLORS['secondary']}; font-weight: 600;")
             self.status_banner.set_status(
                 "success", f"Pasta de saída definida: {self._output_dir.name}"
             )
@@ -890,22 +848,16 @@ class AuditorPage(BaseWizardPage):
     def _save_profile(self):
         nome = self.input_nome_config.text().strip()
         if not nome:
-            QMessageBox.warning(
-                self, "Nome obrigatório", "Informe um nome para salvar o perfil."
-            )
+            QMessageBox.warning(self, "Nome obrigatório", "Informe um nome para salvar o perfil.")
             return
         dados = self._collect_data()
         try:
             salvar_dados_manuais(nome, dados)
             self._load_saved_configs(selecionar=nome)
             self.input_nome_config.clear()
-            self.status_banner.set_status(
-                "success", f"Perfil '{nome}' salvo com sucesso."
-            )
+            self.status_banner.set_status("success", f"Perfil '{nome}' salvo com sucesso.")
         except Exception as exc:
-            self.status_banner.set_status(
-                "danger", f"Não foi possível salvar o perfil: {exc}"
-            )
+            self.status_banner.set_status("danger", f"Não foi possível salvar o perfil: {exc}")
 
     def _collect_data(self) -> Dict[str, str]:
         return {
@@ -915,9 +867,7 @@ class AuditorPage(BaseWizardPage):
             "ORGAO": self.inputs["orgao"].text().strip(),
             "CARGO_TITULO": self.combo_titulo.currentText().strip(),
             "DSF": self.input_dsf.text().strip(),
-            "INCLUIR_IMAGENS_DSF": "True"
-            if self.chk_incluir_imagens_dsf.isChecked()
-            else "False",
+            "INCLUIR_IMAGENS_DSF": "True" if self.chk_incluir_imagens_dsf.isChecked() else "False",
         }
 
     def load_state(self, state: WizardState):
@@ -956,15 +906,11 @@ class AuditorPage(BaseWizardPage):
         if state.diretorio_saida:
             self._output_dir = state.diretorio_saida
             self.lbl_output.setText(str(state.diretorio_saida))
-            self.lbl_output.setStyleSheet(
-                f"color: {COLORS['secondary']}; font-weight: 600;"
-            )
+            self.lbl_output.setStyleSheet(f"color: {COLORS['secondary']}; font-weight: 600;")
         else:
             self._output_dir = None
             self.lbl_output.setText("Pasta padrão: notificacoes/")
-            self.lbl_output.setStyleSheet(
-                f"color: {COLORS['muted']}; font-style: italic;"
-            )
+            self.lbl_output.setStyleSheet(f"color: {COLORS['muted']}; font-style: italic;")
 
     def persist_state(self, state: WizardState):
         state.auditor_data = self._collect_data()
@@ -984,9 +930,7 @@ class AuditorPage(BaseWizardPage):
         return "Confirmar auditor e seguir"
 
     def footer_context(self, state: WizardState) -> str:
-        return (
-            "Etapa 3 de 5  \u2022  Cadastre o responsável e a referência documental da DSF."
-        )
+        return "Etapa 3 de 5  \u2022  Cadastre o responsável e a referência documental da DSF."
 
 
 class PeriodPage(BaseWizardPage):
@@ -1054,9 +998,7 @@ class PeriodPage(BaseWizardPage):
         mes_ini, ano_ini = int(m_ini.group(1)), int(m_ini.group(2))
         mes_fim, ano_fim = int(m_fim.group(1)), int(m_fim.group(2))
         if not (1 <= mes_ini <= 12) or not (1 <= mes_fim <= 12):
-            QMessageBox.warning(
-                self, "Mes invalido", "O mes deve estar entre 01 e 12."
-            )
+            QMessageBox.warning(self, "Mes invalido", "O mes deve estar entre 01 e 12.")
             return False
         if ano_ini * 100 + mes_ini >= ano_fim * 100 + mes_fim:
             QMessageBox.warning(
@@ -1153,15 +1095,9 @@ class ProcessingPage(BaseWizardPage):
         self.results_model = ResultsTableModel()
         self.results_view = DataTable()
         self.results_view.setModel(self.results_model)
-        self.results_view.horizontalHeader().setSectionResizeMode(
-            0, QHeaderView.ResizeToContents
-        )
-        self.results_view.horizontalHeader().setSectionResizeMode(
-            1, QHeaderView.ResizeToContents
-        )
-        self.results_view.horizontalHeader().setSectionResizeMode(
-            2, QHeaderView.Stretch
-        )
+        self.results_view.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        self.results_view.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        self.results_view.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
         result_layout.addWidget(self.results_view)
         splitter.addWidget(result_card)
         splitter.setSizes([280, 280])
@@ -1296,9 +1232,7 @@ class ProcessingPage(BaseWizardPage):
         scrollbar.setValue(scrollbar.maximum())
 
     def _append_result(self, cnpj: str, sucesso: bool, detalhe: str):
-        self.results_model.add_result(
-            ProcessingResult(cnpj=cnpj, sucesso=sucesso, detalhe=detalhe)
-        )
+        self.results_model.add_result(ProcessingResult(cnpj=cnpj, sucesso=sucesso, detalhe=detalhe))
 
     def _finish_processing(self, resumo: dict):
         self._running = False
@@ -1315,9 +1249,7 @@ class ProcessingPage(BaseWizardPage):
                 f"Processamento concluído com {falhas} falha(s). Consulte a tabela de resultados para detalhes.",
             )
         else:
-            self.status_banner.set_status(
-                "success", "Processamento concluído sem falhas."
-            )
+            self.status_banner.set_status("success", "Processamento concluído sem falhas.")
         self.action_updated.emit()
         self._prompt_next_action()
 
@@ -1333,7 +1265,7 @@ class ProcessingPage(BaseWizardPage):
     def _open_output_folder(self):
         if not self._output_dir:
             return
-        subprocess.run(["explorer", str(self._output_dir)], check=False)
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(self._output_dir)))
 
     def _prompt_next_action(self):
         msg = QMessageBox(self)

@@ -1,3 +1,5 @@
+import os
+
 """
 Módulo principal para geração de notificações fisconforme.
 
@@ -143,9 +145,7 @@ def formatar_tabela_html(dados: List[Dict[str, Any]]) -> str:
 
     # Adiciona cabeçalho
     for coluna in colunas:
-        html_lines.append(
-            f'      <th style="text-align: left; padding: 8px;">{coluna}</th>'
-        )
+        html_lines.append(f'      <th style="text-align: left; padding: 8px;">{coluna}</th>')
 
     html_lines.append("    </tr>")
     html_lines.append("  </thead>")
@@ -357,9 +357,7 @@ def gerar_notificacao_para_cnpj(
             logger.error(f"Erro ao extrair pendências do Oracle: {e}")
             dados_tabela = []
     else:
-        logger.info(
-            f"Dados da tabela fornecidos externamente: {len(dados_tabela)} linha(s)"
-        )
+        logger.info(f"Dados da tabela fornecidos externamente: {len(dados_tabela)} linha(s)")
 
     # ==========================================================================
     # ETAPA 4: PREENCHIMENTO E SALVAMENTO DA NOTIFICAÇÃO
@@ -378,9 +376,7 @@ def gerar_notificacao_para_cnpj(
         logger.info(f"Tabela HTML gerada: {len(tabela_html)} caracteres")
         if dados_tabela:
             logger.info(f"Dados da tabela: {len(dados_tabela)} linha(s)")
-            for i, linha in enumerate(
-                dados_tabela[:3], start=1
-            ):  # Log das 3 primeiras linhas
+            for i, linha in enumerate(dados_tabela[:3], start=1):  # Log das 3 primeiras linhas
                 logger.info(f"  Linha {i}: {linha}")
         else:
             logger.warning("Nenhum dado de pendência disponível para a tabela")
@@ -390,9 +386,7 @@ def gerar_notificacao_para_cnpj(
         dados_completos["TABELA"] = tabela_html
 
         # Log dos dados completos
-        logger.info(
-            f"Dados completos para preenchimento: {list(dados_completos.keys())}"
-        )
+        logger.info(f"Dados completos para preenchimento: {list(dados_completos.keys())}")
 
         # Usa diretório fornecido ou padrão
         if diretorio_saida is None:
@@ -548,8 +542,7 @@ def gerar_notificacoes_em_lote(
             # Verifica se deve parar no primeiro erro
             if parar_no_primeiro_erro:
                 logger.warning(
-                    f"Parando processamento devido a erro no CNPJ {cnpj}: "
-                    f"{resultado['erro']}"
+                    f"Parando processamento devido a erro no CNPJ {cnpj}: {resultado['erro']}"
                 )
                 break
 
@@ -641,9 +634,7 @@ def listar_cnpjs_para_processamento(
                                 f"Linha {linha_num}: CNPJ válido encontrado: {cnpj_extraido}"
                             )
                         else:
-                            logger.warning(
-                                f"Linha {linha_num}: CNPJ inválido: {cnpj_extraido}"
-                            )
+                            logger.warning(f"Linha {linha_num}: CNPJ inválido: {cnpj_extraido}")
                     else:
                         logger.warning(
                             f"Linha {linha_num}: Nenhum CNPJ válido encontrado na linha: '{linha}'"
@@ -655,9 +646,7 @@ def listar_cnpjs_para_processamento(
             return []
 
         logger.info(f"{len(cnpjs)} CNPJ(s) válidos lidos do arquivo")
-        print(
-            f"\n✅ {len(cnpjs)} CNPJ(s) válidos encontrados no arquivo: {arquivo_entrada}"
-        )
+        print(f"\n✅ {len(cnpjs)} CNPJ(s) válidos encontrados no arquivo: {arquivo_entrada}")
 
         # Exibe resumo dos CNPJs encontrados
         if cnpjs:
@@ -678,9 +667,7 @@ def listar_cnpjs_para_processamento(
 
         while True:
             try:
-                entrada = input(
-                    f"\nCNPJ {len(cnpjs) + 1} (ou Enter para finalizar): "
-                ).strip()
+                entrada = input(f"\nCNPJ {len(cnpjs) + 1} (ou Enter para finalizar): ").strip()
 
                 if not entrada:
                     break
@@ -869,9 +856,7 @@ def coletar_arquivo_dsf() -> Optional[Path]:
                 elif opcao == "1":
                     while True:
                         try:
-                            idx = input(
-                                f"  Número do arquivo (1-{len(arquivos_dsf)}): "
-                            ).strip()
+                            idx = input(f"  Número do arquivo (1-{len(arquivos_dsf)}): ").strip()
                             if not idx:
                                 break
 
@@ -896,9 +881,7 @@ def coletar_arquivo_dsf() -> Optional[Path]:
         # Opção 2: Entrada manual do caminho
         print("\nInforme o caminho do arquivo PDF da DSF:")
         while True:
-            caminho_pdf = input(
-                "\nCaminho do arquivo PDF (ou Enter para pular): "
-            ).strip()
+            caminho_pdf = input("\nCaminho do arquivo PDF (ou Enter para pular): ").strip()
 
             if not caminho_pdf:
                 print(
@@ -918,9 +901,7 @@ def coletar_arquivo_dsf() -> Optional[Path]:
             # Verifica se é um arquivo PDF
             if pdf_path.suffix.lower() != ".pdf":
                 print(f"⚠️  O arquivo não tem extensão .pdf: {pdf_path.suffix}")
-                continuar = (
-                    input("   Deseja continuar mesmo assim? (S/N): ").strip().upper()
-                )
+                continuar = input("   Deseja continuar mesmo assim? (S/N): ").strip().upper()
                 if continuar not in ("S", "SIM", "Y", "YES"):
                     continue
 
@@ -1064,11 +1045,7 @@ def coletar_dados_manuais() -> Dict[str, str]:
     print("-" * 60)
 
     try:
-        salvar = (
-            input("\nDeseja salvar esta configuração para uso futuro? (S/N): ")
-            .strip()
-            .upper()
-        )
+        salvar = input("\nDeseja salvar esta configuração para uso futuro? (S/N): ").strip().upper()
         if salvar in ("S", "SIM", "Y", "YES"):
             nome_config = input(
                 "Nome para esta configuração (ex: 'Padrao', 'Auditor_Joao'): "
@@ -1351,16 +1328,18 @@ def salvar_dados_manuais(nome_config: str, dados: Dict[str, str]) -> None:
         )
 
         # Adiciona nova configuração
-        secao_existe = (
-            "# CONFIGURAÇÕES SALVAS DE AUDITORES" in conteudo_sem_config_antiga
-        )
+        secao_existe = "# CONFIGURAÇÕES SALVAS DE AUDITORES" in conteudo_sem_config_antiga
 
         if not secao_existe:
             # Adiciona cabeçalho da seção
             conteudo_final = conteudo_sem_config_antiga.rstrip() + "\n\n"
-            conteudo_final += "# =============================================================================\n"
+            conteudo_final += (
+                "# =============================================================================\n"
+            )
             conteudo_final += "# CONFIGURAÇÕES SALVAS DE AUDITORES\n"
-            conteudo_final += "# =============================================================================\n"
+            conteudo_final += (
+                "# =============================================================================\n"
+            )
         else:
             conteudo_final = conteudo_sem_config_antiga
 
@@ -1484,12 +1463,13 @@ def exibir_relatorio_final(resumo: Dict[str, Any]) -> None:
 
         # Tenta abrir automaticamente no Windows
         try:
-            import subprocess
-
-            subprocess.run(["explorer", str(dir_saida)], check=False)
-            print(f"\n✅ Explorer aberto em: {dir_saida}")
+            if sys.platform == "win32":
+                os.startfile(dir_saida)
+                print(f"\n✅ Explorer aberto em: {dir_saida}")
+            else:
+                logger.info("Abertura automática de diretório só suportada em Windows.")
         except Exception as e:
-            logger.warning(f"Não foi possível abrir o explorer: {e}")
+            logger.warning(f"Não foi possível abrir o diretório: {e}")
 
     print("\n" + "=" * 70)
     print("Processamento concluído!")
@@ -1549,11 +1529,7 @@ def main():
     arquivo_cnpjs = None
     if "--arquivo" in sys.argv or "-a" in sys.argv:
         try:
-            idx = (
-                sys.argv.index("--arquivo")
-                if "--arquivo" in sys.argv
-                else sys.argv.index("-a")
-            )
+            idx = sys.argv.index("--arquivo") if "--arquivo" in sys.argv else sys.argv.index("-a")
             if idx + 1 < len(sys.argv):
                 arquivo_cnpjs = Path(sys.argv[idx + 1])
         except (ValueError, IndexError):
@@ -1563,9 +1539,7 @@ def main():
     if cnpjs_argumento and not arquivo_cnpjs:
         # Filtra argumentos de controle
         cnpjs_argumento = [
-            c
-            for c in cnpjs_argumento
-            if not c.startswith("--") and not c.startswith("-")
+            c for c in cnpjs_argumento if not c.startswith("--") and not c.startswith("-")
         ]
         logger.info(f"CNPJs fornecidos via linha de comando: {len(cnpjs_argumento)}")
         lista_cnpjs = cnpjs_argumento
@@ -1637,9 +1611,7 @@ def main():
     proxima_acao = perguntar_proxima_acao()
     if proxima_acao == "nova_dsf":
         if len(sys.argv) > 1:
-            print(
-                "\nâ„¹ï¸  Reiniciando em modo interativo para processar uma nova DSF."
-            )
+            print("\nâ„¹ï¸  Reiniciando em modo interativo para processar uma nova DSF.")
             sys.argv = [sys.argv[0]]
         main()
         return
