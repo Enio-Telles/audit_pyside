@@ -37,12 +37,8 @@ cd wiki-local
 No repositorio principal (`audit_pyside`), apos o merge do PR:
 
 ```bash
-cp docs/wiki/Home.md ../wiki-local/Home.md
-cp docs/wiki/Catalogo-de-Tabelas-e-Campos.md ../wiki-local/
-cp docs/wiki/Tabelas-Base-Campos-e-Formulas.md ../wiki-local/
-cp docs/wiki/Tabelas-de-Agrupamento-Campos-e-Formulas.md ../wiki-local/
-cp docs/wiki/Tabelas-de-Estoque-e-Enriquecimento-Campos-e-Formulas.md ../wiki-local/
-cp docs/wiki/Tabelas-Analiticas-Campos-e-Formulas.md ../wiki-local/
+cp docs/wiki/*.md ../wiki-local/
+rm ../wiki-local/README.md  # Opcional: o README do docs/wiki/ costuma ser interno
 ```
 
 ### 4. Fazer commit e push no wiki.git
