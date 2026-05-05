@@ -35,6 +35,7 @@ dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
     "pytest-mock>=3.10",
+    "pytest-qt>=4.4.0",
     # pytest-benchmark: aprovado em P8-01 no Notion e pedido do owner em 2026-05-02.
     "pytest-benchmark>=4.0",
     "ruff>=0.4",
