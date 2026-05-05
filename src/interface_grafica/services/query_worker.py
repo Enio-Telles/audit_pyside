@@ -122,93 +122,148 @@ class QueryWorker(QThread):
         if self.isInterruptionRequested():
             raise QueryCancelledError("Consulta cancelada pelo usuario.")
 
-    def run(self) -> None:
-        conn = None
-        inicio_total = perf_counter()
-        try:
-            self._raise_if_cancelled()
-            self.progress.emit("Conectando ao Oracle...")
-            inicio_conexao = perf_counter()
-            if conectar_oracle is not None:
-                conn = conectar_oracle()
-            else:
-                conn = _conectar_oracle_fallback()
+    def _connect(self) -> Any:
+        self.progress.emit("Conectando ao Oracle...")
+        inicio_conexao = perf_counter()
+        if conectar_oracle is not None:
+            conn = conectar_oracle()
+        else:
+            conn = _conectar_oracle_fallback()
+        self._raise_if_cancelled()
+        registrar_evento_performance(
+            "query_worker.conectar_oracle",
+            perf_counter() - inicio_conexao,
+            {
+                "fetch_size": self.fetch_size,
+                "quantidade_binds": len(self.binds or {}),
+            },
+        )
+        return conn
+
+    def _execute_and_fetch(self, conn: Any) -> tuple[list[str], list[tuple]]:
+        self.progress.emit("Executando consulta...")
+        with conn.cursor() as cursor:
+            cursor.arraysize = self.fetch_size
+            cursor.prefetchrows = self.fetch_size
+
+            inicio_execute = perf_counter()
+            cursor.execute(self.sql, self.binds)
             self._raise_if_cancelled()
             registrar_evento_performance(
-                "query_worker.conectar_oracle",
-                perf_counter() - inicio_conexao,
+                "query_worker.execute",
+                perf_counter() - inicio_execute,
                 {
                     "fetch_size": self.fetch_size,
                     "quantidade_binds": len(self.binds or {}),
                 },
             )
 
-            self.progress.emit("Executando consulta...")
-            with conn.cursor() as cursor:
-                cursor.arraysize = self.fetch_size
-                cursor.prefetchrows = self.fetch_size
+            columns = [desc[0] for desc in cursor.description] if cursor.description else []
+            all_rows: list[tuple] = []
 
-                inicio_execute = perf_counter()
-                cursor.execute(self.sql, self.binds)
+            batch_num = 0
+            inicio_fetch = perf_counter()
+            while True:
                 self._raise_if_cancelled()
-                registrar_evento_performance(
-                    "query_worker.execute",
-                    perf_counter() - inicio_execute,
-                    {
-                        "fetch_size": self.fetch_size,
-                        "quantidade_binds": len(self.binds or {}),
-                    },
-                )
-
-                columns = (
-                    [desc[0] for desc in cursor.description]
-                    if cursor.description
-                    else []
-                )
-                all_rows: list[tuple] = []
-
-                batch_num = 0
-                inicio_fetch = perf_counter()
-                while True:
-                    self._raise_if_cancelled()
-                    rows = cursor.fetchmany(self.fetch_size)
-                    if not rows:
-                        break
-                    all_rows.extend(rows)
-                    batch_num += 1
-                    self.progress.emit(f"Lidas {len(all_rows):,} linhas...")
-                registrar_evento_performance(
-                    "query_worker.fetchmany",
-                    perf_counter() - inicio_fetch,
-                    {
-                        "fetch_size": self.fetch_size,
-                        "batches": batch_num,
-                        "linhas": len(all_rows),
-                        "colunas": len(columns),
-                    },
-                )
-
-            self._raise_if_cancelled()
-            inicio_dataframe = perf_counter()
-            if not all_rows:
-                self.progress.emit("Consulta retornou 0 linhas.")
-                df = pl.DataFrame({col: [] for col in columns})
-            else:
-                # Otimizacao Bolt: criar DataFrame diretamente de tuplas (muito mais rapido)
-                df = pl.DataFrame(
-                    all_rows,
-                    schema=columns,
-                    orient="row",
-                    infer_schema_length=min(len(all_rows), 1000),
-                )
+                rows = cursor.fetchmany(self.fetch_size)
+                if not rows:
+                    break
+                all_rows.extend(rows)
+                batch_num += 1
+                self.progress.emit(f"Lidas {len(all_rows):,} linhas...")
             registrar_evento_performance(
-                "query_worker.build_dataframe",
-                perf_counter() - inicio_dataframe,
+                "query_worker.fetchmany",
+                perf_counter() - inicio_fetch,
                 {
-                    "linhas": df.height,
-                    "colunas": df.width,
+                    "fetch_size": self.fetch_size,
+                    "batches": batch_num,
+                    "linhas": len(all_rows),
+                    "colunas": len(columns),
                 },
             )
+        return columns, all_rows
+
+    def _build_dataframe(self, columns: list[str], all_rows: list[tuple]) -> pl.DataFrame:
+        inicio_dataframe = perf_counter()
+        if not all_rows:
+            self.progress.emit("Consulta retornou 0 linhas.")
+            df = pl.DataFrame({col: [] for col in columns})
+        else:
+            # Otimizacao Bolt: criar DataFrame diretamente de tuplas (muito mais rapido)
+            df = pl.DataFrame(
+                all_rows,
+                schema=columns,
+                orient="row",
+                infer_schema_length=min(len(all_rows), 1000),
+            )
+        registrar_evento_performance(
+            "query_worker.build_dataframe",
+            perf_counter() - inicio_dataframe,
+            {
+                "linhas": df.height,
+                "colunas": df.width,
+            },
+        )
+        return df
+
+    def _handle_cancellation(self, conn: Any, exc: Exception, inicio_total: float) -> None:
+        if conn is not None:
+            try:
+                cancel = getattr(conn, "cancel", None)
+                if callable(cancel):
+                    cancel()
+            except Exception as cancel_exc:
+                log_exception(cancel_exc)
+        registrar_evento_performance(
+            "query_worker.total",
+            perf_counter() - inicio_total,
+            {
+                "fetch_size": self.fetch_size,
+                "quantidade_binds": len(self.binds or {}),
+                "erro": str(exc),
+            },
+            status="cancelled",
+        )
+        self.progress.emit("Consulta cancelada.")
+        self.failed.emit("Consulta cancelada pelo usuario.")
+
+    def _handle_error(self, exc: Exception, inicio_total: float) -> None:
+        log_exception(exc)
+        registrar_evento_performance(
+            "query_worker.total",
+            perf_counter() - inicio_total,
+            {
+                "fetch_size": self.fetch_size,
+                "quantidade_binds": len(self.binds or {}),
+                "erro": str(exc),
+            },
+            status="error",
+        )
+        # 🛡️ Sentinel: Sanitize error message to prevent leaking internal database schema/details to the UI
+        rprint(f"[red]Erro interno no QueryWorker:[/red] {exc}")
+        safe_error_msg = "Ocorreu um erro ao executar a consulta no banco de dados. Verifique os logs para mais detalhes."
+        self.failed.emit(safe_error_msg)
+
+    def _close_connection(self, conn: Any) -> None:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception as close_exc:
+                log_exception(close_exc)
+                rprint(f"[yellow]Aviso: Erro ao fechar conexao Oracle:[/yellow] {close_exc}")
+
+    def run(self) -> None:
+        conn = None
+        inicio_total = perf_counter()
+        try:
+            self._raise_if_cancelled()
+            conn = self._connect()
+            self._raise_if_cancelled()
+
+            columns, all_rows = self._execute_and_fetch(conn)
+            self._raise_if_cancelled()
+
+            df = self._build_dataframe(columns, all_rows)
 
             self.progress.emit(f"Concluido: {df.height:,} linhas, {df.width} colunas.")
             registrar_evento_performance(
@@ -224,48 +279,10 @@ class QueryWorker(QThread):
             self.finished_ok.emit(df)
 
         except QueryCancelledError as exc:
-            if conn is not None:
-                try:
-                    cancel = getattr(conn, "cancel", None)
-                    if callable(cancel):
-                        cancel()
-                except Exception as cancel_exc:
-                    log_exception(cancel_exc)
-            registrar_evento_performance(
-                "query_worker.total",
-                perf_counter() - inicio_total,
-                {
-                    "fetch_size": self.fetch_size,
-                    "quantidade_binds": len(self.binds or {}),
-                    "erro": str(exc),
-                },
-                status="cancelled",
-            )
-            self.progress.emit("Consulta cancelada.")
-            self.failed.emit("Consulta cancelada pelo usuario.")
+            self._handle_cancellation(conn, exc, inicio_total)
 
         except Exception as exc:
-            log_exception(exc)
-            registrar_evento_performance(
-                "query_worker.total",
-                perf_counter() - inicio_total,
-                {
-                    "fetch_size": self.fetch_size,
-                    "quantidade_binds": len(self.binds or {}),
-                    "erro": str(exc),
-                },
-                status="error",
-            )
-            # 🛡️ Sentinel: Sanitize error message to prevent leaking internal database schema/details to the UI
-            rprint(f"[red]Erro interno no QueryWorker:[/red] {exc}")
-            safe_error_msg = "Ocorreu um erro ao executar a consulta no banco de dados. Verifique os logs para mais detalhes."
-            self.failed.emit(safe_error_msg)
+            self._handle_error(exc, inicio_total)
+
         finally:
-            if conn is not None:
-                try:
-                    conn.close()
-                except Exception as close_exc:
-                    log_exception(close_exc)
-                    rprint(
-                        f"[yellow]Aviso: Erro ao fechar conexao Oracle:[/yellow] {close_exc}"
-                    )
+            self._close_connection(conn)
