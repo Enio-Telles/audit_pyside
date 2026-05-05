@@ -38,6 +38,11 @@ class PaginacaoTabsMixin:
         self._tab_df_filtrado[key] = df_filtrado
         self._tab_page[key] = 1
 
+    def _limpar_pagina_tab(self, key: str) -> None:
+        """Limpa cache paginado de uma tab — impede export de dados stale."""
+        self._tab_df_filtrado[key] = pl.DataFrame()
+        self._tab_page[key] = 1
+
     def _fatia_pagina(self, key: str) -> pl.DataFrame:
         """Retorna o slice correspondente a pagina atual."""
         df = self._tab_df_filtrado.get(key, pl.DataFrame())
