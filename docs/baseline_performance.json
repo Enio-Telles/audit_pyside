@@ -1,0 +1,78 @@
+{
+  "meta": {
+    "timestamp": "2026-05-04T20:32:53",
+    "hostname": "NOTEBOOKVAIO",
+    "python": "3.13.9",
+    "threshold_mb": 512,
+    "page_size": 200,
+    "rounds": 5
+  },
+  "results": [
+    {
+      "size_mb": 256,
+      "backend": "polars",
+      "operation": "ttfp",
+      "mean_s": 0.0613,
+      "median_s": 0.0036,
+      "p95_s": 0.292,
+      "cv_pct": 210.32,
+      "mean_rss_delta_mb": 4.8,
+      "rounds": 5
+    },
+    {
+      "size_mb": 256,
+      "backend": "polars",
+      "operation": "page_2",
+      "mean_s": 0.005,
+      "median_s": 0.0012,
+      "p95_s": 0.0203,
+      "cv_pct": 172.75,
+      "mean_rss_delta_mb": 1.33,
+      "rounds": 5
+    },
+    {
+      "size_mb": 256,
+      "backend": "polars",
+      "operation": "page_3",
+      "mean_s": 0.0051,
+      "median_s": 0.0008,
+      "p95_s": 0.0223,
+      "cv_pct": 186.97,
+      "mean_rss_delta_mb": 1.35,
+      "rounds": 5
+    },
+    {
+      "size_mb": 256,
+      "backend": "polars",
+      "operation": "page_10",
+      "mean_s": 0.0049,
+      "median_s": 0.001,
+      "p95_s": 0.0202,
+      "cv_pct": 176.76,
+      "mean_rss_delta_mb": 1.29,
+      "rounds": 5
+    },
+    {
+      "size_mb": 256,
+      "backend": "polars",
+      "operation": "filter_contem",
+      "mean_s": 0.3842,
+      "median_s": 0.2006,
+      "p95_s": 1.1383,
+      "cv_pct": 109.76,
+      "mean_rss_delta_mb": 330.92,
+      "rounds": 5
+    },
+    {
+      "size_mb": 256,
+      "backend": "polars",
+      "operation": "distinct",
+      "mean_s": 0.3585,
+      "median_s": 0.338,
+      "p95_s": 0.5041,
+      "cv_pct": 23.79,
+      "mean_rss_delta_mb": 99.64,
+      "rounds": 5
+    }
+  ]
+}
