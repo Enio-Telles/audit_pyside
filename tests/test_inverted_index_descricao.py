@@ -83,3 +83,19 @@ def test_corpus_grande_com_tokens_genericos_podados():
     componentes = agrupar_por_inverted_index(linhas, threshold=0.6)
     componentes_grandes = [c for c in componentes if len(c) >= 2]
     assert all(len(c) <= 50 for c in componentes_grandes)
+
+
+def test_agrupar_por_inverted_index_lista_vazia():
+    # As stated in the rationale, the goal is to test the empty case.
+    # agrupar_por_inverted_index now takes a list, so we test it with an empty list.
+    resultado = agrupar_por_inverted_index([])
+    assert resultado == []
+
+
+
+
+def test_agrupar_por_inverted_index_lista_vazia():
+    # This function originally took a DataFrame, but was refactored to take a list of _Linha.
+    # The edge case test is verifying it handles empty inputs correctly.
+    resultado = agrupar_por_inverted_index([])
+    assert resultado == []
