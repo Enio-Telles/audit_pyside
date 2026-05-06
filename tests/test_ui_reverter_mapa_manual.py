@@ -1,14 +1,8 @@
-import os
-import sys
 from pathlib import Path
 
 import pytest
 
 pytestmark = pytest.mark.gui
-
-# Skip on Windows CI due to DLL instability (0xc0000139 STATUS_ENTRYPOINT_NOT_FOUND).
-if sys.platform == "win32" and os.getenv("GITHUB_ACTIONS"):
-    pytest.skip("Skipping GUI tests on Windows CI due to DLL instability", allow_module_level=True)
 
 try:
     from PySide6.QtWidgets import QApplication, QMessageBox
