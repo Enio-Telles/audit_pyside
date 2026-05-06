@@ -1,0 +1,52 @@
+{
+  "meta": {
+    "timestamp": "2026-05-06T12:43:23",
+    "python": "3.12.13"
+  },
+  "results": [
+    {
+      "size_mb": 2048,
+      "backend": "duckdb",
+      "operation": "ttfp",
+      "mean_s": 0.1235,
+      "median_s": 0.1235,
+      "p95_s": 0.1235,
+      "cv_pct": 0.0,
+      "mean_rss_delta_mb": -146.3,
+      "rounds": 1
+    },
+    {
+      "size_mb": 2048,
+      "backend": "duckdb",
+      "operation": "page_change",
+      "mean_s": 0.0651,
+      "median_s": 0.0651,
+      "p95_s": 0.0651,
+      "cv_pct": 0.0,
+      "mean_rss_delta_mb": 47.82,
+      "rounds": 1
+    },
+    {
+      "size_mb": 2048,
+      "backend": "duckdb",
+      "operation": "filter_apply",
+      "mean_s": 0.8105,
+      "median_s": 0.8105,
+      "p95_s": 0.8105,
+      "cv_pct": 0.0,
+      "mean_rss_delta_mb": -9.63,
+      "rounds": 1
+    },
+    {
+      "size_mb": 2048,
+      "backend": "duckdb",
+      "operation": "export_50k",
+      "mean_s": 0.0914,
+      "median_s": 0.0914,
+      "p95_s": 0.0914,
+      "cv_pct": 0.0,
+      "mean_rss_delta_mb": 37.91,
+      "rounds": 1
+    }
+  ]
+}

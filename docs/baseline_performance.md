@@ -18,10 +18,10 @@ Este relatório apresenta as medições de baseline para operações comuns na G
 | 1000 | page_change | duckdb | 0.062s | +15.4 MB |
 | 1000 | filter_apply | duckdb | 0.948s | +16.5 MB |
 | 1000 | export_50k | duckdb | 0.077s | +45.1 MB |
-| 1500 | ttfp | duckdb | 0.501s | +70.9 MB |
-| 1500 | page_change | duckdb | 0.078s | +4.7 MB |
-| 1500 | filter_apply | duckdb | 2.174s | -3.6 MB |
-| 1500 | export_50k | duckdb | 0.141s | +45.3 MB |
+| 2048 | ttfp | duckdb | 0.123s | -146.3 MB |
+| 2048 | page_change | duckdb | 0.065s | +47.8 MB |
+| 2048 | filter_apply | duckdb | 0.810s | -9.6 MB |
+| 2048 | export_50k | duckdb | 0.091s | +37.9 MB |
 
 ## Resumo por Tamanho
 
@@ -41,11 +41,11 @@ Este relatório apresenta as medições de baseline para operações comuns na G
 | Filter Apply | <= 5.0s | 0.948s | [PASS] |
 | Export 50k rows | N/A | 0.077s | - |
 
-### Arquivo de 1500 MB
+### Arquivo de 2048 MB
 | KPI | Meta | P95 Medido | Resultado |
 |---|---|---|---|
-| TTFP | <= 5.0s | 0.501s | [PASS] |
-| Page Change | <= 2.0s | 0.078s | [PASS] |
-| Filter Apply | <= 5.0s | 2.174s | [PASS] |
-| Export 50k rows | N/A | 0.141s | - |
+| TTFP | <= 5.0s | 0.123s | [PASS] |
+| Page Change | <= 2.0s | 0.065s | [PASS] |
+| Filter Apply | <= 5.0s | 0.810s | [PASS] |
+| Export 50k rows | N/A | 0.091s | - |
 
