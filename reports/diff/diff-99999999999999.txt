@@ -1,5 +1,5 @@
 DifferentialReport — CLI · 99999999999999 · HEAD~1 vs HEAD
-Gerado em: 2026-05-05T16:53:27Z
+Gerado em: 2026-05-06T08:57:11Z
 Harness: tests/diff_harness/run_harness.py v1.1.0
 FONTE: nfe —————————————————————————————————————————————
 Baseline principal:              5 linhas
