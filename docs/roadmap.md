@@ -1,3 +1,7 @@
+# Roadmap audit_pyside
+_Fonte única de verdade. Planos antigos em docs/historico/ são arquivo morto._
+_Plano-mestre vivo: Notion → 🎯 Plano de Execução Performance-First — audit_pyside_
+
 # Plano de melhoria expressiva de desempenho — audit_pyside
 
 > Prioridade máxima: o desempenho precisa melhorar **muitíssimo**. Este plano foca em mudanças estruturais, não apenas micro-otimizações.

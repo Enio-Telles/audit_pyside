@@ -53,3 +53,29 @@ mcp_servers.json
 .todo
 desktop-commander-version.txt
 .claude/settings.local.json
+
+# === Onda 0 — chore/cleanup-root (2026-05-05) ===
+# Backups de stash
+.stash_backups/
+
+# Diretórios de trabalho temporário
+tmp/
+scratch/
+playground/
+validacao_tmp/
+pr100_fixes/
+artifacts/
+
+# Arquivos de descrição de PR (devem ir no body do PR, não no repo)
+pr_body.md
+pr_desc.md
+pr_desc.txt
+pr_description.md
+pr_description.txt
+
+# Scripts/arquivos temporários
+tmp_*.py
+traceback.txt
+
+# Patches soltos (versionar em PR, não como arquivo)
+*.diff
