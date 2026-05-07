@@ -394,12 +394,14 @@ class RelatoriosWindowMixin:
 
         paginacao_anual = QHBoxLayout()
         self.btn_aba_anual_prev_page = QPushButton("< Anterior")
+        self.btn_aba_anual_prev_page.setToolTip("Ir para a pagina anterior")
         self.btn_aba_anual_prev_page.setEnabled(False)
         self.lbl_aba_anual_page = QLabel("Pagina 1/1 | 0 linhas filtradas")
         self.lbl_aba_anual_page.setStyleSheet(
             "QLabel { padding: 4px 8px; color: #94a3b8; }"
         )
         self.btn_aba_anual_next_page = QPushButton("Proximo >")
+        self.btn_aba_anual_next_page.setToolTip("Ir para a proxima pagina")
         self.btn_aba_anual_next_page.setEnabled(False)
         paginacao_anual.addWidget(self.btn_aba_anual_prev_page)
         paginacao_anual.addWidget(self.lbl_aba_anual_page)
@@ -529,10 +531,12 @@ class RelatoriosWindowMixin:
 
         paginacao_periodos = QHBoxLayout()
         self.btn_aba_periodos_prev_page = QPushButton("< Anterior")
+        self.btn_aba_periodos_prev_page.setToolTip("Ir para a pagina anterior")
         self.btn_aba_periodos_prev_page.setEnabled(False)
         self.lbl_aba_periodos_page = QLabel("Pagina 1/1 | 0 linhas filtradas")
         self.lbl_aba_periodos_page.setStyleSheet("QLabel { padding: 4px 8px; color: #94a3b8; }")
         self.btn_aba_periodos_next_page = QPushButton("Proximo >")
+        self.btn_aba_periodos_next_page.setToolTip("Ir para a proxima pagina")
         self.btn_aba_periodos_next_page.setEnabled(False)
         paginacao_periodos.addWidget(self.btn_aba_periodos_prev_page)
         paginacao_periodos.addWidget(self.lbl_aba_periodos_page)
@@ -829,12 +833,14 @@ class RelatoriosWindowMixin:
 
         paginacao_mensal = QHBoxLayout()
         self.btn_aba_mensal_prev_page = QPushButton("< Anterior")
+        self.btn_aba_mensal_prev_page.setToolTip("Ir para a pagina anterior")
         self.btn_aba_mensal_prev_page.setEnabled(False)
         self.lbl_aba_mensal_page = QLabel("Pagina 1/1 | 0 linhas filtradas")
         self.lbl_aba_mensal_page.setStyleSheet(
             "QLabel { padding: 4px 8px; color: #94a3b8; }"
         )
         self.btn_aba_mensal_next_page = QPushButton("Proximo >")
+        self.btn_aba_mensal_next_page.setToolTip("Ir para a proxima pagina")
         self.btn_aba_mensal_next_page.setEnabled(False)
         paginacao_mensal.addWidget(self.btn_aba_mensal_prev_page)
         paginacao_mensal.addWidget(self.lbl_aba_mensal_page)

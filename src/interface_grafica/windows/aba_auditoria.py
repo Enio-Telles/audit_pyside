@@ -70,7 +70,9 @@ class AuditoriaWindowMixin:
         self.btn_save_consulta_profile = QPushButton("Salvar perfil")
         self.btn_consulta_destacar = self._criar_botao_destacar()
         self.btn_prev_page = QPushButton("Pagina anterior")
+        self.btn_prev_page.setToolTip("Ir para a pagina anterior")
         self.btn_next_page = QPushButton("Proxima pagina")
+        self.btn_next_page.setToolTip("Ir para a proxima pagina")
         self.lbl_page = QLabel("Pagina 0/0")
         filter_actions.addWidget(self.btn_remove_filter)
         filter_actions.addWidget(self.btn_choose_columns)
@@ -261,12 +263,14 @@ class AuditoriaWindowMixin:
 
         paginacao_mov = QHBoxLayout()
         self.btn_mov_estoque_prev_page = QPushButton("< Anterior")
+        self.btn_mov_estoque_prev_page.setToolTip("Ir para a pagina anterior")
         self.btn_mov_estoque_prev_page.setEnabled(False)
         self.lbl_mov_estoque_page = QLabel("Pagina 1/1 | 0 linhas filtradas")
         self.lbl_mov_estoque_page.setStyleSheet(
             "QLabel { padding: 4px 8px; color: #94a3b8; }"
         )
         self.btn_mov_estoque_next_page = QPushButton("Proximo >")
+        self.btn_mov_estoque_next_page.setToolTip("Ir para a proxima pagina")
         self.btn_mov_estoque_next_page.setEnabled(False)
         paginacao_mov.addWidget(self.btn_mov_estoque_prev_page)
         paginacao_mov.addWidget(self.lbl_mov_estoque_page)
