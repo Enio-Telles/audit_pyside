@@ -14,6 +14,7 @@ Data: 2026-04-02
 """
 
 import os
+import re
 import time
 import logging
 import oracledb
@@ -24,10 +25,10 @@ from concurrent.futures import ThreadPoolExecutor
 import sys
 
 # Configuração de logging
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
+
+PADRAO_IDENTIFICADOR_ORACLE = re.compile(r"^[a-zA-Z0-9_$#]+$")
 
 # Configuração e Carregamento de Ambiente
 from .path_resolver import get_root_dir, get_env_path
@@ -66,7 +67,9 @@ class ExtratorOracle:
         self.servico = os.getenv("ORACLE_SERVICE")
 
         if not all([self.host, porta_str, self.servico, self.usuario, self.senha]):
-            raise RuntimeError("Configuracao Oracle incompleta. Verifique as variaveis ORACLE_HOST, ORACLE_PORT, ORACLE_SERVICE, DB_USER e DB_PASSWORD no .env")
+            raise RuntimeError(
+                "Configuracao Oracle incompleta. Verifique as variaveis ORACLE_HOST, ORACLE_PORT, ORACLE_SERVICE, DB_USER e DB_PASSWORD no .env"
+            )
 
         self.dsn = oracledb.makedsn(self.host, self.porta, service_name=self.servico)
         self.pasta_dados = ROOT_DIR / "dados" / "fisconforme" / "data_parquet"
@@ -193,6 +196,13 @@ class ExtratorOracle:
         Returns:
             True se a extração foi bem-sucedida, False caso contrário
         """
+        # Validação de segurança contra SQL Injection (CWE-89) em identificadores
+        if not PADRAO_IDENTIFICADOR_ORACLE.match(schema):
+            raise ValueError(f"Nome de schema inválido: '{schema}'")
+        if not PADRAO_IDENTIFICADOR_ORACLE.match(tabela):
+            raise ValueError(f"Nome de tabela inválido: '{tabela}'")
+        if filtro_coluna and not PADRAO_IDENTIFICADOR_ORACLE.match(filtro_coluna):
+            raise ValueError(f"Nome de coluna de filtro inválido: '{filtro_coluna}'")
         nome_completo = f"{schema}.{tabela}"
         arquivo_saida = self.pasta_dados / f"{schema}_{tabela}.parquet"
 
@@ -309,9 +319,9 @@ class ExtratorOracle:
         Returns:
             True se todas as extrações foram bem-sucedidas, False caso contrário
         """
-        logger.info(f"{'='*60}")
+        logger.info(f"{'=' * 60}")
         logger.info(f"Extração completa para CNPJ: {cnpj}")
-        logger.info(f"{'='*60}")
+        logger.info(f"{'=' * 60}")
 
         # -----------------------------------------------------------------
         # GRUPO 1: Tabelas-fato com filtro simples por CNPJ
@@ -374,9 +384,7 @@ class ExtratorOracle:
             # Grupo 1: filtro simples
             for schema, tabela, coluna_filtro in tabelas_filtradas:
                 tarefas.append(
-                    executor.submit(
-                        self.extrair_tabela, schema, tabela, coluna_filtro, cnpj
-                    )
+                    executor.submit(self.extrair_tabela, schema, tabela, coluna_filtro, cnpj)
                 )
 
             # Grupo 2: dimensões integrais
@@ -402,9 +410,9 @@ class ExtratorOracle:
         ok = sum(1 for r in resultados if r)
         falhas = total - ok
 
-        logger.info(f"{'='*60}")
+        logger.info(f"{'=' * 60}")
         logger.info(f"Extração concluída: {ok}/{total} tabelas OK, {falhas} falha(s)")
-        logger.info(f"{'='*60}")
+        logger.info(f"{'=' * 60}")
 
         return ok == total
 
