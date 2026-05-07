@@ -32,14 +32,27 @@ logs/
 workspace/
 audit_pyside/
 tmp/
+scratch/
+playground/
+validacao_tmp/
+pr100_fixes/
 artifacts/
+reports/
 tmp/__pycache__
+.stash_backups/
+*.stash
+*.diff
+pr_*.md
+pr_*.txt
+tmp_*.py
+traceback.txt
+runlist.txt
+sitafe_cols.txt
 
 # uv
 .venv/
 
 # Scratch / audit artefacts (not committed)
-scratch/
 .tmp_frontend_refs/
 docstring_audit*.txt
 missing_docstrings.txt
