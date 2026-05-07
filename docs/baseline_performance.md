@@ -1,51 +1,49 @@
 # Baseline de Performance (Arquivos Sintéticos)
 
-Este relatório apresenta as medições de baseline para operações comuns na GUI utilizando diferentes tamanhos de arquivos Parquet sintéticos.
+Este relatório apresenta as medições de baseline para operações comuns na GUI utilizando arquivos Parquet sintéticos.
 
 ## Ambiente
-- Data: 2026-05-05T16:50:56
-- Python: 3.12.13
+- **Data:** 2026-05-07T18:55:13
+- **SO:** N/A
+- **CPU:** N/A
+- **RAM:** N/A GB
+- **Disco:** N/A
+- **Python:** 3.12.13
+- **Polars:** N/A
+- **DuckDB:** N/A
+- **Rounds:** 2
 
 ## Resultados das Medições
 
-| Tamanho (MB) | Operação | Backend | P95 Time (s) | RSS Delta (MB) |
-|---|---|---|---|---|
-| 256 | ttfp | polars | 0.039s | +24.5 MB |
-| 256 | page_change | polars | 0.027s | +6.9 MB |
-| 256 | filter_apply | polars | 0.318s | +343.9 MB |
-| 256 | export_50k | polars | 0.063s | -230.9 MB |
-| 1000 | ttfp | duckdb | 0.121s | -73.0 MB |
-| 1000 | page_change | duckdb | 0.062s | +15.4 MB |
-| 1000 | filter_apply | duckdb | 0.948s | +16.5 MB |
-| 1000 | export_50k | duckdb | 0.077s | +45.1 MB |
-| 2048 | ttfp | duckdb | 0.123s | -146.3 MB |
-| 2048 | page_change | duckdb | 0.065s | +47.8 MB |
-| 2048 | filter_apply | duckdb | 0.810s | -9.6 MB |
-| 2048 | export_50k | duckdb | 0.091s | +37.9 MB |
+| Tamanho (MB) | Operação | Backend | Mean (s) | P95 (s) | RSS Delta | CV% |
+|---|---|---|---|---|---|---|
+| 256 | ttfp | polars | 0.021s | 0.039s | +11.6 MB | 117.72% |
+| 256 | page_2 | polars | 0.012s | 0.023s | +3.0 MB | 136.23% |
+| 256 | page_3 | polars | 0.011s | 0.021s | +1.6 MB | 135.79% |
+| 256 | page_10 | polars | 0.010s | 0.020s | +1.2 MB | 135.52% |
+| 256 | filter_contem | polars | 1.204s | 2.339s | +776.7 MB | 133.36% |
+| 256 | distinct | polars | 1.181s | 2.126s | +207.8 MB | 113.07% |
+| 1024 | ttfp | duckdb | 0.129s | 0.156s | -25.9 MB | 29.72% |
+| 1024 | page_2 | duckdb | 0.060s | 0.061s | +5.0 MB | 4.38% |
+| 1024 | page_3 | duckdb | 0.059s | 0.060s | -5.0 MB | 3.57% |
+| 1024 | page_10 | duckdb | 0.064s | 0.071s | +2.2 MB | 15.2% |
+| 1024 | filter_contem | duckdb | 0.444s | 0.458s | +7.3 MB | 4.55% |
+| 1024 | distinct | duckdb | 0.135s | 0.140s | -0.9 MB | 5.59% |
 
 ## Resumo por Tamanho
 
 ### Arquivo de 256 MB
-| KPI | Meta | P95 Medido | Resultado |
+| KPI | Meta | Valor (P95/Mean) | Resultado |
 |---|---|---|---|
 | TTFP | <= 5.0s | 0.039s | [PASS] |
-| Page Change | <= 2.0s | 0.027s | [PASS] |
-| Filter Apply | <= 5.0s | 0.318s | [PASS] |
-| Export 50k rows | N/A | 0.063s | - |
+| Page Change (p2) | <= 2.0s | 0.023s | [PASS] |
+| Filter Apply | <= 5.0s | 2.339s | [PASS] |
+| Distinct Values | <= 1.0s | 2.126s | [FAIL] |
 
-### Arquivo de 1000 MB
-| KPI | Meta | P95 Medido | Resultado |
+### Arquivo de 1024 MB
+| KPI | Meta | Valor (P95/Mean) | Resultado |
 |---|---|---|---|
-| TTFP | <= 5.0s | 0.121s | [PASS] |
-| Page Change | <= 2.0s | 0.062s | [PASS] |
-| Filter Apply | <= 5.0s | 0.948s | [PASS] |
-| Export 50k rows | N/A | 0.077s | - |
-
-### Arquivo de 2048 MB
-| KPI | Meta | P95 Medido | Resultado |
-|---|---|---|---|
-| TTFP | <= 5.0s | 0.123s | [PASS] |
-| Page Change | <= 2.0s | 0.065s | [PASS] |
-| Filter Apply | <= 5.0s | 0.810s | [PASS] |
-| Export 50k rows | N/A | 0.091s | - |
-
+| TTFP | <= 5.0s | 0.156s | [PASS] |
+| Page Change (p2) | <= 2.0s | 0.061s | [PASS] |
+| Filter Apply | <= 5.0s | 0.458s | [PASS] |
+| Distinct Values | <= 1.0s | 0.140s | [PASS] |
