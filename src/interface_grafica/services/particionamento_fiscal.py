@@ -55,6 +55,14 @@ class _Linha:
     gtin: str
     unidade: str
 
+@dataclass(frozen=True)
+class _AtribuicaoMeta:
+    bloco_id: int
+    motivo: str
+    camada: int
+    score_base: int
+    chave: str
+
 
 def _normalizar_codigo(valor: object) -> str:
     if valor is None:
@@ -280,18 +288,14 @@ def ordenar_blocos_por_particionamento_fiscal(
 
     def _atribuir(
         comp: list[_Linha],
-        bloco_id: int,
-        motivo: str,
-        camada: int,
-        score_base: int,
-        chave: str,
+        meta: _AtribuicaoMeta,
     ) -> None:
         for l in comp:
-            bloco_por_idx[l.idx] = bloco_id
-            motivo_por_idx[l.idx] = motivo
-            camada_por_idx[l.idx] = camada
-            score_por_idx[l.idx] = score_base
-            chave_fiscal_por_idx[l.idx] = chave
+            bloco_por_idx[l.idx] = meta.bloco_id
+            motivo_por_idx[l.idx] = meta.motivo
+            camada_por_idx[l.idx] = meta.camada
+            score_por_idx[l.idx] = meta.score_base
+            chave_fiscal_por_idx[l.idx] = meta.chave
             pendentes.discard(l.idx)
 
     # --- Camada 0: GTIN igual ---
@@ -301,7 +305,7 @@ def ordenar_blocos_por_particionamento_fiscal(
         pendentes=pendentes,
     )
     for grupo in grupos:
-        _atribuir(grupo, proximo_bloco, "GTIN_IGUAL", 0, 100, f"GTIN={grupo[0].gtin}")
+        _atribuir(grupo, _AtribuicaoMeta(proximo_bloco, "GTIN_IGUAL", 0, 100, f"GTIN={grupo[0].gtin}"))
         proximo_bloco += 1
 
     # --- Camada 1: NCM + CEST + UNIDADE ---
@@ -314,8 +318,8 @@ def ordenar_blocos_por_particionamento_fiscal(
     for grupo in grupos:
         for comp in _subdividir_por_descricao(grupo, cfg["camada_1"] / 100, cfg["max_bucket_size"]):
             _atribuir(
-                comp, proximo_bloco, "NCM+CEST+UNID", 1, 85,
-                f"NCM={grupo[0].ncm}|CEST={grupo[0].cest}|UN={grupo[0].unidade}",
+                comp, _AtribuicaoMeta(proximo_bloco, "NCM+CEST+UNID", 1, 85,
+                f"NCM={grupo[0].ncm}|CEST={grupo[0].cest}|UN={grupo[0].unidade}"),
             )
             proximo_bloco += 1
 
@@ -329,8 +333,8 @@ def ordenar_blocos_por_particionamento_fiscal(
     for grupo in grupos:
         for comp in _subdividir_por_descricao(grupo, cfg["camada_2"] / 100, cfg["max_bucket_size"]):
             _atribuir(
-                comp, proximo_bloco, "NCM+UNID", 2, 75,
-                f"NCM={grupo[0].ncm}|UN={grupo[0].unidade}",
+                comp, _AtribuicaoMeta(proximo_bloco, "NCM+UNID", 2, 75,
+                f"NCM={grupo[0].ncm}|UN={grupo[0].unidade}"),
             )
             proximo_bloco += 1
 
@@ -344,8 +348,8 @@ def ordenar_blocos_por_particionamento_fiscal(
     for grupo in grupos:
         for comp in _subdividir_por_descricao(grupo, cfg["camada_3"] / 100, cfg["max_bucket_size"]):
             _atribuir(
-                comp, proximo_bloco, "NCM4+UNID", 3, 65,
-                f"NCM4={grupo[0].ncm4}|UN={grupo[0].unidade}",
+                comp, _AtribuicaoMeta(proximo_bloco, "NCM4+UNID", 3, 65,
+                f"NCM4={grupo[0].ncm4}|UN={grupo[0].unidade}"),
             )
             proximo_bloco += 1
 
@@ -360,8 +364,8 @@ def ordenar_blocos_por_particionamento_fiscal(
         ):
             if len(comp) >= 2:
                 _atribuir(
-                    comp, proximo_bloco, "DESC_TOKENS", 5, 60,
-                    "INVERTED_INDEX",
+                    comp, _AtribuicaoMeta(proximo_bloco, "DESC_TOKENS", 5, 60,
+                    "INVERTED_INDEX"),
                 )
                 proximo_bloco += 1
 
