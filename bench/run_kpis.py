@@ -253,7 +253,10 @@ def make_scan(
             ) from exc
 
         def scan_typed(path: str | Path) -> pl.LazyFrame:
-            return scan_parquet_typed(path, codes_path=codes_path)
+            # strict_cast=False: valores desconhecidos viram null em vez de
+            # levantar erro — necessario para medir performance em dados reais
+            # que podem conter codigos sujos pontuais (ex.: "061" em Cst).
+            return scan_parquet_typed(path, codes_path=codes_path, strict_cast=False)
 
         return scan_typed
     else:

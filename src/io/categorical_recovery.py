@@ -110,11 +110,14 @@ COLUMN_TO_ENUM_KEY: Final[Mapping[str, str]] = {
     "Cfop": "cfop_all",
     "Cfop_c170": "cfop_all",
     "prod_CFOP": "cfop_all",
-    # CST ICMS
+    # CST ICMS (campo puro, regime normal)
     "cst_icms": "cst_icms_completo",
-    "Cst": "cst_icms_completo",
-    "Cst_c170": "cst_icms_completo",
     "icms_CST": "cst_icms_completo",
+    # Cst / Cst_c170 no SPED EFD: pode conter CST ICMS *ou* CSOSN
+    # dependendo do CRT da empresa (regime normal vs Simples Nacional).
+    # Usar chave unificada para evitar InvalidOperationError em Simples.
+    "Cst": "cst_icms_e_csosn",
+    "Cst_c170": "cst_icms_e_csosn",
     # CSOSN
     "csosn": "csosn",
     "icms_CSOSN": "csosn",
@@ -404,6 +407,7 @@ def scan_parquet_typed(
     extra_categorical_columns: Iterable[str] = (),
     blocklist: Iterable[str] = (),
     apply_boolean_cast: bool = True,
+    strict_cast: bool = True,
 ) -> pl.LazyFrame:
     """
     Wrapper de ``pl.scan_parquet`` com casts categóricos defensivos.
@@ -429,6 +433,11 @@ def scan_parquet_typed(
             ``pl.Categorical()``.
         blocklist: Colunas a NÃO castar, somadas a
             ``INVARIANT_BLOCKLIST``.
+        strict_cast: Se ``True`` (default), valores fora do Enum levantam
+            ``InvalidOperationError`` na coleta — comportamento de producao
+            para capturar dados sujos do SPED. Se ``False``, valores
+            desconhecidos viram ``null`` (modo tolerante para benchmarks
+            e migracao incremental).
 
     Returns:
         ``pl.LazyFrame`` com schema tipado. Se uma coluna do mapa não
@@ -436,8 +445,9 @@ def scan_parquet_typed(
 
     Raises:
         polars.exceptions.InvalidOperationError: Se o Parquet contém
-            valores fora do domínio de um ``pl.Enum`` (CFOP inválido,
-            etc.). Esta é a falha por design — captura dados sujos.
+            valores fora do domínio de um ``pl.Enum`` e ``strict_cast=True``
+            (CFOP inválido, etc.). Esta é a falha por design — captura
+            dados sujos.
 
     Example:
         >>> lf = scan_parquet_typed("dados/c170.parquet")
@@ -494,8 +504,10 @@ def scan_parquet_typed(
             continue  # idempotente
         # Polars exige cast intermediário para String quando origem
         # é Categorical com categorias diferentes (Polars #19389).
+        # strict=False substitui valores desconhecidos por null em vez de
+        # levantar InvalidOperationError (usado em benchmarks/migracao).
         cast_exprs.append(
-            pl.col(column).cast(pl.String).cast(target_enum)
+            pl.col(column).cast(pl.String).cast(target_enum, strict=strict_cast)
         )
 
     # Categoricals
@@ -528,6 +540,7 @@ def cast_dataframe_typed(
     extra_categorical_columns: Iterable[str] = (),
     blocklist: Iterable[str] = (),
     apply_boolean_cast: bool = True,
+    strict_cast: bool = True,
 ) -> pl.DataFrame:
     """
     Versão eager de ``scan_parquet_typed`` para DataFrames já materializados.
@@ -537,8 +550,8 @@ def cast_dataframe_typed(
 
     Args:
         df: DataFrame a tipar.
-        codes_path, extra_enum_map, extra_categorical_columns, blocklist:
-            Idênticos a ``scan_parquet_typed``.
+        codes_path, extra_enum_map, extra_categorical_columns, blocklist,
+        strict_cast: Idênticos a ``scan_parquet_typed``.
 
     Returns:
         Novo DataFrame com schema tipado. O original é preservado.
@@ -581,7 +594,7 @@ def cast_dataframe_typed(
         if _is_enum_dtype(schema[column], target_enum):
             continue
         cast_exprs.append(
-            pl.col(column).cast(pl.String).cast(target_enum)
+            pl.col(column).cast(pl.String).cast(target_enum, strict=strict_cast)
         )
 
     cat_dtype = pl.Categorical()

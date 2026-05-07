@@ -1,0 +1,169 @@
+{
+  "schema_version": 1,
+  "captured_at": "2026-05-07T20:07:14+00:00",
+  "polars_version": "1.40.1",
+  "n_parquets": 3,
+  "total_rows": 5517464,
+  "total_size_bytes": 242310283,
+  "parquets": [
+    {
+      "path": "C:\\audit_pyside\\dados\\CNPJ\\04240370002877\\analises\\produtos\\produtos_final_04240370002877.parquet",
+      "n_rows": 55296,
+      "file_size_bytes": 15939049,
+      "kpis_summary": {
+        "rss_peak_full_scan": 85.7422,
+        "groupby_id_agrupado_sum": 5.7134,
+        "filter_cfop_in": 0.0,
+        "filter_cst_eq": 0.0,
+        "pagination_p95": 0.0,
+        "file_size_on_disk": 15.2007,
+        "rle_dictionary_coverage": 0.0,
+        "invariants_hash": 1.0
+      }
+    },
+    {
+      "path": "C:\\audit_pyside\\dados\\CNPJ\\04240370002877\\analises\\produtos\\tb_documentos_04240370002877.parquet",
+      "n_rows": 4967008,
+      "file_size_bytes": 200944387,
+      "kpis_summary": {
+        "rss_peak_full_scan": 502.8086,
+        "groupby_id_agrupado_sum": 82.1649,
+        "filter_cfop_in": 0.0,
+        "filter_cst_eq": 0.0,
+        "pagination_p95": 0.0,
+        "file_size_on_disk": 191.6355,
+        "rle_dictionary_coverage": 0.0,
+        "invariants_hash": 0.0
+      }
+    },
+    {
+      "path": "C:\\audit_pyside\\dados\\CNPJ\\04240370002877\\arquivos_parquet\\c170_xml_04240370002877.parquet",
+      "n_rows": 495160,
+      "file_size_bytes": 25426847,
+      "kpis_summary": {
+        "rss_peak_full_scan": 124.2578,
+        "groupby_id_agrupado_sum": 11.9374,
+        "filter_cfop_in": 0.0,
+        "filter_cst_eq": 1.6567,
+        "pagination_p95": 0.0,
+        "file_size_on_disk": 24.2489,
+        "rle_dictionary_coverage": 0.0,
+        "invariants_hash": 1.0
+      }
+    }
+  ],
+  "aggregated_kpis": {
+    "file_size_on_disk": {
+      "name": "file_size_on_disk",
+      "unit": "MB",
+      "median_of_medians": 24.2489,
+      "p95_of_medians": 24.2489,
+      "min_median": 15.2007,
+      "max_median": 191.6355,
+      "n_runs": 3,
+      "per_run_medians": [
+        15.2007,
+        191.6355,
+        24.2489
+      ]
+    },
+    "filter_cfop_in": {
+      "name": "filter_cfop_in",
+      "unit": "ms",
+      "median_of_medians": 0.0,
+      "p95_of_medians": 0.0,
+      "min_median": 0.0,
+      "max_median": 0.0,
+      "n_runs": 3,
+      "per_run_medians": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "filter_cst_eq": {
+      "name": "filter_cst_eq",
+      "unit": "ms",
+      "median_of_medians": 0.0,
+      "p95_of_medians": 0.0,
+      "min_median": 0.0,
+      "max_median": 1.6567,
+      "n_runs": 3,
+      "per_run_medians": [
+        0.0,
+        0.0,
+        1.6567
+      ]
+    },
+    "groupby_id_agrupado_sum": {
+      "name": "groupby_id_agrupado_sum",
+      "unit": "ms",
+      "median_of_medians": 11.9374,
+      "p95_of_medians": 11.9374,
+      "min_median": 5.7134,
+      "max_median": 82.1649,
+      "n_runs": 3,
+      "per_run_medians": [
+        5.7134,
+        82.1649,
+        11.9374
+      ]
+    },
+    "invariants_hash": {
+      "name": "invariants_hash",
+      "unit": "mixed",
+      "median_of_medians": 1.0,
+      "p95_of_medians": 1.0,
+      "min_median": 0.0,
+      "max_median": 1.0,
+      "n_runs": 3,
+      "per_run_medians": [
+        1.0,
+        0.0,
+        1.0
+      ]
+    },
+    "pagination_p95": {
+      "name": "pagination_p95",
+      "unit": "ms",
+      "median_of_medians": 0.0,
+      "p95_of_medians": 0.0,
+      "min_median": 0.0,
+      "max_median": 0.0,
+      "n_runs": 3,
+      "per_run_medians": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "rle_dictionary_coverage": {
+      "name": "rle_dictionary_coverage",
+      "unit": "pct",
+      "median_of_medians": 0.0,
+      "p95_of_medians": 0.0,
+      "min_median": 0.0,
+      "max_median": 0.0,
+      "n_runs": 3,
+      "per_run_medians": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "rss_peak_full_scan": {
+      "name": "rss_peak_full_scan",
+      "unit": "MB",
+      "median_of_medians": 124.2578,
+      "p95_of_medians": 124.2578,
+      "min_median": 85.7422,
+      "max_median": 502.8086,
+      "n_runs": 3,
+      "per_run_medians": [
+        85.7422,
+        502.8086,
+        124.2578
+      ]
+    }
+  }
+}

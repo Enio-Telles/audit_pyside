@@ -42,6 +42,7 @@ def minimal_codes() -> dict[str, list[str] | dict[str, str]]:
         "cst_icms_origem": ["0", "1", "2"],
         "cst_icms_completo": ["000", "010", "060", "090"],
         "csosn": ["101", "102", "500", "900"],
+        "cst_icms_e_csosn": ["000", "010", "060", "090", "101", "102", "500", "900"],
         "cst_pis_cofins_completo": ["01", "49", "50", "99"],
         "modelo_documento": ["55", "65"],
         "tipo_operacao_nfe": ["0", "1"],
