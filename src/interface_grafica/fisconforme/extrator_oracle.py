@@ -201,7 +201,7 @@ class ExtratorOracle:
             raise ValueError(f"Nome de schema inválido: '{schema}'")
         if not PADRAO_IDENTIFICADOR_ORACLE.match(tabela):
             raise ValueError(f"Nome de tabela inválido: '{tabela}'")
-        if filtro_coluna and not PADRAO_IDENTIFICADOR_ORACLE.match(filtro_coluna):
+        if filtro_coluna is not None and not PADRAO_IDENTIFICADOR_ORACLE.match(filtro_coluna):
             raise ValueError(f"Nome de coluna de filtro inválido: '{filtro_coluna}'")
         nome_completo = f"{schema}.{tabela}"
         arquivo_saida = self.pasta_dados / f"{schema}_{tabela}.parquet"
