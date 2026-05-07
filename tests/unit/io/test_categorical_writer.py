@@ -26,7 +26,7 @@ from src.io.categorical_recovery import (
     INVARIANT_BLOCKLIST,
     reload_fiscal_codes,
 )
-from src.io.categorical_writer import rewrite_parquet_typed
+from src.io.categorical_writer import batch_rewrite_parquets, rewrite_parquet_typed
 
 
 # ---------------------------------------------------------------------------
@@ -313,3 +313,130 @@ class TestRewriteParquetTyped:
                     # String columns may or may not have dictionary encoding
                     # depending on cardinality — the key is they are not Enum/Categorical
                     pass
+
+
+class TestBatchRewriteParquets:
+    """Testes para batch_rewrite_parquets."""
+
+    def test_batch_rewrite_dois_parquets(
+        self, tmp_codes_json: Path, tmp_path: Path
+    ) -> None:
+        """Batch rewrite de 2 Parquets em subpastas diferentes."""
+        # Criar estrutura de entrada
+        input_root = tmp_path / "input"
+        sub_a = input_root / "analises" / "produtos"
+        sub_b = input_root / "arquivos_parquet"
+        sub_a.mkdir(parents=True)
+        sub_b.mkdir(parents=True)
+
+        df1 = pl.DataFrame({
+            "cfop": ["5102", "5405"],
+            "uf": ["SP", "RJ"],
+            "id_agrupado": ["id_a1", "id_a2"],
+        })
+        df1.write_parquet(sub_a / "produtos_final.parquet")
+
+        df2 = pl.DataFrame({
+            "cfop": ["6102", "6108"],
+            "Cst": ["000", "102"],
+            "id_agrupado": ["id_b1", "id_b2"],
+        })
+        df2.write_parquet(sub_b / "c170_xml.parquet")
+
+        output_root = tmp_path / "output"
+        results = batch_rewrite_parquets(
+            input_root, output_root, codes_path=tmp_codes_json,
+        )
+
+        assert len(results) == 2
+        assert output_root.exists()
+        assert (output_root / "analises" / "produtos" / "produtos_final.parquet").exists()
+        assert (output_root / "arquivos_parquet" / "c170_xml.parquet").exists()
+
+        for r in results:
+            assert r["n_cols_typed"] > 0
+            assert r["schema_diff"] == {}
+
+    def test_batch_input_root_inexistente(
+        self, tmp_codes_json: Path, tmp_path: Path
+    ) -> None:
+        """input_root inexistente levanta FileNotFoundError."""
+        inexistente = tmp_path / "nao_existe"
+        output = tmp_path / "output"
+        with pytest.raises(FileNotFoundError, match="nao encontrado"):
+            batch_rewrite_parquets(inexistente, output, codes_path=tmp_codes_json)
+
+    def test_batch_sem_parquets(
+        self, tmp_codes_json: Path, tmp_path: Path
+    ) -> None:
+        """Diretorio sem Parquets: lista vazia, sem erro."""
+        input_root = tmp_path / "vazio"
+        input_root.mkdir(parents=True)
+        output_root = tmp_path / "output"
+        results = batch_rewrite_parquets(
+            input_root, output_root, codes_path=tmp_codes_json,
+        )
+        assert results == []
+
+    def test_batch_min_size_mb(
+        self, tmp_codes_json: Path, tmp_path: Path
+    ) -> None:
+        """Filtro min_size_mb exclui arquivos pequenos."""
+        input_root = tmp_path / "input"
+        input_root.mkdir()
+
+        # Parquet pequeno (alguns bytes)
+        df = pl.DataFrame({"cfop": ["5102"]})
+        df.write_parquet(input_root / "pequeno.parquet")
+
+        output_root = tmp_path / "output"
+        results = batch_rewrite_parquets(
+            input_root, output_root, codes_path=tmp_codes_json, min_size_mb=10,
+        )
+        assert results == []
+
+    def test_batch_max_files(
+        self, tmp_codes_json: Path, tmp_path: Path
+    ) -> None:
+        """max_files limita o numero de arquivos processados."""
+        input_root = tmp_path / "input"
+        input_root.mkdir()
+
+        for i in range(5):
+            df = pl.DataFrame({"cfop": ["5102"]})
+            df.write_parquet(input_root / f"file_{i}.parquet")
+
+        output_root = tmp_path / "output"
+        results = batch_rewrite_parquets(
+            input_root, output_root, codes_path=tmp_codes_json, max_files=2,
+        )
+        assert len(results) == 2
+
+    def test_batch_tolera_erro_parcial(
+        self, tmp_codes_json: Path, tmp_path: Path
+    ) -> None:
+        """Batch continua mesmo se um arquivo falha (strict_cast=True)."""
+        input_root = tmp_path / "input"
+        input_root.mkdir()
+
+        # Arquivo valido
+        df_ok = pl.DataFrame({
+            "cfop": ["5102"],
+            "id_agrupado": ["id_ok"],
+        })
+        df_ok.write_parquet(input_root / "ok.parquet")
+
+        # Arquivo com CFOP invalido
+        df_bad = pl.DataFrame({
+            "cfop": ["9999"],
+            "id_agrupado": ["id_bad"],
+        })
+        df_bad.write_parquet(input_root / "bad.parquet")
+
+        output_root = tmp_path / "output"
+        results = batch_rewrite_parquets(
+            input_root, output_root, codes_path=tmp_codes_json, strict_cast=True,
+        )
+        # Apenas o valido deve ter sucesso
+        assert len(results) == 1
+        assert results[0]["n_rows"] == 1
