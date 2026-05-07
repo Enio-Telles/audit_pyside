@@ -228,10 +228,10 @@ class MainWindow(
                 f"Uma nova versão ({release_info.tag_name}) está disponível.\n\n"
                 f"Notas de release:\n{release_info.body}\n\n"
                 "Deseja baixar e aplicar a atualização agora?",
-                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             )
 
-            if reply == QMessageBox.Yes:
+            if reply == QMessageBox.StandardButton.Yes:
                 self._update_dialog = UpdateDialog(release_info, self)
                 self._update_dialog.set_downloading()
 
@@ -261,7 +261,7 @@ class MainWindow(
             import subprocess
 
             subprocess.Popen(
-                ["cmd.exe", "/c", bat_path], creationflags=subprocess.CREATE_NEW_CONSOLE
+                ["cmd.exe", "/c", bat_path], creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0x00000010)
             )
             self.close()
         except Exception as e:
@@ -274,7 +274,7 @@ class MainWindow(
         self.setCentralWidget(central)
         root_layout = QVBoxLayout(central)
 
-        self.main_splitter = QSplitter(Qt.Horizontal)
+        self.main_splitter = QSplitter(Qt.Orientation.Horizontal)
         root_layout.addWidget(self.main_splitter)
 
         self.left_panel_widget = self._build_left_panel()
@@ -300,7 +300,7 @@ class MainWindow(
         self.tabs = QTabWidget()
         self.btn_toggle_panel = QPushButton("<< Ocultar Painel Lateral")
         self.btn_toggle_panel.setCheckable(True)
-        self.tabs.setCornerWidget(self.btn_toggle_panel, Qt.TopRightCorner)
+        self.tabs.setCornerWidget(self.btn_toggle_panel, Qt.Corner.TopRightCorner)
 
         self.tabs.addTab(self._build_tab_configuracoes(), "Configurações")
         self.tabs.addTab(self._build_tab_consulta(), "Consulta")

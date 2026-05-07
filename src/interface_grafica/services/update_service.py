@@ -52,7 +52,7 @@ class UpdateWorker(QThread):
             reply.finished.connect(loop.quit)
             loop.exec()
 
-            if reply.error() != QNetworkReply.NoError:
+            if reply.error() != QNetworkReply.NetworkError.NoError:
                 # Silent failure as per research doc
                 logger.warning(f"Failed to check for updates: {reply.errorString()}")
                 self.finished.emit(None)
@@ -120,12 +120,12 @@ class UpdateService(QObject):
             self._download_zip(release_info.zip_url)
 
     def _download_checksums(self, release_info: ReleaseInfo):
-        request = QNetworkRequest(QUrl(release_info.checksums_url))
+        request = QNetworkRequest(QUrl(release_info.checksums_url or ""))
         reply = self.manager.get(request)
         reply.finished.connect(lambda: self._on_checksums_downloaded(reply, release_info))
 
     def _on_checksums_downloaded(self, reply, release_info: ReleaseInfo):
-        if reply.error() != QNetworkReply.NoError:
+        if reply.error() != QNetworkReply.NetworkError.NoError:
             logger.error(f"Failed to download checksums: {reply.errorString()}")
             self.update_error.emit(f"Erro ao baixar checksums: {reply.errorString()}")
             return
@@ -147,7 +147,7 @@ class UpdateService(QObject):
             self.download_progress.emit(progress)
 
     def _on_download_finished(self):
-        if self.reply.error() != QNetworkReply.NoError:
+        if self.reply.error() != QNetworkReply.NetworkError.NoError:
             self.update_error.emit(f"Download failed: {self.reply.errorString()}")
             return
 
