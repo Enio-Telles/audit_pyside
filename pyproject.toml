@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src"]
-include = ["app.py"]
+include = ["app.py", "app_safe.py"]
 
 [project]
 name = "audit-pyside"
@@ -41,9 +41,6 @@ dev = [
     "mypy>=1.10",
     "pre-commit>=3.5",
     "pyinstaller>=6.0",
-]
-test-gui = [
-    "pytest-qt>=4.4.0",
 ]
 
 [project.scripts]
@@ -91,6 +88,7 @@ indent-style = "space"
 [tool.ruff.lint.per-file-ignores]
 "conftest.py" = ["E402"]
 "app.py" = ["E402"]
+"app_safe.py" = ["E402"]
 
 [tool.mypy]
 python_version = "3.11"

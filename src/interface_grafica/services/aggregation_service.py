@@ -13,7 +13,7 @@ import shutil
 from datetime import datetime
 
 import polars as pl
-from utilitarios.perf_monitor import log_parquet_open, registrar_evento_performance
+from utilitarios.perf_monitor import registrar_evento_performance
 from utilitarios.text import expr_normalizar_descricao
 
 from interface_grafica.config import CNPJ_ROOT
@@ -186,13 +186,6 @@ class ServicoAgregacao:
             t0 = perf_counter()
             df = pl.read_parquet(path)
             t1 = perf_counter()
-            log_parquet_open(
-                path,
-                "ServicoAgregacao._ler_parquet_cache",
-                rows=df.height,
-                cols=df.width,
-                elapsed_ms=(t1 - t0) * 1000.0,
-            )
             cache[path] = df
             if cnpj is not None:
                 self._global_df_cache[cnpj][path] = df
@@ -747,16 +740,7 @@ class ServicoAgregacao:
         selecionadas = [col for col in colunas if col in schema_cols]
         if not selecionadas:
             return pl.DataFrame()
-        inicio = perf_counter()
-        df = pl.read_parquet(path, columns=selecionadas)
-        log_parquet_open(
-            path,
-            "ServicoAgregacao._ler_parquet_colunas",
-            rows=df.height,
-            cols=df.width,
-            elapsed_ms=(perf_counter() - inicio) * 1000.0,
-        )
-        return df
+        return pl.read_parquet(path, columns=selecionadas)
 
     @staticmethod
     def _obter_schema_parquet(path: Path) -> set[str]:

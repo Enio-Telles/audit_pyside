@@ -1,19 +1,13 @@
-import os
-import sys
 from pathlib import Path
 
 import pytest
-pytest.importorskip("PySide6.QtWidgets")
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 pytestmark = pytest.mark.gui
 
-# Skip on Windows CI due to DLL instability (0xc0000139 STATUS_ENTRYPOINT_NOT_FOUND).
-if sys.platform == "win32" and os.getenv("GITHUB_ACTIONS"):
-    pytest.skip("Skipping GUI tests on Windows CI due to DLL instability", allow_module_level=True)
-
-from PySide6.QtWidgets import QApplication, QMessageBox
+try:
+    from PySide6.QtWidgets import QApplication, QMessageBox
+except ImportError as exc:
+    pytest.skip(f"PySide6 indisponivel neste ambiente: {exc}", allow_module_level=True)
 
 from interface_grafica.ui.main_window import MainWindow
 

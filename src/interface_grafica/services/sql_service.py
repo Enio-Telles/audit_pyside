@@ -22,6 +22,17 @@ from utilitarios.sql_catalog import list_sql_entries, resolve_sql_path
 WIDGET_DATE = "date"
 WIDGET_TEXT = "text"
 
+# 🛡️ Strict allowlist for Oracle identifiers (schema, table, column)
+# where bind variables cannot be used. Supports alphanumeric, _, $, #.
+ORACLE_IDENTIFIER_ALLOWED = re.compile(r"^[a-zA-Z0-9_$#]+$")
+
+
+def validate_oracle_identifier(identifier: str) -> str:
+    """Valida identificador Oracle contra injeção de SQL; retorna o próprio se OK."""
+    if not identifier or not ORACLE_IDENTIFIER_ALLOWED.match(identifier):
+        raise ValueError(f"Identificador Oracle invalido ou malicioso: {identifier!r}")
+    return identifier
+
 
 @dataclass
 class ParamInfo:
@@ -126,6 +137,12 @@ class SqlService:
     def executar_sql(
         sql: str, params: dict[str, Any] | None = None, cnpj: str | None = None
     ) -> list[dict[str, Any]]:
+        if cnpj:
+            # 🛡️ Sentinel: CNPJ as a value is usually used in bind variables,
+            # but we validate it as an extra layer of defense if it's used
+            # in dynamic queries.
+            validate_oracle_identifier(cnpj)
+
         try:
             from interface_grafica.services.query_worker import (
                 _conectar_oracle_fallback,

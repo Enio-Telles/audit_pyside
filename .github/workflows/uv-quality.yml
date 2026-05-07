@@ -34,7 +34,9 @@ jobs:
             libxkbcommon-x11-0 libfontconfig1 libfreetype6
 
       - name: Install project dependencies
-        run: uv sync --group dev --group test-gui
+        run: |
+          uv sync --group dev
+          uv pip install pytest-qt
 
       - name: Run GUI smoke test
         run: uv run pytest -q -m gui_smoke tests/ui/test_main_window_smoke.py

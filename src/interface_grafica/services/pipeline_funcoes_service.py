@@ -21,7 +21,6 @@ import polars as pl
 
 from extracao.extracao_oracle_eficiente import _gravar_cursor_em_parquet
 from interface_grafica.config import CNPJ_ROOT, SQL_DIR
-from utilitarios.perf_monitor import log_parquet_open
 
 
 def _parquet_valido_simples(arquivo: Path) -> bool:
@@ -231,15 +230,7 @@ class ServicoExtracao:
         if not arquivo.exists():
             return None
         try:
-            inicio = perf_counter()
             df = pl.read_parquet(arquivo, columns=["data_entrega"])
-            log_parquet_open(
-                arquivo,
-                "ServicoExtracao.obter_data_entrega_reg0000",
-                rows=df.height,
-                cols=df.width,
-                elapsed_ms=(perf_counter() - inicio) * 1000.0,
-            )
             if df.is_empty():
                 return None
             maior_data = df.select(pl.col("data_entrega").max()).to_series()[0]

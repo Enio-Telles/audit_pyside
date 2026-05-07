@@ -10,9 +10,9 @@ isso explicitamente para uma área já existente no código.
 
 | Escopo | Arquivo | Consumidores |
 |---|---|---|
-| Raiz / transversal | `AGENTS.md` (este) | Claude, Codex, Copilot, Jules |
-| Pipeline de transformação | `src/transformacao/AGENTS.md` | Claude, Codex, Jules |
-| Interface gráfica PySide6 | `src/interface_grafica/AGENTS.md` | Claude, Copilot, Jules |
+| Raiz / transversal | `AGENTS.md` (este) | Claude, Codex, Copilot |
+| Pipeline de transformação | `src/transformacao/AGENTS.md` | Claude, Codex |
+| Interface gráfica PySide6 | `src/interface_grafica/AGENTS.md` | Claude, Copilot |
 
 > **Backend:** removido (ADR-001 Opção B, 2026-04-22). Pipeline + GUI desktop são a única superfície.
 > **Regra de precedência:** em caso de conflito, este arquivo prevalece sobre os escopados.
@@ -34,21 +34,6 @@ automated_agents:
     root: "AGENTS.md"
     transformacao: "src/transformacao/AGENTS.md"
     interface_grafica: "src/interface_grafica/AGENTS.md"
-  async_agents:
-    jules:
-      provider: "Google"
-      mode: "asynchronous coding agent"
-      allowed_default_scope:
-        - "docs/**"
-        - "tests/**"
-        - "scripts/**"
-        - "src/interface_grafica/**"
-      requires_human_authorization:
-        - "src/transformacao/**"
-        - "schema Parquet"
-        - "read_only_files"
-        - "fiscal invariants"
-        - "release/signing/auto-update workflows"
   read_only_files:
     - "src/transformacao/rastreabilidade_produtos/_produtos_final_impl.py"
     - "src/transformacao/rastreabilidade_produtos/fatores_conversao.py"
@@ -73,7 +58,7 @@ automated_agents:
   pr_title_format: "tipo(area-fase): descricao"
 ```
 
-Regras para Codex, Copilot Agent, Jules e Antigravity:
+Regras para Codex, Copilot Agent e Antigravity:
 
 - Nao altere semantica fiscal.
 - Nao modifique os arquivos read-only listados acima.
@@ -89,132 +74,11 @@ Regras para Codex, Copilot Agent, Jules e Antigravity:
 
 ---
 
-## Jules — agente assincrono de codificacao
-
-Jules e tratado neste repositorio como agente assincrono de implementacao em background.
-Ele pode executar tarefas complexas em uma VM isolada, abrir PRs, responder a comentarios
-e aplicar commits corretivos, mas nao decide estrategia fiscal nem substitui aprovacao humana.
-
-Use Jules para:
-
-- PRs pequenas e bem delimitadas;
-- correcoes de bugs com criterio de aceite claro;
-- refactors mecanicos em multiplos arquivos;
-- criacao ou expansao de testes;
-- docstrings e documentacao operacional;
-- limpeza de codigo sem mudanca fiscal;
-- tarefas repetitivas com validacao objetiva.
-
-Nao use Jules para decidir ou executar sem autorizacao humana:
-
-- regra fiscal;
-- alteracao de invariantes;
-- mudanca de schema Parquet;
-- alteracao em arquivos read-only;
-- estrategia de arquitetura;
-- politica de release, signing ou auto-update;
-- merge automatico.
-
-### Regras especificas para Jules
-
-Antes de acionar Jules, o prompt deve conter:
-
-1. Objetivo em uma frase.
-2. Escopo permitido por arquivos ou pastas.
-3. Arquivos proibidos.
-4. Gates de validacao.
-5. Criterio de pronto.
-6. Instrucao explicita para manter o diff pequeno.
-7. Instrucao para nao fazer merge.
-8. Instrucao para priorizar reviews humanos sobre comentarios de bots.
-
-### Escopo seguro para Jules
-
-Jules pode atuar sem autorizacao extra em:
-
-- `docs/**`
-- `tests/**`
-- `scripts/**`
-- `src/interface_grafica/**`, exceto quando afetar calculo fiscal
-- melhorias de CI nao destrutivas
-- refactors de GUI sem regra fiscal
-- testes unitarios e regressoes
-
-Jules precisa de autorizacao humana explicita antes de tocar:
-
-- `src/transformacao/**`
-- qualquer schema Parquet
-- qualquer uma das 5 invariantes fiscais
-- qualquer arquivo listado em `read_only_files`
-- workflows de release, assinatura ou auto-update
-- mudancas que afetem reprocessamento ou preservacao de ajustes manuais
-
-### Fluxo de cooperacao com Jules
-
-1. Humano ou agente de triagem define a tarefa.
-2. Prompt deve ser colado em issue ou PR com escopo fechado.
-3. Jules gera plano e diff.
-4. Revisar o plano antes de aceitar mudancas amplas.
-5. Se Jules abrir PR, manter como draft ate passar validacao.
-6. Comentarios humanos tem prioridade sobre comentarios de bots.
-7. Se houver conflito entre Jules, CodeRabbit, Codex, Copilot ou Gemini, prevalece:
-   1. humano responsavel;
-   2. `AGENTS.md` raiz;
-   3. `AGENTS.md` escopado;
-   4. `docs/Plano_duck/`;
-   5. comentario de bot.
-
-### Padrao de prompt para Jules
-
-```text
-Leia AGENTS.md, src/transformacao/AGENTS.md e src/interface_grafica/AGENTS.md antes de alterar qualquer arquivo.
-
-Objetivo:
-<descrever em uma frase>
-
-Escopo permitido:
-- <arquivos/pastas permitidos>
-
-Fora de escopo:
-- nao alterar regra fiscal
-- nao alterar schema Parquet
-- nao alterar as invariantes: id_agrupado, id_agregado, __qtd_decl_final_audit__, q_conv, q_conv_fisica
-- nao tocar arquivos read-only listados em AGENTS.md
-- nao fazer merge
-
-Validacao obrigatoria:
-- ruff check
-- ruff format --check
-- pytest -q -m "not gui_smoke"
-- se tocar src/transformacao: mypy src/transformacao
-- se tocar src/transformacao em perf/refactor: differential harness real
-
-Criterio de pronto:
-- diff pequeno e revisavel
-- testes focados adicionados ou atualizados
-- descricao da PR explica objetivo, risco, validacao e rollback
-- nenhum artefato temporario versionado
-```
-
-### Resposta esperada de Jules
-
-Toda PR criada por Jules deve conter:
-- objetivo;
-- arquivos alterados;
-- o que foi reaproveitado;
-- validacao executada;
-- riscos;
-- rollback;
-- proximos passos;
-- confirmacao de que nao tocou arquivos read-only, quando aplicavel.
-
----
-
 ## Hierarquia de autoridade
 
 1. Humano responsavel pelo repositorio.
 2. Claude Code, somente quando autorizado, com ADR e differential test para regra fiscal.
-3. Codex, GitHub Copilot Agent, Jules e Antigravity, restritos a escopo seguro e sem regra fiscal.
+3. Codex, GitHub Copilot Agent e Antigravity, restritos a escopo seguro e sem regra fiscal.
 
 Quando houver conflito entre instrucoes, siga a ordem acima. Em caso de duvida sobre
 regra fiscal, pare e solicite decisao humana antes de editar.
