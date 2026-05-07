@@ -16,3 +16,8 @@
 **Vulnerability:** The `/execute` endpoint in `backend/routers/sql_query.py` was previously receiving arbitrary `sql` query strings from the client via the `SqlRequest` model and executing them directly against the database via `SqlService.executar_sql()`, introducing a severe SQL Injection risk.
 **Learning:** Exposing raw SQL execution to an API endpoint is highly unsafe. By restricting execution to predefined queries registered in the application's catalog, you can effectively mitigate SQL injection.
 **Prevention:** Always accept an `sql_id` or similar identifier in requests to execute SQL, and look up the registered query content (e.g. via `SqlService.read_sql()`) before execution. Do not pass client-provided arbitrary query strings directly to database cursors.
+
+## 2026-05-07 - Prevention of Internal Network Information Disclosure
+**Vulnerability:** Internal Oracle database hostnames (`exa01-scan.sefin.ro.gov.br`) and service names (`sefindw`) were hardcoded as placeholder texts in UI components (`QFormLayout` text fields) and docstrings.
+**Learning:** Hardcoding specific infrastructure details, even if only used as placeholder examples in the UI or in code documentation, exposes internal network topology to anyone with access to the source code or the application interface, leading to Information Disclosure.
+**Prevention:** Always use generic examples (e.g., `db.example.com`, `orcl`) for connection strings, hostnames, and service names in UI placeholders and documentation. Keep internal topology confidential.

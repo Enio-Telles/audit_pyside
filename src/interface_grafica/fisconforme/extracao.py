@@ -162,7 +162,7 @@ def conectar_oracle() -> Optional[Any]:
         As variÃ¡veis de ambiente necessÃ¡rias sÃ£o:
         - ORACLE_HOST: Host do servidor Oracle
         - ORACLE_PORT: Porta de conexÃ£o (padrÃ£o: 1521)
-        - ORACLE_SERVICE: Nome do serviÃ§o (padrÃ£o: sefindw)
+        - ORACLE_SERVICE: Nome do serviÃ§o (padrÃ£o: orcl)
         - DB_USER: UsuÃ¡rio do banco
         - DB_PASSWORD: Senha do banco
     """
