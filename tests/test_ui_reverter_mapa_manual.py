@@ -3,6 +3,7 @@ import sys
 from pathlib import Path
 
 import pytest
+pytest.importorskip("PySide6")
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -12,7 +13,6 @@ pytestmark = pytest.mark.gui
 if sys.platform == "win32" and os.getenv("GITHUB_ACTIONS"):
     pytest.skip("Skipping GUI tests on Windows CI due to DLL instability", allow_module_level=True)
 
-pytest.importorskip("PySide6")
 from PySide6.QtWidgets import QApplication, QMessageBox
 
 from interface_grafica.ui.main_window import MainWindow
