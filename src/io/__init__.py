@@ -18,7 +18,7 @@ from src.io.categorical_recovery import (
     scan_parquet_typed,
     validate_schema_post_cast,
 )
-from src.io.categorical_writer import rewrite_parquet_typed
+from src.io.categorical_writer import batch_rewrite_parquets, rewrite_parquet_typed
 
 __all__ = [
     "COLUMN_TO_ENUM_KEY",
@@ -29,6 +29,7 @@ __all__ = [
     "BOOLEAN_TRUE_VALUES_BY_COLUMN",
     "INVERTED_BOOLEAN_FIELDS",
     "assert_no_invariant_categorized",
+    "batch_rewrite_parquets",
     "build_categorical_map",
     "build_enum_map",
     "cast_dataframe_typed",

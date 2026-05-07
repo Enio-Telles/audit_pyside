@@ -218,6 +218,129 @@ def rewrite_parquet_typed(
     return result
 
 
+def batch_rewrite_parquets(
+    input_root: str | Path,
+    output_root: str | Path,
+    *,
+    codes_path: Path | None = None,
+    strict_cast: bool = True,
+    min_size_mb: float = 0,
+    max_files: int | None = None,
+    compression: str = "zstd",
+    compression_level: int | None = None,
+    statistics: bool = True,
+    row_group_size: int | None = None,
+    **write_kwargs: Any,
+) -> list[dict[str, Any]]:
+    """
+    Reescreve em lote todos os Parquets de ``input_root`` para ``output_root``.
+
+    Descobre recursivamente arquivos ``*.parquet`` em ``input_root``,
+    filtra por tamanho minimo (``min_size_mb``), e reescreve cada um
+    side-by-side em ``output_root`` preservando a estrutura de pastas.
+
+    Args:
+        input_root: Diretorio raiz com Parquets v1.
+        output_root: Diretorio raiz para Parquets v2 (criado se nao existir).
+        codes_path: Caminho do JSON de codigos fiscais.
+        strict_cast: Se ``True`` (default), valores fora do Enum levantam erro.
+        min_size_mb: Tamanho minimo do arquivo em MB para incluir no lote.
+        max_files: Numero maximo de arquivos a processar (default: None = todos).
+        compression: Codec de compressao (default: ``"zstd"``).
+        compression_level: Nivel de compressao.
+        statistics: Gravar estatisticas de coluna (default: ``True``).
+        row_group_size: Linhas por row group.
+        **write_kwargs: Argumentos extras para ``df.write_parquet``.
+
+    Returns:
+        Lista de dicionarios com metadados de cada rewrite (mesmo formato
+        de ``rewrite_parquet_typed``).
+
+    Raises:
+        FileNotFoundError: Se ``input_root`` nao existe.
+    """
+    input_root_p = Path(input_root).resolve()
+    output_root_p = Path(output_root).resolve()
+
+    if not input_root_p.exists():
+        raise FileNotFoundError(f"Diretorio de entrada nao encontrado: {input_root_p}")
+
+    # Descobrir Parquets
+    parquet_files = sorted(input_root_p.rglob("*.parquet"))
+
+    # Filtrar por tamanho minimo
+    if min_size_mb > 0:
+        min_bytes = min_size_mb * 1024 * 1024
+        parquet_files = [p for p in parquet_files if p.stat().st_size >= min_bytes]
+
+    # Limitar numero de arquivos
+    if max_files is not None and max_files > 0:
+        parquet_files = parquet_files[:max_files]
+
+    if not parquet_files:
+        logger.warning(
+            "batch_rewrite_parquets: nenhum Parquet encontrado em %s "
+            "(min_size_mb=%s)", input_root_p, min_size_mb,
+        )
+        return []
+
+    logger.info(
+        "batch_rewrite_parquets: %d Parquets encontrados em %s",
+        len(parquet_files), input_root_p,
+    )
+
+    results: list[dict[str, Any]] = []
+    errors: list[tuple[Path, str]] = []
+
+    for i, parquet_path in enumerate(parquet_files, 1):
+        # Calcular output_path preservando estrutura de pastas
+        rel_path = parquet_path.relative_to(input_root_p)
+        output_path = output_root_p / rel_path
+
+        try:
+            result = rewrite_parquet_typed(
+                parquet_path,
+                output_path,
+                codes_path=codes_path,
+                strict_cast=strict_cast,
+                compression=compression,
+                compression_level=compression_level,
+                statistics=statistics,
+                row_group_size=row_group_size,
+                **write_kwargs,
+            )
+            results.append(result)
+            logger.info(
+                "[%d/%d] OK %s -> %s (%d linhas, %d colunas tipadas)",
+                i, len(parquet_files),
+                parquet_path.name, output_path.name,
+                result["n_rows"], result["n_cols_typed"],
+            )
+        except Exception as exc:
+            errors.append((parquet_path, str(exc)))
+            logger.error(
+                "[%d/%d] ERRO %s: %s",
+                i, len(parquet_files), parquet_path.name, exc,
+            )
+
+    # Resumo final
+    n_ok = len(results)
+    n_err = len(errors)
+    n_total = n_ok + n_err
+    logger.info(
+        "batch_rewrite_parquets: concluido — %d/%d OK, %d erro(s)",
+        n_ok, n_total, n_err,
+    )
+
+    if errors:
+        logger.warning("Erros:")
+        for path, msg in errors:
+            logger.warning("  %s: %s", path, msg)
+
+    return results
+
+
 __all__ = [
+    "batch_rewrite_parquets",
     "rewrite_parquet_typed",
 ]
