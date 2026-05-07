@@ -18,6 +18,7 @@ from src.io.categorical_recovery import (
     scan_parquet_typed,
     validate_schema_post_cast,
 )
+from src.io.categorical_writer import rewrite_parquet_typed
 
 __all__ = [
     "COLUMN_TO_ENUM_KEY",
@@ -34,6 +35,7 @@ __all__ = [
     "get_invariant_dtypes",
     "load_fiscal_codes",
     "reload_fiscal_codes",
+    "rewrite_parquet_typed",
     "scan_parquet_typed",
     "validate_schema_post_cast",
 ]
