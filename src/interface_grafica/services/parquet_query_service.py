@@ -41,8 +41,9 @@ class ParquetQueryService:
         polars_service: ParquetService | None = None,
         duckdb_service: DuckDBParquetService | None = None,
         threshold_mb: int = LARGE_PARQUET_THRESHOLD_MB,
+        v2_root: Path | None = None,
     ) -> None:
-        self._polars = polars_service if polars_service is not None else ParquetService()
+        self._polars = polars_service if polars_service is not None else ParquetService(v2_root=v2_root)
         self._duckdb = duckdb_service if duckdb_service is not None else DuckDBParquetService()
         self._threshold_bytes = threshold_mb * 1024 * 1024
 
