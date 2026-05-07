@@ -1,9 +1,16 @@
 """
-Pacote fisconforme — integração do pipeline "Fisconforme não Atendido".
+Pacote fisconforme para integracao do pipeline "Fisconforme nao Atendido".
 
-Expõe apenas o painel embeddable para uso em main_window.py.
+O painel GUI e carregado sob demanda para permitir importar utilitarios sem
+exigir bibliotecas Qt no ambiente de testes nao-GUI.
 """
 
-from .panel import FisconformeNaoAtendidoPanel
-
 __all__ = ["FisconformeNaoAtendidoPanel"]
+
+
+def __getattr__(name):
+    if name == "FisconformeNaoAtendidoPanel":
+        from .panel import FisconformeNaoAtendidoPanel
+
+        return FisconformeNaoAtendidoPanel
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

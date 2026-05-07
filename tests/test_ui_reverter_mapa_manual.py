@@ -3,7 +3,7 @@ import sys
 from pathlib import Path
 
 import pytest
-pytest.importorskip("PySide6")
+pytest.importorskip("PySide6.QtWidgets")
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
