@@ -59,7 +59,8 @@ Se nenhum `--cnpj` for informado, o CLI usa os dois CNPJs amostra da wiki.
 
 ### 4. Anexar o relatorio na PR
 
-Cole o texto de `DifferentialReport.render()` no corpo da PR. O arquivo de saida fica em `reports/diff/diff-<cnpj>.txt`.
+**NUNCA** commite o relatório gerado (`reports/diff/diff-*.txt`) no repositório.
+Cole o texto de `DifferentialReport.render()` no corpo da PR ou anexe o arquivo manualmente na interface do GitHub.
 
 ### 5. Adicionar o label `differential-validated`
 

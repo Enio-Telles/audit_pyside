@@ -8,6 +8,16 @@ on:
       - master
 
 jobs:
+  check-forbidden-files:
+    name: Check for forbidden files
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run check script
+        run: python scripts/check_forbidden_files.py
+
   lint:
     name: Lint and type check
     runs-on: ubuntu-latest

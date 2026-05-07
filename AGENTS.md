@@ -86,6 +86,8 @@ Regras para Codex, Copilot Agent, Jules e Antigravity:
   passar o check `diff-harness.yml`.
 - Use titulos de PR no formato `tipo(area-fase): descricao`.
 - Use PT-BR sem acentos em titulos de PR, corpos de PR e comentarios de review.
+- **Nenhum artefato temporário ou output gerado deve ser versionado no repositório.** Isso inclui `PR_BODY.md`, `coverage.xml`, `full_harness_report.txt` e logs de erro.
+- Scripts exploratórios devem ser mantidos em `scratch/`, `playground/` ou `tmp/`, que são pastas ignoradas pelo Git.
 
 ---
 

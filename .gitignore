@@ -26,7 +26,7 @@ CNPJ/
 Thumbs.db
 .env
 
-# Logs
+# Logs and Temporary Folders
 logs/
 *.log
 workspace/
@@ -38,16 +38,24 @@ validacao_tmp/
 pr100_fixes/
 artifacts/
 reports/
-tmp/__pycache__
 .stash_backups/
 *.stash
 *.diff
-pr_*.md
-pr_*.txt
-tmp_*.py
 traceback.txt
 runlist.txt
 sitafe_cols.txt
+
+# Artifacts / Generated outputs (NUNCA commitar)
+PR_BODY.md
+full_harness_report.txt
+coverage.xml
+.coverage
+htmlcov/
+pr_description*
+pr_desc*
+pr_*.md
+pr_*.txt
+tmp_*.py
 
 # uv
 .venv/
