@@ -1,0 +1,79 @@
+name: Performance Gates
+
+on:
+  pull_request:
+    paths:
+      - "bench/**"
+      - "ref/fiscal_codes_*.json"
+      - "src/io/**"
+      - ".github/workflows/perf-gates.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: perf-gates-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: Bench smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff # v6
+
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
+        with:
+          python-version: "3.11"
+
+      - name: Instalar dependencias
+        run: uv sync --group dev
+
+      - name: Rodar smoke de KPIs
+        run: uv run python bench/run_kpis.py smoke --tmp-dir tmp/audit_pyside_smoke
+
+  compare-fixture:
+    name: Comparar fixture committed
+    runs-on: ubuntu-latest
+    needs: smoke
+    if: |
+      hashFiles('tests/fixtures/perf_sample.parquet') != '' &&
+      hashFiles('bench/results/baseline_committed.json') != ''
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff # v6
+
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
+        with:
+          python-version: "3.11"
+
+      - name: Instalar dependencias
+        run: uv sync --group dev
+
+      - name: Rodar cenario typed
+        run: |
+          mkdir -p bench/results
+          uv run python bench/run_kpis.py typed \
+            --parquet tests/fixtures/perf_sample.parquet \
+            --output bench/results/typed_ci.json \
+            --iterations 5
+
+      - name: Comparar com baseline committed
+        run: |
+          uv run python bench/run_kpis.py compare \
+            --baseline bench/results/baseline_committed.json \
+            --typed bench/results/typed_ci.json \
+            --report bench/results/comparison_ci.md
+
+      - name: Upload do relatorio
+        if: always()
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: kpi-comparison-${{ github.run_id }}
+          path: |
+            bench/results/comparison_ci.md
+            bench/results/typed_ci.json
+          retention-days: 30
