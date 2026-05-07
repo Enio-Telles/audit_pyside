@@ -3,9 +3,12 @@ import sys
 from pathlib import Path
 
 import pytest
-pytest.importorskip("PySide6.QtWidgets")
 
+# Ensure headless platform is set before any PySide6 imports
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+# Standard guard for PySide6 tests
+pytest.importorskip("PySide6.QtWidgets")
 
 pytestmark = pytest.mark.gui
 

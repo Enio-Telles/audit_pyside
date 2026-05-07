@@ -65,7 +65,13 @@ automated_agents:
   required_local_validation:
     - "ruff check"
     - "mypy src/transformacao"
-    - "pytest -q -m \"not gui_smoke\""
+    - "pytest -q -m \"not gui and not gui_smoke\""
+  gui_testing_policy:
+    - "Testes GUI/PySide6 devem ficar em tests/ui/"
+    - "Sempre definir QT_QPA_PLATFORM=offscreen no topo do arquivo de teste"
+    - "Usar pytest.importorskip('PySide6') para evitar falhas de coleta"
+    - "Testes GUI sao ignorados no Windows CI devido a instabilidade (0xc0000139)"
+    - "Instalar via uv sync --group test-gui apenas em jobs dedicados"
   transformacao_perf_or_refactor_gate:
     - "differential test byte-a-byte sobre amostra real"
     - "ADR em docs/adr/ quando tocar regra fiscal"

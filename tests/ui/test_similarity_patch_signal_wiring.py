@@ -1,8 +1,26 @@
 from __future__ import annotations
 
 import importlib
+import os
 import sys
 from types import ModuleType
+
+import pytest
+
+# Ensure headless platform is set before any PySide6 imports
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+# Skip on Windows CI due to DLL instability (0xc0000139 STATUS_ENTRYPOINT_NOT_FOUND).
+if sys.platform == "win32" and os.getenv("GITHUB_ACTIONS"):
+    pytest.skip(
+        "Skipping GUI similarity patch tests on Windows CI due to DLL instability",
+        allow_module_level=True,
+    )
+
+# Standard guard for PySide6 tests
+pytest.importorskip("PySide6")
+
+pytestmark = pytest.mark.gui
 
 
 class _DummySignal:
