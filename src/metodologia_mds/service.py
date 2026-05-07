@@ -1,4 +1,5 @@
 """Serviços mínimos para aplicar a metodologia MDS (derivação de quantidades)."""
+
 from __future__ import annotations
 from pathlib import Path
 from typing import Union
@@ -43,7 +44,10 @@ class MovimentacaoService:
         if "quantidade_convertida" not in df.columns:
             if "quantidade_original" in df.columns:
                 df = df.with_columns(
-                    pl.col("quantidade_original").cast(pl.Float64).fill_null(0.0).alias("quantidade_convertida")
+                    pl.col("quantidade_original")
+                    .cast(pl.Float64)
+                    .fill_null(0.0)
+                    .alias("quantidade_convertida")
                 )
             else:
                 df = df.with_columns(pl.lit(0.0).cast(pl.Float64).alias("quantidade_convertida"))
@@ -95,7 +99,11 @@ class MovimentacaoService:
         # Sinal da quantidade para cálculos de saldo sequencial
         if "__q_conv_sinal__" not in cols:
             df = df.with_columns(
-                pl.when(pl.col("tipo_operacao").cast(pl.Utf8, strict=False).str.starts_with("0 - ESTOQUE INICIAL"))
+                pl.when(
+                    pl.col("tipo_operacao")
+                    .cast(pl.Utf8, strict=False)
+                    .str.starts_with("0 - ESTOQUE INICIAL")
+                )
                 .then(pl.col("q_conv_fisica"))
                 .when(pl.col("tipo_operacao") == "1 - ENTRADA")
                 .then(pl.col("q_conv_fisica"))
@@ -107,12 +115,24 @@ class MovimentacaoService:
 
         # Aplicar arredondamento consistente para quantidades (4 casas decimais)
         df = df.with_columns(
-            pl.col("quantidade_fisica").cast(pl.Float64, strict=False).round(4).alias("quantidade_fisica"),
-            pl.col("quantidade_fisica_sinalizada").cast(pl.Float64, strict=False).round(4).alias("quantidade_fisica_sinalizada"),
-            pl.col("estoque_final_declarado").cast(pl.Float64, strict=False).round(4).alias("estoque_final_declarado"),
+            pl.col("quantidade_fisica")
+            .cast(pl.Float64, strict=False)
+            .round(4)
+            .alias("quantidade_fisica"),
+            pl.col("quantidade_fisica_sinalizada")
+            .cast(pl.Float64, strict=False)
+            .round(4)
+            .alias("quantidade_fisica_sinalizada"),
+            pl.col("estoque_final_declarado")
+            .cast(pl.Float64, strict=False)
+            .round(4)
+            .alias("estoque_final_declarado"),
             pl.col("q_conv").cast(pl.Float64, strict=False).round(4).alias("q_conv"),
             pl.col("q_conv_fisica").cast(pl.Float64, strict=False).round(4).alias("q_conv_fisica"),
-            pl.col("__q_conv_sinal__").cast(pl.Float64, strict=False).round(4).alias("__q_conv_sinal__"),
+            pl.col("__q_conv_sinal__")
+            .cast(pl.Float64, strict=False)
+            .round(4)
+            .alias("__q_conv_sinal__"),
         )
 
         # calcular preco_unit de forma centralizada
@@ -125,39 +145,15 @@ class MovimentacaoService:
         return df
 
     @staticmethod
-    def apply_conversion_factors(df: "pl.DataFrame", df_prod_final: "pl.DataFrame" | None = None) -> "pl.DataFrame":
-        """Aplica fatores de conversão e resolve unidade de referência com preservação de overrides.
-
-        Prioridade para `unidade_referencia`:
-            1. `unidade_referencia_override` (quando presente)
-            2. `unid_ref` (join de fatores)
-            3. `unid_ref_sugerida` (do produto)
-            4. coluna de unidade original detectada (p.ex. `Unid`, `unid`)
-            5. None
-
-        Prioridade para `fator_conversao`:
-            1. `fator_conversao_override` (quando presente)
-            2. `fator` (join de fatores físicos)
-            3. 1.0 (fallback)
-
-        A função preserva `fator_original` quando `fator` existir e atualiza `fator` com
-        o valor efetivo a ser consumido pelo pipeline (para compatibilidade com cálculos
-        existentes que usam a coluna `fator`).
-        """
-        cols = set(df.columns)
-
-        # preservar fator original se existir
-        if "fator" in cols and "fator_original" not in cols:
-            df = df.with_columns(pl.col("fator").alias("fator_original"))
-
-        # construir expressão para fator_conversao
+    def _build_fator_conversao_expr(cols: set[str]) -> pl.Expr:
         if "fator_conversao_override" in cols:
-            fator_expr = (
-                pl.when(pl.col("fator_conversao_override").is_not_null())
-                .then(pl.col("fator_conversao_override").cast(pl.Float64))
+            fator_expr = pl.when(pl.col("fator_conversao_override").is_not_null()).then(
+                pl.col("fator_conversao_override").cast(pl.Float64)
             )
             if "fator" in cols:
-                fator_expr = fator_expr.when(pl.col("fator").is_not_null()).then(pl.col("fator").cast(pl.Float64))
+                fator_expr = fator_expr.when(pl.col("fator").is_not_null()).then(
+                    pl.col("fator").cast(pl.Float64)
+                )
             fator_expr = fator_expr.otherwise(pl.lit(1.0)).alias("fator_conversao")
         else:
             if "fator" in cols:
@@ -168,10 +164,10 @@ class MovimentacaoService:
                 ).alias("fator_conversao")
             else:
                 fator_expr = pl.lit(1.0).alias("fator_conversao")
+        return fator_expr
 
-        df = df.with_columns(fator_expr)
-
-        # origem do fator (proteger referências quando coluna `fator` não existir)
+    @staticmethod
+    def _build_fator_origem_expr(cols: set[str]) -> pl.Expr:
         if "fator_conversao_override" in cols:
             if "fator" in cols:
                 origem_expr = (
@@ -196,10 +192,13 @@ class MovimentacaoService:
                 ).alias("fator_conversao_origem")
             else:
                 origem_expr = pl.lit("fallback_sem_dados").alias("fator_conversao_origem")
+        return origem_expr
 
-        df = df.with_columns(origem_expr)
-
-        # determinar unidade de referência
+    @staticmethod
+    def _resolve_unidade_referencia(
+        df: "pl.DataFrame", df_prod_final: "pl.DataFrame" | None = None
+    ) -> "pl.DataFrame":
+        cols = set(df.columns)
         candidate_unit_cols = [
             "unidade_referencia_override",
             "unid_ref",
@@ -216,9 +215,15 @@ class MovimentacaoService:
             if c in cols:
                 unit_exprs.append(pl.col(c).cast(pl.Utf8))
 
-        # se for passado df_prod_final e id_agrupado estiver presente, anexar sugestão se faltar
-        if df_prod_final is not None and "unid_ref_sugerida" in df_prod_final.columns and "id_agrupado" in cols and "unid_ref_sugerida" not in cols:
-            prod_map = df_prod_final.select([pl.col("id_agrupado"), pl.col("unid_ref_sugerida")]).unique()
+        if (
+            df_prod_final is not None
+            and "unid_ref_sugerida" in df_prod_final.columns
+            and "id_agrupado" in cols
+            and "unid_ref_sugerida" not in cols
+        ):
+            prod_map = df_prod_final.select(
+                [pl.col("id_agrupado"), pl.col("unid_ref_sugerida")]
+            ).unique()
             df = df.join(prod_map, on="id_agrupado", how="left")
             if "unid_ref_sugerida" in df.columns:
                 unit_exprs.append(pl.col("unid_ref_sugerida").cast(pl.Utf8))
@@ -228,7 +233,42 @@ class MovimentacaoService:
         else:
             unidade_expr = pl.lit(None).cast(pl.Utf8).alias("unidade_referencia")
 
-        df = df.with_columns(unidade_expr)
+        return df.with_columns(unidade_expr)
+
+    @staticmethod
+    def apply_conversion_factors(
+        df: "pl.DataFrame", df_prod_final: "pl.DataFrame" | None = None
+    ) -> "pl.DataFrame":
+        """Aplica fatores de conversão e resolve unidade de referência com preservação de overrides.
+
+        Prioridade para `unidade_referencia`:
+            1. `unidade_referencia_override` (quando presente)
+            2. `unid_ref` (join de fatores)
+            3. `unid_ref_sugerida` (do produto)
+            4. coluna de unidade original detectada (p.ex. `Unid`, `unid`)
+            5. None
+
+        Prioridade para `fator_conversao`:
+            1. `fator_conversao_override` (quando presente)
+            2. `fator` (join de fatores físicos)
+            3. 1.0 (fallback)
+
+        A função preserva `fator_original` quando `fator` existir e atualiza `fator` com
+        o valor efetivo a ser consumido pelo pipeline (para compatibilidade com cálculos
+        existentes que usam a coluna `fator`).
+        """
+        cols = set(df.columns)
+
+        # preservar fator original se existir
+        if "fator" in cols and "fator_original" not in cols:
+            df = df.with_columns(pl.col("fator").alias("fator_original"))
+
+        df = df.with_columns(
+            MovimentacaoService._build_fator_conversao_expr(cols),
+            MovimentacaoService._build_fator_origem_expr(cols),
+        )
+
+        df = MovimentacaoService._resolve_unidade_referencia(df, df_prod_final)
 
         # normalizar e garantir colunas esperadas
         # normalizar e aplicar arredondamento para fator_conversao
@@ -263,7 +303,14 @@ class MovimentacaoService:
 
         Mantém valores existentes quando presentes; adiciona colunas ausentes como None.
         """
-        for col in ["mov_rep", "excluir_estoque", "dev_simples", "dev_venda", "dev_compra", "dev_ent_simples"]:
+        for col in [
+            "mov_rep",
+            "excluir_estoque",
+            "dev_simples",
+            "dev_venda",
+            "dev_compra",
+            "dev_ent_simples",
+        ]:
             if col not in df.columns:
                 df = df.with_columns(pl.lit(None).alias(col))
         return df
@@ -283,7 +330,9 @@ class MovimentacaoService:
                 parts.append(pl.lit(False))
 
         if "finnfe" in cols:
-            finnfe_part = pl.col("finnfe").cast(pl.Utf8, strict=False).fill_null("").str.strip_chars() == "4"
+            finnfe_part = (
+                pl.col("finnfe").cast(pl.Utf8, strict=False).fill_null("").str.strip_chars() == "4"
+            )
         else:
             finnfe_part = pl.lit(False)
 
@@ -358,20 +407,40 @@ class MovimentacaoService:
             )
 
         if "num_doc" in cols:
-            col_emitente = next((c for c in ["cnpj_emitente", "cnpj_participante", "co_emitente", "emit_cnpj_cpf"] if c in cols), None)
+            col_emitente = next(
+                (
+                    c
+                    for c in ["cnpj_emitente", "cnpj_participante", "co_emitente", "emit_cnpj_cpf"]
+                    if c in cols
+                ),
+                None,
+            )
             col_serie = next((c for c in ["Serie", "serie", "ser"] if c in cols), None)
             partes = []
             if col_emitente:
-                partes.append(pl.col(col_emitente).cast(pl.Utf8, strict=False).fill_null("").str.strip_chars())
+                partes.append(
+                    pl.col(col_emitente).cast(pl.Utf8, strict=False).fill_null("").str.strip_chars()
+                )
             if col_serie:
-                partes.append(pl.col(col_serie).cast(pl.Utf8, strict=False).fill_null("").str.strip_chars())
-            partes.append(pl.col("num_doc").cast(pl.Utf8, strict=False).fill_null("").str.strip_chars())
+                partes.append(
+                    pl.col(col_serie).cast(pl.Utf8, strict=False).fill_null("").str.strip_chars()
+                )
+            partes.append(
+                pl.col("num_doc").cast(pl.Utf8, strict=False).fill_null("").str.strip_chars()
+            )
             candidatos.append(pl.concat_str(partes, separator="|"))
 
         if "id_linha_origem" in cols:
-            candidatos.append(pl.col("id_linha_origem").cast(pl.Utf8, strict=False).fill_null("").str.strip_chars())
+            candidatos.append(
+                pl.col("id_linha_origem")
+                .cast(pl.Utf8, strict=False)
+                .fill_null("")
+                .str.strip_chars()
+            )
         elif "num_doc" in cols:
-            candidatos.append(pl.col("num_doc").cast(pl.Utf8, strict=False).fill_null("").str.strip_chars())
+            candidatos.append(
+                pl.col("num_doc").cast(pl.Utf8, strict=False).fill_null("").str.strip_chars()
+            )
 
         if not candidatos:
             return df
@@ -380,7 +449,12 @@ class MovimentacaoService:
         if df.is_empty() or "Num_item" not in df.columns:
             return df.drop("__chave_doc__")
 
-        id_doc_expr = pl.coalesce([pl.col(c).cast(pl.Utf8, strict=False).str.strip_chars() for c in [c for c in ["Chv_nfe", "num_doc", "id_linha_origem"] if c in cols]]).fill_null("")
+        id_doc_expr = pl.coalesce(
+            [
+                pl.col(c).cast(pl.Utf8, strict=False).str.strip_chars()
+                for c in [c for c in ["Chv_nfe", "num_doc", "id_linha_origem"] if c in cols]
+            ]
+        ).fill_null("")
         item_expr = pl.col("Num_item").cast(pl.Utf8, strict=False).fill_null("").str.strip_chars()
 
         df = df.with_columns(id_doc_expr.alias("__chave_doc__"))
@@ -391,13 +465,19 @@ class MovimentacaoService:
         )
 
         if "mov_rep" in cols:
-            df = df.with_columns((repetido_expr | MovimentacaoService._boolish_expr("mov_rep")).alias("mov_rep"))
+            df = df.with_columns(
+                (repetido_expr | MovimentacaoService._boolish_expr("mov_rep")).alias("mov_rep")
+            )
         else:
             df = df.with_columns(repetido_expr.alias("mov_rep"))
 
         # linha neutra: duplicidade ou flag explicita de exclusao
-        excl_expr = MovimentacaoService._boolish_expr("excluir_estoque") if "excluir_estoque" in cols else pl.lit(False)
-        linha_neutra = (excl_expr | MovimentacaoService._boolish_expr("mov_rep"))
+        excl_expr = (
+            MovimentacaoService._boolish_expr("excluir_estoque")
+            if "excluir_estoque" in cols
+            else pl.lit(False)
+        )
+        linha_neutra = excl_expr | MovimentacaoService._boolish_expr("mov_rep")
         df = df.with_columns(linha_neutra.alias("__is_neutralizada__"))
 
         # persistir artefato opcional
