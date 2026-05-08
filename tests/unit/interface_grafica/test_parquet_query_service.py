@@ -19,7 +19,7 @@ import polars as pl
 import pytest
 
 from interface_grafica.services.parquet_query_service import ParquetQueryService
-from interface_grafica.services.parquet_service import FilterCondition
+from interface_grafica.services.parquet_service import FilterCondition, ParquetService
 
 
 # ---------------------------------------------------------------------------
@@ -208,6 +208,32 @@ def test_get_page_delega_para_duckdb(parquet_pequeno: Path) -> None:
     svc = ParquetQueryService(duckdb_service=mock_duckdb, threshold_mb=0)
     svc.get_page(parquet_pequeno, None, None, page=1, page_size=10)
     mock_duckdb.get_page.assert_called_once()
+
+
+def test_query_service_duckdb_usa_v2_quando_disponivel(tmp_path: Path) -> None:
+    """Arquivos grandes devem ser roteados ao DuckDB usando o path v2."""
+    root = tmp_path / "v1"
+    v2_root = tmp_path / "v2"
+    root.mkdir()
+    v2_root.mkdir()
+
+    v1_path = root / "dados.parquet"
+    v2_path = v2_root / "dados.parquet"
+    pl.DataFrame({"id": [1], "origem": ["v1"]}).write_parquet(v1_path)
+    pl.DataFrame({"id": [2], "origem": ["v2"]}).write_parquet(v2_path)
+
+    mock_duckdb = MagicMock()
+    mock_duckdb.get_count.return_value = 1
+    polars_service = ParquetService(root=root, v2_root=v2_root)
+    svc = ParquetQueryService(
+        polars_service=polars_service,
+        duckdb_service=mock_duckdb,
+        threshold_mb=0,
+        v2_root=v2_root,
+    )
+
+    assert svc.get_count(v1_path) == 1
+    mock_duckdb.get_count.assert_called_once_with(v2_path, None)
 
 
 # ---------------------------------------------------------------------------
