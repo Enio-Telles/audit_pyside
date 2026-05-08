@@ -83,10 +83,19 @@ def test_main_executa_batch_com_funcao_injetada(
     parquet_path = input_root / "c170_xml.parquet"
     _write_parquet(parquet_path)
 
-    def fake_batch(input_arg: str, output_arg: str, **kwargs: object) -> list[dict[str, object]]:
+    def fake_batch(
+        input_arg: str,
+        output_arg: str,
+        **kwargs: object,
+    ) -> list[dict[str, object]]:
         assert Path(input_arg) == input_root.resolve()
         assert Path(output_arg) == output_root.resolve()
         assert kwargs["strict_cast"] is True
+        # file_list deve conter o mesmo path do plano
+        fl = kwargs.get("file_list")
+        assert fl is not None
+        assert len(fl) == 1
+        assert Path(fl[0]) == parquet_path.resolve()
         return [
             {"input_path": str(parquet_path), "output_path": str(output_root / "c170_xml.parquet")}
         ]
@@ -109,3 +118,136 @@ def test_main_executa_batch_com_funcao_injetada(
     assert summary["planned_count"] == 1
     assert summary["ok_count"] == 1
     assert summary["failed_or_skipped_count"] == 0
+
+
+# ---------------------------------------------------------------------------
+# Testes #288 — flags operacionais
+# ---------------------------------------------------------------------------
+
+
+def test_main_min_size_mb_exclui_arquivos_pequenos(tmp_path: Path) -> None:
+    """--min-size-mb exclui arquivos menores que o limite."""
+    input_root = tmp_path / "v1"
+    output_root = tmp_path / "v2"
+    report_json = tmp_path / "plan.json"
+
+    # Arquivo pequeno (~200 bytes)
+    _write_parquet(input_root / "pequeno.parquet")
+    # Arquivo maior (~7 KB com 5000 strings unicas)
+    rng = pl.Series("_rng", range(5000)).cast(pl.String)
+    pl.DataFrame(
+        {
+            "cfop": rng,
+            "id_agrupado": rng,
+        }
+    ).write_parquet(input_root / "grande.parquet")
+
+    exit_code = batch_cli.main(
+        [
+            "--input-root",
+            str(input_root),
+            "--output-root",
+            str(output_root),
+            "--dry-run",
+            "--min-size-mb",
+            "0.001",
+            "--report-json",
+            str(report_json),
+        ]
+    )
+
+    assert exit_code == 0
+    summary = json.loads(report_json.read_text(encoding="utf-8"))
+    assert summary["planned_count"] == 1
+    # Apenas o arquivo grande deve estar no plano
+    assert "grande.parquet" in summary["files"][0]["input_path"]
+
+
+def test_main_max_files_limita_quantidade_planejada(tmp_path: Path) -> None:
+    """--max-files limita deterministicamente a quantidade planejada."""
+    input_root = tmp_path / "v1"
+    output_root = tmp_path / "v2"
+    report_json = tmp_path / "plan.json"
+
+    for i in range(5):
+        _write_parquet(input_root / f"arquivo_{i}.parquet")
+
+    exit_code = batch_cli.main(
+        [
+            "--input-root",
+            str(input_root),
+            "--output-root",
+            str(output_root),
+            "--dry-run",
+            "--max-files",
+            "3",
+            "--report-json",
+            str(report_json),
+        ]
+    )
+
+    assert exit_code == 0
+    summary = json.loads(report_json.read_text(encoding="utf-8"))
+    assert summary["planned_count"] == 3
+
+
+def test_main_no_strict_cast_nao_altera_descoberta(tmp_path: Path) -> None:
+    """--no-strict-cast altera apenas a politica de cast, nao a descoberta."""
+    input_root = tmp_path / "v1"
+    output_root = tmp_path / "v2"
+    report_json = tmp_path / "plan.json"
+
+    _write_parquet(input_root / "c170_xml.parquet")
+
+    exit_code = batch_cli.main(
+        [
+            "--input-root",
+            str(input_root),
+            "--output-root",
+            str(output_root),
+            "--dry-run",
+            "--no-strict-cast",
+            "--report-json",
+            str(report_json),
+        ]
+    )
+
+    assert exit_code == 0
+    summary = json.loads(report_json.read_text(encoding="utf-8"))
+    assert summary["strict_cast"] is False
+    assert summary["planned_count"] == 1
+
+
+def test_main_combinacao_flags_nao_promove_v2(tmp_path: Path) -> None:
+    """Combinacao de flags nao promove v2 como padrao (dry-run)."""
+    input_root = tmp_path / "v1"
+    output_root = tmp_path / "v2"
+    report_json = tmp_path / "plan.json"
+
+    for i in range(10):
+        _write_parquet(input_root / f"arquivo_{i}.parquet")
+
+    exit_code = batch_cli.main(
+        [
+            "--input-root",
+            str(input_root),
+            "--output-root",
+            str(output_root),
+            "--dry-run",
+            "--min-size-mb",
+            "0.0001",
+            "--max-files",
+            "4",
+            "--no-strict-cast",
+            "--report-json",
+            str(report_json),
+        ]
+    )
+
+    assert exit_code == 0
+    assert not output_root.exists()
+    summary = json.loads(report_json.read_text(encoding="utf-8"))
+    assert summary["dry_run"] is True
+    assert summary["strict_cast"] is False
+    assert summary["planned_count"] == 4
+    assert summary["ok_count"] is None

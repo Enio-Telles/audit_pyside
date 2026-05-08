@@ -175,13 +175,14 @@ def main(argv: list[str] | None = None) -> int:
 
     results: list[dict[str, Any]] | None = None
     if not args.dry_run:
+        # Usar o mesmo plano de descoberta — zero divergencia
+        file_list = [Path(item.input_path) for item in plan.files]
         results = batch_rewrite_parquets(
             plan.input_root,
             plan.output_root,
+            file_list=file_list,
             codes_path=args.codes_path,
             strict_cast=args.strict_cast,
-            min_size_mb=args.min_size_mb,
-            max_files=args.max_files,
             compression=args.compression,
             compression_level=args.compression_level,
             row_group_size=args.row_group_size,
