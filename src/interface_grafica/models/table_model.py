@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from collections import OrderedDict
 from typing import Any, Callable
 
 import polars as pl
@@ -11,8 +10,6 @@ from utilitarios.text import display_cell
 
 
 class PolarsTableModel(QAbstractTableModel):
-    _ROW_DICT_CACHE_MAX = 2048
-
     def __init__(
         self,
         df: pl.DataFrame | None = None,
@@ -35,7 +32,6 @@ class PolarsTableModel(QAbstractTableModel):
         self._foreground_resolver = foreground_resolver
         self._background_resolver = background_resolver
         self._font_resolver = font_resolver
-        self._row_dict_cache: OrderedDict[int, dict[str, Any]] = OrderedDict()
         self._last_sort_column: str | None = None
         self._last_sort_order: Qt.SortOrder | None = None
 
@@ -44,7 +40,6 @@ class PolarsTableModel(QAbstractTableModel):
             self._refresh_checked_keys_from_rows()
         self.beginResetModel()
         self._df = df
-        self._row_dict_cache.clear()
         self._rebuild_checked_rows_from_keys()
         self.endResetModel()
 
@@ -313,7 +308,6 @@ class PolarsTableModel(QAbstractTableModel):
             values = self._df.get_column(col_name).to_list()
             values[row] = parsed
             self._df = self._df.with_columns(pl.Series(col_name, values, dtype=dtype))
-            self._row_dict_cache.pop(row, None)
             self.dataChanged.emit(index, index, [Qt.DisplayRole, Qt.EditRole])
             return True
         return False
@@ -360,7 +354,6 @@ class PolarsTableModel(QAbstractTableModel):
             self.layoutAboutToBeChanged.emit()
             self._refresh_checked_keys_from_rows()
             self._df = self._df.sort(col_name, descending=descending, nulls_last=True)
-            self._row_dict_cache.clear()
             self._rebuild_checked_rows_from_keys()
             self._last_sort_column = col_name
             self._last_sort_order = order
@@ -371,15 +364,7 @@ class PolarsTableModel(QAbstractTableModel):
     def row_as_dict(self, row: int) -> dict[str, Any]:
         if row < 0 or row >= self._df.height:
             return {}
-        cached = self._row_dict_cache.get(row)
-        if cached is not None:
-            self._row_dict_cache.move_to_end(row)
-            return cached
-        row_data = self._df.row(row, named=True)
-        self._row_dict_cache[row] = row_data
-        if len(self._row_dict_cache) > self._ROW_DICT_CACHE_MAX:
-            self._row_dict_cache.popitem(last=False)
-        return row_data
+        return self._df.row(row, named=True)
 
     def get_checked_rows(self) -> list[dict[str, Any]]:
         results = []

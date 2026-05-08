@@ -1,0 +1,207 @@
+diff --git a/src/interface_grafica/services/aggregation_service.py b/src/interface_grafica/services/aggregation_service.py
+--- a/src/interface_grafica/services/aggregation_service.py
++++ b/src/interface_grafica/services/aggregation_service.py
+@@
+-        # Only consider the monthly and annual summary artifacts for staleness
++        # Consider every analytical table derived from mov_estoque so manual
++        # regrouping is reflected consistently across monthly, annual and
++        # period views.
+         derivados = {
+             "calculos_mensais": pasta_prod / f"aba_mensal_{cnpj}.parquet",
+             "calculos_anuais": pasta_prod / f"aba_anual_{cnpj}.parquet",
++            "calculos_periodos": pasta_prod / f"aba_periodos_{cnpj}.parquet",
+         }
+@@
+     def recalcular_referencias_agr(self, cnpj: str, progresso=None, reset_timings: bool = True) -> bool:
+         """
+         Recalcula tabelas dependentes das agregacoes:
+         - produtos_final
+         - fontes *_agr
+         - fatores_conversao
+         - c170_xml
+         - c176_xml
+         - mov_estoque
+         - aba_mensal
+         - aba_anual
++        - aba_periodos
+         """
+@@
+         if gerar_movimentacao_estoque is None:
+             raise ImportError("Nao foi possivel importar movimentacao_estoque.py.")
+         if gerar_calculos_mensais is None:
+             raise ImportError("Nao foi possivel importar calculos_mensais.py.")
+         if gerar_calculos_anuais is None:
+             raise ImportError("Nao foi possivel importar calculos_anuais.py.")
++        if gerar_calculos_periodos is None:
++            raise ImportError("Nao foi possivel importar calculos_periodos.py.")
+
+         ok_fatores = self._executar_etapa_tempo("fatores_conversao", lambda: bool(calcular_fatores_conversao(cnpj)), progresso, contexto=contexto_base) if (ok_final and ok_fontes) else False
+         ok_c170 = self._executar_etapa_tempo("c170_xml", lambda: bool(gerar_c170_xml(cnpj)), progresso, contexto=contexto_base) if ok_fatores else False
+         ok_c176 = self._executar_etapa_tempo("c176_xml", lambda: bool(gerar_c176_xml(cnpj)), progresso, contexto=contexto_base) if ok_c170 else False
+         ok_mov = self._executar_etapa_tempo("mov_estoque", lambda: bool(gerar_movimentacao_estoque(cnpj)), progresso, contexto=contexto_base) if ok_c176 else False
+         ok_mensal = self._executar_etapa_tempo("calculos_mensais", lambda: bool(gerar_calculos_mensais(cnpj)), progresso, contexto=contexto_base) if ok_mov else False
+         ok_anual = self._executar_etapa_tempo("calculos_anuais", lambda: bool(gerar_calculos_anuais(cnpj)), progresso, contexto=contexto_base) if ok_mensal else False
+-        ok_total = bool(ok_final and ok_fontes and ok_fatores and ok_c170 and ok_c176 and ok_mov and ok_mensal and ok_anual)
++        ok_periodos = self._executar_etapa_tempo("calculos_periodos", lambda: bool(gerar_calculos_periodos(cnpj)), progresso, contexto=contexto_base) if ok_anual else False
++        ok_total = bool(ok_final and ok_fontes and ok_fatores and ok_c170 and ok_c176 and ok_mov and ok_mensal and ok_anual and ok_periodos)
+         self._registrar_tempo(
+             "recalcular_referencias_agr_total",
+             perf_counter() - inicio_total,
+             progresso,
+             contexto={**contexto_base, "sucesso": ok_total},
+@@
+     def recalcular_mov_estoque(self, cnpj: str, progresso=None, reset_timings: bool = True) -> bool:
+         """
+-        Recalcula artefatos diretamente afetados por ajustes manuais em fatores de conversao.
++        Recalcula artefatos diretamente afetados por ajustes manuais em fatores de conversao,
++        incluindo a tabela de periodos derivada de mov_estoque.
+         """
+@@
+         if gerar_movimentacao_estoque is None:
+             raise ImportError("Nao foi possivel importar movimentacao_estoque.py.")
+         if gerar_calculos_mensais is None:
+             raise ImportError("Nao foi possivel importar calculos_mensais.py.")
+         if gerar_calculos_anuais is None:
+             raise ImportError("Nao foi possivel importar calculos_anuais.py.")
++        if gerar_calculos_periodos is None:
++            raise ImportError("Nao foi possivel importar calculos_periodos.py.")
+@@
+         ok_c176 = self._executar_etapa_tempo("c176_xml", lambda: bool(gerar_c176_xml(cnpj)), progresso, contexto=contexto_base)
+         ok_mov = self._executar_etapa_tempo("mov_estoque", lambda: bool(gerar_movimentacao_estoque(cnpj)), progresso, contexto=contexto_base) if ok_c176 else False
+         ok_mensal = self._executar_etapa_tempo("calculos_mensais", lambda: bool(gerar_calculos_mensais(cnpj)), progresso, contexto=contexto_base) if ok_mov else False
+         ok_anual = self._executar_etapa_tempo("calculos_anuais", lambda: bool(gerar_calculos_anuais(cnpj)), progresso, contexto=contexto_base) if ok_mensal else False
+-        ok_total = bool(ok_c176 and ok_mov and ok_mensal and ok_anual)
++        ok_periodos = self._executar_etapa_tempo("calculos_periodos", lambda: bool(gerar_calculos_periodos(cnpj)), progresso, contexto=contexto_base) if ok_anual else False
++        ok_total = bool(ok_c176 and ok_mov and ok_mensal and ok_anual and ok_periodos)
+         self._registrar_tempo(
+             "recalcular_mov_estoque_total",
+             perf_counter() - inicio_total,
+             progresso,
+             contexto={**contexto_base, "sucesso": ok_total},
+@@
+     def recalcular_resumos_estoque(self, cnpj: str, progresso=None, reset_timings: bool = True) -> bool:
+         """
+-        Recalcula apenas os resumos mensal/anual quando estiverem ausentes ou defasados da mov_estoque.
++        Recalcula as tabelas analiticas derivadas de mov_estoque quando estiverem ausentes
++        ou defasadas: mensal, anual e periodos.
+         """
+         if gerar_calculos_mensais is None:
+             raise ImportError("Nao foi possivel importar calculos_mensais.py.")
+         if gerar_calculos_anuais is None:
+             raise ImportError("Nao foi possivel importar calculos_anuais.py.")
++        if gerar_calculos_periodos is None:
++            raise ImportError("Nao foi possivel importar calculos_periodos.py.")
+@@
+             )
+             if progresso:
+-                progresso("Mensal e anual ja estao sincronizadas com mov_estoque.")
++                progresso("Mensal, anual e periodos ja estao sincronizados com mov_estoque.")
+             return True
+
+         ok_mensal = True
+         ok_anual = True
++        ok_periodos = True
+         if "calculos_mensais" in artefatos_defasados:
+             ok_mensal = self._executar_etapa_tempo(
+                 "calculos_mensais",
+                 lambda: bool(gerar_calculos_mensais(cnpj)),
+                 progresso,
+@@
+                 lambda: bool(gerar_calculos_anuais(cnpj)),
+                 progresso,
+                 contexto=contexto_base,
+             )
++        if "calculos_periodos" in artefatos_defasados:
++            ok_periodos = self._executar_etapa_tempo(
++                "calculos_periodos",
++                lambda: bool(gerar_calculos_periodos(cnpj)),
++                progresso,
++                contexto=contexto_base,
++            )
+
+-        ok_total = bool(ok_mensal and ok_anual)
++        ok_total = bool(ok_mensal and ok_anual and ok_periodos)
+         self._registrar_tempo(
+             "recalcular_resumos_estoque_total",
+             perf_counter() - inicio_total,
+             progresso,
+             contexto={**contexto_base, "sucesso": ok_total, "etapas": artefatos_defasados},
+         )
+         return ok_total
+diff --git a/tests/test_aggregation_service_periodos.py b/tests/test_aggregation_service_periodos.py
+new file mode 100644
+--- /dev/null
++++ b/tests/test_aggregation_service_periodos.py
+@@
++from pathlib import Path
++import sys
++
++
++sys.path.insert(0, str(Path("src").resolve()))
++
++import interface_grafica.services.aggregation_service as aggregation_service_module
++
++
++def test_recalcular_referencias_agr_inclui_calculos_periodos(monkeypatch):
++    ordem = []
++    servico = aggregation_service_module.ServicoAgregacao()
++
++    monkeypatch.setattr(servico, "recalcular_produtos_final", lambda cnpj: ordem.append("produtos_final") or True)
++    monkeypatch.setattr(servico, "refazer_tabelas_agr", lambda cnpj: ordem.append("fontes_agr") or True)
++    monkeypatch.setattr(aggregation_service_module, "calcular_fatores_conversao", lambda cnpj: ordem.append("fatores_conversao") or True)
++    monkeypatch.setattr(aggregation_service_module, "gerar_c170_xml", lambda cnpj: ordem.append("c170_xml") or True)
++    monkeypatch.setattr(aggregation_service_module, "gerar_c176_xml", lambda cnpj: ordem.append("c176_xml") or True)
++    monkeypatch.setattr(aggregation_service_module, "gerar_movimentacao_estoque", lambda cnpj: ordem.append("mov_estoque") or True)
++    monkeypatch.setattr(aggregation_service_module, "gerar_calculos_mensais", lambda cnpj: ordem.append("calculos_mensais") or True)
++    monkeypatch.setattr(aggregation_service_module, "gerar_calculos_anuais", lambda cnpj: ordem.append("calculos_anuais") or True)
++    monkeypatch.setattr(aggregation_service_module, "gerar_calculos_periodos", lambda cnpj: ordem.append("calculos_periodos") or True)
++
++    assert servico.recalcular_referencias_agr("12345678000190", reset_timings=False) is True
++    assert ordem == [
++        "produtos_final",
++        "fontes_agr",
++        "fatores_conversao",
++        "c170_xml",
++        "c176_xml",
++        "mov_estoque",
++        "calculos_mensais",
++        "calculos_anuais",
++        "calculos_periodos",
++    ]
++
++
++def test_recalcular_mov_estoque_inclui_calculos_periodos(monkeypatch):
++    ordem = []
++    servico = aggregation_service_module.ServicoAgregacao()
++
++    monkeypatch.setattr(aggregation_service_module, "gerar_c176_xml", lambda cnpj: ordem.append("c176_xml") or True)
++    monkeypatch.setattr(aggregation_service_module, "gerar_movimentacao_estoque", lambda cnpj: ordem.append("mov_estoque") or True)
++    monkeypatch.setattr(aggregation_service_module, "gerar_calculos_mensais", lambda cnpj: ordem.append("calculos_mensais") or True)
++    monkeypatch.setattr(aggregation_service_module, "gerar_calculos_anuais", lambda cnpj: ordem.append("calculos_anuais") or True)
++    monkeypatch.setattr(aggregation_service_module, "gerar_calculos_periodos", lambda cnpj: ordem.append("calculos_periodos") or True)
++
++    assert servico.recalcular_mov_estoque("12345678000190", reset_timings=False) is True
++    assert ordem == [
++        "c176_xml",
++        "mov_estoque",
++        "calculos_mensais",
++        "calculos_anuais",
++        "calculos_periodos",
++    ]
++
++
++def test_artefatos_estoque_defasados_inclui_calculos_periodos(tmp_path, monkeypatch):
++    cnpj = "12345678000190"
++    pasta_produtos = tmp_path / cnpj / "analises" / "produtos"
++    pasta_produtos.mkdir(parents=True, exist_ok=True)
++
++    monkeypatch.setattr(aggregation_service_module, "CNPJ_ROOT", tmp_path)
++
++    (pasta_produtos / f"aba_mensal_{cnpj}.parquet").touch()
++    (pasta_produtos / f"aba_anual_{cnpj}.parquet").touch()
++    (pasta_produtos / f"mov_estoque_{cnpj}.parquet").touch()
++
++    servico = aggregation_service_module.ServicoAgregacao()
++    artefatos = set(servico.artefatos_estoque_defasados(cnpj))
++
++    assert artefatos == {"calculos_mensais", "calculos_anuais", "calculos_periodos"}

@@ -19,10 +19,11 @@ load_dotenv(dotenv_path=env_path, encoding="latin-1", override=True)
 
 # Configurações do Banco (Audit: Strict Validation)
 def _get_required_env(key: str) -> str:
-    """Le uma variavel de ambiente obrigatoria e remove espacos externos."""
     val = os.getenv(key)
     if not val:
-        raise EnvironmentError(f"❌ Variável de ambiente OBRIGATÓRIA não encontrada: {key}")
+        raise EnvironmentError(
+            f"❌ Variável de ambiente OBRIGATÓRIA não encontrada: {key}"
+        )
     return val.strip()
 
 
@@ -49,12 +50,16 @@ def conectar(cpf_usuario=None, senha=None):
         senha = os.getenv("DB_PASSWORD")
 
     if not cpf_usuario or not senha:
-        rprint("[red]Erro:[/red] Credenciais (DB_USER/DB_PASSWORD) não encontradas no .env")
+        rprint(
+            "[red]Erro:[/red] Credenciais (DB_USER/DB_PASSWORD) não encontradas no .env"
+        )
         return None
 
     try:
         dsn = oracledb.makedsn(HOST, PORTA, service_name=SERVICO)
-        conexao = oracledb.connect(user=cpf_usuario.strip(), password=senha.strip(), dsn=dsn)
+        conexao = oracledb.connect(
+            user=cpf_usuario.strip(), password=senha.strip(), dsn=dsn
+        )
 
         # Configuração de NLS para consistência decimal
         with conexao.cursor() as cursor:
@@ -93,7 +98,9 @@ def obter_conexao_oracle(user=None, password=None):
 if __name__ == "__main__":
     try:
         with obter_conexao_oracle() as conn:
-            rprint("[green]Conexão via Context Manager estabelecida com sucesso![/green]")
+            rprint(
+                "[green]Conexão via Context Manager estabelecida com sucesso![/green]"
+            )
     except Exception as e:
         logging.error(f"Erro no teste de conexão Oracle: {e}")
         rprint(

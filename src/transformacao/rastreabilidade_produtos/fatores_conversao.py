@@ -13,7 +13,6 @@ import sys
 from pathlib import Path
 
 import polars as pl
-import structlog
 from rich import print as rprint
 
 from utilitarios.project_paths import PROJECT_ROOT
@@ -34,8 +33,6 @@ except ImportError as e:
     rprint(f"[red]Erro ao importar modulos utilitarios:[/red] {e}")
     raise RuntimeError(f"Falha ao importar modulos ETL: {e}") from e
 
-log = structlog.get_logger(__name__)
-
 
 def _normalizar_descricao_expr(col: str) -> pl.Expr:
     return normalizar_descricao_expr(col).alias("descricao_normalizada")
@@ -49,9 +46,7 @@ def _salvar_log_sem_compra(df_sem_compra: pl.DataFrame, pasta_analises: Path, cn
         "qtd_itens_com_fallback_venda": int(df_sem_compra.filter(pl.col("tem_preco_venda")).height),
         "qtd_itens_sem_preco_algum": int(df_sem_compra.filter(~pl.col("tem_preco_venda")).height),
     }
-    with open(
-        pasta_analises / f"log_sem_preco_medio_compra_{cnpj}.json", "w", encoding="utf-8"
-    ) as f:
+    with open(pasta_analises / f"log_sem_preco_medio_compra_{cnpj}.json", "w", encoding="utf-8") as f:
         json.dump(resumo, f, ensure_ascii=False, indent=2)
 
 
@@ -60,9 +55,7 @@ def _df_vazio_override_unid() -> pl.DataFrame:
 
 
 def _df_vazio_override_fator() -> pl.DataFrame:
-    return pl.DataFrame(
-        schema={"id_agrupado": pl.Utf8, "unid": pl.Utf8, "fator_override": pl.Float64}
-    )
+    return pl.DataFrame(schema={"id_agrupado": pl.Utf8, "unid": pl.Utf8, "fator_override": pl.Float64})
 
 
 def _df_vazio_vinculo() -> pl.DataFrame:
@@ -81,9 +74,7 @@ def _df_vazio_vinculo_produto() -> pl.DataFrame:
 
 
 def _salvar_log_vinculo_produto(resumo: dict, pasta_analises: Path, cnpj: str) -> None:
-    with open(
-        pasta_analises / f"log_vinculo_produto_fatores_{cnpj}.json", "w", encoding="utf-8"
-    ) as f:
+    with open(pasta_analises / f"log_vinculo_produto_fatores_{cnpj}.json", "w", encoding="utf-8") as f:
         json.dump(resumo, f, ensure_ascii=False, indent=2)
 
 
@@ -102,12 +93,10 @@ def _construir_vinculo_unico_por_descricao(
         }
 
     df_base = (
-        df.select(
+        df
+        .select(
             [
-                pl.col("descricao_normalizada")
-                .cast(pl.Utf8, strict=False)
-                .fill_null("")
-                .alias("descricao_normalizada"),
+                pl.col("descricao_normalizada").cast(pl.Utf8, strict=False).fill_null("").alias("descricao_normalizada"),
                 pl.col("id_agrupado").cast(pl.Utf8, strict=False).alias("id_agrupado"),
                 pl.col(col_descr_padrao).cast(pl.Utf8, strict=False).alias("descr_padrao_vinculo"),
             ]
@@ -123,12 +112,16 @@ def _construir_vinculo_unico_por_descricao(
             "qtd_descricoes_ambiguas": 0,
         }
 
-    df_grouped = df_base.group_by("descricao_normalizada").agg(
-        [
-            pl.col("id_agrupado").n_unique().alias("__qtd_ids__"),
-            pl.col("id_agrupado").first().alias("id_agrupado"),
-            pl.col("descr_padrao_vinculo").drop_nulls().first().alias("descr_padrao_vinculo"),
-        ]
+    df_grouped = (
+        df_base
+        .group_by("descricao_normalizada")
+        .agg(
+            [
+                pl.col("id_agrupado").n_unique().alias("__qtd_ids__"),
+                pl.col("id_agrupado").first().alias("id_agrupado"),
+                pl.col("descr_padrao_vinculo").drop_nulls().first().alias("descr_padrao_vinculo"),
+            ]
+        )
     )
 
     df_ambiguos = df_grouped.filter(pl.col("__qtd_ids__") > 1)
@@ -150,7 +143,8 @@ def _construir_vinculo_unico_por_descricao(
         "qtd_descricoes_ambiguas": int(df_ambiguos.height),
     }
     return (
-        df_grouped.filter(pl.col("__qtd_ids__") == 1)
+        df_grouped
+        .filter(pl.col("__qtd_ids__") == 1)
         .drop("__qtd_ids__")
         .with_columns(pl.lit(origem).alias("origem_vinculo_produto")),
         resumo,
@@ -179,9 +173,9 @@ def _carregar_vinculo_produto_canonico(
                 )
                 .collect()
                 .join(
-                    df_final.select(["id_agrupado", "descr_padrao_calc"]).unique(
-                        subset=["id_agrupado"], keep="first"
-                    ),
+                    df_final
+                    .select(["id_agrupado", "descr_padrao_calc"])
+                    .unique(subset=["id_agrupado"], keep="first"),
                     on="id_agrupado",
                     how="left",
                 )
@@ -260,24 +254,18 @@ def _primeira_lista_textos_nao_vazia(listas: list | None) -> list[str]:
     return []
 
 
-def _salvar_log_reconciliacao_overrides(
-    df_log: pl.DataFrame, pasta_analises: Path, cnpj: str
-) -> None:
+def _salvar_log_reconciliacao_overrides(df_log: pl.DataFrame, pasta_analises: Path, cnpj: str) -> None:
     if df_log.is_empty():
         return
 
-    salvar_para_parquet(
-        df_log, pasta_analises, f"log_reconciliacao_overrides_fatores_{cnpj}.parquet"
-    )
+    salvar_para_parquet(df_log, pasta_analises, f"log_reconciliacao_overrides_fatores_{cnpj}.parquet")
     resumo = {
         "cnpj": cnpj,
         "qtd_registros": int(df_log.height),
         "qtd_remapeados": int(df_log.filter(pl.col("acao") == "remapeado").height),
         "qtd_descartados": int(df_log.filter(pl.col("acao") == "descartado").height),
     }
-    with open(
-        pasta_analises / f"log_reconciliacao_overrides_fatores_{cnpj}.json", "w", encoding="utf-8"
-    ) as f:
+    with open(pasta_analises / f"log_reconciliacao_overrides_fatores_{cnpj}.json", "w", encoding="utf-8") as f:
         json.dump(resumo, f, ensure_ascii=False, indent=2)
 
 
@@ -295,54 +283,42 @@ def _construir_mapa_descricoes_canonicas(df_agrupamento_canonico: pl.DataFrame) 
         df_agrupamento_canonico.select(
             [
                 pl.col("id_agrupado").cast(pl.Utf8, strict=False),
-                pl.col("descr_padrao_canonico")
-                .cast(pl.Utf8, strict=False)
-                .alias("descr_padrao_destino"),
-                pl.col("descr_padrao_canonico")
-                .cast(pl.Utf8, strict=False)
-                .alias("descricao_texto"),
+                pl.col("descr_padrao_canonico").cast(pl.Utf8, strict=False).alias("descr_padrao_destino"),
+                pl.col("descr_padrao_canonico").cast(pl.Utf8, strict=False).alias("descricao_texto"),
             ]
         )
     ]
 
     if "lista_descricoes" in df_agrupamento_canonico.columns:
         partes.append(
-            df_agrupamento_canonico.select(
+            df_agrupamento_canonico
+            .select(
                 [
                     pl.col("id_agrupado").cast(pl.Utf8, strict=False),
-                    pl.col("descr_padrao_canonico")
-                    .cast(pl.Utf8, strict=False)
-                    .alias("descr_padrao_destino"),
-                    pl.col("lista_descricoes")
-                    .cast(pl.List(pl.Utf8), strict=False)
-                    .alias("descricao_texto"),
+                    pl.col("descr_padrao_canonico").cast(pl.Utf8, strict=False).alias("descr_padrao_destino"),
+                    pl.col("lista_descricoes").cast(pl.List(pl.Utf8), strict=False).alias("descricao_texto"),
                 ]
-            ).explode("descricao_texto")
+            )
+            .explode("descricao_texto")
         )
     if "lista_desc_compl" in df_agrupamento_canonico.columns:
         partes.append(
-            df_agrupamento_canonico.select(
+            df_agrupamento_canonico
+            .select(
                 [
                     pl.col("id_agrupado").cast(pl.Utf8, strict=False),
-                    pl.col("descr_padrao_canonico")
-                    .cast(pl.Utf8, strict=False)
-                    .alias("descr_padrao_destino"),
-                    pl.col("lista_desc_compl")
-                    .cast(pl.List(pl.Utf8), strict=False)
-                    .alias("descricao_texto"),
+                    pl.col("descr_padrao_canonico").cast(pl.Utf8, strict=False).alias("descr_padrao_destino"),
+                    pl.col("lista_desc_compl").cast(pl.List(pl.Utf8), strict=False).alias("descricao_texto"),
                 ]
-            ).explode("descricao_texto")
+            )
+            .explode("descricao_texto")
         )
 
     return (
         pl.concat(partes, how="vertical_relaxed")
         .with_columns(
             [
-                pl.col("descricao_texto")
-                .cast(pl.Utf8, strict=False)
-                .fill_null("")
-                .str.strip_chars()
-                .alias("descricao_texto"),
+                pl.col("descricao_texto").cast(pl.Utf8, strict=False).fill_null("").str.strip_chars().alias("descricao_texto"),
                 normalizar_descricao_expr("descricao_texto").alias("descricao_normalizada_match"),
             ]
         )
@@ -395,22 +371,22 @@ def _carregar_base_agrupamento_canonico(path: Path) -> pl.DataFrame:
     if "descr_padrao" not in df.columns:
         df = df.with_columns(pl.lit(None, dtype=pl.Utf8).alias("descr_padrao"))
     if "lista_descricoes" not in df.columns:
-        df = df.with_columns(
-            pl.lit([]).cast(pl.List(pl.Utf8), strict=False).alias("lista_descricoes")
-        )
+        df = df.with_columns(pl.lit([]).cast(pl.List(pl.Utf8), strict=False).alias("lista_descricoes"))
     if "lista_desc_compl" not in df.columns:
-        df = df.with_columns(
-            pl.lit([]).cast(pl.List(pl.Utf8), strict=False).alias("lista_desc_compl")
-        )
+        df = df.with_columns(pl.lit([]).cast(pl.List(pl.Utf8), strict=False).alias("lista_desc_compl"))
 
-    return df.select(
-        [
-            pl.col("id_agrupado").cast(pl.Utf8, strict=False),
-            pl.col("descr_padrao").cast(pl.Utf8, strict=False).alias("descr_padrao_canonico"),
-            pl.col("lista_descricoes").cast(pl.List(pl.Utf8), strict=False),
-            pl.col("lista_desc_compl").cast(pl.List(pl.Utf8), strict=False),
-        ]
-    ).unique(subset=["id_agrupado"], keep="first")
+    return (
+        df
+        .select(
+            [
+                pl.col("id_agrupado").cast(pl.Utf8, strict=False),
+                pl.col("descr_padrao").cast(pl.Utf8, strict=False).alias("descr_padrao_canonico"),
+                pl.col("lista_descricoes").cast(pl.List(pl.Utf8), strict=False),
+                pl.col("lista_desc_compl").cast(pl.List(pl.Utf8), strict=False),
+            ]
+        )
+        .unique(subset=["id_agrupado"], keep="first")
+    )
 
 
 def _carregar_agrupamento_canonico(pasta_analises: Path, cnpj: str) -> pl.DataFrame:
@@ -497,21 +473,11 @@ def _reconciliar_fatores_existentes_com_agrupamento_atual(
         [
             pl.col("id_agrupado").cast(pl.Utf8, strict=False),
             pl.col("id_produtos").cast(pl.Utf8, strict=False),
-            pl.col("descr_padrao")
-            .cast(pl.Utf8, strict=False)
-            .fill_null("")
-            .str.strip_chars()
-            .alias("descr_padrao"),
+            pl.col("descr_padrao").cast(pl.Utf8, strict=False).fill_null("").str.strip_chars().alias("descr_padrao"),
             pl.col("unid").cast(pl.Utf8, strict=False),
             pl.col("unid_ref").cast(pl.Utf8, strict=False),
-            pl.col("fator_manual")
-            .cast(pl.Boolean, strict=False)
-            .fill_null(False)
-            .alias("fator_manual"),
-            pl.col("unid_ref_manual")
-            .cast(pl.Boolean, strict=False)
-            .fill_null(False)
-            .alias("unid_ref_manual"),
+            pl.col("fator_manual").cast(pl.Boolean, strict=False).fill_null(False).alias("fator_manual"),
+            pl.col("unid_ref_manual").cast(pl.Boolean, strict=False).fill_null(False).alias("unid_ref_manual"),
         ]
     )
 
@@ -526,7 +492,8 @@ def _reconciliar_fatores_existentes_com_agrupamento_atual(
     df_mapa_descricoes = _construir_mapa_descricoes_canonicas(df_canonico)
 
     df_avaliacao = (
-        df_existente.join(df_canonico, on="id_agrupado", how="left")
+        df_existente
+        .join(df_canonico, on="id_agrupado", how="left")
         .with_columns(
             [
                 (pl.col("fator_manual") | pl.col("unid_ref_manual")).alias("__eh_manual__"),
@@ -535,34 +502,36 @@ def _reconciliar_fatores_existentes_com_agrupamento_atual(
         )
         # Incoerente apenas quando o id_agrupado sumiu do canonico (não por divergência textual)
         .with_columns(
-            (pl.col("__eh_manual__") & pl.col("descr_padrao_canonico").is_null()).alias(
-                "__manual_incoerente__"
-            )
+            (
+                pl.col("__eh_manual__")
+                & pl.col("descr_padrao_canonico").is_null()
+            ).alias("__manual_incoerente__")
         )
     )
 
-    df_manuais_incoerentes = df_avaliacao.filter(pl.col("__manual_incoerente__")).join(
-        df_mapa_descricoes,
-        left_on="__descr_padrao_norm__",
-        right_on="descricao_normalizada_match",
-        how="left",
+    df_manuais_incoerentes = (
+        df_avaliacao
+        .filter(pl.col("__manual_incoerente__"))
+        .join(df_mapa_descricoes, left_on="__descr_padrao_norm__", right_on="descricao_normalizada_match", how="left")
     )
 
     if df_manuais_incoerentes.is_empty():
         return df_existente.drop("__idx_override__")
 
-    df_remapeados = df_manuais_incoerentes.filter(
-        pl.col("id_agrupado_destino").is_not_null()
-    ).with_columns(
-        [
-            pl.col("id_agrupado").alias("id_agrupado_original"),
-            pl.col("id_agrupado_destino").alias("id_agrupado"),
-            pl.col("descr_padrao_destino").alias("descr_padrao"),
-            pl.when(pl.col("id_produtos").is_not_null())
-            .then(pl.col("id_agrupado_destino"))
-            .otherwise(pl.col("id_produtos"))
-            .alias("id_produtos"),
-        ]
+    df_remapeados = (
+        df_manuais_incoerentes
+        .filter(pl.col("id_agrupado_destino").is_not_null())
+        .with_columns(
+            [
+                pl.col("id_agrupado").alias("id_agrupado_original"),
+                pl.col("id_agrupado_destino").alias("id_agrupado"),
+                pl.col("descr_padrao_destino").alias("descr_padrao"),
+                pl.when(pl.col("id_produtos").is_not_null())
+                .then(pl.col("id_agrupado_destino"))
+                .otherwise(pl.col("id_produtos"))
+                .alias("id_produtos"),
+            ]
+        )
     )
 
     # Órfãos: id_agrupado sumiu do canonico E sem match textual — preservar como backup
@@ -580,9 +549,7 @@ def _reconciliar_fatores_existentes_com_agrupamento_atual(
                     pl.col("descr_padrao_canonico"),
                     pl.col("unid"),
                     pl.col("unid_ref"),
-                    pl.lit("Override manual realocado para o agrupamento canonico atual.").alias(
-                        "motivo"
-                    ),
+                    pl.lit("Override manual realocado para o agrupamento canonico atual.").alias("motivo"),
                 ]
             )
         )
@@ -597,9 +564,7 @@ def _reconciliar_fatores_existentes_com_agrupamento_atual(
                     pl.col("descr_padrao_canonico"),
                     pl.col("unid"),
                     pl.col("unid_ref"),
-                    pl.lit(
-                        "Override manual preservado como orfao: id_agrupado ausente do canonico atual."
-                    ).alias("motivo"),
+                    pl.lit("Override manual preservado como orfao: id_agrupado ausente do canonico atual.").alias("motivo"),
                 ]
             )
         )
@@ -626,9 +591,7 @@ def _reconciliar_fatores_existentes_com_agrupamento_atual(
     return df_reconciliado.drop("__idx_override__").unique(maintain_order=True)
 
 
-def _extrair_overrides_existentes(
-    df_existente: pl.DataFrame, df_final: pl.DataFrame
-) -> tuple[pl.DataFrame, pl.DataFrame]:
+def _extrair_overrides_existentes(df_existente: pl.DataFrame, df_final: pl.DataFrame) -> tuple[pl.DataFrame, pl.DataFrame]:
     if df_existente.is_empty():
         return _df_vazio_override_unid(), _df_vazio_override_fator()
 
@@ -655,16 +618,16 @@ def _extrair_overrides_existentes(
 
     if "unid_ref_manual" in df_existente.columns:
         df_unid_override = (
-            df_existente.filter(
-                pl.col("unid_ref_manual").cast(pl.Boolean, strict=False).fill_null(False)
-            )
+            df_existente
+            .filter(pl.col("unid_ref_manual").cast(pl.Boolean, strict=False).fill_null(False))
             .select(["id_agrupado", pl.col("unid_ref").alias("unid_ref_override")])
             .drop_nulls(["id_agrupado", "unid_ref_override"])
             .unique(subset=["id_agrupado"], keep="first")
         )
     else:
         df_ref_final = (
-            df_final.select(["id_agrupado", "unid_ref_sugerida"])
+            df_final
+            .select(["id_agrupado", "unid_ref_sugerida"])
             .with_columns(
                 [
                     pl.col("id_agrupado").cast(pl.Utf8, strict=False),
@@ -674,7 +637,8 @@ def _extrair_overrides_existentes(
             .unique(subset=["id_agrupado"], keep="first")
         )
         df_unid_override = (
-            df_existente.select(["id_agrupado", "unid_ref"])
+            df_existente
+            .select(["id_agrupado", "unid_ref"])
             .drop_nulls(["id_agrupado", "unid_ref"])
             .unique(subset=["id_agrupado"], keep="first")
             .join(df_ref_final, on="id_agrupado", how="left")
@@ -690,21 +654,22 @@ def _extrair_overrides_existentes(
 
     if "fator_manual" in df_existente.columns:
         df_fator_override = (
-            df_existente.filter(
-                pl.col("fator_manual").cast(pl.Boolean, strict=False).fill_null(False)
-            )
+            df_existente
+            .filter(pl.col("fator_manual").cast(pl.Boolean, strict=False).fill_null(False))
             .select(["id_agrupado", "unid", pl.col("fator").alias("fator_override")])
             .drop_nulls(["id_agrupado", "unid"])
             .unique(subset=["id_agrupado", "unid"], keep="first")
         )
     else:
         df_ref_prev = (
-            df_existente.filter(pl.col("unid") == pl.col("unid_ref"))
+            df_existente
+            .filter(pl.col("unid") == pl.col("unid_ref"))
             .group_by("id_agrupado")
             .agg(pl.col("preco_medio").mean().alias("__preco_ref_prev__"))
         )
         df_fator_override = (
-            df_existente.join(df_ref_prev, on="id_agrupado", how="left")
+            df_existente
+            .join(df_ref_prev, on="id_agrupado", how="left")
             .with_columns(
                 pl.when(pl.col("__preco_ref_prev__") > 0)
                 .then(pl.col("preco_medio") / pl.col("__preco_ref_prev__"))
@@ -750,10 +715,7 @@ def _carregar_vinculo_por_id_item_unid(pasta_analises: Path, cnpj: str) -> pl.Da
         .collect()
         .explode("lista_id_item_unid")
         .rename({"lista_id_item_unid": "id_item_unid"})
-        .filter(
-            pl.col("id_item_unid").is_not_null()
-            & (pl.col("id_item_unid").cast(pl.Utf8, strict=False) != "")
-        )
+        .filter(pl.col("id_item_unid").is_not_null() & (pl.col("id_item_unid").cast(pl.Utf8, strict=False) != ""))
         .with_columns(
             pl.col("id_item_unid").cast(pl.Utf8, strict=False),
             pl.col("id_descricao").cast(pl.Utf8, strict=False),
@@ -772,7 +734,8 @@ def _carregar_vinculo_por_id_item_unid(pasta_analises: Path, cnpj: str) -> pl.Da
     )
 
     result = (
-        df_id_item.join(df_mapa, on="id_descricao", how="left")
+        df_id_item
+        .join(df_mapa, on="id_descricao", how="left")
         .filter(pl.col("id_agrupado").is_not_null())
         .select(["id_item_unid", "id_agrupado"])
         .unique(subset=["id_item_unid"], keep="first")
@@ -780,9 +743,7 @@ def _carregar_vinculo_por_id_item_unid(pasta_analises: Path, cnpj: str) -> pl.Da
     return result if not result.is_empty() else vazio
 
 
-def _carregar_vinculo_id_agrupado(
-    pasta_analises: Path, cnpj: str, df_final: pl.DataFrame
-) -> pl.DataFrame:
+def _carregar_vinculo_id_agrupado(pasta_analises: Path, cnpj: str, df_final: pl.DataFrame) -> pl.DataFrame:
     arq_descricoes = pasta_analises / f"descricao_produtos_{cnpj}.parquet"
     arq_mapa = pasta_analises / f"map_produto_agrupado_{cnpj}.parquet"
 
@@ -809,7 +770,8 @@ def _carregar_vinculo_id_agrupado(
             .unique(subset=["id_descricao"], keep="first")
         )
         df_vinculo = (
-            df_descricoes.join(df_mapa, on="id_descricao", how="left")
+            df_descricoes
+            .join(df_mapa, on="id_descricao", how="left")
             .filter(pl.col("id_agrupado").is_not_null())
             .select(["descricao_normalizada", "id_agrupado"])
             .unique(subset=["descricao_normalizada"], keep="first")
@@ -818,7 +780,8 @@ def _carregar_vinculo_id_agrupado(
             return df_vinculo
 
     return (
-        df_final.select(["descricao_normalizada", "id_agrupado"])
+        df_final
+        .select(["descricao_normalizada", "id_agrupado"])
         .with_columns(
             [
                 pl.col("descricao_normalizada").cast(pl.Utf8, strict=False),
@@ -871,9 +834,7 @@ def calcular_fatores_conversao(cnpj: str, pasta_cnpj: Path | None = None) -> boo
 
     df_unid = pl.read_parquet(arq_unid)
     df_final = pl.read_parquet(arq_final)
-    df_fatores_existente = (
-        pl.read_parquet(arq_fatores_existente) if arq_fatores_existente.exists() else pl.DataFrame()
-    )
+    df_fatores_existente = pl.read_parquet(arq_fatores_existente) if arq_fatores_existente.exists() else pl.DataFrame()
 
     # Garantir colunas principais — alguns testes ou fontes podem omitir
     # colunas auxiliares como `descricao_final`. Adicionamos colunas ausentes
@@ -883,13 +844,7 @@ def calcular_fatores_conversao(cnpj: str, pasta_cnpj: Path | None = None) -> boo
         if col not in df_unid.columns:
             df_unid = df_unid.with_columns(pl.lit(None).alias(col))
 
-    required_final = [
-        "id_agrupado",
-        "descricao_normalizada",
-        "descricao_final",
-        "descr_padrao",
-        "unid_ref_sugerida",
-    ]
+    required_final = ["id_agrupado", "descricao_normalizada", "descricao_final", "descr_padrao", "unid_ref_sugerida"]
     for col in required_final:
         if col not in df_final.columns:
             df_final = df_final.with_columns(pl.lit(None).alias(col))
@@ -911,18 +866,10 @@ def calcular_fatores_conversao(cnpj: str, pasta_cnpj: Path | None = None) -> boo
 
     if df_unid.is_empty() or df_final.is_empty():
         rprint("[yellow]Aviso: sem dados para calcular fatores de conversao.[/yellow]")
-        return salvar_para_parquet(
-            pl.DataFrame(), pasta_analises, f"fatores_conversao_{cnpj}.parquet"
-        )
+        return salvar_para_parquet(pl.DataFrame(), pasta_analises, f"fatores_conversao_{cnpj}.parquet")
 
     required_unid = ["descricao", "unid", "compras", "vendas", "qtd_compras", "qtd_vendas"]
-    required_final = [
-        "id_agrupado",
-        "descricao_normalizada",
-        "descricao_final",
-        "descr_padrao",
-        "unid_ref_sugerida",
-    ]
+    required_final = ["id_agrupado", "descricao_normalizada", "descricao_final", "descr_padrao", "unid_ref_sugerida"]
 
     for col in required_unid:
         if col not in df_unid.columns:
@@ -939,17 +886,13 @@ def calcular_fatores_conversao(cnpj: str, pasta_cnpj: Path | None = None) -> boo
     df_final = df_final.with_columns(
         [
             pl.col("id_agrupado").cast(pl.Utf8, strict=False).alias("id_agrupado"),
-            pl.col("descricao_normalizada")
-            .cast(pl.Utf8, strict=False)
-            .fill_null("")
-            .alias("descricao_normalizada"),
-            pl.coalesce([pl.col("descr_padrao"), pl.col("descricao_final")]).alias(
-                "descr_padrao_calc"
-            ),
+            pl.col("descricao_normalizada").cast(pl.Utf8, strict=False).fill_null("").alias("descricao_normalizada"),
+            pl.coalesce([pl.col("descr_padrao"), pl.col("descricao_final")]).alias("descr_padrao_calc"),
         ]
     )
     df_ref_final = (
-        df_final.select(["id_agrupado", "descr_padrao_calc", "unid_ref_sugerida"])
+        df_final
+        .select(["id_agrupado", "descr_padrao_calc", "unid_ref_sugerida"])
         .with_columns(
             [
                 pl.col("id_agrupado").cast(pl.Utf8, strict=False),
@@ -967,22 +910,27 @@ def calcular_fatores_conversao(cnpj: str, pasta_cnpj: Path | None = None) -> boo
         pasta_analises,
         cnpj,
     )
-    df_unid_override, df_fator_override = _extrair_overrides_existentes(
-        df_fatores_existente, df_final
-    )
+    df_unid_override, df_fator_override = _extrair_overrides_existentes(df_fatores_existente, df_final)
     df_vinculo = _carregar_vinculo_id_agrupado(pasta_analises, cnpj, df_final)
     df_vinculo_chave = _carregar_vinculo_por_id_item_unid(pasta_analises, cnpj)
 
-    usar_chave_fisica = not df_vinculo_chave.is_empty() and "id_item_unid" in df_unid.columns
+    usar_chave_fisica = (
+        not df_vinculo_chave.is_empty()
+        and "id_item_unid" in df_unid.columns
+    )
 
     if usar_chave_fisica:
         # Fio de ouro: vincula por chave física (id_item_unid -> id_agrupado)
-        df_link_base = df_unid.join(df_vinculo_chave, on="id_item_unid", how="left")
+        df_link_base = (
+            df_unid
+            .join(df_vinculo_chave, on="id_item_unid", how="left")
+        )
         # Fallback por descricao_normalizada para linhas sem match físico
         sem_vinculo = df_link_base.filter(pl.col("id_agrupado").is_null())
         if not sem_vinculo.is_empty():
             sem_vinculo = (
-                sem_vinculo.drop("id_agrupado")
+                sem_vinculo
+                .drop("id_agrupado")
                 .join(df_vinculo_produto, on="descricao_normalizada", how="left")
                 .with_columns(
                     pl.lit("descricao_normalizada_fallback").alias("origem_vinculo_produto")
@@ -993,7 +941,10 @@ def calcular_fatores_conversao(cnpj: str, pasta_cnpj: Path | None = None) -> boo
                 how="diagonal_relaxed",
             )
     else:
-        df_link_base = df_unid.join(df_vinculo_produto, on="descricao_normalizada", how="left")
+        df_link_base = (
+            df_unid
+            .join(df_vinculo_produto, on="descricao_normalizada", how="left")
+        )
 
     df_link_joined = df_link_base.join(df_ref_final, on="id_agrupado", how="left")
     if "descr_padrao_vinculo" in df_link_joined.columns:
@@ -1001,46 +952,23 @@ def calcular_fatores_conversao(cnpj: str, pasta_cnpj: Path | None = None) -> boo
             pl.coalesce(["descr_padrao_vinculo", "descr_padrao_calc"]).alias("descr_padrao_calc")
         )
     elif "descr_padrao_calc" not in df_link_joined.columns:
-        df_link_joined = df_link_joined.with_columns(
-            pl.lit(None, dtype=pl.Utf8).alias("descr_padrao_calc")
-        )
+        df_link_joined = df_link_joined.with_columns(pl.lit(None, dtype=pl.Utf8).alias("descr_padrao_calc"))
 
-    df_link = df_link_joined.filter(
-        pl.col("id_agrupado").is_not_null() & pl.col("unid").is_not_null()
-    )
+    df_link = df_link_joined.filter(pl.col("id_agrupado").is_not_null() & pl.col("unid").is_not_null())
 
     if df_link.is_empty():
-        rprint(
-            "[yellow]Aviso: sem vinculacao entre item_unidades e camada canonica de agrupamento.[/yellow]"
-        )
-        return salvar_para_parquet(
-            pl.DataFrame(), pasta_analises, f"fatores_conversao_{cnpj}.parquet"
-        )
+        rprint("[yellow]Aviso: sem vinculacao entre item_unidades e camada canonica de agrupamento.[/yellow]")
+        return salvar_para_parquet(pl.DataFrame(), pasta_analises, f"fatores_conversao_{cnpj}.parquet")
 
     df_precos = (
-        df_link.group_by(["id_agrupado", "descr_padrao_calc", "unid"])
+        df_link
+        .group_by(["id_agrupado", "descr_padrao_calc", "unid"])
         .agg(
             [
-                pl.col("compras")
-                .cast(pl.Float64, strict=False)
-                .fill_null(0)
-                .sum()
-                .alias("compras_total"),
-                pl.col("qtd_compras")
-                .cast(pl.Float64, strict=False)
-                .fill_null(0)
-                .sum()
-                .alias("qtd_compras_total"),
-                pl.col("vendas")
-                .cast(pl.Float64, strict=False)
-                .fill_null(0)
-                .sum()
-                .alias("vendas_total"),
-                pl.col("qtd_vendas")
-                .cast(pl.Float64, strict=False)
-                .fill_null(0)
-                .sum()
-                .alias("qtd_vendas_total"),
+                pl.col("compras").cast(pl.Float64, strict=False).fill_null(0).sum().alias("compras_total"),
+                pl.col("qtd_compras").cast(pl.Float64, strict=False).fill_null(0).sum().alias("qtd_compras_total"),
+                pl.col("vendas").cast(pl.Float64, strict=False).fill_null(0).sum().alias("vendas_total"),
+                pl.col("qtd_vendas").cast(pl.Float64, strict=False).fill_null(0).sum().alias("qtd_vendas_total"),
                 (
                     pl.col("qtd_compras").cast(pl.Float64, strict=False).fill_null(0).sum()
                     + pl.col("qtd_vendas").cast(pl.Float64, strict=False).fill_null(0).sum()
@@ -1062,9 +990,7 @@ def calcular_fatores_conversao(cnpj: str, pasta_cnpj: Path | None = None) -> boo
         )
         .with_columns(
             [
-                pl.coalesce([pl.col("preco_medio_compra"), pl.col("preco_medio_venda")]).alias(
-                    "preco_medio_base"
-                ),
+                pl.coalesce([pl.col("preco_medio_compra"), pl.col("preco_medio_venda")]).alias("preco_medio_base"),
                 pl.when(pl.col("preco_medio_compra").is_not_null())
                 .then(pl.lit("COMPRA"))
                 .when(pl.col("preco_medio_venda").is_not_null())
@@ -1077,7 +1003,8 @@ def calcular_fatores_conversao(cnpj: str, pasta_cnpj: Path | None = None) -> boo
     )
 
     df_sem_compra = (
-        df_precos.filter(pl.col("preco_medio_compra").is_null())
+        df_precos
+        .filter(pl.col("preco_medio_compra").is_null())
         .with_columns(
             [
                 pl.col("preco_medio_venda").is_not_null().alias("tem_preco_venda"),
@@ -1104,7 +1031,8 @@ def calcular_fatores_conversao(cnpj: str, pasta_cnpj: Path | None = None) -> boo
     _salvar_log_sem_compra(df_sem_compra, pasta_analises, cnpj)
 
     unid_ref_manual = (
-        df_final.select(["id_agrupado", "unid_ref_sugerida"])
+        df_final
+        .select(["id_agrupado", "unid_ref_sugerida"])
         .drop_nulls("id_agrupado")
         .with_columns(pl.col("unid_ref_sugerida").cast(pl.String, strict=False).str.strip_chars())
         .filter(pl.col("unid_ref_sugerida").is_not_null() & (pl.col("unid_ref_sugerida") != ""))
@@ -1113,39 +1041,33 @@ def calcular_fatores_conversao(cnpj: str, pasta_cnpj: Path | None = None) -> boo
     )
 
     unid_ref_auto = (
-        df_precos.filter(pl.col("unid").is_not_null())
-        .sort(
-            ["id_agrupado", "qtd_mov_total", "qtd_compras_total"],
-            descending=[False, True, True],
-            nulls_last=True,
-        )
+        df_precos
+        .filter(pl.col("unid").is_not_null())
+        .sort(["id_agrupado", "qtd_mov_total", "qtd_compras_total"], descending=[False, True, True], nulls_last=True)
         .group_by("id_agrupado")
         .agg(pl.col("unid").first().alias("unid_ref_auto"))
     )
 
     df_full = (
-        df_precos.join(unid_ref_manual, on="id_agrupado", how="left")
+        df_precos
+        .join(unid_ref_manual, on="id_agrupado", how="left")
         .join(unid_ref_auto, on="id_agrupado", how="left")
         .join(df_unid_override, on="id_agrupado", how="left")
         .with_columns(
-            pl.coalesce(
-                [
-                    pl.col("unid_ref_override"),
-                    pl.col("unid_ref_manual_sugerida"),
-                    pl.col("unid_ref_auto"),
-                ]
-            ).alias("unid_ref")
+            pl.coalesce([pl.col("unid_ref_override"), pl.col("unid_ref_manual_sugerida"), pl.col("unid_ref_auto")]).alias("unid_ref")
         )
     )
 
     df_ref_price = (
-        df_full.filter(pl.col("unid") == pl.col("unid_ref"))
+        df_full
+        .filter(pl.col("unid") == pl.col("unid_ref"))
         .group_by("id_agrupado")
         .agg(pl.col("preco_medio_base").mean().alias("preco_unid_ref"))
     )
 
     df_fatores = (
-        df_full.join(df_ref_price, on="id_agrupado", how="left")
+        df_full
+        .join(df_ref_price, on="id_agrupado", how="left")
         .join(df_fator_override, on=["id_agrupado", "unid"], how="left")
         .with_columns(
             [
@@ -1195,41 +1117,31 @@ def calcular_fatores_conversao(cnpj: str, pasta_cnpj: Path | None = None) -> boo
         .sort(["id_agrupado", "unid"])
     )
 
-    # Log fallback summary — one event per non-"preco" fator_origem value.
-    # df_fatores was already deduplicated via .unique() so the count reflects
-    # distinct (id_agrupado, unid) combinations, not raw source rows.
-    if "fator_origem" in df_fatores.columns:
-        for row in df_fatores.group_by("fator_origem").agg(pl.len().alias("n")).to_dicts():
-            if row["fator_origem"] != "preco":
-                log.info(
-                    "fatores_conversao.fallback",
-                    motivo=row["fator_origem"],
-                    fator_origem=row["fator_origem"],
-                    n_linhas=row["n"],
-                    cnpj=cnpj,
-                )
-
     if not df_fatores_existente.is_empty():
         colunas_manual = []
         if "fator_manual" in df_fatores_existente.columns:
-            colunas_manual.append(
-                pl.col("fator_manual").cast(pl.Boolean, strict=False).fill_null(False)
-            )
+            colunas_manual.append(pl.col("fator_manual").cast(pl.Boolean, strict=False).fill_null(False))
         if "unid_ref_manual" in df_fatores_existente.columns:
-            colunas_manual.append(
-                pl.col("unid_ref_manual").cast(pl.Boolean, strict=False).fill_null(False)
-            )
+            colunas_manual.append(pl.col("unid_ref_manual").cast(pl.Boolean, strict=False).fill_null(False))
 
         if colunas_manual:
-            df_manuais_antigos = df_fatores_existente.with_columns(colunas_manual).filter(
-                pl.col("fator_manual").fill_null(False) | pl.col("unid_ref_manual").fill_null(False)
+            df_manuais_antigos = (
+                df_fatores_existente
+                .with_columns(colunas_manual)
+                .filter(
+                    pl.col("fator_manual").fill_null(False)
+                    | pl.col("unid_ref_manual").fill_null(False)
+                )
             )
 
             if not df_manuais_antigos.is_empty():
-                df_orfaos = df_manuais_antigos.join(
-                    df_fatores.select(["id_agrupado", "unid"]).unique(),
-                    on=["id_agrupado", "unid"],
-                    how="anti",
+                df_orfaos = (
+                    df_manuais_antigos
+                    .join(
+                        df_fatores.select(["id_agrupado", "unid"]).unique(),
+                        on=["id_agrupado", "unid"],
+                        how="anti",
+                    )
                 )
 
                 if not df_orfaos.is_empty():
@@ -1238,16 +1150,12 @@ def calcular_fatores_conversao(cnpj: str, pasta_cnpj: Path | None = None) -> boo
                             df_orfaos = df_orfaos.with_columns(pl.lit(None).alias(col))
                     if "id_produtos" in df_orfaos.columns:
                         df_orfaos = df_orfaos.with_columns(
-                            pl.coalesce([pl.col("id_produtos"), pl.col("id_agrupado")]).alias(
-                                "id_produtos"
-                            )
+                            pl.coalesce([pl.col("id_produtos"), pl.col("id_agrupado")]).alias("id_produtos")
                         )
 
                     df_orfaos = df_orfaos.select(df_fatores.columns)
                     df_fatores = pl.concat([df_fatores, df_orfaos], how="vertical_relaxed")
-                    df_fatores = df_fatores.unique(
-                        subset=["id_agrupado", "unid"], keep="first"
-                    ).sort(["id_agrupado", "unid"])
+                    df_fatores = df_fatores.unique(subset=["id_agrupado", "unid"], keep="first").sort(["id_agrupado", "unid"])
                     rprint(f"[green]Preservados {df_orfaos.height} fatores manuais orfaos.[/green]")
 
     return salvar_para_parquet(df_fatores, pasta_analises, f"fatores_conversao_{cnpj}.parquet")

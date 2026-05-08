@@ -58,7 +58,6 @@ class WorkerThread(QThread):
         periodo_analise: tuple,
         arquivo_dsf: Optional[Path] = None,
         diretorio_saida: Optional[Path] = None,
-        incluir_imagens_dsf: bool = True,
     ):
         super().__init__()
         self.lista_cnpjs = lista_cnpjs
@@ -66,7 +65,6 @@ class WorkerThread(QThread):
         self.periodo_analise = periodo_analise
         self.arquivo_dsf = arquivo_dsf
         self.diretorio_saida = diretorio_saida or DIR_SAIDA_NOTIFICACOES
-        self.incluir_imagens_dsf = incluir_imagens_dsf
         self._cancelar = False
 
     def cancelar(self):
@@ -119,7 +117,6 @@ class WorkerThread(QThread):
                     diretorio_saida=dir_saida,
                     forcar_reatribuicao=False,
                     periodo_analise=self.periodo_analise,
-                    incluir_imagens_dsf=self.incluir_imagens_dsf,
                 )
                 if self._deve_cancelar():
                     resumo["cancelado"] = True

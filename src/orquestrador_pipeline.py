@@ -13,10 +13,7 @@ import sys
 from pathlib import Path
 from typing import Callable
 
-import structlog
 from rich import print as rprint
-
-log = structlog.get_logger(__name__)
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 SRC_DIR = ROOT_DIR / "src"
@@ -28,27 +25,15 @@ SRC_DIR = ROOT_DIR / "src"
 class _TabelaRegistro:
     """Entrada do registo de tabelas."""
 
-    __slots__ = ("_func", "deps", "funcao_path", "id")
+    __slots__ = ("id", "funcao_path", "deps", "_func")
 
     def __init__(self, id: str, funcao_path: str, deps: list[str] | None = None):
-        """Inicializa entrada do registro com ID, caminho de função e dependências.
-
-        Args:
-            id: Identificador único da tabela no registro.
-            funcao_path: Caminho ``modulo:funcao`` resolvido via importlib.
-            deps: IDs de tabelas das quais esta depende para execução correta.
-        """
         self.id = id
         self.funcao_path = funcao_path  # "modulo:funcao"
         self.deps = deps or []
         self._func: Callable | None = None
 
     def resolver(self) -> Callable:
-        """Resolve e cacheia a função de geração associada a esta entrada.
-
-        Returns:
-            Callable que recebe ``cnpj: str`` e retorna ``bool``.
-        """
         if self._func is None:
             modulo_path, nome_func = self.funcao_path.rsplit(":", 1)
             import importlib
@@ -62,7 +47,6 @@ REGISTO_TABELAS: dict[str, _TabelaRegistro] = {}
 
 
 def _registar(id: str, funcao_path: str, deps: list[str] | None = None) -> None:
-    """Registra uma tabela em REGISTO_TABELAS com seu caminho de função e dependências."""
     REGISTO_TABELAS[id] = _TabelaRegistro(id, funcao_path, deps)
 
 
@@ -144,7 +128,6 @@ def _ordem_topologica(selecionadas: list[str]) -> list[str]:
     ordem: list[str] = []
 
     def _visitar(tab_id: str) -> None:
-        """Visita recursivamente uma tabela e suas dependências adicionando-as à ordem."""
         if tab_id in visitados:
             return
         visitados.add(tab_id)
@@ -168,26 +151,11 @@ def executar_pipeline_completo(
     tabelas_selecionadas: list[str] | None = None,
     data_limite: str | None = None,
 ) -> bool:
-    """Executa o pipeline ETL completo para um CNPJ.
-
-    Fase 1 (opcional): extrai consultas SQL selecionadas do Oracle.
-    Fase 2 (opcional): gera tabelas de negócio em ordem topológica, respeitando dependências.
-
-    Args:
-        cnpj: CNPJ do contribuinte (com ou sem formatação; apenas dígitos são usados).
-        consultas_selecionadas: Caminhos de arquivos SQL a extrair do Oracle. Omitir pula a Fase 1.
-        tabelas_selecionadas: IDs de tabelas registradas em REGISTO_TABELAS a gerar. Omitir pula a Fase 2.
-        data_limite: Data limite de processamento no formato ``DD/MM/YYYY`` (bind Oracle).
-
-    Returns:
-        True se todas as etapas concluíram sem falhas; False em caso de falha parcial ou total.
-    """
     cnpj = re.sub(r"\D", "", cnpj)
     if len(cnpj) != 14:
         rprint(f"[red]Erro:[/red] CNPJ invalido: {cnpj}")
         return False
 
-    log.info("orquestrador.pipeline.iniciado", cnpj=cnpj)
     rprint(f"\n[bold green]Iniciando pipeline para CNPJ: {cnpj}[/bold green]")
     sucesso_global = True
 
@@ -261,12 +229,10 @@ def executar_pipeline_completo(
                 sucesso_global = False
 
     if sucesso_global:
-        log.info("orquestrador.pipeline.sucesso", cnpj=cnpj)
         rprint(
             f"\n[bold green]Pipeline finalizado com sucesso para {cnpj}![/bold green]\n"
         )
     else:
-        log.info("orquestrador.pipeline.falha_parcial", cnpj=cnpj)
         rprint(
             f"\n[bold yellow]Pipeline finalizado com avisos/falhas parciais para {cnpj}.[/bold yellow]\n"
         )
@@ -277,7 +243,6 @@ def executar_pipeline_completo(
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         cnpj_alvo = sys.argv[1]
-        log.info("orquestrador.start", target_cnpj=cnpj_alvo)
         executar_pipeline_completo(
             cnpj_alvo, tabelas_selecionadas=["tb_documentos", "item_unidades", "itens"]
         )

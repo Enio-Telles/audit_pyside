@@ -1,7 +1,0 @@
-180 src\interface_grafica\windows\aba_agregacao.py
-105 src\interface_grafica\windows\aba_auditoria.py
-205 src\interface_grafica\windows\aba_importacao.py
-314 src\interface_grafica\windows\aba_relatorios.py
-8 src\interface_grafica\windows\main_window.py
-1 src\interface_grafica\windows\__init__.py
-9093 src\interface_grafica\ui\main_window.py

@@ -1,5 +1,4 @@
 import os
-from collections import OrderedDict as _OrderedDict
 
 try:
     import psutil
@@ -13,7 +12,7 @@ import shutil
 from datetime import datetime
 
 import polars as pl
-from utilitarios.perf_monitor import log_parquet_open, registrar_evento_performance
+from utilitarios.perf_monitor import registrar_evento_performance
 from utilitarios.text import expr_normalizar_descricao
 
 from interface_grafica.config import CNPJ_ROOT
@@ -104,11 +103,6 @@ except ImportError:
     gerar_aba_produtos_selecionados = None
 
 try:
-    from transformacao.estoque_codigo_produto import gerar_estoque_codigo_produto
-except ImportError:
-    gerar_estoque_codigo_produto = None
-
-try:
     from utilitarios.salvar_para_parquet import salvar_para_parquet
 except ImportError:
     salvar_para_parquet = None
@@ -116,33 +110,9 @@ except ImportError:
 from utilitarios.compat import ensure_id_aliases
 
 
-class _BoundedLRUDict(_OrderedDict):
-    """OrderedDict com limite de entradas (LRU eviction, stdlib apenas).
-
-    Usado como cache global de DataFrames Parquet por CNPJ, evitando crescimento
-    ilimitado ao alternar entre CNPJs em sessoes longas.
-    """
-
-    def __init__(self, maxsize: int = 8) -> None:
-        super().__init__()
-        self._maxsize = maxsize
-
-    def __setitem__(self, key, value) -> None:  # type: ignore[override]
-        if key in self:
-            self.move_to_end(key)
-        super().__setitem__(key, value)
-        if len(self) > self._maxsize:
-            self.popitem(last=False)
-
-    def __getitem__(self, key):
-        value = super().__getitem__(key)
-        self.move_to_end(key)
-        return value
-
-
 class ServicoAgregacao:
-    # Cache global de DataFrames por CNPJ — limitado a 8 entradas (LRU)
-    _global_df_cache: _BoundedLRUDict = _BoundedLRUDict(maxsize=8)
+    # Cache global de DataFrames por CNPJ
+    _global_df_cache: dict[str, dict[Path, pl.DataFrame]] = {}
 
     def _ler_parquet_com_cache(
         self,
@@ -186,13 +156,6 @@ class ServicoAgregacao:
             t0 = perf_counter()
             df = pl.read_parquet(path)
             t1 = perf_counter()
-            log_parquet_open(
-                path,
-                "ServicoAgregacao._ler_parquet_cache",
-                rows=df.height,
-                cols=df.width,
-                elapsed_ms=(t1 - t0) * 1000.0,
-            )
             cache[path] = df
             if cnpj is not None:
                 self._global_df_cache[cnpj][path] = df
@@ -205,9 +168,10 @@ class ServicoAgregacao:
             if progresso:
                 progresso(f"[ERRO] Falha ao ler {nome}: {exc}")
             # Remove do cache se corrompido
-            if cnpj is not None:
-                self._global_df_cache[cnpj].pop(path, None)
-            cache.pop(path, None)
+            if cnpj is not None and path in self._global_df_cache[cnpj]:
+                del self._global_df_cache[cnpj][path]
+            if path in cache:
+                del cache[path]
             # Tenta reprocessar automaticamente se permitido
             if tentar_reprocessar:
                 if progresso:
@@ -605,7 +569,7 @@ class ServicoAgregacao:
         id_agrupados_col = df_rastreavel.get_column("id_agrupado").to_list()
 
         normalized_ids: list[list[str]] = []
-        for orig, id_agr in zip(ids_col, id_agrupados_col, strict=True):
+        for orig, id_agr in zip(ids_col, id_agrupados_col):
             if orig is None:
                 normalized = [str(id_agr).strip()]
             else:
@@ -648,8 +612,6 @@ class ServicoAgregacao:
             "lista_gtin",
             "lista_descricoes",
             "lista_desc_compl",
-            "lista_codigo_fonte",
-            "lista_codigos",
             "ids_origem_agrupamento",
             "lista_itens_agrupados",
         ]:
@@ -747,16 +709,7 @@ class ServicoAgregacao:
         selecionadas = [col for col in colunas if col in schema_cols]
         if not selecionadas:
             return pl.DataFrame()
-        inicio = perf_counter()
-        df = pl.read_parquet(path, columns=selecionadas)
-        log_parquet_open(
-            path,
-            "ServicoAgregacao._ler_parquet_colunas",
-            rows=df.height,
-            cols=df.width,
-            elapsed_ms=(perf_counter() - inicio) * 1000.0,
-        )
-        return df
+        return pl.read_parquet(path, columns=selecionadas)
 
     @staticmethod
     def _obter_schema_parquet(path: Path) -> set[str]:
@@ -786,8 +739,6 @@ class ServicoAgregacao:
             "lista_gtin",
             "lista_descricoes",
             "lista_desc_compl",
-            "lista_codigo_fonte",
-            "lista_codigos",
             "ids_origem_agrupamento",
             "lista_itens_agrupados",
         }
@@ -1183,13 +1134,13 @@ class ServicoAgregacao:
         if not {"lista_descricoes", "lista_desc_compl"}.issubset(schema_regenerado):
             return False
 
-        return not (
-            path_id_agrupados.exists()
-            and not {
-                "lista_descricoes",
-                "lista_desc_compl",
-            }.issubset(self._obter_schema_parquet(path_id_agrupados))
-        )
+        if path_id_agrupados.exists() and not {
+            "lista_descricoes",
+            "lista_desc_compl",
+        }.issubset(self._obter_schema_parquet(path_id_agrupados)):
+            return False
+
+        return True
 
     def garantir_metricas_tabela_agregadas(self, cnpj: str) -> bool:
         path = self.garantir_tabela_agregadas(cnpj, criar_se_ausente=True)
@@ -1326,8 +1277,6 @@ class ServicoAgregacao:
                     "descricao_normalizada",
                     "descricao",
                     "lista_desc_compl",
-                    "lista_codigo_fonte",
-                    "lista_codigos",
                     "lista_ncm",
                     "lista_cest",
                     "lista_gtin",
@@ -1415,8 +1364,6 @@ class ServicoAgregacao:
             df_prod_sel, "descricao"
         ) or self._coletar_lista_coluna(df_base_filtered, "descricao")
         lista_desc_compl = self._coletar_lista_coluna(df_prod_sel, "lista_desc_compl")
-        lista_codigo_fonte = self._coletar_lista_coluna(df_prod_sel, "lista_codigo_fonte")
-        lista_codigos = self._coletar_lista_coluna(df_prod_sel, "lista_codigos")
         lista_itens_agrupados = (
             self._coletar_lista_coluna(df_prod_sel, "descricao") or lista_descricoes
         )
@@ -1442,8 +1389,6 @@ class ServicoAgregacao:
             "lista_gtin": lista_gtin,
             "lista_descricoes": lista_descricoes,
             "lista_desc_compl": lista_desc_compl,
-            "lista_codigo_fonte": lista_codigo_fonte,
-            "lista_codigos": lista_codigos,
             "ids_origem_agrupamento": ids_origem_agrupamento,
             "lista_itens_agrupados": lista_itens_agrupados,
             "lista_co_sefin": lista_sefin,
@@ -1872,56 +1817,6 @@ class ServicoAgregacao:
             contexto={**contexto_base, "sucesso": ok_total},
         )
         return ok_total
-
-    def calcular_estoque_codigo_produto(
-        self,
-        cnpj: str,
-        progresso=None,
-        reset_timings: bool = True,
-        recalcular_base: bool = False,
-    ) -> bool:
-        """
-        Gera artefatos separados de estoque por codigo do produto.
-
-        A base usa mov_estoque ja materializado, portanto preserva q_conv/q_conv_fisica
-        calculados com fatores de conversao. Quando recalcular_base=True, reexecuta a
-        cadeia de mov_estoque antes de derivar os artefatos por codigo.
-        """
-        if gerar_estoque_codigo_produto is None:
-            raise ImportError("Nao foi possivel importar estoque_codigo_produto.py.")
-
-        if reset_timings:
-            self.ultimo_tempo_etapas = {}
-        inicio_total = perf_counter()
-        contexto_base = {"cnpj": cnpj, "fluxo": "estoque_codigo_produto"}
-
-        ok_base = True
-        if recalcular_base:
-            ok_base = bool(
-                self.recalcular_mov_estoque(
-                    cnpj,
-                    progresso=progresso,
-                    reset_timings=False,
-                )
-            )
-
-        ok_codigo = (
-            self._executar_etapa_tempo(
-                "estoque_codigo_produto",
-                lambda: bool(gerar_estoque_codigo_produto(cnpj)),
-                progresso,
-                contexto=contexto_base,
-            )
-            if ok_base
-            else False
-        )
-        self._registrar_tempo(
-            "estoque_codigo_produto_total",
-            perf_counter() - inicio_total,
-            progresso,
-            contexto={**contexto_base, "sucesso": bool(ok_base and ok_codigo)},
-        )
-        return bool(ok_base and ok_codigo)
 
     def recalcular_resumos_estoque(
         self, cnpj: str, progresso=None, reset_timings: bool = True
@@ -2578,14 +2473,8 @@ class ServicoAgregacao:
                 ),
             )
 
-            colunas_metricas_obsoletas = set(colunas_metricas)
-            colunas_metricas_obsoletas.update(
-                f"{coluna}_right" for coluna in colunas_metricas
-            )
             cols_to_drop = [
-                coluna
-                for coluna in df_agrup.columns
-                if coluna in colunas_metricas_obsoletas
+                c for c in ["total_compras", "total_vendas"] if c in cols_agrup
             ]
             if cols_to_drop:
                 df_agrup = df_agrup.drop(cols_to_drop)

@@ -1,4 +1,4 @@
-"""
+﻿"""
 03_descricao_produtos.py
 
 Objetivo: Gerar a tabela consolidada de descricoes normalizadas e unicas.
@@ -61,46 +61,16 @@ def _gerar_id_agrupado_automatico(texto_normalizado: str | None) -> str:
 
 
 def _gerar_id_agrupado_automatico_expr(col: str = "descricao_normalizada") -> pl.Expr:
-    # map_batches: uma chamada Python por coluna vs. uma por elemento (map_elements)
-    def _batch(s: pl.Series) -> pl.Series:
-        return pl.Series(
-            [_gerar_id_agrupado_automatico(x) for x in s],
-            dtype=pl.Utf8,
-        )
-
     return (
         pl.col(col)
         .cast(pl.Utf8, strict=False)
         .fill_null("")
-        .map_batches(_batch, return_dtype=pl.Utf8)
+        .map_elements(_gerar_id_agrupado_automatico, return_dtype=pl.Utf8)
         .alias("id_agrupado_base")
     )
 
 
 def descricao_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
-    """Gera a tabela consolidada de descricoes normalizadas de produtos para um CNPJ.
-
-    Combina ``item_unidades_<cnpj>.parquet`` e ``itens_<cnpj>.parquet`` para
-    produzir uma tabela unica com descricoes normalizadas, IDs automaticos
-    (``id_agrupado_auto_<sha1[:12]>``), listas de GTINs, unidades e codigos
-    de fonte. O resultado e salvo em
-    ``analises/produtos/descricao_produtos_<cnpj>.parquet``.
-
-    Gera os arquivos dependentes (``item_unidades``, ``itens``) caso ainda nao
-    existam.
-
-    Args:
-        cnpj: CPF ou CNPJ do contribuinte (somente digitos ou formatado).
-        pasta_cnpj: Raiz do diretorio do CNPJ. Se ``None``, usa o padrao
-            ``dados/CNPJ/<cnpj>``.
-
-    Returns:
-        ``True`` se o arquivo foi gerado com sucesso; ``False`` em caso de
-        arquivos base ausentes ou falha ao salvar.
-
-    Raises:
-        ValueError: Se ``cnpj`` nao for um CPF (11 digitos) nem CNPJ (14 digitos).
-    """
     cnpj = re.sub(r"\D", "", cnpj or "")
     if len(cnpj) not in {11, 14}:
         raise ValueError("CPF/CNPJ invalido.")
@@ -123,7 +93,9 @@ def descricao_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
             return False
 
     if not arq_item_unid.exists() or not arq_itens.exists():
-        rprint("[red]Arquivos base para descricao_produtos nao foram encontrados.[/red]")
+        rprint(
+            "[red]Arquivos base para descricao_produtos nao foram encontrados.[/red]"
+        )
         return False
 
     rprint(f"[bold cyan]Gerando descricao_produtos para CNPJ: {cnpj}[/bold cyan]")
@@ -172,7 +144,9 @@ def descricao_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
                     pl.lit([]).cast(pl.List(pl.String)).alias(col)
                 )
             else:
-                df_item_unid = df_item_unid.with_columns(pl.lit(None, pl.String).alias(col))
+                df_item_unid = df_item_unid.with_columns(
+                    pl.lit(None, pl.String).alias(col)
+                )
 
     df_item_unid = df_item_unid.with_columns(
         expr_normalizar_descricao("descricao").alias("descricao_normalizada")
@@ -211,7 +185,7 @@ def descricao_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         )
         .join(df_lista_ids, on="descricao_normalizada", how="left")
         .sort(["descricao_normalizada", "descricao"], nulls_last=True)
-        .with_row_index("seq", offset=1)
+        .with_row_count("seq", offset=1)
         .with_columns(pl.format("id_descricao_{}", pl.col("seq")).alias("id_descricao"))
         .drop("seq")
         .with_columns(_gerar_id_agrupado_automatico_expr())
@@ -237,20 +211,12 @@ def descricao_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         )
     )
 
-    return salvar_para_parquet(df_descricoes, pasta_analises, f"descricao_produtos_{cnpj}.parquet")
+    return salvar_para_parquet(
+        df_descricoes, pasta_analises, f"descricao_produtos_{cnpj}.parquet"
+    )
 
 
 def gerar_descricao_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
-    """Alias publico para :func:`descricao_produtos`.
-
-    Args:
-        cnpj: CPF ou CNPJ do contribuinte (somente digitos ou formatado).
-        pasta_cnpj: Raiz do diretorio do CNPJ. Se ``None``, usa o padrao
-            ``dados/CNPJ/<cnpj>``.
-
-    Returns:
-        ``True`` se o arquivo foi gerado com sucesso; ``False`` caso contrario.
-    """
     return descricao_produtos(cnpj, pasta_cnpj)
 
 

@@ -18,7 +18,11 @@ from rich import print as rprint
 def _padronizar_tipo_operacao_expr(col: str = "Tipo_operacao") -> pl.Expr:
     """Normaliza valores de Tipo_operacao para os 4 tipos canonicos."""
     valor = (
-        pl.col(col).cast(pl.Utf8, strict=False).fill_null("").str.strip_chars().str.to_uppercase()
+        pl.col(col)
+        .cast(pl.Utf8, strict=False)
+        .fill_null("")
+        .str.strip_chars()
+        .str.to_uppercase()
     )
     return (
         pl.when(valor == "INVENTARIO")
@@ -79,35 +83,34 @@ def gerar_eventos_estoque(df_mov: pl.DataFrame) -> pl.DataFrame:
             pl.col("Tipo_operacao").cast(pl.Utf8, strict=False).fill_null("").alias("__tipo_op__"),
             (
                 pl.col("origem_evento_estoque").cast(pl.Utf8, strict=False)
-                if "origem_evento_estoque" in columns
-                else pl.lit("registro")
-            )
-            .fill_null("registro")
-            .alias("origem_evento_estoque"),
+                if "origem_evento_estoque" in columns else pl.lit("registro")
+            ).fill_null("registro").alias("origem_evento_estoque"),
             (
                 pl.col("evento_sintetico").cast(pl.Boolean, strict=False)
-                if "evento_sintetico" in columns
-                else pl.lit(False)
-            )
-            .fill_null(False)
-            .alias("evento_sintetico"),
+                if "evento_sintetico" in columns else pl.lit(False)
+            ).fill_null(False).alias("evento_sintetico"),
         ]
     )
 
-    df_exist_final = df_base.filter(pl.col("__tipo_op__") == "inventario").with_columns(
-        [
-            pl.lit("3 - ESTOQUE FINAL").alias("Tipo_operacao"),
-            pl.col("__data_ref__").cast(dt_doc_dtype, strict=False).alias("Dt_doc"),
-            pl.col("__data_ref__").cast(dt_es_dtype, strict=False).alias("Dt_e_s"),
-            pl.lit("inventario_bloco_h").alias("origem_evento_estoque"),
-            pl.lit(False).alias("evento_sintetico"),
-        ]
+    df_exist_final = (
+        df_base
+        .filter(pl.col("__tipo_op__") == "inventario")
+        .with_columns(
+            [
+                pl.lit("3 - ESTOQUE FINAL").alias("Tipo_operacao"),
+                pl.col("__data_ref__").cast(dt_doc_dtype, strict=False).alias("Dt_doc"),
+                pl.col("__data_ref__").cast(dt_es_dtype, strict=False).alias("Dt_e_s"),
+                pl.lit("inventario_bloco_h").alias("origem_evento_estoque"),
+                pl.lit(False).alias("evento_sintetico"),
+            ]
+        )
     )
 
     rprint("[cyan]Ajustando eventos de estoque...[/cyan]")
 
     produtos_unicos = (
-        df_base.filter(pl.col("id_agrupado").is_not_null())
+        df_base
+        .filter(pl.col("id_agrupado").is_not_null())
         .select(
             [
                 "id_agrupado",
@@ -130,7 +133,8 @@ def gerar_eventos_estoque(df_mov: pl.DataFrame) -> pl.DataFrame:
     )
 
     anos_ativos = (
-        df_base.filter(
+        df_base
+        .filter(
             pl.col("id_agrupado").is_not_null()
             & pl.col("__data_ref__").is_not_null()
             & (pl.col("__tipo_op__") != "inventario")
@@ -141,7 +145,8 @@ def gerar_eventos_estoque(df_mov: pl.DataFrame) -> pl.DataFrame:
     )
 
     movimentos_31_12 = (
-        df_base.filter(
+        df_base
+        .filter(
             pl.col("id_agrupado").is_not_null()
             & pl.col("__data_ref__").is_not_null()
             & (pl.col("__tipo_op__") == "inventario")
@@ -161,13 +166,11 @@ def gerar_eventos_estoque(df_mov: pl.DataFrame) -> pl.DataFrame:
     pares_sem_31_12 = anos_ativos.join(movimentos_31_12, on=["id_agrupado", "__ano__"], how="anti")
 
     df_gerado_final = pl.DataFrame()
-    if isinstance(pares_sem_31_12, pl.LazyFrame):
-        tem_pares = pares_sem_31_12.select(pl.len()).collect().item() > 0
-    else:
-        tem_pares = not pares_sem_31_12.is_empty()
+    tem_pares = (pares_sem_31_12.select(pl.len()).collect().item() > 0) if isinstance(pares_sem_31_12, pl.LazyFrame) else (not pares_sem_31_12.is_empty())
     if tem_pares:
         df_gerado_final = (
-            pares_sem_31_12.join(produtos_unicos, on="id_agrupado", how="left")
+            pares_sem_31_12
+            .join(produtos_unicos, on="id_agrupado", how="left")
             .with_columns(
                 [
                     pl.concat_str(
@@ -206,40 +209,43 @@ def gerar_eventos_estoque(df_mov: pl.DataFrame) -> pl.DataFrame:
     df_finais = pl.concat(
         [
             df_exist_final.select(df_base.columns),
-            df_gerado_final.select(df_base.columns)
-            if not df_gerado_final.is_empty()
-            else pl.DataFrame(schema=df_base.schema),
+            df_gerado_final.select(df_base.columns) if not df_gerado_final.is_empty() else pl.DataFrame(schema=df_base.schema),
         ],
         how="vertical_relaxed",
     )
 
     df_iniciais = pl.DataFrame(schema=df_base.schema)
     if not df_finais.is_empty():
-        df_iniciais = df_finais.with_columns(
-            [
-                (pl.col("__data_ref__").cast(pl.Date, strict=False) + pl.duration(days=1)).alias(
-                    "__data_inicial__"
-                ),
-            ]
-        ).with_columns(
-            [
-                pl.when(pl.col("Tipo_operacao") == "3 - ESTOQUE FINAL")
-                .then(pl.lit("0 - ESTOQUE INICIAL"))
-                .otherwise(pl.lit("0 - ESTOQUE INICIAL gerado"))
-                .alias("Tipo_operacao"),
-                pl.col("__data_inicial__").cast(dt_doc_dtype, strict=False).alias("Dt_doc"),
-                pl.col("__data_inicial__").cast(dt_es_dtype, strict=False).alias("Dt_e_s"),
-                pl.lit("gerado").alias("fonte"),
-                pl.when(pl.col("origem_evento_estoque") == "inventario_bloco_h")
-                .then(pl.lit("estoque_inicial_derivado"))
-                .otherwise(pl.lit("estoque_inicial_gerado"))
-                .alias("origem_evento_estoque"),
-                pl.lit(True).alias("evento_sintetico"),
-            ]
+        df_iniciais = (
+            df_finais
+            .with_columns(
+                [
+                    (
+                        pl.col("__data_ref__").cast(pl.Date, strict=False) + pl.duration(days=1)
+                    ).alias("__data_inicial__"),
+                ]
+            )
+            .with_columns(
+                [
+                    pl.when(pl.col("Tipo_operacao") == "3 - ESTOQUE FINAL")
+                    .then(pl.lit("0 - ESTOQUE INICIAL"))
+                    .otherwise(pl.lit("0 - ESTOQUE INICIAL gerado"))
+                    .alias("Tipo_operacao"),
+                    pl.col("__data_inicial__").cast(dt_doc_dtype, strict=False).alias("Dt_doc"),
+                    pl.col("__data_inicial__").cast(dt_es_dtype, strict=False).alias("Dt_e_s"),
+                    pl.lit("gerado").alias("fonte"),
+                    pl.when(pl.col("origem_evento_estoque") == "inventario_bloco_h")
+                    .then(pl.lit("estoque_inicial_derivado"))
+                    .otherwise(pl.lit("estoque_inicial_gerado"))
+                    .alias("origem_evento_estoque"),
+                    pl.lit(True).alias("evento_sintetico"),
+                ]
+            )
         )
 
     iniciais_deriv_01_01 = (
-        df_iniciais.with_columns(
+        df_iniciais
+        .with_columns(
             [
                 pl.col("Dt_e_s").dt.year().alias("__ano__"),
                 pl.col("Dt_e_s").dt.month().alias("__mes__"),
@@ -252,7 +258,8 @@ def gerar_eventos_estoque(df_mov: pl.DataFrame) -> pl.DataFrame:
     )
 
     inv_01_01_base = (
-        df_base.filter(
+        df_base
+        .filter(
             pl.col("id_agrupado").is_not_null()
             & pl.col("__data_ref__").is_not_null()
             & (pl.col("__tipo_op__") == "inventario")
@@ -272,13 +279,11 @@ def gerar_eventos_estoque(df_mov: pl.DataFrame) -> pl.DataFrame:
     tem_01_01 = pl.concat([iniciais_deriv_01_01, inv_01_01_base]).unique()
     pares_sem_01_01 = anos_ativos.join(tem_01_01, on=["id_agrupado", "__ano__"], how="anti")
 
-    if isinstance(pares_sem_01_01, pl.LazyFrame):
-        tem_pares_01 = pares_sem_01_01.select(pl.len()).collect().item() > 0
-    else:
-        tem_pares_01 = not pares_sem_01_01.is_empty()
+    tem_pares_01 = (pares_sem_01_01.select(pl.len()).collect().item() > 0) if isinstance(pares_sem_01_01, pl.LazyFrame) else (not pares_sem_01_01.is_empty())
     if tem_pares_01:
         df_gerado_inicial = (
-            pares_sem_01_01.join(produtos_unicos, on="id_agrupado", how="left")
+            pares_sem_01_01
+            .join(produtos_unicos, on="id_agrupado", how="left")
             .with_columns(
                 [
                     pl.concat_str([pl.col("__ano__").cast(pl.Utf8), pl.lit("-01-01")])
@@ -306,28 +311,23 @@ def gerar_eventos_estoque(df_mov: pl.DataFrame) -> pl.DataFrame:
         for c in df_base.columns:
             if c not in df_gerado_inicial.columns:
                 df_gerado_inicial = df_gerado_inicial.with_columns(pl.lit(None).alias(c))
-        df_iniciais = pl.concat(
-            [df_iniciais.select(df_base.columns), df_gerado_inicial.select(df_base.columns)],
-            how="vertical_relaxed",
-        )
+        df_iniciais = pl.concat([df_iniciais.select(df_base.columns), df_gerado_inicial.select(df_base.columns)], how="vertical_relaxed")
 
-    df_sem_inventario = df_base.filter(pl.col("__tipo_op__") != "inventario").with_columns(
-        [
-            pl.coalesce([pl.col("origem_evento_estoque"), pl.lit("registro")]).alias(
-                "origem_evento_estoque"
-            ),
-            pl.coalesce([pl.col("evento_sintetico"), pl.lit(False)]).alias("evento_sintetico"),
-        ]
+    df_sem_inventario = (
+        df_base
+        .filter(pl.col("__tipo_op__") != "inventario")
+        .with_columns(
+            [
+                pl.coalesce([pl.col("origem_evento_estoque"), pl.lit("registro")]).alias("origem_evento_estoque"),
+                pl.coalesce([pl.col("evento_sintetico"), pl.lit(False)]).alias("evento_sintetico"),
+            ]
+        )
     )
     df_result = pl.concat(
         [
             df_sem_inventario.select(df_base.columns),
-            df_finais.select(df_base.columns)
-            if not df_finais.is_empty()
-            else pl.DataFrame(schema=df_base.schema),
-            df_iniciais.select(df_base.columns)
-            if not df_iniciais.is_empty()
-            else pl.DataFrame(schema=df_base.schema),
+            df_finais.select(df_base.columns) if not df_finais.is_empty() else pl.DataFrame(schema=df_base.schema),
+            df_iniciais.select(df_base.columns) if not df_iniciais.is_empty() else pl.DataFrame(schema=df_base.schema),
         ],
         how="vertical_relaxed",
     )
@@ -403,41 +403,27 @@ def _calc_saldos_loop(df: pl.DataFrame, sufixo: str) -> pl.DataFrame:
     if df.is_empty():
         return df
 
-    df_prep = df.with_columns(
-        [
-            pl.col("Tipo_operacao").cast(pl.Utf8, strict=False).fill_null("").alias("__tipo_str__"),
-            pl.col("finnfe").cast(pl.Utf8, strict=False).fill_null("").alias("__finnfe_str__")
-            if "finnfe" in df.columns
-            else pl.lit("").alias("__finnfe_str__"),
-        ]
-    ).with_columns(
-        [
-            pl.when(
-                pl.col("__tipo_str__").str.starts_with("0")
-                | (pl.col("__tipo_str__") == "1 - ENTRADA")
-            )
-            .then(0)
-            .when(pl.col("__tipo_str__") == "2 - SAIDAS")
-            .then(1)
-            .when(pl.col("__tipo_str__").str.starts_with("3"))
-            .then(2)
-            .otherwise(3)
-            .alias("__tipo_int__"),
-            (
-                (pl.col("__finnfe_str__").str.strip_chars() == "4")
-                | _boolish_expr("dev_simples")
-                | _boolish_expr("dev_venda")
-                | _boolish_expr("dev_compra")
-                | _boolish_expr("dev_ent_simples")
-            ).alias("__is_devolucao__"),
-        ]
-    )
+    df_prep = df.with_columns([
+        pl.col("Tipo_operacao").cast(pl.Utf8, strict=False).fill_null("").alias("__tipo_str__"),
+        pl.col("finnfe").cast(pl.Utf8, strict=False).fill_null("").alias("__finnfe_str__") if "finnfe" in df.columns else pl.lit("").alias("__finnfe_str__"),
+    ]).with_columns([
+        pl.when(pl.col("__tipo_str__").str.starts_with("0") | (pl.col("__tipo_str__") == "1 - ENTRADA")).then(0)
+        .when(pl.col("__tipo_str__") == "2 - SAIDAS").then(1)
+        .when(pl.col("__tipo_str__").str.starts_with("3")).then(2)
+        .otherwise(3)
+        .alias("__tipo_int__"),
+        (
+            (pl.col("__finnfe_str__").str.strip_chars() == "4") |
+            _boolish_expr("dev_simples") |
+            _boolish_expr("dev_venda") |
+            _boolish_expr("dev_compra") |
+            _boolish_expr("dev_ent_simples")
+        ).alias("__is_devolucao__")
+    ])
 
     tipos_int = df_prep["__tipo_int__"].to_numpy().astype(np.int8)
     q_conv_arr = df_prep["q_conv"].cast(pl.Float64, strict=False).fill_null(0.0).to_numpy()
-    q_sinal_arr = (
-        df_prep["__q_conv_sinal__"].cast(pl.Float64, strict=False).fill_null(0.0).to_numpy()
-    )
+    q_sinal_arr = df_prep["__q_conv_sinal__"].cast(pl.Float64, strict=False).fill_null(0.0).to_numpy()
     preco_arr = df_prep["preco_item"].cast(pl.Float64, strict=False).fill_null(0.0).to_numpy()
     is_devolucao_arr = df_prep["__is_devolucao__"].to_numpy().astype(np.bool_)
 

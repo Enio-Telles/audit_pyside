@@ -10,7 +10,6 @@ Salva:
 
 from __future__ import annotations
 
-import inspect
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -19,21 +18,7 @@ from typing import Any, Callable
 
 import polars as pl
 
-from extracao.extracao_oracle_eficiente import _gravar_cursor_em_parquet
 from interface_grafica.config import CNPJ_ROOT, SQL_DIR
-from utilitarios.perf_monitor import log_parquet_open
-
-
-def _parquet_valido_simples(arquivo: Path) -> bool:
-    """Retorna True se o parquet existe, nao esta vazio e pode ser lido sem erro."""
-    if not arquivo.exists() or arquivo.stat().st_size == 0:
-        return False
-    try:
-        pl.scan_parquet(arquivo).collect_schema()
-        return True
-    except Exception:
-        return False
-
 
 from utilitarios.sql_catalog import list_sql_entries, resolve_sql_path
 from utilitarios.extrair_parametros import extrair_parametros_sql
@@ -231,15 +216,7 @@ class ServicoExtracao:
         if not arquivo.exists():
             return None
         try:
-            inicio = perf_counter()
             df = pl.read_parquet(arquivo, columns=["data_entrega"])
-            log_parquet_open(
-                arquivo,
-                "ServicoExtracao.obter_data_entrega_reg0000",
-                rows=df.height,
-                cols=df.width,
-                elapsed_ms=(perf_counter() - inicio) * 1000.0,
-            )
             if df.is_empty():
                 return None
             maior_data = df.select(pl.col("data_entrega").max()).to_series()[0]
@@ -271,7 +248,6 @@ class ServicoExtracao:
         consultas: list[str | Path],
         data_limite: str | None = None,
         progresso: Callable[[str], None] | None = None,
-        pular_existente: bool = False,
     ) -> list[str]:
         def _msg(texto: str) -> None:
             if progresso:
@@ -299,21 +275,6 @@ class ServicoExtracao:
                             sql_path = self.consultas_dir / f"{sql_item}.sql"
 
                 nome_consulta = sql_path.stem.lower()
-                arquivo_saida = pasta / f"{nome_consulta}_{cnpj}.parquet"
-                arquivo_tmp = arquivo_saida.with_suffix(".parquet.tmp")
-
-                # Remove tmp orphan de execucao anterior interrompida
-                if arquivo_tmp.exists():
-                    arquivo_tmp.unlink(missing_ok=True)
-                    _msg(f"  Removido arquivo temporario incompleto: {arquivo_tmp.name}")
-
-                if pular_existente and _parquet_valido_simples(arquivo_saida):
-                    _msg(
-                        f"Pulando {sql_path.name} (parquet valido ja existe: {arquivo_saida.name})"
-                    )
-                    arquivos.append(str(arquivo_saida))
-                    continue
-
                 _msg(f"Executando {sql_path.name}...")
 
                 sql_text = ler_sql(sql_path)
@@ -334,22 +295,56 @@ class ServicoExtracao:
                         cursor.arraysize = 50_000
                         cursor.prefetchrows = 50_000
                         cursor.execute(sql_text, binds)
-                        total_linhas = _gravar_cursor_em_parquet(
-                            cursor,
-                            arquivo_saida,
-                            tamanho_lote=50_000,
-                            progresso=_msg,
-                            rotulo_consulta=sql_path.name,
-                        )
+                        colunas = [desc[0].lower() for desc in cursor.description]
+                        todas_linhas: list[tuple] = []
+                        while True:
+                            lote = cursor.fetchmany(50_000)
+                            if not lote:
+                                break
+                            todas_linhas.extend(lote)
+                            _msg(
+                                f"  {sql_path.name}: {len(todas_linhas):,} linhas lidas..."
+                            )
 
+                    if todas_linhas:
+                        try:
+                            # Otimizacao Bolt: criar DataFrame diretamente de tuplas
+                            df = pl.DataFrame(
+                                todas_linhas,
+                                schema=colunas,
+                                orient="row",
+                                infer_schema_length=min(len(todas_linhas), 50_000),
+                            )
+                        except Exception as exc:
+                            _msg(
+                                f"  Aviso: falha na inferencia automatica ({exc}). Tentando modo robusto..."
+                            )
+                            dados_colunas = {
+                                col_name: [row[i] for row in todas_linhas]
+                                for i, col_name in enumerate(colunas)
+                            }
+                            try:
+                                df = pl.DataFrame(dados_colunas)
+                            except Exception:
+                                dados_string = {
+                                    col_name: [
+                                        str(row[i]) if row[i] is not None else None
+                                        for row in todas_linhas
+                                    ]
+                                    for i, col_name in enumerate(colunas)
+                                }
+                                df = pl.DataFrame(dados_string)
+                    else:
+                        df = pl.DataFrame({col: [] for col in colunas})
+
+                    arquivo_saida = pasta / f"{nome_consulta}_{cnpj}.parquet"
+                    df.write_parquet(arquivo_saida, compression="snappy")
                     arquivos.append(str(arquivo_saida))
-                    _msg(f"OK {sql_path.name}: {total_linhas:,} linhas -> {arquivo_saida.name}")
-                except Exception as exc:
-                    arquivo_tmp.unlink(missing_ok=True)
                     _msg(
-                        f"Erro em {sql_path.name}: {exc}. "
-                        "Reexecute a mesma extracao para retomar pelos checkpoints gravados."
+                        f"OK {sql_path.name}: {df.height:,} linhas -> {arquivo_saida.name}"
                     )
+                except Exception as exc:
+                    _msg(f"Erro em {sql_path.name}: {exc}")
 
         return arquivos
 
@@ -494,7 +489,6 @@ class ServicoPipelineCompleto:
         tabelas: list[str],
         data_limite: str | None = None,
         progresso: Callable[[str], None] | None = None,
-        pular_existente: bool = True,
     ) -> ResultadoPipeline:
         cnpj = ServicoExtracao.sanitizar_cnpj(cnpj)
         resultado = ResultadoPipeline(ok=True, cnpj=cnpj)
@@ -508,22 +502,17 @@ class ServicoPipelineCompleto:
             _msg(f"=== Fase 1: Extracao Oracle ({len(consultas)} consultas) ===")
             inicio_extracao = perf_counter()
             try:
-                executar_consultas = self.servico_extracao.executar_consultas
-                kwargs = (
-                    {"pular_existente": pular_existente}
-                    if "pular_existente" in inspect.signature(executar_consultas).parameters
-                    else {}
-                )
-                arquivos = executar_consultas(
+                arquivos = self.servico_extracao.executar_consultas(
                     cnpj,
                     consultas,
                     data_limite,
                     _msg,
-                    **kwargs,
                 )
                 resultado.arquivos_gerados.extend(arquivos)
                 resultado.tempos["extracao_oracle"] = perf_counter() - inicio_extracao
-                _msg(f"Tempo da extracao Oracle: {resultado.tempos['extracao_oracle']:.2f}s")
+                _msg(
+                    f"Tempo da extracao Oracle: {resultado.tempos['extracao_oracle']:.2f}s"
+                )
             except Exception as exc:
                 resultado.erros.append(f"Falha na extracao: {exc}")
                 resultado.ok = False
@@ -533,13 +522,17 @@ class ServicoPipelineCompleto:
             _msg(f"=== Fase 2: Geracao de tabelas ({len(tabelas)} selecionadas) ===")
             inicio_tabelas = perf_counter()
             try:
-                resultado_tabelas = self.servico_tabelas.gerar_tabelas(cnpj, tabelas, _msg)
+                resultado_tabelas = self.servico_tabelas.gerar_tabelas(
+                    cnpj, tabelas, _msg
+                )
                 resultado.arquivos_gerados.extend(resultado_tabelas.geradas)
                 resultado.tempos.update(
                     {f"tabela::{k}": v for k, v in resultado_tabelas.tempos.items()}
                 )
                 resultado.tempos["geracao_tabelas"] = perf_counter() - inicio_tabelas
-                _msg(f"Tempo da geracao de tabelas: {resultado.tempos['geracao_tabelas']:.2f}s")
+                _msg(
+                    f"Tempo da geracao de tabelas: {resultado.tempos['geracao_tabelas']:.2f}s"
+                )
                 if not resultado_tabelas.ok:
                     resultado.ok = False
                     resultado.erros.extend(resultado_tabelas.erros)

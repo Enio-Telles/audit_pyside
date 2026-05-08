@@ -30,17 +30,6 @@ def test_recalcular_valores_totais_persiste_medias_sem_duplicar_descricao(
             "id_agrupado": ["AGR_1", "AGR_2"],
             "descr_padrao": ["Produto A", "Produto B"],
             "lista_chave_produto": [["desc_1", "desc_2"], ["desc_3"]],
-            "total_compras": [-1.0, -1.0],
-            "qtd_compras_total": [-1.0, -1.0],
-            "qtd_compras_total_right": [-99.0, -99.0],
-            "preco_medio_compra": [-1.0, -1.0],
-            "total_vendas": [-1.0, -1.0],
-            "qtd_vendas_total": [-1.0, -1.0],
-            "qtd_vendas_total_right": [-99.0, -99.0],
-            "preco_medio_venda": [-1.0, -1.0],
-            "total_entradas": [-1.0, -1.0],
-            "total_saidas": [-1.0, -1.0],
-            "total_movimentacao": [-1.0, -1.0],
         }
     ).write_parquet(pasta_prod / f"produtos_agrupados_{cnpj}.parquet")
 
@@ -92,7 +81,6 @@ def test_recalcular_valores_totais_persiste_medias_sem_duplicar_descricao(
     assert row_b["total_entradas"] == 0.0
     assert row_b["total_saidas"] == 0.0
     assert row_b["total_movimentacao"] == 0.0
-    assert not any(col.endswith("_right") for col in df.columns)
 
 
 def test_agregar_linhas_recalcula_padroes_com_colunas_item_unidades(

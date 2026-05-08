@@ -19,7 +19,9 @@ def setup_logging():
         logger.setLevel(logging.ERROR)
         fh = logging.FileHandler(str(log_file), encoding="utf-8")
         fh.setLevel(logging.ERROR)
-        formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+        formatter = logging.Formatter(
+            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        )
         fh.setFormatter(formatter)
         logger.addHandler(fh)
     return logger

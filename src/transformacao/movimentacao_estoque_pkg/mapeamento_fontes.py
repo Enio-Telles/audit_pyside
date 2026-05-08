@@ -21,20 +21,6 @@ DADOS_DIR = ROOT_DIR / "dados"
 
 
 def normalizar_descricao_expr(col: str) -> pl.Expr:
-    """Retorna expressao Polars para normalizar uma coluna de descricao de produto.
-
-    A normalizacao consiste em: cast para Utf8, fill_null com string vazia,
-    uppercase, substituicao de caracteres acentuados por suas versoes sem acento,
-    strip de espacos e colapso de espacos multiplos em um unico espaco.
-    O alias da expressao resultante e ``__descricao_normalizada__``.
-
-    Args:
-        col: Nome da coluna de entrada a ser normalizada.
-
-    Returns:
-        Expressao Polars que produz a descricao normalizada com alias
-        ``__descricao_normalizada__``.
-    """
     # Optimization: Replace .map_elements with native Polars string operations to preserve vectorization
     return (
         pl.col(col)
@@ -55,20 +41,6 @@ def normalizar_descricao_expr(col: str) -> pl.Expr:
 
 
 def detectar_coluna_descricao(df: pl.DataFrame, fonte: str) -> str | None:
-    """Detecta o nome da coluna de descricao de produto para uma dada fonte.
-
-    Pesquisa uma lista de candidatos por ordem de preferencia de acordo com
-    a fonte informada. As fontes reconhecidas sao ``c170``, ``bloco_h``,
-    ``nfe`` e ``nfce``.
-
-    Args:
-        df: DataFrame da fonte a ser inspecionado.
-        fonte: Identificador da fonte de dados (ex.: ``"c170"``, ``"nfe"``).
-
-    Returns:
-        Nome da primeira coluna candidata encontrada em ``df``, ou ``None``
-        se nenhuma coluna candidata estiver presente.
-    """
     candidatos = {
         "c170": ["descr_item", "descricao", "prod_xprod"],
         "bloco_h": ["descricao_produto", "descr_item", "descricao", "prod_xprod"],
@@ -82,20 +54,6 @@ def detectar_coluna_descricao(df: pl.DataFrame, fonte: str) -> str | None:
 
 
 def detectar_coluna_unidade(df: pl.DataFrame, fonte: str) -> str | None:
-    """Detecta o nome da coluna de unidade de medida para uma dada fonte.
-
-    Pesquisa uma lista de candidatos por ordem de preferencia de acordo com
-    a fonte informada. As fontes reconhecidas sao ``c170``, ``bloco_h``,
-    ``nfe`` e ``nfce``.
-
-    Args:
-        df: DataFrame da fonte a ser inspecionado.
-        fonte: Identificador da fonte de dados (ex.: ``"c170"``, ``"nfe"``).
-
-    Returns:
-        Nome da primeira coluna candidata encontrada em ``df``, ou ``None``
-        se nenhuma coluna candidata estiver presente.
-    """
     candidatos = {
         "c170": ["unid"],
         "bloco_h": ["unidade_medida", "unidade_media", "unid", "unidade"],
@@ -121,14 +79,20 @@ def parse_expression(expr_str: str, col_alias: str) -> pl.Expr:
 
     # NCM/CEST cleanup
     if expr_str in ["cod_ncm", "prod_ncm", "cest", "prod_cest"]:
-        return pl.col(expr_str).cast(pl.String).str.replace_all(r"\D", "").alias(col_alias)
+        return (
+            pl.col(expr_str).cast(pl.String).str.replace_all(r"\D", "").alias(col_alias)
+        )
 
     # Complex: Cst
     if expr_str == "icms_orig & icms_cst ou icms_csosn":
         return (
             pl.when(pl.col("icms_cst").is_not_null())
-            .then(pl.concat_str([pl.col("icms_orig"), pl.col("icms_cst")], separator=""))
-            .otherwise(pl.concat_str([pl.col("icms_orig"), pl.col("icms_csosn")], separator=""))
+            .then(
+                pl.concat_str([pl.col("icms_orig"), pl.col("icms_cst")], separator="")
+            )
+            .otherwise(
+                pl.concat_str([pl.col("icms_orig"), pl.col("icms_csosn")], separator="")
+            )
             .alias(col_alias)
         )
 
@@ -139,7 +103,8 @@ def parse_expression(expr_str: str, col_alias: str) -> pl.Expr:
     # Complex: Valores matemÃ¡ticos (Vl_item em C170 ou Nfe)
     if expr_str == "vl_item-vl_desc":
         return (
-            pl.col("vl_item").cast(pl.Float64) - pl.col("vl_desc").cast(pl.Float64).fill_null(0)
+            pl.col("vl_item").cast(pl.Float64)
+            - pl.col("vl_desc").cast(pl.Float64).fill_null(0)
         ).alias(col_alias)
 
     if expr_str == "prod_vprod+prod_vfrete+prod_vseg+prod_voutro-prod_vdesc":
@@ -177,7 +142,10 @@ def carregar_flags_cfop() -> pl.DataFrame:
     if arq_cfop.exists():
         df_cfop_raw = pl.read_parquet(arq_cfop)
         exprs = [
-            pl.col("co_cfop").cast(pl.Utf8, strict=False).str.replace_all(r"\D", "").alias("Cfop"),
+            pl.col("co_cfop")
+            .cast(pl.Utf8, strict=False)
+            .str.replace_all(r"\D", "")
+            .alias("Cfop"),
         ]
         for col in ["excluir_estoque", "dev_simples"]:
             if col in df_cfop_raw.columns:
@@ -194,7 +162,10 @@ def carregar_flags_cfop() -> pl.DataFrame:
     if arq_cfop_bi.exists():
         df_cfop_bi_raw = pl.read_parquet(arq_cfop_bi)
         exprs = [
-            pl.col("co_cfop").cast(pl.Utf8, strict=False).str.replace_all(r"\D", "").alias("Cfop"),
+            pl.col("co_cfop")
+            .cast(pl.Utf8, strict=False)
+            .str.replace_all(r"\D", "")
+            .alias("Cfop"),
         ]
         for col in ["dev_venda", "dev_compra", "dev_ent_simples"]:
             if col in df_cfop_bi_raw.columns:

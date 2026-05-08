@@ -1,8 +1,6 @@
 from __future__ import annotations
-import functools
 
 import logging
-import functools
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
@@ -14,25 +12,20 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class SqlCatalogEntry:
-    """Entrada resolvida do catalogo local de arquivos SQL."""
-
     sql_id: str
     path: Path
 
     @property
     def display_name(self) -> str:
-        """Retorna o nome exibivel do arquivo SQL sem extensao."""
         return self.path.stem
 
     @property
     def source_label(self) -> str:
-        """Retorna a pasta relativa de origem do SQL no catalogo."""
         parent = self.path.parent.relative_to(SQL_ROOT)
         return parent.as_posix()
 
 
 def _normalizar_texto_relativo(value: str) -> str:
-    """Normaliza separadores e prefixos relativos para comparar IDs SQL."""
     return value.replace("\\", "/").strip().lstrip("./")
 
 
@@ -40,7 +33,6 @@ _SQL_ARQUIVOS_PARQUET_ROOT = SQL_ROOT / "arquivos_parquet"
 
 
 def _iter_sql_paths(include_archive: bool = False) -> Iterable[Path]:
-    """Itera arquivos SQL catalogaveis, opcionalmente incluindo o archive."""
     if not SQL_ROOT.exists():
         return []
 
@@ -67,7 +59,6 @@ def _iter_sql_paths(include_archive: bool = False) -> Iterable[Path]:
 
 
 def list_sql_entries(include_archive: bool = False) -> list[SqlCatalogEntry]:
-    """Lista entradas SQL ordenadas pelo identificador canonico."""
     entries = [
         SqlCatalogEntry(sql_id=path.relative_to(SQL_ROOT).as_posix(), path=path)
         for path in _iter_sql_paths(include_archive=include_archive)
@@ -76,7 +67,6 @@ def list_sql_entries(include_archive: bool = False) -> list[SqlCatalogEntry]:
 
 
 def get_sql_id(path: Path | str) -> str | None:
-    """Retorna o ID relativo de um caminho dentro de `SQL_ROOT`."""
     candidate = Path(path)
     try:
         return candidate.resolve().relative_to(SQL_ROOT.resolve()).as_posix()
@@ -84,9 +74,9 @@ def get_sql_id(path: Path | str) -> str | None:
         return None
 
 
-@functools.lru_cache(maxsize=1)
-def _index_entries() -> tuple[dict[str, SqlCatalogEntry], dict[str, list[SqlCatalogEntry]]]:
-    """Monta indices por ID e nome para resolver selecoes SQL legadas."""
+def _index_entries() -> (
+    tuple[dict[str, SqlCatalogEntry], dict[str, list[SqlCatalogEntry]]]
+):
     by_id: dict[str, SqlCatalogEntry] = {}
     by_name: dict[str, list[SqlCatalogEntry]] = {}
     for entry in list_sql_entries():
@@ -96,7 +86,6 @@ def _index_entries() -> tuple[dict[str, SqlCatalogEntry], dict[str, list[SqlCata
 
 
 def normalize_sql_id(value: Path | str | None) -> str | None:
-    """Normaliza um valor de entrada para um ID SQL existente no catalogo."""
     if value is None:
         return None
 
@@ -123,12 +112,8 @@ def normalize_sql_id(value: Path | str | None) -> str | None:
             direct = by_id.get(suffix_match.lower())
             if direct is not None:
                 return direct.sql_id
-            # If the path contains a known marker but the suffix does not match
-            # any catalog entry, fail early: do not fallback to name-based
-            # heuristics. This preserves explicit marker semantics used by the
-            # tests (e.g. unknown folders under a `/sql/` path must not match
-            # by filename alone).
-            return None
+            text = text.split(marker, 1)[1]
+            break
 
     candidate_name = Path(text).name.lower()
     matches = by_name.get(candidate_name, [])
@@ -137,7 +122,9 @@ def normalize_sql_id(value: Path | str | None) -> str | None:
 
     candidate_suffix = _normalizar_texto_relativo(text).lower()
     suffix_matches = [
-        entry for entry in by_id.values() if entry.sql_id.lower().endswith(candidate_suffix)
+        entry
+        for entry in by_id.values()
+        if entry.sql_id.lower().endswith(candidate_suffix)
     ]
     if len(suffix_matches) == 1:
         return suffix_matches[0].sql_id
@@ -146,7 +133,6 @@ def normalize_sql_id(value: Path | str | None) -> str | None:
 
 
 def resolve_sql_path(value: Path | str) -> Path:
-    """Resolve um valor de entrada para o caminho real de um SQL catalogado."""
     sql_id = normalize_sql_id(value)
     if sql_id is None:
         raise FileNotFoundError(f"SQL nao encontrada no catalogo local: {value}")
@@ -156,8 +142,9 @@ def resolve_sql_path(value: Path | str) -> Path:
     return path
 
 
-def migrate_sql_id_list(values: list[str] | None, *, log_context: str = "sql") -> list[str]:
-    """Migra uma lista de selecoes SQL legadas para IDs canonicos unicos."""
+def migrate_sql_id_list(
+    values: list[str] | None, *, log_context: str = "sql"
+) -> list[str]:
     migrated: list[str] = []
     for item in values or []:
         sql_id = normalize_sql_id(item)

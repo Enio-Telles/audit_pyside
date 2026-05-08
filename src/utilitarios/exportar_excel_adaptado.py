@@ -26,7 +26,6 @@ Detecta automaticamente presets para:
 
 from __future__ import annotations
 
-from datetime import date, datetime, time
 from pathlib import Path
 from typing import Any
 
@@ -43,12 +42,10 @@ from utilitarios.text import is_year_column_name
 
 
 def _is_empty_df(df: Any) -> bool:
-    """Retorna True se o DataFrame (Polars ou Pandas) não contém linhas."""
     return df.height == 0 if hasattr(df, "height") else df.empty
 
 
 def _to_pandas(df: Any) -> pd.DataFrame:
-    """Converte um DataFrame Polars, Pandas ou sequência para ``pd.DataFrame``."""
     if hasattr(df, "to_pandas"):
         return df.to_pandas()
     if isinstance(df, pd.DataFrame):
@@ -57,7 +54,6 @@ def _to_pandas(df: Any) -> pd.DataFrame:
 
 
 def _sanitize_sheet_name(nome: str) -> str:
-    """Remove caracteres proibidos pelo Excel e trunca para 31 caracteres."""
     proibidos = set(r"[]:*?/\\")
     nome = "".join("_" if c in proibidos else c for c in str(nome))
     nome = nome.strip() or "Dados"
@@ -65,7 +61,6 @@ def _sanitize_sheet_name(nome: str) -> str:
 
 
 def _serializar_valor(v: Any) -> Any:
-    """Converte listas/tuplas/conjuntos em string delimitada por ``|``; retorna demais valores intactos."""
     if isinstance(v, (list, tuple, set)):
         itens = [str(x) for x in v if x is not None and str(x) != ""]
         return " | ".join(itens)
@@ -73,7 +68,6 @@ def _serializar_valor(v: Any) -> Any:
 
 
 def _serializar_listas(df_pd: pd.DataFrame) -> pd.DataFrame:
-    """Aplica ``_serializar_valor`` em todas as colunas do DataFrame Pandas."""
     df_pd = df_pd.copy()
     for col in df_pd.columns:
         df_pd[col] = df_pd[col].map(_serializar_valor)
@@ -81,7 +75,6 @@ def _serializar_listas(df_pd: pd.DataFrame) -> pd.DataFrame:
 
 
 def _normalizar_objetos(df_pd: pd.DataFrame) -> pd.DataFrame:
-    """Preenche ``NaN`` com ``""`` nas colunas de tipo ``object`` para evitar erros no XlsxWriter."""
     df_pd = df_pd.copy()
     for col in df_pd.columns:
         if pd.api.types.is_object_dtype(df_pd[col]):
@@ -89,46 +82,7 @@ def _normalizar_objetos(df_pd: pd.DataFrame) -> pd.DataFrame:
     return df_pd
 
 
-def _normalizar_colunas_data(df_pd: pd.DataFrame, cfg: dict[str, Any]) -> pd.DataFrame:
-    """Converte colunas de data para células Excel sem horário quando possível."""
-    df_pd = df_pd.copy()
-    date_cols = set(cfg.get("date_cols", set()))
-    for col in df_pd.columns:
-        if str(col).strip().lower() not in date_cols:
-            continue
-        serie = df_pd[col]
-        if pd.api.types.is_datetime64_any_dtype(serie):
-            df_pd[col] = serie.dt.date
-            continue
-
-        texto = serie.astype(str).str.strip()
-        mascara_vazia = texto.isin({"", "nan", "NaT", "None"})
-        valores_data = texto.mask(mascara_vazia)
-        parsed = pd.Series(pd.NaT, index=serie.index, dtype="datetime64[ns]")
-        for formato in (
-            "%d/%m/%Y %H:%M:%S",
-            "%d/%m/%Y",
-            "%Y-%m-%d %H:%M:%S",
-            "%Y-%m-%d",
-        ):
-            pendentes = parsed.isna() & valores_data.notna()
-            if not pendentes.any():
-                break
-            parsed.loc[pendentes] = pd.to_datetime(
-                valores_data.loc[pendentes],
-                errors="coerce",
-                format=formato,
-            )
-        if parsed.notna().any():
-            normalizada = serie.astype(object)
-            normalizada.loc[parsed.notna()] = parsed.loc[parsed.notna()].dt.date
-            normalizada.loc[mascara_vazia] = ""
-            df_pd[col] = normalizada
-    return df_pd
-
-
 def _colunas_lower(df_pd: pd.DataFrame) -> set[str]:
-    """Retorna o conjunto de nomes de colunas em minúsculas sem espaços para matching case-insensitive."""
     return {str(c).strip().lower() for c in df_pd.columns}
 
 
@@ -138,15 +92,6 @@ def _colunas_lower(df_pd: pd.DataFrame) -> set[str]:
 
 
 def _detectar_preset(nome_base: str, df_pd: pd.DataFrame) -> str:
-    """Detecta o preset de formatação Excel com base no nome da tabela e nas colunas presentes.
-
-    Args:
-        nome_base: Nome base da aba ou dataset (ex.: ``"c170_xml"``, ``"aba_mensal"``).
-        df_pd: DataFrame Pandas cujas colunas auxiliam a identificação.
-
-    Returns:
-        Chave do preset (ex.: ``"c170_xml"``, ``"generico"``).
-    """
     nome = str(nome_base).strip().lower()
     cols = _colunas_lower(df_pd)
 
@@ -350,7 +295,7 @@ def _base_config() -> dict[str, Any]:
         "boolean_cols": set(),
         "integer_cols": set(),
         "decimal_cols": set(),
-        "date_cols": {"dt_doc", "dt_e_s"},
+        "date_cols": set(),
         "datetime_cols": set(),
         "url_cols": set(),
         "highlight_rules": [],
@@ -1796,29 +1741,6 @@ def _escolher_formato(
     return formatos["padrao"]
 
 
-def _reescrever_colunas_data(
-    worksheet,
-    df_pd: pd.DataFrame,
-    cfg: dict[str, Any],
-    formatos: dict[str, Any],
-) -> None:
-    date_cols = set(cfg.get("date_cols", set()))
-    if not date_cols or df_pd.empty:
-        return
-
-    for col_idx, col_name in enumerate(df_pd.columns):
-        if str(col_name).strip().lower() not in date_cols:
-            continue
-        for row_idx, valor in enumerate(df_pd.iloc[:, col_idx], start=1):
-            if isinstance(valor, datetime):
-                excel_value = valor
-            elif isinstance(valor, date):
-                excel_value = datetime.combine(valor, time.min)
-            else:
-                continue
-            worksheet.write_datetime(row_idx, col_idx, excel_value, formatos["data"])
-
-
 def _aplicar_condicional(
     worksheet, df_pd: pd.DataFrame, cfg: dict[str, Any], formatos: dict[str, Any]
 ):
@@ -1987,7 +1909,6 @@ def exportar_excel(
 
     preset_detectado = preset or _detectar_preset(nome_base, df_pd)
     cfg = _obter_preset_config(preset_detectado)
-    df_pd = _normalizar_colunas_data(df_pd, cfg)
     nome_aba = _sanitize_sheet_name(nome_aba or preset_detectado or "Dados")
 
     with pd.ExcelWriter(arquivo_excel, engine="xlsxwriter") as writer:
@@ -2036,7 +1957,6 @@ def exportar_excel(
             fmt = _escolher_formato(col_lower, dtype_str, cfg, formatos)
             worksheet.set_column(col_idx, col_idx, largura, fmt)
 
-        _reescrever_colunas_data(worksheet, df_pd, cfg, formatos)
         _aplicar_condicional(worksheet, df_pd, cfg, formatos)
         _aplicar_links_url(worksheet, df_pd, cfg, formatos)
 

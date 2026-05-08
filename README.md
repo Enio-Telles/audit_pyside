@@ -19,21 +19,6 @@ Em vez de `copilot-instructions.md`, o Codex usa `AGENTS.md` por escopo de pasta
 3. abra o projeto no Codex
 4. peça tarefas específicas por área do código
 
-## Instalação
-
-### Com uv (recomendado)
-```bash
-uv sync                   # instala dependências runtime
-uv sync --group dev       # instala dependências de desenvolvimento
-uv run pytest -q          # roda testes
-uv run python app.py      # lança a aplicação
-```
-
-### Com pip (legacy)
-```bash
-pip install -e ".[dev]"
-```
-
 ## Scripts
 
 Há utilitários em `scripts/` para gerar documentação e artefatos de amostra. Exemplos de uso (execute a partir da raiz do repositório):

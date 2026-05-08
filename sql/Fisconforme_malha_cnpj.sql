@@ -36,12 +36,12 @@ WITH PendenciasRankeadas AS (
     LEFT JOIN bi.fato_det_notificacao dn 
         ON dp.id = dn.id_fisconforme
     WHERE dp.cpf_cnpj = :CNPJ
-    AND dp.malhas_id IN (10061, 10120, 10140, 10220, 10240, 10260, 10300, 10320, 10340, 10420, 10440, 10500, 10580, 10600, 10780, 10820, 10900, 10960)
-    AND dp.status IN (0, 4)
-    AND dp.periodo BETWEEN :data_inicio AND :data_fim
+      AND dp.malhas_id IN (10061, 10120)
+      AND dp.status IN (0, 4)
+      AND dp.periodo < '202601'
 )
 -- Consulta final filtrando apenas a linha mais recente (Ranking = 1)
-SELECT /*+ MONITOR */
+SELECT
     id_pendencia,
     id_notificacao,
     malhas_id,

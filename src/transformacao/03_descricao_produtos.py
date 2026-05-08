@@ -39,12 +39,10 @@ except ImportError as e:
 
 
 def _normalizar_descricao_expr(col: str) -> pl.Expr:
-    """Retorna expressão Polars que normaliza a coluna de descrição para 'descricao_normalizada'."""
     return expr_normalizar_descricao(col).alias("descricao_normalizada")
 
 
 def _agg_list(col: str, alias: str) -> pl.Expr:
-    """Agrega valores únicos e ordenados de *col* em uma List, expondo-os sob *alias*."""
     return (
         pl.col(col)
         .cast(pl.String, strict=False)
@@ -58,19 +56,6 @@ def _agg_list(col: str, alias: str) -> pl.Expr:
 
 
 def descricao_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
-    """Gera a tabela consolidada de descrições normalizadas e únicas.
-
-    Lê ``item_unidades_{cnpj}.parquet`` e ``itens_{cnpj}.parquet``, agrega por
-    ``descricao_normalizada`` e produz ``descricao_produtos_{cnpj}.parquet`` em
-    ``analises/produtos``.
-
-    Args:
-        cnpj: CPF (11 dígitos) ou CNPJ (14 dígitos) do contribuinte.
-        pasta_cnpj: Pasta raiz do CNPJ; usa o padrão global quando None.
-
-    Returns:
-        True em caso de sucesso; False se a geração falhar ou inputs estiverem ausentes.
-    """
     cnpj = re.sub(r"\D", "", cnpj or "")
     if len(cnpj) not in {11, 14}:
         raise ValueError("CPF/CNPJ invalido.")
@@ -93,7 +78,9 @@ def descricao_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
             return False
 
     if not arq_item_unid.exists() or not arq_itens.exists():
-        rprint("[red]Arquivos base para descricao_produtos nao foram encontrados.[/red]")
+        rprint(
+            "[red]Arquivos base para descricao_produtos nao foram encontrados.[/red]"
+        )
         return False
 
     rprint(f"[bold cyan]Gerando descricao_produtos para CNPJ: {cnpj}[/bold cyan]")
@@ -122,7 +109,9 @@ def descricao_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
                     pl.lit([]).cast(pl.List(pl.String)).alias(col)
                 )
             else:
-                lf_item_unid = lf_item_unid.with_columns(pl.lit(None, pl.String).alias(col))
+                lf_item_unid = lf_item_unid.with_columns(
+                    pl.lit(None, pl.String).alias(col)
+                )
 
     lf_item_unid = lf_item_unid.with_columns(_normalizar_descricao_expr("descricao"))
 
@@ -143,14 +132,17 @@ def descricao_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
             _agg_list("co_sefin_item", "lista_co_sefin"),
             _agg_list("gtin", "lista_gtin"),
             _agg_list("unid", "lista_unid"),
-            _agg_list("codigo_fonte", "lista_codigo_fonte"),
             pl.col("fontes").explode().drop_nulls().unique().sort().alias("fontes"),
             _agg_list("id_item_unid", "lista_id_item_unid"),
         ]
     )
     # Join LazyFrames
-    lf_descricoes = lf_descricoes.join(lf_lista_ids, on="descricao_normalizada", how="left")
-    lf_descricoes = lf_descricoes.sort(["descricao_normalizada", "descricao"], nulls_last=True)
+    lf_descricoes = lf_descricoes.join(
+        lf_lista_ids, on="descricao_normalizada", how="left"
+    )
+    lf_descricoes = lf_descricoes.sort(
+        ["descricao_normalizada", "descricao"], nulls_last=True
+    )
     lf_descricoes = lf_descricoes.with_row_count("seq", offset=1)
     lf_descricoes = lf_descricoes.with_columns(
         pl.format("id_descricao_{}", pl.col("seq")).alias("id_descricao")
@@ -179,11 +171,12 @@ def descricao_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
     if df_descricoes.is_empty():
         rprint("[yellow]Arquivo descricao_produtos resultou vazio.[/yellow]")
         return False
-    return salvar_para_parquet(df_descricoes, pasta_analises, f"descricao_produtos_{cnpj}.parquet")
+    return salvar_para_parquet(
+        df_descricoes, pasta_analises, f"descricao_produtos_{cnpj}.parquet"
+    )
 
 
 def gerar_descricao_produtos(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
-    """Alias público para ``descricao_produtos``; ponto de entrada usado pelo orquestrador."""
     return descricao_produtos(cnpj, pasta_cnpj)
 
 

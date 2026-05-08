@@ -1,0 +1,18 @@
+{
+  "84654326000394": {
+    "removed": 0,
+    "removed_files": [],
+    "kept_files": [
+      "dados\\CNPJ\\84654326000394\\analises\\produtos\\snapshots\\mapa_agrupamento_manual_84654326000394_20260422T113718.parquet",
+      "dados\\CNPJ\\84654326000394\\analises\\produtos\\snapshots\\mapa_agrupamento_manual_84654326000394_20260421T113718.parquet"
+    ],
+    "would_remove_files": [
+      "dados\\CNPJ\\84654326000394\\analises\\produtos\\snapshots\\mapa_agrupamento_manual_84654326000394_20260420T113718.parquet",
+      "dados\\CNPJ\\84654326000394\\analises\\produtos\\snapshots\\mapa_agrupamento_manual_84654326000394_20260419T113718.parquet",
+      "dados\\CNPJ\\84654326000394\\analises\\produtos\\snapshots\\mapa_agrupamento_manual_84654326000394_20260418T113718.parquet",
+      "dados\\CNPJ\\84654326000394\\analises\\produtos\\snapshots\\mapa_agrupamento_manual_84654326000394_20260417T113718.parquet",
+      "dados\\CNPJ\\84654326000394\\analises\\produtos\\snapshots\\mapa_agrupamento_manual_84654326000394_20260416T113718.parquet",
+      "dados\\CNPJ\\84654326000394\\analises\\produtos\\snapshots\\mapa_agrupamento_manual_84654326000394_20260415T113718.parquet"
+    ]
+  }
+}

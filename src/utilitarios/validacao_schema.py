@@ -10,12 +10,10 @@ class SchemaValidacaoError(ValueError):
 
 
 def _prefixo_contexto(contexto: str | None = None) -> str:
-    """Monta prefixo opcional para mensagens de validacao."""
     return f"{contexto}: " if contexto else ""
 
 
 def _formatar_tipo(dtype: pl.DataType | None) -> str:
-    """Formata um tipo Polars para mensagens de erro."""
     return "desconhecido" if dtype is None else str(dtype)
 
 
@@ -24,8 +22,9 @@ def garantir_colunas_obrigatorias(
     colunas: list[str] | tuple[str, ...],
     contexto: str | None = None,
 ) -> pl.DataFrame | pl.LazyFrame:
-    """Garante que um DataFrame contenha todas as colunas obrigatorias."""
-    columns = df.collect_schema().names() if isinstance(df, pl.LazyFrame) else df.columns
+    columns = (
+        df.collect_schema().names() if isinstance(df, pl.LazyFrame) else df.columns
+    )
     colunas_ausentes = [col for col in colunas if col not in columns]
     if colunas_ausentes:
         raise SchemaValidacaoError(
@@ -39,9 +38,10 @@ def validar_parquet_essencial(
     colunas: list[str] | tuple[str, ...],
     contexto: str | None = None,
 ) -> list[str]:
-    """Valida a existencia de arquivo Parquet e suas colunas essenciais."""
     if not path.exists():
-        raise FileNotFoundError(f"{_prefixo_contexto(contexto)}arquivo nao encontrado: {path}")
+        raise FileNotFoundError(
+            f"{_prefixo_contexto(contexto)}arquivo nao encontrado: {path}"
+        )
 
     schema_cols = list(pl.read_parquet_schema(path).names())
     colunas_ausentes = [col for col in colunas if col not in schema_cols]
@@ -57,7 +57,6 @@ def garantir_tipos_compativeis(
     schema_esperado: dict[str, pl.DataType],
     contexto: str | None = None,
 ) -> pl.DataFrame | pl.LazyFrame:
-    """Garante que colunas existentes tenham os tipos Polars esperados."""
     garantir_colunas_obrigatorias(df, list(schema_esperado.keys()), contexto=contexto)
 
     schema_atual = df.collect_schema() if isinstance(df, pl.LazyFrame) else df.schema

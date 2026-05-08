@@ -1,4 +1,4 @@
-"""
+﻿"""
 co_sefin.py
 
 Script para inferir o codigo co_sefin_inferido com base no NCM e CEST
@@ -28,7 +28,12 @@ except ImportError as e:
 
 
 def _limpar_expr(coluna: str) -> pl.Expr:
-    return pl.col(coluna).cast(pl.String, strict=False).str.replace_all(r"\.", "").str.strip_chars()
+    return (
+        pl.col(coluna)
+        .cast(pl.String, strict=False)
+        .str.replace_all(r"\.", "")
+        .str.strip_chars()
+    )
 
 
 def _resolver_ref(nome_arquivo: str) -> Path:
@@ -75,7 +80,7 @@ def inferir_co_sefin_dataframe(
         df_base = df_base.with_columns(pl.lit(None, dtype=pl.String).alias(col_cest))
 
     ref_cn = (
-        pl.scan_parquet(ref_cest_ncm_path)
+        pl.read_parquet(ref_cest_ncm_path)
         .select(["it_nu_cest", "it_nu_ncm", "it_co_sefin"])
         .with_columns(
             [
@@ -85,25 +90,22 @@ def inferir_co_sefin_dataframe(
             ]
         )
         .drop(["it_nu_cest", "it_nu_ncm"])
-        .collect()
     )
 
     ref_c = (
-        pl.scan_parquet(ref_cest_path)
+        pl.read_parquet(ref_cest_path)
         .select(["cest", "co-sefin"])
         .with_columns(_limpar_expr("cest").alias("ref_cest"))
         .drop("cest")
         .rename({"co-sefin": "co_sefin_cest"})
-        .collect()
     )
 
     ref_n = (
-        pl.scan_parquet(ref_ncm_path)
+        pl.read_parquet(ref_ncm_path)
         .select(["ncm", "co-sefin"])
         .with_columns(_limpar_expr("ncm").alias("ref_ncm"))
         .drop("ncm")
         .rename({"co-sefin": "co_sefin_ncm"})
-        .collect()
     )
 
     df_join = df_base.with_columns(
@@ -132,24 +134,6 @@ def inferir_co_sefin_dataframe(
 
 
 def co_sefin(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
-    """Infere a coluna ``co_sefin_inferido`` nas tabelas de caracteristicas de itens.
-
-    Processa os arquivos ``tabela_itens_caracteristicas_<cnpj>.parquet`` e
-    ``tab_itens_caract_normalizada_<cnpj>.parquet`` em ``analises/produtos``,
-    adicionando a coluna ``co_sefin_inferido`` calculada a partir das colunas
-    ``ncm`` e ``cest`` com a mesma ordem de fallback do pipeline:
-    1. CEST + NCM; 2. apenas CEST; 3. apenas NCM.
-
-    Args:
-        cnpj: CPF ou CNPJ do contribuinte (somente digitos ou formatado).
-        pasta_cnpj: Raiz do diretorio do CNPJ. Se ``None``, usa o padrao
-            ``dados/CNPJ/<cnpj>``.
-
-    Returns:
-        ``True`` se pelo menos um arquivo foi processado com sucesso;
-        ``False`` se nenhum arquivo alvo foi encontrado ou se ocorreu erro
-        em todos os arquivos processados.
-    """
     import re
 
     cnpj = re.sub(r"[^0-9]", "", cnpj)

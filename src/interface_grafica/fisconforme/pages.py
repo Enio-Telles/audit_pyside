@@ -6,12 +6,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, Optional
 
-import pymupdf as fitz
 from PySide6.QtCore import Qt, QThreadPool, Signal
-from PySide6.QtGui import QImage, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
-    QCheckBox,
     QFileDialog,
     QComboBox,
     QHBoxLayout,
@@ -20,7 +17,6 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QProgressBar,
-    QScrollArea,
     QSplitter,
     QTextEdit,
     QVBoxLayout,
@@ -232,7 +228,7 @@ class DatabaseConfigPage(BaseWizardPage):
 
     def footer_context(self, state: WizardState) -> str:
         return (
-            "Etapa 1 de 5  \u2022  Configure a base de conexão para as próximas consultas."
+            "Etapa 1 de 5  •  Configure a base de conexão para as próximas consultas."
         )
 
 
@@ -387,7 +383,7 @@ class CNPJsPage(BaseWizardPage):
         return "Confirmar CNPJs e seguir"
 
     def footer_context(self, state: WizardState) -> str:
-        return "Etapa 2 de 5  \u2022  Organize a base de contribuintes com ordenação e tooltips completos."
+        return "Etapa 2 de 5  •  Organize a base de contribuintes com ordenação e tooltips completos."
 
     def _load_file(self):
         caminho, _ = QFileDialog.getOpenFileName(
@@ -606,7 +602,7 @@ class CNPJsPage(BaseWizardPage):
         validos = len(
             [registro for registro in self.model.records() if registro.valido]
         )
-        self.lbl_count.setText(f"{total} registro(s) na grade  \u2022  {validos} válido(s)")
+        self.lbl_count.setText(f"{total} registro(s) na grade  •  {validos} válido(s)")
 
 
 class AuditorPage(BaseWizardPage):
@@ -621,9 +617,6 @@ class AuditorPage(BaseWizardPage):
         self._configs: Dict[str, Dict[str, str]] = {}
         self._pdf_path: Optional[Path] = None
         self._output_dir: Optional[Path] = None
-        self._preview_card: Optional[SectionCard] = None
-        self._preview_container: Optional[QWidget] = None
-        self._preview_container_layout: Optional[QVBoxLayout] = None
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -685,13 +678,8 @@ class AuditorPage(BaseWizardPage):
         btn_pdf.setObjectName("PrimaryButton")
         btn_pdf.clicked.connect(self._select_pdf)
         pdf_row.addWidget(btn_pdf)
+        pdf_row.addWidget(btn_pdf)
         dsf_layout.addLayout(pdf_row)
-
-        self.chk_incluir_imagens_dsf = QCheckBox(
-            "Incluir imagens da DSF na notificação"
-        )
-        self.chk_incluir_imagens_dsf.setChecked(True)
-        dsf_layout.addWidget(self.chk_incluir_imagens_dsf)
 
         output_row = QHBoxLayout()
         output_row.setSpacing(SPACING["md"])
@@ -706,25 +694,6 @@ class AuditorPage(BaseWizardPage):
         dsf_layout.addLayout(output_row)
 
         layout.addWidget(dsf_card)
-
-        self._preview_card = SectionCard("Prévia do PDF da DSF")
-        self._preview_card.setVisible(False)
-        preview_layout = QVBoxLayout(self._preview_card)
-        preview_layout.setContentsMargins(0, 0, 0, 0)
-        preview_layout.setSpacing(SPACING["sm"])
-
-        preview_scroll = QScrollArea()
-        preview_scroll.setWidgetResizable(True)
-        preview_scroll.setMinimumHeight(280)
-        self._preview_container = QWidget()
-        self._preview_container_layout = QVBoxLayout(self._preview_container)
-        self._preview_container_layout.setContentsMargins(0, 0, 0, 0)
-        self._preview_container_layout.setSpacing(SPACING["md"])
-        self._preview_container_layout.setAlignment(Qt.AlignTop)
-        preview_scroll.setWidget(self._preview_container)
-        preview_layout.addWidget(preview_scroll)
-
-        layout.addWidget(self._preview_card)
 
         salvar_card = SectionCard("Salvar configuração reutilizável")
         salvar_layout = QHBoxLayout(salvar_card)
@@ -765,10 +734,6 @@ class AuditorPage(BaseWizardPage):
         self.inputs["contato"].setText(dados.get("CONTATO", ""))
         self.inputs["orgao"].setText(dados.get("ORGAO", ""))
         self.input_dsf.setText(dados.get("DSF", ""))
-        incluir_imagens = str(dados.get("INCLUIR_IMAGENS_DSF", "True")).strip().lower()
-        self.chk_incluir_imagens_dsf.setChecked(
-            incluir_imagens in {"1", "true", "yes", "on", "sim"}
-        )
         titulo = dados.get("CARGO_TITULO", "Auditor")
         idx = self.combo_titulo.findText(titulo)
         if idx >= 0:
@@ -789,84 +754,7 @@ class AuditorPage(BaseWizardPage):
         self.status_banner.set_status(
             "success", f"PDF selecionado: {self._pdf_path.name}"
         )
-        self._renderizar_preview_pdf(self._pdf_path)
         self.action_updated.emit()
-
-    def _limpar_preview_pdf(self):
-        if not self._preview_container_layout:
-            return
-        while self._preview_container_layout.count():
-            item = self._preview_container_layout.takeAt(0)
-            widget = item.widget() if item else None
-            if widget is not None:
-                widget.setParent(None)
-                widget.deleteLater()
-
-    def _renderizar_preview_pdf(self, caminho_pdf: Path):
-        if self._preview_card is None or self._preview_container_layout is None:
-            return
-
-        self._limpar_preview_pdf()
-
-        if not caminho_pdf.exists():
-            self._preview_card.setVisible(False)
-            self.status_banner.set_status(
-                "danger", f"PDF da DSF nao encontrado: {caminho_pdf.name}"
-            )
-            return
-
-        try:
-            documento = fitz.open(str(caminho_pdf))
-        except Exception as exc:
-            self._preview_card.setVisible(False)
-            self.status_banner.set_status(
-                "danger", f"Nao foi possivel abrir o PDF da DSF: {exc}"
-            )
-            return
-
-        try:
-            total_paginas = documento.page_count
-            if total_paginas <= 0:
-                self._preview_card.setVisible(False)
-                self.status_banner.set_status(
-                    "warning", "O PDF da DSF nao possui paginas para visualizar."
-                )
-                return
-
-            limite_paginas = min(total_paginas, 20)
-            if total_paginas > 20:
-                self.status_banner.set_status(
-                    "warning",
-                    f"Previa limitada as primeiras 20 paginas de {total_paginas} no PDF da DSF.",
-                )
-
-            for indice in range(limite_paginas):
-                pagina = documento.load_page(indice)
-                pixmap_pdf = pagina.get_pixmap(matrix=fitz.Matrix(72 / 72, 72 / 72))
-                imagem = QImage.fromData(pixmap_pdf.tobytes("png"))
-                if imagem.isNull():
-                    continue
-
-                label = QLabel()
-                label.setAlignment(Qt.AlignCenter)
-                label.setPixmap(
-                    QPixmap.fromImage(imagem).scaledToWidth(
-                        780, Qt.SmoothTransformation
-                    )
-                )
-                label.setStyleSheet("background: transparent;")
-                self._preview_container_layout.addWidget(label)
-
-            if self._preview_container_layout.count() == 0:
-                self._preview_card.setVisible(False)
-                self.status_banner.set_status(
-                    "warning", "Nao foi possivel gerar a previa do PDF da DSF."
-                )
-                return
-
-            self._preview_card.setVisible(True)
-        finally:
-            documento.close()
 
     def _select_output_directory(self):
         diretorio_atual = str(self._output_dir) if self._output_dir else str(ROOT_DIR)
@@ -915,9 +803,6 @@ class AuditorPage(BaseWizardPage):
             "ORGAO": self.inputs["orgao"].text().strip(),
             "CARGO_TITULO": self.combo_titulo.currentText().strip(),
             "DSF": self.input_dsf.text().strip(),
-            "INCLUIR_IMAGENS_DSF": "True"
-            if self.chk_incluir_imagens_dsf.isChecked()
-            else "False",
         }
 
     def load_state(self, state: WizardState):
@@ -927,7 +812,10 @@ class AuditorPage(BaseWizardPage):
                 campo.clear()
             self.input_dsf.clear()
             self.combo_titulo.setCurrentIndex(0)
-        else:
+            self._pdf_path = None
+            self.lbl_pdf.setText("Nenhum arquivo selecionado")
+            return
+        if state.auditor_data:
             dados = state.auditor_data
             self.inputs["auditor"].setText(dados.get("AUDITOR", ""))
             self.inputs["matricula"].setText(dados.get("MATRICULA", ""))
@@ -937,21 +825,9 @@ class AuditorPage(BaseWizardPage):
             idx = self.combo_titulo.findText(dados.get("CARGO_TITULO", "Auditor"))
             if idx >= 0:
                 self.combo_titulo.setCurrentIndex(idx)
-        self.chk_incluir_imagens_dsf.setChecked(state.incluir_imagens_dsf)
         if state.pdf_dsf:
             self._pdf_path = state.pdf_dsf
             self.lbl_pdf.setText(str(state.pdf_dsf))
-            if state.pdf_dsf.exists():
-                self._renderizar_preview_pdf(state.pdf_dsf)
-            elif self._preview_card is not None:
-                self._preview_card.setVisible(False)
-                self._limpar_preview_pdf()
-        else:
-            self._pdf_path = None
-            self.lbl_pdf.setText("Nenhum arquivo selecionado")
-            if self._preview_card is not None:
-                self._preview_card.setVisible(False)
-                self._limpar_preview_pdf()
 
         if state.diretorio_saida:
             self._output_dir = state.diretorio_saida
@@ -969,7 +845,6 @@ class AuditorPage(BaseWizardPage):
     def persist_state(self, state: WizardState):
         state.auditor_data = self._collect_data()
         state.pdf_dsf = self._pdf_path
-        state.incluir_imagens_dsf = self.chk_incluir_imagens_dsf.isChecked()
         state.diretorio_saida = self._output_dir
 
     def validate(self, state: WizardState) -> bool:
@@ -985,7 +860,7 @@ class AuditorPage(BaseWizardPage):
 
     def footer_context(self, state: WizardState) -> str:
         return (
-            "Etapa 3 de 5  \u2022  Cadastre o responsável e a referência documental da DSF."
+            "Etapa 3 de 5  •  Cadastre o responsável e a referência documental da DSF."
         )
 
 
@@ -1034,35 +909,10 @@ class PeriodPage(BaseWizardPage):
         state.periodo_fim = self.input_fim.text().strip()
         self._refresh_metadata(state)
 
-    _PADRAO_PERIODO = re.compile(r"^(\d{2})/(\d{4})$")
-
     def validate(self, state: WizardState) -> bool:
         if not state.periodo_inicio or not state.periodo_fim:
             QMessageBox.warning(
-                self, "Atencao", "Informe data inicial e data final antes de continuar."
-            )
-            return False
-        m_ini = self._PADRAO_PERIODO.match(state.periodo_inicio)
-        m_fim = self._PADRAO_PERIODO.match(state.periodo_fim)
-        if not m_ini or not m_fim:
-            QMessageBox.warning(
-                self,
-                "Formato invalido",
-                "As datas devem estar no formato MM/AAAA (ex.: 01/2021).",
-            )
-            return False
-        mes_ini, ano_ini = int(m_ini.group(1)), int(m_ini.group(2))
-        mes_fim, ano_fim = int(m_fim.group(1)), int(m_fim.group(2))
-        if not (1 <= mes_ini <= 12) or not (1 <= mes_fim <= 12):
-            QMessageBox.warning(
-                self, "Mes invalido", "O mes deve estar entre 01 e 12."
-            )
-            return False
-        if ano_ini * 100 + mes_ini >= ano_fim * 100 + mes_fim:
-            QMessageBox.warning(
-                self,
-                "Periodo invalido",
-                "A data inicial deve ser anterior a data final.",
+                self, "Atenção", "Informe data inicial e data final antes de continuar."
             )
             return False
         return True
@@ -1074,7 +924,7 @@ class PeriodPage(BaseWizardPage):
         return "SuccessButton"
 
     def footer_context(self, state: WizardState) -> str:
-        return "Etapa 4 de 5  \u2022  Revise os dados agregados antes de abrir a etapa operacional."
+        return "Etapa 4 de 5  •  Revise os dados agregados antes de abrir a etapa operacional."
 
     def _refresh_metadata(self, state: WizardState):
         itens = [
@@ -1221,10 +1071,10 @@ class ProcessingPage(BaseWizardPage):
 
     def footer_context(self, state: WizardState) -> str:
         if self._completed:
-            return "Etapa 5 de 5  \u2022  Execução concluída. Revise resultados e abra a pasta de saída se necessário."
+            return "Etapa 5 de 5  •  Execução concluída. Revise resultados e abra a pasta de saída se necessário."
         if self._running:
-            return "Etapa 5 de 5  \u2022  Processamento em andamento. A navegação foi bloqueada para preservar o contexto."
-        return "Etapa 5 de 5  \u2022  Inicie a geração e acompanhe log e resultados na mesma tela."
+            return "Etapa 5 de 5  •  Processamento em andamento. A navegação foi bloqueada para preservar o contexto."
+        return "Etapa 5 de 5  •  Inicie a geração e acompanhe log e resultados na mesma tela."
 
     def _prepare_execution(self, state: WizardState):
         total = len(state.cnpjs_validos())
@@ -1276,7 +1126,6 @@ class ProcessingPage(BaseWizardPage):
             (state.periodo_inicio, state.periodo_fim),
             state.pdf_dsf,
             diretorio_saida=self._output_dir,
-            incluir_imagens_dsf=state.incluir_imagens_dsf,
         )
         self._worker.progresso.connect(self._update_progress)
         self._worker.log_msg.connect(self._append_log)

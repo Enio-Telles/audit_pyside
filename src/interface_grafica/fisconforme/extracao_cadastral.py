@@ -114,8 +114,6 @@ def extrair_dados_cadastrais_oracle(cnpj: str) -> Optional[Dict[str, Any]]:
     Returns:
         DicionÃ¡rio com dados cadastrais ou None
     """
-    cnpj_limpo = "".join(caractere for caractere in str(cnpj) if caractere.isdigit())
-
     sql = ler_sql(SQL_DADOS_CADASTRAIS)
     if not sql:
         return None
@@ -127,13 +125,13 @@ def extrair_dados_cadastrais_oracle(cnpj: str) -> Optional[Dict[str, Any]]:
     try:
         with conexao.cursor() as cursor:
             cursor.arraysize = 10
-            cursor.execute(sql, {"CO_CNPJ_CPF": cnpj_limpo})
+            cursor.execute(sql, {"cnpj": cnpj})
 
             colunas = [col[0] for col in cursor.description]
             resultado = cursor.fetchone()
 
             if not resultado:
-                logger.warning(f"Nenhum dado encontrado para CNPJ {cnpj_limpo}")
+                logger.warning(f"Nenhum dado encontrado para CNPJ {cnpj}")
                 return None
 
             # Converte para dicionÃ¡rio
@@ -147,11 +145,11 @@ def extrair_dados_cadastrais_oracle(cnpj: str) -> Optional[Dict[str, Any]]:
                 else:
                     dados[chave] = valor
 
-            logger.info(f"Dados cadastrais extraÃ­dos para CNPJ {cnpj_limpo}")
+            logger.info(f"Dados cadastrais extraÃ­dos para CNPJ {cnpj}")
             return dados
 
     except Exception as e:
-        logger.error(f"Erro ao extrair dados cadastrais para {cnpj_limpo}: {e}")
+        logger.error(f"Erro ao extrair dados cadastrais para {cnpj}: {e}")
         return None
 
     finally:

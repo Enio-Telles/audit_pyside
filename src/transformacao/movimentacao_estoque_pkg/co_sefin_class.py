@@ -24,7 +24,9 @@ def _resolver_ref(nome_arquivo: str) -> Path | None:
 def _garantir_colunas(
     df: pl.DataFrame | pl.LazyFrame, schema: dict[str, pl.DataType]
 ) -> pl.DataFrame | pl.LazyFrame:
-    columns = df.collect_schema().names() if isinstance(df, pl.LazyFrame) else df.columns
+    columns = (
+        df.collect_schema().names() if isinstance(df, pl.LazyFrame) else df.columns
+    )
     for coluna, dtype in schema.items():
         if coluna not in columns:
             df = df.with_columns(pl.lit(None, dtype=dtype).alias(coluna))
@@ -48,26 +50,20 @@ def _carregar_co_sefin_padrao(cnpj: str) -> pl.DataFrame | None:
     if not path_agrupado.exists():
         return None
 
-    _schema = pl.read_parquet_schema(path_agrupado)
-    if "id_agrupado" not in _schema or "co_sefin_padrao" not in _schema:
+    df_agr = pl.read_parquet(path_agrupado)
+    if "id_agrupado" not in df_agr.columns or "co_sefin_padrao" not in df_agr.columns:
         rprint(
             f"[yellow]Aviso: {path_agrupado.name} nao possui as colunas "
             "'id_agrupado' e 'co_sefin_padrao'.[/yellow]"
         )
         return None
 
-    return (
-        pl.scan_parquet(path_agrupado)
-        .select(["id_agrupado", "co_sefin_padrao"])
-        .collect()
-        .select(
-            [
-                pl.col("id_agrupado").cast(pl.String, strict=False),
-                pl.col("co_sefin_padrao").cast(pl.String, strict=False),
-            ]
-        )
-        .unique(subset=["id_agrupado"], keep="first")
-    )
+    return df_agr.select(
+        [
+            pl.col("id_agrupado").cast(pl.String, strict=False),
+            pl.col("co_sefin_padrao").cast(pl.String, strict=False),
+        ]
+    ).unique(subset=["id_agrupado"], keep="first")
 
 
 def gerar_co_sefin_final(
@@ -90,10 +86,15 @@ def gerar_co_sefin_final(
 
     def _limpar_expr(col: str) -> pl.Expr:
         return (
-            pl.col(col).cast(pl.String, strict=False).str.replace_all(r"\D", "").str.strip_chars()
+            pl.col(col)
+            .cast(pl.String, strict=False)
+            .str.replace_all(r"\D", "")
+            .str.strip_chars()
         )
 
-    df_lazy = _garantir_colunas(df_lazy, {"ncm_padrao": pl.String, "cest_padrao": pl.String})
+    df_lazy = _garantir_colunas(
+        df_lazy, {"ncm_padrao": pl.String, "cest_padrao": pl.String}
+    )
     df_join = df_lazy.with_columns(
         [
             _limpar_expr("ncm_padrao").alias("_ncm_j"),
@@ -106,7 +107,9 @@ def gerar_co_sefin_final(
             [
                 _limpar_expr("it_nu_cest").alias("ref_cest"),
                 _limpar_expr("it_nu_ncm").alias("ref_ncm"),
-                pl.col("it_co_sefin").cast(pl.String, strict=False).alias("co_sefin_cn"),
+                pl.col("it_co_sefin")
+                .cast(pl.String, strict=False)
+                .alias("co_sefin_cn"),
             ]
         )
         df_join = df_join.join(
@@ -125,7 +128,9 @@ def gerar_co_sefin_final(
                 pl.col("co-sefin").cast(pl.String, strict=False).alias("co_sefin_c"),
             ]
         )
-        df_join = df_join.join(ref_c, left_on="_cest_j", right_on="ref_cest_only", how="left")
+        df_join = df_join.join(
+            ref_c, left_on="_cest_j", right_on="ref_cest_only", how="left"
+        )
     else:
         df_join = df_join.with_columns(pl.lit(None, pl.String).alias("co_sefin_c"))
 
@@ -136,14 +141,16 @@ def gerar_co_sefin_final(
                 pl.col("co-sefin").cast(pl.String, strict=False).alias("co_sefin_n"),
             ]
         )
-        df_join = df_join.join(ref_n, left_on="_ncm_j", right_on="ref_ncm_only", how="left")
+        df_join = df_join.join(
+            ref_n, left_on="_ncm_j", right_on="ref_ncm_only", how="left"
+        )
     else:
         df_join = df_join.with_columns(pl.lit(None, pl.String).alias("co_sefin_n"))
 
     result = df_join.with_columns(
-        pl.coalesce([pl.col("co_sefin_cn"), pl.col("co_sefin_c"), pl.col("co_sefin_n")]).alias(
-            "co_sefin_final"
-        )
+        pl.coalesce(
+            [pl.col("co_sefin_cn"), pl.col("co_sefin_c"), pl.col("co_sefin_n")]
+        ).alias("co_sefin_final")
     ).drop(["_ncm_j", "_cest_j", "co_sefin_cn", "co_sefin_c", "co_sefin_n"])
     return result if is_lazy_input else result.collect()
 
@@ -212,8 +219,12 @@ def enriquecer_co_sefin_class(
     # 2. Carregar sitafe_produto_sefin_aux.parquet
     caminho_aux = _resolver_ref("sitafe_produto_sefin_aux.parquet")
     if not caminho_aux or not caminho_aux.exists():
-        rprint("[yellow]Aviso: sitafe_produto_sefin_aux.parquet nao encontrado.[/yellow]")
-        res = df_mov.with_columns(pl.col("__co_sefin_lookup__").alias("co_sefin_agr")).drop(
+        rprint(
+            "[yellow]Aviso: sitafe_produto_sefin_aux.parquet nao encontrado.[/yellow]"
+        )
+        res = df_mov.with_columns(
+            pl.col("__co_sefin_lookup__").alias("co_sefin_agr")
+        ).drop(
             ["__co_sefin_lookup__", "co_sefin_padrao"],
             strict=False,
         )
@@ -243,7 +254,9 @@ def enriquecer_co_sefin_class(
         ]
     )
     df_mov = df_mov.with_columns(
-        pl.max_horizontal([pl.col("_dt_doc_date"), pl.col("_dt_es_date")]).alias("dt_referencia")
+        pl.max_horizontal([pl.col("_dt_doc_date"), pl.col("_dt_es_date")]).alias(
+            "dt_referencia"
+        )
     )
 
     # 4. Join e Filtro por Data
@@ -301,7 +314,9 @@ def enriquecer_co_sefin_class(
     ).with_columns(pl.lit(None, dtype=pl.Float64).alias("it_pc_interna"))
 
     # 6. FinalizaÃ§Ã£o e Concat
-    df_filtered = df_filtered.with_columns(pl.col("__co_sefin_lookup__").alias("co_sefin_agr"))
+    df_filtered = df_filtered.with_columns(
+        pl.col("__co_sefin_lookup__").alias("co_sefin_agr")
+    )
     orphans_filled = orphans_filled.with_columns(
         pl.col("__co_sefin_lookup__").alias("co_sefin_agr")
     )

@@ -26,7 +26,10 @@ except ImportError as e:
 
 
 def _finnfe_4_expr() -> pl.Expr:
-    return pl.col("finnfe").cast(pl.Utf8, strict=False).fill_null("").str.strip_chars() == "4"
+    return (
+        pl.col("finnfe").cast(pl.Utf8, strict=False).fill_null("").str.strip_chars()
+        == "4"
+    )
 
 
 def _carregar_referencia_st_mensal(
@@ -84,7 +87,10 @@ def _carregar_referencia_st_mensal(
             .str.strptime(pl.Date, "%Y%m%d", strict=False)
             .alias("da_inicio"),
             pl.when(
-                pl.col("it_da_final").cast(pl.Utf8, strict=False).fill_null("").str.strip_chars()
+                pl.col("it_da_final")
+                .cast(pl.Utf8, strict=False)
+                .fill_null("")
+                .str.strip_chars()
                 == ""
             )
             .then(pl.lit(None, dtype=pl.Date))
@@ -107,12 +113,20 @@ def _carregar_referencia_st_mensal(
         df_chaves.lazy()
         .join(df_aux, left_on="co_sefin_agr", right_on="it_co_sefin", how="left")
         .filter(
-            (pl.col("da_inicio").is_null() | (pl.col("da_inicio") <= pl.col("__mes_fim__")))
-            & (pl.col("da_final").is_null() | (pl.col("da_final") >= pl.col("__mes_ini__")))
+            (
+                pl.col("da_inicio").is_null()
+                | (pl.col("da_inicio") <= pl.col("__mes_fim__"))
+            )
+            & (
+                pl.col("da_final").is_null()
+                | (pl.col("da_final") >= pl.col("__mes_ini__"))
+            )
         )
         .with_columns(
             [
-                pl.max_horizontal([pl.col("da_inicio"), pl.col("__mes_ini__")]).alias("vig_ini"),
+                pl.max_horizontal([pl.col("da_inicio"), pl.col("__mes_ini__")]).alias(
+                    "vig_ini"
+                ),
                 pl.min_horizontal(
                     [
                         pl.coalesce([pl.col("da_final"), pl.col("__mes_fim__")]),
@@ -167,8 +181,12 @@ def _calc_mva_expr(
     col_aliq_interna: str = "__aliq_mes__",
 ) -> pl.Expr:
     mva_pct = pl.col(col_mva_pct).cast(pl.Float64, strict=False).fill_null(0.0) / 100.0
-    aliq_inter = pl.col(col_aliq_inter).cast(pl.Float64, strict=False).fill_null(0.0) / 100.0
-    aliq_interna = pl.col(col_aliq_interna).cast(pl.Float64, strict=False).fill_null(0.0) / 100.0
+    aliq_inter = (
+        pl.col(col_aliq_inter).cast(pl.Float64, strict=False).fill_null(0.0) / 100.0
+    )
+    aliq_interna = (
+        pl.col(col_aliq_interna).cast(pl.Float64, strict=False).fill_null(0.0) / 100.0
+    )
     mva_ajustada = (((1.0 + mva_pct) * (1.0 - aliq_inter)) / (1.0 - aliq_interna)) - 1.0
 
     return (
@@ -275,8 +293,14 @@ def calcular_aba_mensal_dataframe(
         ]
     )
 
-    is_entrada = pl.col("Tipo_operacao").cast(pl.Utf8, strict=False).str.starts_with("1 - ENTRADA")
-    is_saida = pl.col("Tipo_operacao").cast(pl.Utf8, strict=False).str.starts_with("2 - SAIDA")
+    is_entrada = (
+        pl.col("Tipo_operacao")
+        .cast(pl.Utf8, strict=False)
+        .str.starts_with("1 - ENTRADA")
+    )
+    is_saida = (
+        pl.col("Tipo_operacao").cast(pl.Utf8, strict=False).str.starts_with("2 - SAIDA")
+    )
     is_devolucao = (
         boolish_expr("dev_simples")
         | boolish_expr("dev_venda")
@@ -285,7 +309,9 @@ def calcular_aba_mensal_dataframe(
         | _finnfe_4_expr()
     ).fill_null(False)
     is_excluida = boolish_expr("excluir_estoque").fill_null(False)
-    is_q_conv_positiva = pl.col("q_conv_fisica").cast(pl.Float64, strict=False).fill_null(0.0) > 0
+    is_q_conv_positiva = (
+        pl.col("q_conv_fisica").cast(pl.Float64, strict=False).fill_null(0.0) > 0
+    )
     is_valida_media = ~is_devolucao & ~is_excluida & is_q_conv_positiva
 
     df_base = (
@@ -416,11 +442,18 @@ def calcular_aba_mensal_dataframe(
                 pl.col("__entr_desac_calc__").sum().alias("entradas_desacob"),
                 pl.col("__saldo_calc__").last().alias("saldo_mes"),
                 pl.col("__custo_calc__").last().alias("custo_medio_mes"),
-                pl.col("__entr_desac_periodo_calc__").sum().alias("entradas_desacob_periodo"),
+                pl.col("__entr_desac_periodo_calc__")
+                .sum()
+                .alias("entradas_desacob_periodo"),
                 pl.col("__saldo_periodo_calc__").last().alias("saldo_mes_periodo"),
-                pl.col("__custo_periodo_calc__").last().alias("custo_medio_mes_periodo"),
+                pl.col("__custo_periodo_calc__")
+                .last()
+                .alias("custo_medio_mes_periodo"),
                 pl.col("__aliq_mes_calc__").drop_nulls().last().alias("__aliq_mes__"),
-                pl.col("__aliq_inter_calc__").drop_nulls().last().alias("__aliq_inter_mes__"),
+                pl.col("__aliq_inter_calc__")
+                .drop_nulls()
+                .last()
+                .alias("__aliq_inter_mes__"),
                 pl.col("__mva_pct_calc__").drop_nulls().last().alias("__mva_pct_mes__"),
                 pl.col("it_in_mva_ajustado")
                 .cast(pl.Utf8, strict=False)
@@ -441,7 +474,8 @@ def calcular_aba_mensal_dataframe(
                 .alias("pme_mes"),
                 pl.when(pl.col("__soma_qtd_saidas_validas__") > 0)
                 .then(
-                    pl.col("__soma_valor_saidas_validas__") / pl.col("__soma_qtd_saidas_validas__")
+                    pl.col("__soma_valor_saidas_validas__")
+                    / pl.col("__soma_qtd_saidas_validas__")
                 )
                 .otherwise(0.0)
                 .alias("pms_mes"),
@@ -453,7 +487,11 @@ def calcular_aba_mensal_dataframe(
         .with_columns(
             [
                 pl.when(pl.col("__tem_st_mes__"))
-                .then(pl.col("__mva_pct_mes__").cast(pl.Float64, strict=False).fill_null(0.0))
+                .then(
+                    pl.col("__mva_pct_mes__")
+                    .cast(pl.Float64, strict=False)
+                    .fill_null(0.0)
+                )
                 .otherwise(pl.lit(None, dtype=pl.Float64))
                 .alias("MVA"),
                 # As medias exibidas na tabela mensal devem ser as mesmas usadas na base do ICMS,
@@ -480,10 +518,14 @@ def calcular_aba_mensal_dataframe(
             [
                 (
                     pl.col("saldo_mes").cast(pl.Float64, strict=False).fill_null(0.0)
-                    * pl.col("custo_medio_mes").cast(pl.Float64, strict=False).fill_null(0.0)
+                    * pl.col("custo_medio_mes")
+                    .cast(pl.Float64, strict=False)
+                    .fill_null(0.0)
                 ).alias("valor_estoque"),
                 (
-                    pl.col("saldo_mes_periodo").cast(pl.Float64, strict=False).fill_null(0.0)
+                    pl.col("saldo_mes_periodo")
+                    .cast(pl.Float64, strict=False)
+                    .fill_null(0.0)
                     * pl.col("custo_medio_mes_periodo")
                     .cast(pl.Float64, strict=False)
                     .fill_null(0.0)
@@ -505,7 +547,9 @@ def calcular_aba_mensal_dataframe(
                 )
                 .otherwise(0.0)
                 .alias("ICMS_entr_desacob"),
-                pl.when(pl.col("__tem_st_mes__") & (pl.col("entradas_desacob_periodo") > 0))
+                pl.when(
+                    pl.col("__tem_st_mes__") & (pl.col("entradas_desacob_periodo") > 0)
+                )
                 .then(
                     pl.when(pl.col("__pms_mes_icms__") > 0)
                     .then(
@@ -598,7 +642,9 @@ def gerar_calculos_mensais(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         rprint(f"[red]Arquivo necessario nao encontrado:[/red] {arq_mov_estoque}")
         return False
 
-    rprint(f"\n[bold cyan]Gerando calculos_mensais (Aba Mensal) para CNPJ: {cnpj}[/bold cyan]")
+    rprint(
+        f"\n[bold cyan]Gerando calculos_mensais (Aba Mensal) para CNPJ: {cnpj}[/bold cyan]"
+    )
     # T01: Migrado para scan_parquet para permitir otimização do plano de execução
     lf = pl.scan_parquet(arq_mov_estoque)
 
@@ -625,7 +671,9 @@ def gerar_calculos_mensais(cnpj: str, pasta_cnpj: Path | None = None) -> bool:
         status="ok" if ok else "error",
     )
     if ok:
-        rprint(f"[green]Sucesso! {df_result.height} registros salvos na aba mensal.[/green]")
+        rprint(
+            f"[green]Sucesso! {df_result.height} registros salvos na aba mensal.[/green]"
+        )
     registrar_evento_performance(
         "calculos_mensais.total",
         perf_counter() - inicio_total,

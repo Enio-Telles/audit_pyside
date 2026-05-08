@@ -1,50 +1,69 @@
 import pytest
-import polars as pl
-from polars.testing import assert_frame_equal
-from src.transformacao.movimentacao_estoque_pkg.c170_xml import _get_desc_similarity_expr
+from src.transformacao.movimentacao_estoque_pkg.c170_xml import _desc_similarity
 
-def test_vectorized_desc_similarity():
-    df = pl.DataFrame({
-        "Descr_item_c170_norm": [
-            "PRODUTO TESTE",
-            "MACA",
-            "MACA VERDE",
-            "MACA VERDE DOCE",
-            "",
-            "MACA",
-            None,
-            "MACA MACA VERDE", # dup
-            "  produto   teste  ", # spaces are usually handled by norm, but let's see if extra spaces exist in list
-            "BOLA AZUL",
-        ],
-        "Descr_item_xml_norm": [
-            "PRODUTO TESTE",
-            "BANANA",
-            "MACA VERMELHA",
-            "MACA VERMELHA",
-            "",
-            "",
-            "MACA",
-            "MACA VERMELHA VERMELHA", # dup
-            "PRODUTO TESTE", # extra spaces
-            "BOLA  AZUL", # extra spaces in split
-        ],
-    })
 
-    res = df.with_columns(_get_desc_similarity_expr())
+def test_desc_similarity_identical():
+    payload = {"a": "PRODUTO TESTE", "b": "PRODUTO TESTE"}
+    assert _desc_similarity(payload) == 1.0
 
-    expected = [
-        1.0,  # Identical
-        0.0,  # Completely different
-        0.5,  # MACA VERDE vs MACA VERMELHA -> inter 1, max(2,2) = 2 -> 0.5
-        1.0/3.0, # MACA VERDE DOCE vs MACA VERMELHA -> inter 1, max(3,2) = 3 -> 0.333
-        0.0,  # Both empty
-        0.0,  # One empty
-        0.0,  # One null
-        0.5,  # MACA MACA VERDE (MACA VERDE = len 2) vs MACA VERMELHA VERMELHA (MACA VERMELHA = len 2) -> inter 1, max(2,2) = 0.5
-        0.0,  # not identical directly, and words: {produto, teste} vs {PRODUTO, TESTE} = 0. (norm handles capitalization earlier, here it's 0)
-        1.0,  # BOLA AZUL vs BOLA  AZUL -> {BOLA, AZUL} vs {BOLA, AZUL} -> inter 2, max 2 -> 1.0. Even though they don't exactly match (one has double space), words match!
-    ]
 
-    for i, exp in enumerate(expected):
-        assert res["desc_similarity"][i] == pytest.approx(exp, abs=0.01)
+def test_desc_similarity_identical_different_casing_spacing():
+    # _norm_text handles casing and extra spacing
+    payload = {"a": "  produto   teste  ", "b": "PRODUTO TESTE"}
+    assert _desc_similarity(payload) == 1.0
+
+
+def test_desc_similarity_identical_with_accents():
+    # _norm_text handles accents
+    payload = {"a": "pródutõ téstè", "b": "PRODUTO TESTE"}
+    assert _desc_similarity(payload) == 1.0
+
+
+def test_desc_similarity_completely_different():
+    payload = {"a": "MACA", "b": "BANANA"}
+    assert _desc_similarity(payload) == 0.0
+
+
+def test_desc_similarity_partially_matching():
+    # ta = {"MACA", "VERDE"} -> len 2
+    # tb = {"MACA", "VERMELHA"} -> len 2
+    # inter = {"MACA"} -> len 1
+    # denom = max(2, 2, 1) = 2
+    # expected = 1 / 2 = 0.5
+    payload = {"a": "MACA VERDE", "b": "MACA VERMELHA"}
+    assert _desc_similarity(payload) == 0.5
+
+
+def test_desc_similarity_partially_matching_different_lengths():
+    # ta = {"MACA", "VERDE", "DOCE"} -> len 3
+    # tb = {"MACA", "VERMELHA"} -> len 2
+    # inter = {"MACA"} -> len 1
+    # denom = max(3, 2, 1) = 3
+    # expected = 1 / 3
+    payload = {"a": "MACA VERDE DOCE", "b": "MACA VERMELHA"}
+    assert _desc_similarity(payload) == pytest.approx(1 / 3)
+
+
+def test_desc_similarity_empty_payload():
+    payload = {}
+    assert _desc_similarity(payload) == 0.0
+
+
+def test_desc_similarity_missing_keys():
+    payload = {"a": "MACA"}
+    assert _desc_similarity(payload) == 0.0
+
+
+def test_desc_similarity_empty_strings():
+    payload = {"a": "", "b": ""}
+    assert _desc_similarity(payload) == 0.0
+
+
+def test_desc_similarity_only_spaces():
+    payload = {"a": "   ", "b": " "}
+    assert _desc_similarity(payload) == 0.0
+
+
+def test_desc_similarity_one_empty():
+    payload = {"a": "MACA", "b": ""}
+    assert _desc_similarity(payload) == 0.0

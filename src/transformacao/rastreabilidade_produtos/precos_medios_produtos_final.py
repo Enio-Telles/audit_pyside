@@ -1,4 +1,4 @@
-"""
+﻿"""
 precos_medios_produtos_final.py
 
 Objetivo: Calcular preco medio por produto agrupado/unidade a partir da base final.
@@ -38,30 +38,6 @@ def calcular_precos_medios_produtos_final(
     pasta_cnpj: Path | None = None,
     salvar_logs: bool = True,
 ) -> tuple[pl.DataFrame, pl.DataFrame]:
-    """Calcula o preco medio por produto agrupado e unidade a partir da base final.
-
-    Le ``item_unidades_<cnpj>.parquet`` e ``produtos_agrupados_<cnpj>.parquet``
-    (e opcionalmente ``map_produto_agrupado`` e ``produtos_final``), calcula o
-    preco medio de compra por ``id_agrupado`` e unidade, e retorna dois
-    DataFrames: o completo e um subconjunto dos itens sem preco medio de compra.
-    Se ``salvar_logs=True``, salva ``log_sem_preco_medio_compra_<cnpj>.parquet``
-    e o JSON de resumo correspondente.
-
-    Args:
-        cnpj: CPF ou CNPJ do contribuinte (somente digitos ou formatado).
-        pasta_cnpj: Raiz do diretorio do CNPJ. Se ``None``, usa o padrao
-            ``dados/CNPJ/<cnpj>``.
-        salvar_logs: Se ``True`` (padrao), persiste o arquivo de log de itens
-            sem preco de compra em ``analises/produtos``.
-
-    Returns:
-        Tupla ``(df_precos, df_sem_compra)`` onde ``df_precos`` contem os
-        precos medios calculados e ``df_sem_compra`` lista os itens para os
-        quais nao foi possivel calcular preco medio de compra.
-
-    Raises:
-        FileNotFoundError: Se algum arquivo obrigatorio nao for encontrado.
-    """
     cnpj = re.sub(r"\D", "", cnpj)
     if pasta_cnpj is None:
         pasta_cnpj = CNPJ_ROOT / cnpj
@@ -92,7 +68,9 @@ def calcular_precos_medios_produtos_final(
             .select(["descricao_normalizada", "id_agrupado", "descr_padrao"])
             .with_columns(
                 [
-                    pl.col("descricao_normalizada").cast(pl.Utf8, strict=False).fill_null(""),
+                    pl.col("descricao_normalizada")
+                    .cast(pl.Utf8, strict=False)
+                    .fill_null(""),
                     pl.col("id_agrupado").cast(pl.Utf8, strict=False),
                     pl.col("descr_padrao").cast(pl.Utf8, strict=False),
                 ]
@@ -110,7 +88,9 @@ def calcular_precos_medios_produtos_final(
         )
 
     df_precos = (
-        df_link.filter(pl.col("id_agrupado").is_not_null() & pl.col("unid").is_not_null())
+        df_link.filter(
+            pl.col("id_agrupado").is_not_null() & pl.col("unid").is_not_null()
+        )
         .group_by(["id_agrupado", "descr_padrao", "unid"])
         .agg(
             [
@@ -118,7 +98,9 @@ def calcular_precos_medios_produtos_final(
                 pl.col("qtd_compras").sum().alias("qtd_compras_total"),
                 pl.col("vendas").sum().alias("vendas_total"),
                 pl.col("qtd_vendas").sum().alias("qtd_vendas_total"),
-                (pl.col("qtd_compras").sum() + pl.col("qtd_vendas").sum()).alias("qtd_mov_total"),
+                (pl.col("qtd_compras").sum() + pl.col("qtd_vendas").sum()).alias(
+                    "qtd_mov_total"
+                ),
             ]
         )
         .with_columns(
@@ -135,9 +117,9 @@ def calcular_precos_medios_produtos_final(
         )
         .with_columns(
             [
-                pl.coalesce([pl.col("preco_medio_compra"), pl.col("preco_medio_venda")]).alias(
-                    "preco_medio_base"
-                ),
+                pl.coalesce(
+                    [pl.col("preco_medio_compra"), pl.col("preco_medio_venda")]
+                ).alias("preco_medio_base"),
                 pl.when(pl.col("preco_medio_compra").is_not_null())
                 .then(pl.lit("COMPRA"))
                 .when(pl.col("preco_medio_venda").is_not_null())

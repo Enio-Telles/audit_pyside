@@ -1,68 +1,12 @@
-import importlib
 import sys
-from types import ModuleType
-from unittest.mock import MagicMock
+from unittest.mock import patch, MagicMock
 
-import pytest
-
-
-@pytest.fixture()
-def app_module(monkeypatch):
-    qtwidgets_stub = ModuleType("PySide6.QtWidgets")
-    qtwidgets_stub.QApplication = MagicMock(name="QApplication")
-
-    logging_setup_stub = ModuleType("interface_grafica.logging_setup")
-    logging_setup_stub.configure_structlog = MagicMock(name="configure_structlog")
-    logging_setup_stub.install_fallback_hooks = MagicMock(name="install_fallback_hooks")
-
-    patches_stub = ModuleType("interface_grafica.patches")
-    similaridade_patch_stub = ModuleType(
-        "interface_grafica.patches.similaridade_agregacao"
-    )
-    similaridade_patch_stub.apply_similarity_patch = MagicMock(
-        name="apply_similarity_patch"
-    )
-
-    interface_grafica_stub = ModuleType("interface_grafica")
-    interface_grafica_stub.__path__ = []
-
-    windows_stub = ModuleType("interface_grafica.windows")
-    windows_main_window_stub = ModuleType("interface_grafica.windows.main_window")
-    windows_main_window_stub.MainWindow = MagicMock(name="MainWindow")
-    widgets_stub = ModuleType("interface_grafica.widgets")
-    splash_screen_stub = ModuleType("interface_grafica.widgets.splash_screen")
-    splash_screen_stub.ModernSplashScreen = MagicMock(name="ModernSplashScreen")
-
-    monkeypatch.setitem(sys.modules, "PySide6", ModuleType("PySide6"))
-    monkeypatch.setitem(sys.modules, "PySide6.QtWidgets", qtwidgets_stub)
-    monkeypatch.setitem(sys.modules, "interface_grafica", interface_grafica_stub)
-    monkeypatch.setitem(sys.modules, "interface_grafica.logging_setup", logging_setup_stub)
-    monkeypatch.setitem(sys.modules, "interface_grafica.patches", patches_stub)
-    monkeypatch.setitem(
-        sys.modules,
-        "interface_grafica.patches.similaridade_agregacao",
-        similaridade_patch_stub,
-    )
-    monkeypatch.setitem(sys.modules, "interface_grafica.windows", windows_stub)
-    monkeypatch.setitem(
-        sys.modules, "interface_grafica.windows.main_window", windows_main_window_stub
-    )
-    monkeypatch.setitem(sys.modules, "interface_grafica.widgets", widgets_stub)
-    monkeypatch.setitem(
-        sys.modules, "interface_grafica.widgets.splash_screen", splash_screen_stub
-    )
-    monkeypatch.delitem(sys.modules, "app", raising=False)
-
-    module = importlib.import_module("app")
-    module.MainWindow = windows_main_window_stub.MainWindow
-    yield module
-    sys.modules.pop("app", None)
+import app
 
 
-def test_main(app_module):
-    mock_qapplication_class = app_module.QApplication
-    mock_main_window_class = app_module.MainWindow
-
+@patch("app.QApplication")
+@patch("app.MainWindow")
+def test_main(mock_main_window_class, mock_qapplication_class):
     # Setup mocks
     mock_app_instance = MagicMock()
     mock_qapplication_class.return_value = mock_app_instance
@@ -72,7 +16,7 @@ def test_main(app_module):
     mock_main_window_class.return_value = mock_window_instance
 
     # Execute the function
-    result = app_module.main()
+    result = app.main()
 
     # Verify interactions
     mock_qapplication_class.assert_called_once_with(sys.argv)
@@ -89,10 +33,9 @@ def test_main(app_module):
     assert result == 0
 
 
-def test_main_error_code(app_module):
-    mock_qapplication_class = app_module.QApplication
-    mock_main_window_class = app_module.MainWindow
-
+@patch("app.QApplication")
+@patch("app.MainWindow")
+def test_main_error_code(mock_main_window_class, mock_qapplication_class):
     # Setup mocks for error code return
     mock_app_instance = MagicMock()
     mock_qapplication_class.return_value = mock_app_instance
@@ -102,7 +45,7 @@ def test_main_error_code(app_module):
     mock_main_window_class.return_value = mock_window_instance
 
     # Execute the function
-    result = app_module.main()
+    result = app.main()
 
     # Verify interactions
     mock_qapplication_class.assert_called_once_with(sys.argv)

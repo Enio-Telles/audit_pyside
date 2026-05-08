@@ -72,7 +72,6 @@ def ler_nfe_nfce(
 
     # Calculo do valor final do item (Saida)
     def _val(col: str) -> pl.Expr:
-        """Retorna expressão Polars para a coluna, preenchendo nulos com 0 e convertendo para Float64."""
         return pl.col(col).fill_null(0).cast(pl.Float64)
 
     df = df.with_columns(
@@ -187,7 +186,6 @@ def ler_c170(
         return None
 
     def _val(col: str) -> pl.Expr:
-        """Retorna expressão para a coluna quando existe no DataFrame; ``0.0`` quando ausente."""
         return (
             pl.col(col).fill_null(0).cast(pl.Float64)
             if col in df.columns
@@ -254,7 +252,6 @@ def ler_bloco_h(path: Path | None, print_status: bool = False) -> pl.DataFrame |
     schema = pl.read_parquet_schema(path)
 
     def _pick(*candidates: str) -> str | None:
-        """Retorna o primeiro candidato presente no schema do Parquet; None se nenhum existir."""
         for c in candidates:
             if c in schema:
                 return c
@@ -299,7 +296,6 @@ def ler_bloco_h(path: Path | None, print_status: bool = False) -> pl.DataFrame |
         return None
 
     def _num(col_name: str | None) -> pl.Expr:
-        """Expressão numérica segura: retorna ``0.0`` quando a coluna não existir."""
         if col_name is None or col_name not in df.columns:
             return pl.lit(0.0)
         return pl.col(col_name).fill_null(0).cast(pl.Float64)

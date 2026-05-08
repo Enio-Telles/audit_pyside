@@ -1,6 +1,0 @@
-kind: source
-name: meu-banco-oracle
-type: oracle
-connectionString: "exa01-scan.sefin.ro.gov.br:1521/sefindw"
-user: "${03002693901}"
-password: "${(P@ntera22)}"

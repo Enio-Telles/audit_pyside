@@ -19,14 +19,6 @@ class MovimentacaoService:
 
     @staticmethod
     def load_parquet(path: Union[str, Path]) -> "pl.DataFrame":
-        """Carrega um arquivo Parquet e retorna como DataFrame Polars.
-
-        Args:
-            path: Caminho para o arquivo Parquet.
-
-        Returns:
-            DataFrame com os dados do arquivo.
-        """
         return pl.read_parquet(str(path))
 
     @staticmethod
