@@ -10,9 +10,8 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QThread, Signal
+from PySide6.QtCore import QEventLoop, QObject, QThread, QUrl, Signal
 from PySide6.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
-from PySide6.QtCore import QEventLoop, QUrl
 
 from src import __version__
 from utilitarios.project_paths import PROJECT_ROOT
@@ -168,7 +167,6 @@ class UpdateService(QObject):
         extract_dir.mkdir(parents=True, exist_ok=True)
 
         # We need to extract the zip first to know what to copy
-        import shutil
         shutil.unpack_archive(zip_path, extract_dir)
 
         bat_content = f"""@echo off
