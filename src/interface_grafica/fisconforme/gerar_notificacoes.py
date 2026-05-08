@@ -13,6 +13,7 @@ Autor: Gerado automaticamente
 Data: 2026-04-01
 """
 
+import os
 import sys
 import logging
 from pathlib import Path
@@ -111,7 +112,7 @@ def formatar_tabela_html(dados: List[Dict[str, Any]]) -> str:
     }
 
     # Filtra os dados para incluir apenas as colunas permitidas
-    # e garante que pelo menos um valor seja útil (não-None e não-vazio)
+    # e garante que pelo menos um valor seja util (nao-None e nao-vazio)
     dados_filtrados = []
     colunas_encontradas = set()
 
@@ -119,7 +120,7 @@ def formatar_tabela_html(dados: List[Dict[str, Any]]) -> str:
         linha_filtrada = {}
         tem_valor_util = False
         for chave_origem, nome_coluna in mapeamento.items():
-            # Busca case-insensitive no dicionário de dados
+            # Busca case-insensitive no dicionario de dados
             valor_encontrado = None
             for k, v in linha.items():
                 if k.upper() == chave_origem.upper():
@@ -137,9 +138,9 @@ def formatar_tabela_html(dados: List[Dict[str, Any]]) -> str:
             dados_filtrados.append(linha_filtrada)
 
     if not dados_filtrados:
-        return "<p>Nenhuma pendência encontrada.</p>"
+        return "<p>Nenhuma pendencia encontrada.</p>"
 
-    # Mantém a ordem do mapeamento para as colunas que apareceram
+    # Mantem a ordem do mapeamento para as colunas que apareceram
     colunas = [c for c in mapeamento.values() if c in colunas_encontradas]
 
     # Constrói o HTML da tabela
@@ -1493,9 +1494,9 @@ def exibir_relatorio_final(resumo: Dict[str, Any]) -> None:
         # Tenta abrir automaticamente no Windows
         try:
             if sys.platform == "win32":
-                # 🛡️ Sentinel: Usar os.startfile em vez de subprocess.run para evitar Command Injection
+                # Usar os.startfile em vez de subprocess.run para evitar Command Injection
                 os.startfile(dir_saida)
-                print(f"\n✅ Explorer aberto em: {dir_saida}")
+                print(f"\nExplorer aberto em: {dir_saida}")
             else:
                 logger.info("Abertura automatica de diretorio so suportada em Windows.")
         except Exception as e:

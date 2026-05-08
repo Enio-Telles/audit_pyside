@@ -1,41 +1,33 @@
-# Triage Status Report - 2026-05-07
+# Relatorio de Triagem de PRs e Seguranca - 2026-05-07
 
-## PR Classification
+## PRs Classificadas
 
-| PR # | Category | Status | Action / Reason |
+| PR # | Categoria | Status | Justificativa / Acao |
 | :--- | :--- | :--- | :--- |
-| **#189** | CI/GUI Windows | **FIXED** | Skip logic verified in `tests/ui/test_main_window_smoke.py`. |
-| **#227** | Security | **FIXED** | Command injection via `explorer` replaced with `os.startfile`. |
-| **#230** | Security | **FIXED** | Oracle identifier validation implemented in `SqlService`. |
-| **#238** | Performance | **FIXED** | `None` values regression in HTML table fixed. |
-| **#223** | Fiscal | **BLOCKED** | Touches read-only fiscal files; requires ADR and Diff Harness. |
-| **#240** | Fiscal | **BLOCKED** | Requires full fiscal gate validation. |
-| **#225** | Documentation | **MERGE** | Hygiene and docstrings batch. |
-| **#242** | Documentation | **MERGE** | Hygiene and docstrings batch. |
-| **#244** | Documentation | **MERGE** | Hygiene and docstrings batch. |
-| **#245** | Documentation | **MERGE** | Hygiene and docstrings batch. |
-| **#246** | Documentation | **MERGE** | Hygiene and docstrings batch. |
-| **#222** | CI/GUI | **DECIDE** | Decision needed between #222 and #243 regarding pytest-qt location. |
-| **#243** | CI/GUI | **DECIDE** | Decision needed between #222 and #243. |
-| **#235** | Performance | **REVIEW** | Risk of schema divergence and memory spikes. |
-| **#247** | Performance | **REVIEW** | Needs benchmark validation. |
-| **#248** | Performance | **REVIEW** | Needs human review of benchmark methodology. |
-| **#233** | Quality | **REVIEW** | Duplicate test names identified. |
-| **#241** | Feature | **DRAFT** | Auto-update requires signing, hash, and release policy. |
+| **#189** | CI/GUI Windows | **FIXED** | Logica de skip para Windows CI validada em tests/ui/test_main_window_smoke.py. |
+| **#227** | Seguranca | **FIXED** | Risco de Command Injection via 'explorer' mitigado com os.startfile. |
+| **#230** | Seguranca | **FIXED** | Validacao de identificadores Oracle implementada em SqlService. |
+| **#238** | Performance | **FIXED** | Corregida regressao de linhas vazias com valores None em tabelas HTML. |
+| **#223** | Fiscal | **BLOCKED** | Toca _produtos_final_impl.py; exige gate fiscal completo (ADR + Diff Harness). |
+| **#240** | Fiscal | **BLOCKED** | Exige gate fiscal completo antes do merge. |
+| **#225** | Documentacao | **MERGE** | Higiene e batch de docstrings. |
+| **#242** | Documentacao | **MERGE** | Higiene e batch de docstrings. |
+| **#244** | Documentacao | **MERGE** | Higiene e batch de docstrings. |
+| **#245** | Documentacao | **MERGE** | Higiene e batch de docstrings. |
+| **#246** | Documentacao | **MERGE** | Higiene e batch de docstrings. |
+| **#222** | CI/GUI | **DECIDE** | Decisao pendente entre #222 e #243 sobre localizacao do pytest-qt. |
+| **#243** | CI/GUI | **DECIDE** | Decisao pendente sobre GUI smoke no Windows. |
+| **#235** | Performance | **REVIEW** | Risco de schema divergente entre chunks; exige revisao. |
+| **#247** | Performance | **REVIEW** | Necessita validacao de benchmarks. |
+| **#248** | Performance | **REVIEW** | Necessita revisao humana da metodologia de benchmark. |
+| **#233** | Qualidade | **REVIEW** | Testes duplicados com o mesmo nome identificados. |
+| **#241** | Feature | **DRAFT** | Auto-update depende de politica de release e assinatura. |
 
-## Immediate Blockers Status
+## Status de Bloqueios Imediatos
 
-- **#223:** Touches `_produtos_final_impl.py`; gate complete required.
-- **#230:** Regex and constant implementation DONE. Tests decoupled DONE.
-- **#227:** Fix separated from artifacts. Branch cleanup of artifacts performed.
-- **#222:** On hold (waiting for GUI smoke Windows decision).
-- **#235:** Needs verification of schema consistency across chunks.
-- **#238:** Regression with `None` generating empty lines DONE.
-- **#233:** Requires fixing duplicate test names.
-- **#241:** Awaiting release policy definition.
-- **#248:** Awaiting benchmark methodology review.
-
-## Branch Cleanup Preparedness
-
-- Merged/Closed PR branches can be safely deleted using `scripts/cleanup-merged-branches.ps1` after this triage PR is merged.
-- **DO NOT** delete branches for BLOCKED or REVIEW PRs.
+- **#223:** Bloqueado ate aprovacao humana e Diff Harness real.
+- **#230:** Implementado regex allowlist e constante de modulo. Testes desacoplados.
+- **#227:** Fix de seguranca isolado de artefatos temporarios.
+- **#222:** Aguardando decisao sobre jobs de GUI smoke no Windows.
+- **#235:** Necessita verificar consistencia de schema entre lotes (chunks).
+- **#238:** Lógica de filtragem de valores None/vazios implementada.

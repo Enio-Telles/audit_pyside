@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import subprocess
+import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Optional
@@ -1334,7 +1335,7 @@ class ProcessingPage(BaseWizardPage):
         if not self._output_dir:
             return
         if sys.platform == "win32":
-            # 🛡️ Sentinel: Usar os.startfile em vez de subprocess.run para evitar Command Injection
+            # Usar os.startfile em vez de subprocess.run para evitar Command Injection
             import os
 
             os.startfile(self._output_dir)
