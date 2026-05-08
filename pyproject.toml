@@ -61,7 +61,7 @@ markers = [
     "bench: benchmark tests (run via pytest bench/ --benchmark-only)",
     "diff_harness: testes diferenciais byte-a-byte para invariantes de src/transformacao/",
 ]
-addopts = ["-m", "not oracle and not gui"]
+addopts = ["-m", "not oracle and not gui and not gui_smoke"]
 
 [tool.coverage.run]
 # main_window_impl.py is generated Qt designer output (~4500 stmts); it has 0%
