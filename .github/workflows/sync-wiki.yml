@@ -1,0 +1,44 @@
+name: Sincronizar Wiki
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'docs/wiki/**'
+  workflow_dispatch:
+
+jobs:
+  sync-wiki:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Sincronizar Wiki
+        run: |
+          # Configura identidades
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Clona o repositório da wiki
+          # O GitHub Actions fornece o GITHUB_TOKEN que tem permissão para a wiki se habilitado
+          git clone "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.wiki.git" wiki-repo
+
+          # Copia os arquivos
+          cp docs/wiki/*.md wiki-repo/
+          rm -f wiki-repo/README.md
+
+          # Sincroniza
+          cd wiki-repo
+          if [ -n "$(git status --porcelain)" ]; then
+            git add .
+            git commit -m "docs: sincronizar wiki automagicamente via GitHub Action"
+            git push origin master
+          else
+            echo "Nenhuma mudança para sincronizar."
+          fi

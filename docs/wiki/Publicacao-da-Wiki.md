@@ -1,7 +1,8 @@
 # Como publicar esta Wiki no GitHub
 
 As paginas desta wiki estao versionadas em `docs/wiki/` no repositorio principal.
-Para publica-las na aba Wiki do GitHub, siga os passos abaixo.
+
+A sincronizacao e feita de forma **automatica** via GitHub Actions sempre que houver um push na `main` que altere a pasta `docs/wiki/`.
 
 ## Por que duas copias?
 
@@ -37,12 +38,8 @@ cd wiki-local
 No repositorio principal (`audit_pyside`), apos o merge do PR:
 
 ```bash
-cp docs/wiki/Home.md ../wiki-local/Home.md
-cp docs/wiki/Catalogo-de-Tabelas-e-Campos.md ../wiki-local/
-cp docs/wiki/Tabelas-Base-Campos-e-Formulas.md ../wiki-local/
-cp docs/wiki/Tabelas-de-Agrupamento-Campos-e-Formulas.md ../wiki-local/
-cp docs/wiki/Tabelas-de-Estoque-e-Enriquecimento-Campos-e-Formulas.md ../wiki-local/
-cp docs/wiki/Tabelas-Analiticas-Campos-e-Formulas.md ../wiki-local/
+cp docs/wiki/*.md ../wiki-local/
+rm -f ../wiki-local/README.md  # Opcional: o README do docs/wiki/ costuma ser interno
 ```
 
 ### 4. Fazer commit e push no wiki.git
@@ -64,7 +61,7 @@ Sempre que uma pagina da wiki for atualizada:
 
 1. Editar o arquivo em `docs/wiki/` no repositorio principal
 2. Abrir PR com a mudanca
-3. Apos o merge, copiar o arquivo atualizado para o clone do `wiki.git` e fazer push
+3. Apos o merge na `main`, o workflow `Sincronizar Wiki` cuidara da publicacao.
 
 ## Regra de manutencao
 
