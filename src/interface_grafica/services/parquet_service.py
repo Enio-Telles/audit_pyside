@@ -171,26 +171,27 @@ class ParquetService:
 
     def get_schema(self, parquet_path: Path) -> list[str]:
         inicio = perf_counter()
-        key = self._path_signature(parquet_path)
+        resolved = self._resolve_v2_path(parquet_path)
+        key = self._path_signature(resolved)
         cached = self._schema_cache.get(key)
         if cached is not None:
             registrar_evento_performance(
                 "parquet_service.get_schema",
                 perf_counter() - inicio,
                 {
-                    "parquet_path": parquet_path,
+                    "parquet_path": resolved,
                     "cache_hit": True,
                     "colunas": len(cached),
                 },
             )
             return cached[:]
-        schema = list(pl.read_parquet_schema(parquet_path).names())
+        schema = list(pl.read_parquet_schema(resolved).names())
         self._schema_cache[key] = schema[:]
         registrar_evento_performance(
             "parquet_service.get_schema",
             perf_counter() - inicio,
             {
-                "parquet_path": parquet_path,
+                "parquet_path": resolved,
                 "cache_hit": False,
                 "colunas": len(schema),
             },
