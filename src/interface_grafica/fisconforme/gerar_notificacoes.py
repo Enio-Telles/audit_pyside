@@ -1472,13 +1472,12 @@ def exibir_relatorio_final(resumo: Dict[str, Any]) -> None:
         # Tenta abrir automaticamente no Windows
         try:
             if sys.platform == "win32":
-                # 🛡️ Sentinel: Usar os.startfile em vez de subprocess.run para evitar Command Injection
                 os.startfile(dir_saida)
                 print(f"\n✅ Explorer aberto em: {dir_saida}")
             else:
-                logger.info("Abertura automatica de diretorio so suportada em Windows.")
+                logger.info("Abertura automática de diretório só suportada em Windows.")
         except Exception as e:
-            logger.warning(f"Nao foi possivel abrir o diretorio: {e}")
+            logger.warning(f"Não foi possível abrir o diretório: {e}")
 
     print("\n" + "=" * 70)
     print("Processamento concluído!")
