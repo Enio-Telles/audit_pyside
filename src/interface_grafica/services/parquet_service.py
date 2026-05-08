@@ -64,9 +64,10 @@ class ParquetService:
         "c176_xml_",
     )
 
-    def __init__(self, root: Path = CONSULTAS_ROOT) -> None:
+    def __init__(self, root: Path = CONSULTAS_ROOT, v2_root: Path | None = None) -> None:
         self.root = root
         self.root.mkdir(parents=True, exist_ok=True)
+        self._v2_root = Path(v2_root) if v2_root else None
         self._schema_cache: dict[tuple[str, int, int], list[str]] = {}
         self._count_cache: dict[
             tuple[str, int, int, tuple[tuple[str, str, str], ...]], int
@@ -170,26 +171,27 @@ class ParquetService:
 
     def get_schema(self, parquet_path: Path) -> list[str]:
         inicio = perf_counter()
-        key = self._path_signature(parquet_path)
+        resolved = self._resolve_v2_path(parquet_path)
+        key = self._path_signature(resolved)
         cached = self._schema_cache.get(key)
         if cached is not None:
             registrar_evento_performance(
                 "parquet_service.get_schema",
                 perf_counter() - inicio,
                 {
-                    "parquet_path": parquet_path,
+                    "parquet_path": resolved,
                     "cache_hit": True,
                     "colunas": len(cached),
                 },
             )
             return cached[:]
-        schema = list(pl.read_parquet_schema(parquet_path).names())
+        schema = list(pl.read_parquet_schema(resolved).names())
         self._schema_cache[key] = schema[:]
         registrar_evento_performance(
             "parquet_service.get_schema",
             perf_counter() - inicio,
             {
-                "parquet_path": parquet_path,
+                "parquet_path": resolved,
                 "cache_hit": False,
                 "colunas": len(schema),
             },
@@ -312,12 +314,26 @@ class ParquetService:
             )
         return filtered
 
+    def _resolve_v2_path(self, parquet_path: Path) -> Path:
+        """Retorna caminho v2 se existir, ou o original v1."""
+        if self._v2_root is None:
+            return parquet_path
+        try:
+            rel = parquet_path.relative_to(self.root)
+            v2_candidate = self._v2_root / rel
+            if v2_candidate.exists():
+                return v2_candidate
+        except ValueError:
+            pass
+        return parquet_path
+
     def build_lazyframe(
         self, parquet_path: Path, conditions: Iterable[FilterCondition] | None = None
     ) -> pl.LazyFrame:
-        lf = pl.scan_parquet(parquet_path)
+        resolved = self._resolve_v2_path(parquet_path)
+        lf = pl.scan_parquet(resolved)
         if conditions:
-            schema = pl.read_parquet_schema(parquet_path)
+            schema = pl.read_parquet_schema(resolved)
             lf = self.apply_filters(
                 lf,
                 conditions,

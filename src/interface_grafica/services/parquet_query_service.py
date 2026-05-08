@@ -9,6 +9,7 @@ Regras de roteamento:
 A interface e identica para os dois backends; o chamador nao precisa
 saber qual backend esta ativo.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -41,21 +42,42 @@ class ParquetQueryService:
         polars_service: ParquetService | None = None,
         duckdb_service: DuckDBParquetService | None = None,
         threshold_mb: int = LARGE_PARQUET_THRESHOLD_MB,
+        v2_root: Path | None = None,
     ) -> None:
-        self._polars = polars_service if polars_service is not None else ParquetService()
+        self._polars = (
+            polars_service if polars_service is not None else ParquetService(v2_root=v2_root)
+        )
         self._duckdb = duckdb_service if duckdb_service is not None else DuckDBParquetService()
         self._threshold_bytes = threshold_mb * 1024 * 1024
+        self._v2_root = Path(v2_root) if v2_root else None
 
     # ------------------------------------------------------------------
     # Roteamento
     # ------------------------------------------------------------------
 
+    def _resolve_v2_path(self, path: Path) -> Path:
+        """Retorna o path v2 side-by-side quando configurado e existente."""
+        if self._v2_root is None:
+            return path
+        root = getattr(self._polars, "root", None)
+        if root is None:
+            return path
+        try:
+            rel = path.relative_to(root)
+        except ValueError:
+            return path
+        candidate = self._v2_root / rel
+        if candidate.exists():
+            return candidate
+        return path
+
     def usa_duckdb(self, path: Path) -> bool:
         """Retorna True se o caminho deve ser consultado via DuckDB."""
-        if path.is_dir():
+        resolved = self._resolve_v2_path(path)
+        if resolved.is_dir():
             return True
         try:
-            return path.stat().st_size > self._threshold_bytes
+            return resolved.stat().st_size > self._threshold_bytes
         except OSError:
             return False
 
@@ -65,8 +87,9 @@ class ParquetQueryService:
 
     def get_schema(self, path: Path) -> list[str]:
         """Retorna lista de nomes de colunas."""
-        if self.usa_duckdb(path):
-            return self._duckdb.get_schema(path)
+        resolved = self._resolve_v2_path(path)
+        if self.usa_duckdb(resolved):
+            return self._duckdb.get_schema(resolved)
         return self._polars.get_schema(path)
 
     def get_count(
@@ -75,8 +98,9 @@ class ParquetQueryService:
         filters: list[FilterCondition] | None = None,
     ) -> int:
         """Total de linhas com filtros opcionais."""
-        if self.usa_duckdb(path):
-            return self._duckdb.get_count(path, filters)
+        resolved = self._resolve_v2_path(path)
+        if self.usa_duckdb(resolved):
+            return self._duckdb.get_count(resolved, filters)
         lf = self._polars.build_lazyframe(path, filters)
         return int(lf.select(pl.len()).collect().item())
 
@@ -91,9 +115,10 @@ class ParquetQueryService:
         sort_desc: bool = False,
     ) -> PageResult:
         """Pagina de dados com projection pushdown e sort opcional."""
-        if self.usa_duckdb(path):
+        resolved = self._resolve_v2_path(path)
+        if self.usa_duckdb(resolved):
             return self._duckdb.get_page(
-                path, filters, visible_columns, page, page_size, sort_by, sort_desc
+                resolved, filters, visible_columns, page, page_size, sort_by, sort_desc
             )
         return self._polars.get_page(
             path, filters or [], visible_columns, page, page_size, sort_by, sort_desc
@@ -112,8 +137,9 @@ class ParquetQueryService:
         Para arquivos pequenos usa Polars scan_parquet.
         Para arquivos grandes / diretorios usa DuckDB.
         """
-        if self.usa_duckdb(path):
-            return self._duckdb.get_distinct_values(path, column, search, limit)
+        resolved = self._resolve_v2_path(path)
+        if self.usa_duckdb(resolved):
+            return self._duckdb.get_distinct_values(resolved, column, search, limit)
         return self._get_distinct_polars(path, column, search, limit)
 
     def export_to_parquet(
@@ -124,8 +150,9 @@ class ParquetQueryService:
         target: Path,
     ) -> None:
         """Exporta recorte filtrado para Parquet."""
-        if self.usa_duckdb(path):
-            self._duckdb.export_query_to_parquet(path, filters, columns, target)
+        resolved = self._resolve_v2_path(path)
+        if self.usa_duckdb(resolved):
+            self._duckdb.export_query_to_parquet(resolved, filters, columns, target)
             return
         df = self._polars.load_dataset(path, filters or [], columns)
         self._polars.save_dataset(target, df)
@@ -138,8 +165,9 @@ class ParquetQueryService:
         target: Path,
     ) -> None:
         """Exporta recorte filtrado para CSV com separador ponto-e-virgula."""
-        if self.usa_duckdb(path):
-            self._duckdb.export_query_to_csv(path, filters, columns, target)
+        resolved = self._resolve_v2_path(path)
+        if self.usa_duckdb(resolved):
+            self._duckdb.export_query_to_csv(resolved, filters, columns, target)
             return
         df = self._polars.load_dataset(path, filters or [], columns)
         target.parent.mkdir(parents=True, exist_ok=True)

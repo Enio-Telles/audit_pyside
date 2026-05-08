@@ -8,6 +8,16 @@ on:
       - master
 
 jobs:
+  check-forbidden-files:
+    name: Check for forbidden files
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run check script
+        run: python scripts/check_forbidden_files.py
+
   lint:
     name: Lint and type check
     runs-on: ubuntu-latest
@@ -99,12 +109,10 @@ jobs:
             libxkbcommon-x11-0 libfontconfig1 libfreetype6
 
       - name: Install dependencies
-        run: |
-          uv sync --group dev
-          uv pip install pytest-qt
+        run: uv sync --group dev --group test-gui
 
-      - name: Run GUI smoke test
-        run: uv run pytest -q -m gui_smoke tests/ui/test_main_window_smoke.py
+      - name: Run GUI smoke tests
+        run: uv run pytest -q -m "gui or gui_smoke" tests/ui/
 
   test-windows:
     name: Test Windows

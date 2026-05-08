@@ -3,7 +3,10 @@ name: Differential Harness
 on:
   pull_request:
     paths:
+      - "src/io/**"
       - "src/transformacao/**"
+      - "tests/diff_harness/**"
+      - "ref/fiscal_codes_*.json"
 
 jobs:
   diff-harness:
@@ -24,6 +27,9 @@ jobs:
 
       - name: Rodar diff_harness
         run: uv run pytest -m diff_harness -q --tb=short
+
+      - name: Rodar validacao sintetica de categorical migration
+        run: uv run pytest tests/diff_harness/test_categorical_migration.py --diff-harness-synthetic -q --tb=short
 
   check-readonly-label:
     name: Verificar label differential-validated para arquivos read-only
