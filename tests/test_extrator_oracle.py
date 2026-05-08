@@ -84,18 +84,23 @@ def test_valor_filtro_bind_parameter(mock_extrator):
     mock_cursor = MagicMock()
     # Mocking cursor used in context manager: with conn.cursor() as cursor
     mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
-    mock_conn.__enter__.return_value = mock_conn # for 'with self.obter_conexao() as conn'
+    mock_conn.__enter__.return_value = mock_conn  # for 'with self.obter_conexao() as conn'
     mock_extrator.obter_conexao = MagicMock(return_value=mock_conn)
 
     # Mock _gravar_cursor_em_parquet para evitar escrita real e garantir que caia no else
-    with patch("interface_grafica.fisconforme.extrator_oracle._gravar_cursor_em_parquet", new=MagicMock()) as mock_gravar:
+    with patch(
+        "interface_grafica.fisconforme.extrator_oracle._gravar_cursor_em_parquet", new=MagicMock()
+    ) as mock_gravar:
         # We need to ensure _gravar_cursor_em_parquet is NOT None inside the module
         import interface_grafica.fisconforme.extrator_oracle as eo
+
         with patch.object(eo, "_gravar_cursor_em_parquet", mock_gravar):
             with patch.object(mock_extrator, "_validar_parquet", return_value=True):
                 # Desabilitar retry para facilitar teste
                 with patch.object(mock_extrator, "MAX_TENTATIVAS", 1):
-                    mock_extrator.extrair_tabela("SCHEMA", "TABELA", "COLUNA", "valor_sensivel' OR 1=1")
+                    mock_extrator.extrair_tabela(
+                        "SCHEMA", "TABELA", "COLUNA", "valor_sensivel' OR 1=1"
+                    )
 
     # Verifica se o cursor.execute foi chamado com o bind :valor e se o valor foi passado
     # Pode ser chamado via cursor.execute(sql, params)
