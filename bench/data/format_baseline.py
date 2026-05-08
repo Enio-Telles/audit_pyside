@@ -1,69 +1,40 @@
-import json
+import json, sys
 from pathlib import Path
-
 
 def format_report():
     json_path = Path("docs/baseline_performance.json")
     if not json_path.exists():
-        print("Erro: docs/baseline_performance.json não encontrado.")
-        return
-
-    with open(json_path, "r") as f:
-        data = json.load(f)
-
-    results = data.get("results", [])
-
-    print("# Baseline de Performance (Arquivos Sintéticos)")
-    print()
-    print(
-        "Este relatório apresenta as medições de baseline para operações comuns na GUI utilizando diferentes tamanhos de arquivos Parquet sintéticos."
-    )
-    print()
-    print("## Ambiente")
-    print(f"- Data: {data['meta'].get('timestamp', 'N/A')}")
-    print(f"- Python: {data['meta'].get('python', 'N/A')}")
-    print()
-    print("## Resultados das Medições")
-    print()
-    print("| Tamanho (MB) | Operação | Backend | P95 Time (s) | RSS Delta (MB) |")
-    print("|---|---|---|---|---|")
-
+        print(f"Erro: {json_path} não encontrado."); sys.exit(1)
+    data = json.loads(json_path.read_text(encoding="utf-8"))
+    meta, results = data.get("meta", {}), data.get("results", [])
+    output = ["# Baseline de Performance (Arquivos Sintéticos)", ""]
+    if meta.get("is_proxy"):
+        output.append("> **Nota:** Esta execução foi marcada como **PROXY**.\n")
+    output.append("Este relatório apresenta medições de baseline para operações comuns na GUI (fixtures conforme política D4).\n")
+    output.append("## Ambiente")
+    for k, v in [("Data", "timestamp"), ("SO", "os"), ("CPU", "cpu"), ("RAM", "ram_gb"), ("Python", "python"), ("Polars", "polars_version"), ("DuckDB", "duckdb_version"), ("PyArrow", "pyarrow_version"), ("Rounds", "rounds")]:
+        output.append(f"- **{k}:** {meta.get(v, 'N/A')}{' GB' if k=='RAM' else ''}")
+    output.append("\n## Resultados das Medições\n")
+    output.append("| Tamanho (MB) | Operação | Backend | Mean (s) | P95 (s) | RSS Delta | CV% |")
+    output.append("|---|---|---|---|---|---|---|")
     for r in results:
-        print(
-            f"| {r['size_mb']} | {r['operation']} | {r['backend']} | {r['p95_s']:.3f}s | {r['mean_rss_delta_mb']:+.1f} MB |"
-        )
-
-    print()
-    print("## Resumo por Tamanho")
-    print()
-
+        p95 = r.get("p95_s"); p95_s = f"{p95:.3f}s" if p95 is not None else "N/A"
+        output.append(f"| {r['size_mb']} | {r['operation']} | {r['backend']} | {r['mean_s']:.3f}s | {p95_s} | {r['mean_rss_delta_mb']:+.1f} MB | {r['cv_pct']}% |")
+    output.append("\n## Resumo por Tamanho\n")
     sizes = sorted(list(set(r["size_mb"] for r in results)))
     for size in sizes:
-        print(f"### Arquivo de {size} MB")
-        print("| KPI | Meta | P95 Medido | Resultado |")
-        print("|---|---|---|---|")
-
+        output.append(f"### Arquivo de {size} MB")
+        output.append("| KPI | Meta | Valor (P95/Mean) | Resultado |")
+        output.append("|---|---|---|---|")
         for r in [res for res in results if res["size_mb"] == size]:
-            meta = ""
-            status = ""
-            if r["operation"] == "ttfp":
-                meta = "<= 5.0s"
-                status = "[PASS]" if r["p95_s"] <= 5.0 else "[FAIL]"
-                print(f"| TTFP | {meta} | {r['p95_s']:.3f}s | {status} |")
-            elif r["operation"] == "page_change":
-                meta = "<= 2.0s"
-                status = "[PASS]" if r["p95_s"] <= 2.0 else "[FAIL]"
-                print(f"| Page Change | {meta} | {r['p95_s']:.3f}s | {status} |")
-            elif r["operation"] == "filter_apply":
-                meta = "<= 5.0s"
-                status = "[PASS]" if r["p95_s"] <= 5.0 else "[FAIL]"
-                print(f"| Filter Apply | {meta} | {r['p95_s']:.3f}s | {status} |")
-            elif r["operation"] == "export_50k":
-                meta = "N/A"
-                status = "-"
-                print(f"| Export 50k rows | {meta} | {r['p95_s']:.3f}s | {status} |")
-        print()
+            p95_v = r.get("p95_s"); val = p95_v if p95_v is not None else r["mean_s"]
+            m_map = {"ttfp": ("TTFP", 5.0), "page_2": ("Page Change (p2)", 2.0), "filter_apply": ("Filter Apply", 5.0), "distinct": ("Distinct Values", 1.0), "export_50k": ("Export 50k rows", 2.0)}
+            if r["operation"] in m_map:
+                name, limit = m_map[r["operation"]]
+                status = "[PASS]" if val <= limit else "[FAIL]"
+                output.append(f"| {name} | <= {limit}s | {val:.3f}s | {status} |")
+        output.append("")
+    Path("docs/baseline_performance.md").write_text("\n".join(output), encoding="utf-8")
+    print("Relatório docs/baseline_performance.md atualizado.")
 
-
-if __name__ == "__main__":
-    format_report()
+if __name__ == "__main__": format_report()
