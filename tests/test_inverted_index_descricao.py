@@ -64,9 +64,13 @@ def test_funcao_publica_standalone():
 
 
 def test_dataframe_vazio():
-    df = pl.DataFrame({"descr_padrao": []})
+    df = pl.DataFrame({"descr_padrao": []}, schema={"descr_padrao": pl.Utf8})
     out = ordenar_blocos_apenas_por_descricao(df)
     assert out.height == 0
+    assert "sim_bloco" in out.columns
+    assert "sim_motivo" in out.columns
+    assert "sim_camada" in out.columns
+    assert "sim_desc_norm" in out.columns
 
 
 def test_lista_de_uma_unica_linha():
