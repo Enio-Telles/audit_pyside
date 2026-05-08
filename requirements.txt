@@ -1,0 +1,4 @@
+# DEPRECATED: Dependências migradas para pyproject.toml
+# Este arquivo é mantido apenas como sentinela para ferramentas legacy.
+# Use: uv sync
+# Ou: pip install -e ".[dev]"
