@@ -13,6 +13,7 @@ Autor: Gerado automaticamente
 Data: 2026-04-01
 """
 
+import os
 import sys
 import logging
 from pathlib import Path
@@ -111,11 +112,15 @@ def formatar_tabela_html(dados: List[Dict[str, Any]]) -> str:
     }
 
     # Filtra os dados para incluir apenas as colunas permitidas
+    # e garante que pelo menos um valor seja util (nao-None e nao-vazio)
     dados_filtrados = []
+    colunas_encontradas = set()
+
     for linha in dados:
         linha_filtrada = {}
+        tem_valor_util = False
         for chave_origem, nome_coluna in mapeamento.items():
-            # Busca case-insensitive no dicionário de dados
+            # Busca case-insensitive no dicionario de dados
             valor_encontrado = None
             for k, v in linha.items():
                 if k.upper() == chave_origem.upper():
@@ -123,16 +128,20 @@ def formatar_tabela_html(dados: List[Dict[str, Any]]) -> str:
                     break
 
             if valor_encontrado is not None:
+                str_val = str(valor_encontrado).strip()
+                if str_val:
+                    tem_valor_util = True
                 linha_filtrada[nome_coluna] = valor_encontrado
+                colunas_encontradas.add(nome_coluna)
 
-        if linha_filtrada:
+        if tem_valor_util:
             dados_filtrados.append(linha_filtrada)
 
     if not dados_filtrados:
-        return "<p>Nenhuma pendência encontrada.</p>"
+        return "<p>Nenhuma pendencia encontrada.</p>"
 
-    # Usa as colunas que efetivamente existem nos dados filtrados
-    colunas = list(dados_filtrados[0].keys())
+    # Mantem a ordem do mapeamento para as colunas que apareceram
+    colunas = [c for c in mapeamento.values() if c in colunas_encontradas]
 
     # Constrói o HTML da tabela
     html_lines = [
@@ -1484,12 +1493,14 @@ def exibir_relatorio_final(resumo: Dict[str, Any]) -> None:
 
         # Tenta abrir automaticamente no Windows
         try:
-            import subprocess
-
-            subprocess.run(["explorer", str(dir_saida)], check=False)
-            print(f"\n✅ Explorer aberto em: {dir_saida}")
+            if sys.platform == "win32":
+                # Usar os.startfile em vez de subprocess.run para evitar Command Injection
+                os.startfile(dir_saida)
+                print(f"\nExplorer aberto em: {dir_saida}")
+            else:
+                logger.info("Abertura automatica de diretorio so suportada em Windows.")
         except Exception as e:
-            logger.warning(f"Não foi possível abrir o explorer: {e}")
+            logger.warning(f"Nao foi possivel abrir o diretorio: {e}")
 
     print("\n" + "=" * 70)
     print("Processamento concluído!")

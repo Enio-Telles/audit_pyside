@@ -22,6 +22,17 @@ from utilitarios.sql_catalog import list_sql_entries, resolve_sql_path
 WIDGET_DATE = "date"
 WIDGET_TEXT = "text"
 
+# Allowlist restrita para identificadores Oracle (schema, tabela, coluna)
+# onde bind variables nao podem ser usadas. Suporta alfanumerico, _, $, #.
+ORACLE_IDENTIFIER_ALLOWED = re.compile(r"^[a-zA-Z0-9_$#]+$")
+
+
+def validate_oracle_identifier(identifier: str) -> str:
+    """Valida identificador Oracle contra injecao de SQL; retorna o proprio se OK."""
+    if not identifier or not ORACLE_IDENTIFIER_ALLOWED.match(identifier):
+        raise ValueError(f"Identificador Oracle invalido ou malicioso: {identifier!r}")
+    return identifier
+
 
 @dataclass
 class ParamInfo:

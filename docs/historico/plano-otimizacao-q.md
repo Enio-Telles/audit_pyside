@@ -1,7 +1,7 @@
 # Plano de Otimização — Fiscal Parquet Analyzer
 
-> **Data:** 07/04/2026  
-> **Objetivo:** Melhorar performance, manutenibilidade e confiabilidade do projeto  
+> **Data:** 07/04/2026
+> **Objetivo:** Melhorar performance, manutenibilidade e confiabilidade do projeto
 > **Escopo:** ETL Python/Polars, Backend FastAPI, Frontend React, Infraestrutura
 
 ---
@@ -87,8 +87,8 @@
 
 ### T01: Substituir `sys.exit(1)` por `RuntimeError`
 
-**Status:** 🔴 Crítico  
-**Local:** Múltiplos módulos ETL  
+**Status:** 🔴 Crítico
+**Local:** Múltiplos módulos ETL
 **Impacto:** Backend crasha ao importar módulos
 
 **Problema:**
@@ -128,8 +128,8 @@ except ImportError as e:
 
 ### T02: Criar `backend/routers/_common.py`
 
-**Status:** 🔴 Crítico  
-**Local:** `backend/routers/`  
+**Status:** 🔴 Crítico
+**Local:** `backend/routers/`
 **Impacto:** -30% código duplicado nos routers
 
 **Problema:** 4 routers têm implementações idênticas de `_sanitize`, `_safe_value`, `_df_to_response`.
@@ -173,8 +173,8 @@ def df_to_response(df, page: int, page_size: int, colunas: list[str] | None = No
 
 ### T03: Resolver concorrência em `patch_fatores_conversao`
 
-**Status:** 🔴 Crítico  
-**Local:** `backend/routers/estoque.py`  
+**Status:** 🔴 Crítico
+**Local:** `backend/routers/estoque.py`
 **Impacto:** Corrupção de dados em requisições simultâneas
 
 **Problema:**
@@ -204,8 +204,8 @@ def patch_fatores_conversao(cnpj: str, ...):
 
 ### T04/T05: Vetorizar `map_elements` em cálculos mensais/anuais
 
-**Status:** 🟡 Alto Impacto  
-**Local:** `calculos_mensais.py`, `calculos_anuais.py`  
+**Status:** 🟡 Alto Impacto
+**Local:** `calculos_mensais.py`, `calculos_anuais.py`
 **Impacto:** 3-5x mais rápido em datasets grandes
 
 **Problema:**
@@ -238,8 +238,8 @@ df = df.with_columns(
 
 ### T06: Unificar normalização de descrição
 
-**Status:** 🟡 Alto Impacto  
-**Local:** 7+ arquivos  
+**Status:** 🟡 Alto Impacto
+**Local:** 7+ arquivos
 **Impacto:** -200 linhas duplicadas
 
 **Problema:** 7 implementações quase idênticas de `_normalizar_descricao_expr`:
@@ -261,7 +261,7 @@ def normalizar_descricao_expr(col_name: str, alias: str | None = None) -> pl.Exp
     """Expressão Polars para normalizar descrições (remove acentos, lowercase, etc.)"""
     col = pl.col(col_name)
     alias_name = alias or f"{col_name}_normalizado"
-    
+
     return (
         col.cast(pl.Utf8)
         .str.to_lowercase()
@@ -284,8 +284,8 @@ def normalizar_descricao_expr(col_name: str, alias: str | None = None) -> pl.Exp
 
 ### T07: Criar `src/utilitarios/polars_utils.py`
 
-**Status:** 🟡 Alto Impacto  
-**Local:** Novo arquivo  
+**Status:** 🟡 Alto Impacto
+**Local:** Novo arquivo
 **Impacto:** -150 linhas duplicadas, consistência
 
 **Funções a incluir:**
@@ -303,8 +303,8 @@ def normalizar_descricao_expr(col_name: str, alias: str | None = None) -> pl.Exp
 
 ### T08: Migrar `read_parquet` para `scan_parquet`
 
-**Status:** 🟡 Alto Impacto  
-**Local:** 8+ arquivos  
+**Status:** 🟡 Alto Impacto
+**Local:** 8+ arquivos
 **Impacto:** -60% memória em datasets grandes
 
 **Problema:** `read_parquet` carrega tudo na memória antes de filtrar.
@@ -337,8 +337,8 @@ df = lf.collect()  # Só após filtros
 
 ### T09: Remover acoplamento backend → interface_grafica
 
-**Status:** 🟡 Alto Impacto  
-**Local:** `backend/routers/pipeline.py`  
+**Status:** 🟡 Alto Impacto
+**Local:** `backend/routers/pipeline.py`
 **Impacto:** Arquitetura limpa, testes independentes
 
 **Problema:**
@@ -360,8 +360,8 @@ from interface_grafica.config import CNPJ_ROOT
 
 ### T10: Vetorizar `map_elements` em `fatores_conversao.py`
 
-**Status:** 🟡 Alto Impacto  
-**Local:** `rastreabilidade_produtos/fatores_conversao.py`  
+**Status:** 🟡 Alto Impacto
+**Local:** `rastreabilidade_produtos/fatores_conversao.py`
 **Impacto:** 2-3x mais rápido em reconciliação
 
 **Problema:** Múltiplos `map_elements` para normalização e reconciliação de overrides.
@@ -374,8 +374,8 @@ from interface_grafica.config import CNPJ_ROOT
 
 ### T11: Otimizar similaridade de descrição em `c170_xml.py`
 
-**Status:** 🟡 Alto Impacto  
-**Local:** `movimentacao_estoque_pkg/c170_xml.py`  
+**Status:** 🟡 Alto Impacto
+**Local:** `movimentacao_estoque_pkg/c170_xml.py`
 **Impacto:** Evita OOM em notas com muitos itens
 
 **Problema:** Produto cartesiano C170 × XML itens × similaridade Python.
@@ -391,8 +391,8 @@ from interface_grafica.config import CNPJ_ROOT
 
 ### T12: Validação de CNPJ em todos os routers
 
-**Status:** 🟡 Alto Impacto  
-**Local:** Todos os routers  
+**Status:** 🟡 Alto Impacto
+**Local:** Todos os routers
 **Impacto:** Erros 400 em vez de 500 silenciosos
 
 **Solução:** Usar `sanitize_cnpj()` do `_common.py` (T02) com validação:
@@ -410,8 +410,8 @@ def get_estoque(cnpj: str):
 
 ### T13: Consolidar proxies de compatibilidade
 
-**Status:** 🟢 Médio  
-**Local:** `src/transformacao/*.py`  
+**Status:** 🟢 Médio
+**Local:** `src/transformacao/*.py`
 **Impacto:** Robustez, clareza
 
 **Problema:** Proxies usam `importlib.util.spec_from_file_location` (frágil).
@@ -432,8 +432,8 @@ def gerar_item_unidades(cnpj: str) -> bool:
 
 ### T14: Cache para tabelas de referência
 
-**Status:** 🟢 Médio  
-**Local:** Múltiplos módulos  
+**Status:** 🟢 Médio
+**Local:** Múltiplos módulos
 **Impacto:** -30% I/O em pipelines multi-CNPJ
 
 **Solução:** Singleton com `functools.lru_cache` ou cache em módulo:
@@ -452,8 +452,8 @@ def carregar_co_sefin() -> pl.DataFrame:
 
 ### T15: Mover `map_estoque.json`
 
-**Status:** 🟢 Médio  
-**Local:** Raiz → `dados/referencias/`  
+**Status:** 🟢 Médio
+**Local:** Raiz → `dados/referencias/`
 **Impacto:** Organização
 
 **Estimativa:** 30 minutos
@@ -462,8 +462,8 @@ def carregar_co_sefin() -> pl.DataFrame:
 
 ### T16: Adicionar type hints
 
-**Status:** 🟢 Médio  
-**Local:** Utilitários sem tipagem  
+**Status:** 🟢 Médio
+**Local:** Utilitários sem tipagem
 **Impacto:** Melhor IDE, menos bugs
 
 **Arquivos:**
@@ -478,8 +478,8 @@ def carregar_co_sefin() -> pl.DataFrame:
 
 ### T17: Middleware de erros FastAPI
 
-**Status:** 🟢 Médio  
-**Local:** `backend/main.py`  
+**Status:** 🟢 Médio
+**Local:** `backend/main.py`
 **Impacto:** Respostas de erro padronizadas
 
 **Solução:**
@@ -499,8 +499,8 @@ async def global_exception_handler(request, exc):
 
 ### T18: Refatorar `fatores_conversao.py`
 
-**Status:** 🟢 Médio  
-**Local:** `rastreabilidade_produtos/fatores_conversao.py` (777 linhas)  
+**Status:** 🟢 Médio
+**Local:** `rastreabilidade_produtos/fatores_conversao.py` (777 linhas)
 **Impacto:** Manutenibilidade
 
 **Estrutura proposta:**
@@ -519,8 +519,8 @@ fatores_conversao/
 
 ### T19: Substituir `print` por `logging`
 
-**Status:** 🟢 Médio  
-**Local:** `salvar_para_parquet.py`, módulos diversos  
+**Status:** 🟢 Médio
+**Local:** `salvar_para_parquet.py`, módulos diversos
 **Impacto:** Logs estruturados, debugging
 
 **Estimativa:** 2 horas
@@ -529,8 +529,8 @@ fatores_conversao/
 
 ### T20: Otimizar `to_dicts()` nos routers
 
-**Status:** 🟢 Médio  
-**Local:** Todos os routers  
+**Status:** 🟢 Médio
+**Local:** Todos os routers
 **Impacto:** -40% tempo de serialização
 
 **Problema:**
@@ -551,8 +551,8 @@ result = json.loads(df.write_json())
 
 ### T21: Remover Oracle host hardcoded
 
-**Status:** 🔵 Baixo  
-**Local:** `src/utilitarios/conectar_oracle.py`  
+**Status:** 🔵 Baixo
+**Local:** `src/utilitarios/conectar_oracle.py`
 **Impacto:** Segurança
 
 **Solução:** Exigir variável de ambiente, sem fallback:
@@ -569,8 +569,8 @@ if not HOST:
 
 ### T22: Adicionar `.env.example`
 
-**Status:** 🔵 Baixo  
-**Local:** Raiz do projeto  
+**Status:** 🔵 Baixo
+**Local:** Raiz do projeto
 **Impacto:** Onboarding
 
 **Conteúdo:**
@@ -588,8 +588,8 @@ ORACLE_PASSWORD=
 
 ### T23/T24: Criar Dockerfiles
 
-**Status:** 🔵 Baixo  
-**Local:** `backend/Dockerfile`, `frontend/Dockerfile`  
+**Status:** 🔵 Baixo
+**Local:** `backend/Dockerfile`, `frontend/Dockerfile`
 **Impacto:** Deploy consistente
 
 **Estimativa:** 4 horas
@@ -598,8 +598,8 @@ ORACLE_PASSWORD=
 
 ### T25: Configurar CI com GitHub Actions
 
-**Status:** 🔵 Baixo  
-**Local:** `.github/workflows/ci.yml`  
+**Status:** 🔵 Baixo
+**Local:** `.github/workflows/ci.yml`
 **Impacto:** Qualidade automática
 
 **Pipeline:**
@@ -626,8 +626,8 @@ jobs:
 
 ### T26: Métricas de performance no pipeline
 
-**Status:** 🔵 Baixo  
-**Local:** `src/utilitarios/perf_monitor.py`  
+**Status:** 🔵 Baixo
+**Local:** `src/utilitarios/perf_monitor.py`
 **Impacto:** Visibilidade
 
 **Solução:** Salvar métricas em JSON por execução:
@@ -649,8 +649,8 @@ jobs:
 
 ### T27: Dashboard de fallback de preço
 
-**Status:** 🔵 Baixo  
-**Local:** Frontend + Backend  
+**Status:** 🔵 Baixo
+**Local:** Frontend + Backend
 **Impacto:** Visibilidade de dados faltantes
 
 **Solução:** Endpoint `/api/parquet/fallbacks/{cnpj}` + tab no frontend.
@@ -661,8 +661,8 @@ jobs:
 
 ### T28: Virtualizar listas longas
 
-**Status:** 🔵 Baixo  
-**Local:** Frontend (`DataTable.tsx`)  
+**Status:** 🔵 Baixo
+**Local:** Frontend (`DataTable.tsx`)
 **Impacto:** Performance em tabelas >10k linhas
 
 **Solução:** `@tanstack/react-virtual` para renderização virtualizada.
@@ -673,8 +673,8 @@ jobs:
 
 ### T29: Retry logic no frontend
 
-**Status:** 🔵 Baixo  
-**Local:** `frontend/src/api/client.ts`  
+**Status:** 🔵 Baixo
+**Local:** `frontend/src/api/client.ts`
 **Impacto:** Resiliência
 
 **Solução:**
@@ -694,8 +694,8 @@ axiosRetry(apiClient, {
 
 ### T30: Otimizar `map_groups` em `calculo_saldos.py`
 
-**Status:** 🔵 Baixo  
-**Local:** `movimentacao_estoque_pkg/calculo_saldos.py`  
+**Status:** 🔵 Baixo
+**Local:** `movimentacao_estoque_pkg/calculo_saldos.py`
 **Impacto:** Performance
 
 **Solução:** Explorar `cum_sum` com correções condicionais:

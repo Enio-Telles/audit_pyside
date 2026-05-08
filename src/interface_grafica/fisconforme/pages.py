@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import subprocess
+import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Optional
@@ -1333,7 +1334,13 @@ class ProcessingPage(BaseWizardPage):
     def _open_output_folder(self):
         if not self._output_dir:
             return
-        subprocess.run(["explorer", str(self._output_dir)], check=False)
+        if sys.platform == "win32":
+            # Usar os.startfile em vez de subprocess.run para evitar Command Injection
+            import os
+
+            os.startfile(self._output_dir)
+        else:
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(self._output_dir)))
 
     def _prompt_next_action(self):
         msg = QMessageBox(self)
