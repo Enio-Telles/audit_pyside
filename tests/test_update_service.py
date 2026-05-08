@@ -2,8 +2,18 @@ import sys
 import pytest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
-from interface_grafica.services.update_service import UpdateWorker, UpdateService, ReleaseInfo
-from PySide6.QtNetwork import QNetworkReply
+
+pytest.importorskip("PySide6")
+
+import os
+if sys.platform == 'win32' and os.getenv('GITHUB_ACTIONS'):
+    pytest.skip("Skiping UI tests on CI Windows due to missing DLLs", allow_module_level=True)
+
+try:
+    from interface_grafica.services.update_service import UpdateWorker, UpdateService, ReleaseInfo
+    from PySide6.QtNetwork import QNetworkReply
+except ImportError as exc:
+    pytest.skip(f"PySide6 indisponível neste ambiente: {exc}", allow_module_level=True)
 
 @pytest.fixture
 def mock_frozen_windows():
