@@ -443,10 +443,8 @@ class TestEficienciaTempo:
         fator_tempo = t_grande / t_pequeno if t_pequeno > 0 else 10.0
         print(f"\n  50k linhas: {t_pequeno:.3f}s, 500k linhas: {t_grande:.3f}s, fator: {fator_tempo:.1f}x")
         # 10x mais linhas nao deve levar a mais de 8x mais tempo (sublinear)
-        # On CI Windows environments, perf scaling can be noisy.
-        # We relax the strict sublinear limit from 8x to 12x to avoid flaky CI failures.
-        assert fator_tempo < 12.0, (
-            f"Tempo cresceu {fator_tempo:.1f}x para 10x mais linhas — esperado < 12x"
+        assert fator_tempo < 8.0, (
+            f"Tempo cresceu {fator_tempo:.1f}x para 10x mais linhas — esperado < 8x"
         )
 
 

@@ -5,6 +5,10 @@ from unittest.mock import MagicMock, patch
 
 pytest.importorskip("PySide6")
 
+import os
+if sys.platform == 'win32' and os.getenv('GITHUB_ACTIONS'):
+    pytest.skip("Skiping UI tests on CI Windows due to missing DLLs", allow_module_level=True)
+
 try:
     from interface_grafica.services.update_service import UpdateWorker, UpdateService, ReleaseInfo
     from PySide6.QtNetwork import QNetworkReply
