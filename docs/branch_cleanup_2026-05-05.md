@@ -1,6 +1,6 @@
 # Branch cleanup 2026-05-05
 
-Análise de branches obsoletas identificadas em 2026-05-05.
+Analise de branches obsoletas identificadas em 2026-05-05.
 
 ## Candidatos identificados para remoção
 

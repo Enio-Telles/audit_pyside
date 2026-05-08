@@ -15,7 +15,7 @@ Cleanup de 6 branches stale que nao tinham PR ativa ou conteudo novo relevante.
 ## Dry-run do cleanup_stale_branches.py
 
 O script mostrou 17 candidatas (incluindo branches ativas como #173, #176, main-remote-backup).
-As 6 branches acima foram deletadas diretamente via `git push origin --delete` para evitar deleções inadvertidas.
+As 6 branches acima foram deletadas diretamente via `git push origin --delete` para evitar delecoes inadvertidas.
 
 ## Branches preservadas (verificadas)
 
