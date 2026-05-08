@@ -7,6 +7,14 @@ on:
       - "ref/fiscal_codes_*.json"
       - "src/io/**"
       - ".github/workflows/perf-gates.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "bench/**"
+      - "ref/fiscal_codes_*.json"
+      - "src/io/**"
+      - ".github/workflows/perf-gates.yml"
   workflow_dispatch:
 
 concurrency:
@@ -37,7 +45,7 @@ jobs:
     name: Comparar fixture committed
     runs-on: ubuntu-latest
     needs: smoke
-    if: |
+    if: >-
       hashFiles('tests/fixtures/perf_sample.parquet') != '' &&
       hashFiles('bench/results/baseline_committed.json') != ''
     steps:
