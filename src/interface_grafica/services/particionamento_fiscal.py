@@ -9,6 +9,7 @@ Filosofia: 'ordenar != agrupar'. Esta funcao apenas reorganiza o
 DataFrame e adiciona colunas indicadoras. Nao agrega, nao salva
 arquivos e nao altera identificadores fiscais.
 """
+
 from __future__ import annotations
 
 from collections import defaultdict
@@ -26,8 +27,12 @@ _LOG = structlog.get_logger(__name__)
 
 
 COLUNAS_DESCRICAO = [
-    "descr_padrao", "descricao_normalizada", "descricao",
-    "descricao_final", "lista_descricoes", "lista_itens_agrupados",
+    "descr_padrao",
+    "descricao_normalizada",
+    "descricao",
+    "descricao_final",
+    "lista_descricoes",
+    "lista_itens_agrupados",
 ]
 ALIASES_NCM = ["ncm_padrao", "NCM_padrao", "lista_ncm", "ncm_final", "ncm"]
 ALIASES_CEST = ["cest_padrao", "CEST_padrao", "lista_cest", "cest_final", "cest"]
@@ -86,7 +91,8 @@ def _resolver_coluna(df: pl.DataFrame, aliases: list[str]) -> str | None:
     for alias in aliases:
         if alias in cols:
             return alias
-    norm = lambda s: (remove_accents(s) or "").lower().strip()
+    def norm(s):
+        return (remove_accents(s) or "").lower().strip()
     cols_norm = {norm(c): c for c in cols}
     for alias in aliases:
         col = cols_norm.get(norm(alias))
@@ -96,10 +102,28 @@ def _resolver_coluna(df: pl.DataFrame, aliases: list[str]) -> str | None:
 
 
 def _tokens_fortes(texto: str) -> frozenset[str]:
-    STOP = frozenset({
-        "DE", "DA", "DO", "DAS", "DOS", "COM", "PARA", "POR", "EM",
-        "NA", "NO", "NAS", "NOS", "UN", "UND", "UNID", "PCT", "CX",
-    })
+    STOP = frozenset(
+        {
+            "DE",
+            "DA",
+            "DO",
+            "DAS",
+            "DOS",
+            "COM",
+            "PARA",
+            "POR",
+            "EM",
+            "NA",
+            "NO",
+            "NAS",
+            "NOS",
+            "UN",
+            "UND",
+            "UNID",
+            "PCT",
+            "CX",
+        }
+    )
     out: set[str] = set()
     for tok in re.split(r"\s+", texto or ""):
         if len(tok) < 3:
@@ -219,7 +243,6 @@ def _subdividir_por_descricao(
     return [c for c in componentes.values() if len(c) >= 1]
 
 
-
 class _ContextoParticionamento:
     def __init__(self, pendentes: set[int]):
         self.bloco_por_idx: dict[int, int] = {}
@@ -264,6 +287,7 @@ def _processar_camada_subdividida(
         for comp in _subdividir_por_descricao(grupo, threshold, max_bucket_size):
             ctx.atribuir(comp, motivo, camada, score, chave_str_fn(grupo[0]))
 
+
 def ordenar_blocos_por_particionamento_fiscal(
     df: pl.DataFrame,
     *,
@@ -303,17 +327,13 @@ def ordenar_blocos_por_particionamento_fiscal(
 
     col_desc = _resolver_coluna(df, COLUNAS_DESCRICAO)
     if col_desc is None:
-        raise ValueError(
-            "Nenhuma coluna de descricao encontrada para o particionamento."
-        )
+        raise ValueError("Nenhuma coluna de descricao encontrada para o particionamento.")
     col_ncm = _resolver_coluna(df, ALIASES_NCM)
     col_cest = _resolver_coluna(df, ALIASES_CEST)
     col_gtin = _resolver_coluna(df, ALIASES_GTIN)
     col_unidade = _resolver_coluna(df, ALIASES_UNIDADE)
 
-    linhas = _construir_linhas(
-        df, col_desc, col_ncm, col_cest, col_gtin, col_unidade
-    )
+    linhas = _construir_linhas(df, col_desc, col_ncm, col_cest, col_gtin, col_unidade)
 
     ctx = _ContextoParticionamento({l.idx for l in linhas})
 
@@ -328,29 +348,43 @@ def ordenar_blocos_por_particionamento_fiscal(
 
     # --- Camada 1: NCM + CEST + UNIDADE ---
     _processar_camada_subdividida(
-        linhas, ctx,
-        chave_fn=lambda l: f"{l.ncm}|{l.cest}|{l.unidade}" if (l.ncm and l.cest and l.unidade) else None,
+        linhas,
+        ctx,
+        chave_fn=lambda l: (
+            f"{l.ncm}|{l.cest}|{l.unidade}" if (l.ncm and l.cest and l.unidade) else None
+        ),
         chave_str_fn=lambda l: f"NCM={l.ncm}|CEST={l.cest}|UN={l.unidade}",
-        motivo="NCM+CEST+UNID", camada=1, score=85,
-        threshold=cfg["camada_1"] / 100, max_bucket_size=cfg["max_bucket_size"],
+        motivo="NCM+CEST+UNID",
+        camada=1,
+        score=85,
+        threshold=cfg["camada_1"] / 100,
+        max_bucket_size=cfg["max_bucket_size"],
     )
 
     # --- Camada 2: NCM + UNIDADE (sem CEST) ---
     _processar_camada_subdividida(
-        linhas, ctx,
+        linhas,
+        ctx,
         chave_fn=lambda l: f"{l.ncm}|{l.unidade}" if (l.ncm and l.unidade) else None,
         chave_str_fn=lambda l: f"NCM={l.ncm}|UN={l.unidade}",
-        motivo="NCM+UNID", camada=2, score=75,
-        threshold=cfg["camada_2"] / 100, max_bucket_size=cfg["max_bucket_size"],
+        motivo="NCM+UNID",
+        camada=2,
+        score=75,
+        threshold=cfg["camada_2"] / 100,
+        max_bucket_size=cfg["max_bucket_size"],
     )
 
     # --- Camada 3: NCM4 + UNIDADE ---
     _processar_camada_subdividida(
-        linhas, ctx,
+        linhas,
+        ctx,
         chave_fn=lambda l: f"{l.ncm4}|{l.unidade}" if (l.ncm4 and l.unidade) else None,
         chave_str_fn=lambda l: f"NCM4={l.ncm4}|UN={l.unidade}",
-        motivo="NCM4+UNID", camada=3, score=65,
-        threshold=cfg["camada_3"] / 100, max_bucket_size=cfg["max_bucket_size"],
+        motivo="NCM4+UNID",
+        camada=3,
+        score=65,
+        threshold=cfg["camada_3"] / 100,
+        max_bucket_size=cfg["max_bucket_size"],
     )
 
     # --- Camada 5 (opcional): inverted index sobre descricao ---
@@ -358,13 +392,17 @@ def ordenar_blocos_por_particionamento_fiscal(
         from interface_grafica.services.inverted_index_descricao import (
             agrupar_por_inverted_index,
         )
+
         pendentes_lista = [l for l in linhas if l.idx in ctx.pendentes]
         for comp in agrupar_por_inverted_index(
             pendentes_lista, threshold=cfg.get("camada_5", 70) / 100
         ):
             if len(comp) >= 2:
                 ctx.atribuir(
-                    comp, "DESC_TOKENS", 5, 60,
+                    comp,
+                    "DESC_TOKENS",
+                    5,
+                    60,
                     "INVERTED_INDEX",
                 )
 
@@ -379,14 +417,16 @@ def ordenar_blocos_por_particionamento_fiscal(
 
     # --- Materializa colunas e ordena ---
     n = df.height
-    df_out = df.with_columns([
-        pl.Series("sim_bloco", [ctx.bloco_por_idx[i] for i in range(n)]),
-        pl.Series("sim_motivo", [ctx.motivo_por_idx[i] for i in range(n)]),
-        pl.Series("sim_camada", [ctx.camada_por_idx[i] for i in range(n)]),
-        pl.Series("sim_score", [ctx.score_por_idx[i] for i in range(n)]),
-        pl.Series("sim_desc_norm", [linhas[i].desc_norm for i in range(n)]),
-        pl.Series("sim_chave_fiscal", [ctx.chave_fiscal_por_idx[i] for i in range(n)]),
-    ])
+    df_out = df.with_columns(
+        [
+            pl.Series("sim_bloco", [ctx.bloco_por_idx[i] for i in range(n)]),
+            pl.Series("sim_motivo", [ctx.motivo_por_idx[i] for i in range(n)]),
+            pl.Series("sim_camada", [ctx.camada_por_idx[i] for i in range(n)]),
+            pl.Series("sim_score", [ctx.score_por_idx[i] for i in range(n)]),
+            pl.Series("sim_desc_norm", [linhas[i].desc_norm for i in range(n)]),
+            pl.Series("sim_chave_fiscal", [ctx.chave_fiscal_por_idx[i] for i in range(n)]),
+        ]
+    )
 
     distribuicao_camada: dict[int, int] = defaultdict(int)
     for c in ctx.camada_por_idx.values():
