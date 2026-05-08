@@ -4,14 +4,6 @@ import traceback
 
 import pytest
 
-# Ensure headless platform is set before any PySide6 imports
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
-# Skip on Windows CI due to DLL instability (0xc0000139 STATUS_ENTRYPOINT_NOT_FOUND).
-# This is a known runner-specific issue. GUI smoke tests continue to run on Ubuntu.
-if sys.platform == "win32" and os.getenv("GITHUB_ACTIONS"):
-    pytest.skip("Skipping GUI smoke on Windows CI due to DLL instability", allow_module_level=True)
-
 # Skip this module if PySide6 QtWidgets cannot be fully imported.
 # This prevents collection errors in envs where Qt system libs are absent
 # (e.g. ci.yml Test/Test-Windows that do not install libegl1 etc.).
@@ -41,6 +33,8 @@ def test_main_window_smoke(qtbot):
     The canonical variant is tested only when RUN_CANONICAL_MAINWINDOW=1 and
     skipped gracefully if construction fails (missing data/services in CI).
     """
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
     exceptions: list = []
     old_excepthook = sys.excepthook
 
