@@ -73,6 +73,11 @@ automated_agents:
   pr_title_format: "tipo(area-fase): descricao"
 ```
 
+## Plano e Decisoes Vigentes
+O plano mestre de performance e a integracao com DuckDB estao consolidados em:
+- [**docs/Plano_duck/00_PLANO_MESTRE.md**](docs/Plano_duck/00_PLANO_MESTRE.md) (Fonte Canonica)
+- [**docs/Plano_duck/01_decisoes_pendentes.md**](docs/Plano_duck/01_decisoes_pendentes.md) (Decisoes D1-D11)
+
 Regras para Codex, Copilot Agent, Jules e Antigravity:
 
 - Nao altere semantica fiscal.
@@ -161,7 +166,7 @@ Jules precisa de autorizacao humana explicita antes de tocar:
    1. humano responsavel;
    2. `AGENTS.md` raiz;
    3. `AGENTS.md` escopado;
-   4. `docs/Plano_duck/`;
+      4. `docs/Plano_duck/00_PLANO_MESTRE.md`;
    5. comentario de bot.
 
 ### Padrao de prompt para Jules
