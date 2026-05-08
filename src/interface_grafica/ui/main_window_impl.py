@@ -323,6 +323,7 @@ class MainWindow(QMainWindow):
         cnpj_layout = QVBoxLayout(cnpj_box)
         input_line = QHBoxLayout()
         self.cnpj_input = QLineEdit()
+        self.cnpj_input.setClearButtonEnabled(True)
         self.cnpj_input.setPlaceholderText("Digite o CPF ou CNPJ com ou sem mascara")
         self.btn_run_pipeline = QPushButton("Extrair + Processar")
         input_line.addWidget(self.cnpj_input)
@@ -809,6 +810,7 @@ class MainWindow(QMainWindow):
             ]
         )
         self.filter_value = QLineEdit()
+        self.filter_value.setClearButtonEnabled(True)
         self.filter_value.setPlaceholderText("Valor do filtro")
         self.btn_add_filter = QPushButton("Adicionar filtro")
         self.btn_clear_filters = QPushButton("Limpar filtros")
@@ -869,12 +871,16 @@ class MainWindow(QMainWindow):
 
         quick_filter_layout = QHBoxLayout()
         self.qf_norm = QLineEdit()
+        self.qf_norm.setClearButtonEnabled(True)
         self.qf_norm.setPlaceholderText("Filtrar Desc. Norm")
         self.qf_desc = QLineEdit()
+        self.qf_desc.setClearButtonEnabled(True)
         self.qf_desc.setPlaceholderText("Filtrar Descricao (ex.: buch 18)")
         self.qf_ncm = QLineEdit()
+        self.qf_ncm.setClearButtonEnabled(True)
         self.qf_ncm.setPlaceholderText("Filtrar NCM")
         self.qf_cest = QLineEdit()
+        self.qf_cest.setClearButtonEnabled(True)
         self.qf_cest.setPlaceholderText("Filtrar CEST")
 
         for w in [self.qf_norm, self.qf_desc, self.qf_ncm, self.qf_cest]:
@@ -935,12 +941,16 @@ class MainWindow(QMainWindow):
 
         filtros = QHBoxLayout()
         self.top_filter_desc = QLineEdit()
+        self.top_filter_desc.setClearButtonEnabled(True)
         self.top_filter_desc.setPlaceholderText("Filtrar Descricao (ex.: buch 18)")
         self.top_filter_ncm = QLineEdit()
+        self.top_filter_ncm.setClearButtonEnabled(True)
         self.top_filter_ncm.setPlaceholderText("Filtrar NCM")
         self.top_filter_cest = QLineEdit()
+        self.top_filter_cest.setClearButtonEnabled(True)
         self.top_filter_cest.setPlaceholderText("Filtrar CEST")
         self.top_filter_texto = QLineEdit()
+        self.top_filter_texto.setClearButtonEnabled(True)
         self.top_filter_texto.setPlaceholderText("Busca global...")
         self.btn_top_match_ncm_cest = QPushButton("NCM+CEST iguais")
         self.btn_top_match_ncm_cest_gtin = QPushButton("NCM+CEST+GTIN iguais")
@@ -994,14 +1004,18 @@ class MainWindow(QMainWindow):
 
         bottom_filtros = QHBoxLayout()
         self.bot_filter_desc_norm = QLineEdit()
+        self.bot_filter_desc_norm.setClearButtonEnabled(True)
         self.bot_filter_desc_norm.setPlaceholderText("Filtrar Desc. Norm")
         self.bot_filter_desc_orig = QLineEdit()
+        self.bot_filter_desc_orig.setClearButtonEnabled(True)
         self.bot_filter_desc_orig.setPlaceholderText(
             "Filtrar Descricao (ex.: whisky 12)"
         )
         self.bot_filter_ncm = QLineEdit()
+        self.bot_filter_ncm.setClearButtonEnabled(True)
         self.bot_filter_ncm.setPlaceholderText("Filtrar NCM")
         self.bot_filter_cest = QLineEdit()
+        self.bot_filter_cest.setClearButtonEnabled(True)
         self.bot_filter_cest.setPlaceholderText("Filtrar CEST")
         self.btn_bottom_match_ncm_cest = QPushButton("NCM+CEST iguais")
         self.btn_bottom_match_ncm_cest_gtin = QPushButton("NCM+CEST+GTIN iguais")
@@ -1165,6 +1179,7 @@ class MainWindow(QMainWindow):
         # Filtro rApido nos resultados
         sql_filter_bar = QHBoxLayout()
         self.sql_result_search = QLineEdit()
+        self.sql_result_search.setClearButtonEnabled(True)
         self.sql_result_search.setPlaceholderText("Buscar nos resultados...")
         sql_filter_bar.addWidget(self.sql_result_search)
         self.sql_result_page_label = QLabel("")
@@ -1239,7 +1254,9 @@ class MainWindow(QMainWindow):
         self.conv_filter_id.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
         self.conv_filter_id.setMinimumWidth(220)
         self.conv_filter_id.lineEdit().setPlaceholderText("Filtrar id_agrupado")
+        self.conv_filter_id.lineEdit().setClearButtonEnabled(True)
         self.conv_filter_desc = QLineEdit()
+        self.conv_filter_desc.setClearButtonEnabled(True)
         self.conv_filter_desc.setPlaceholderText("Filtrar descr_padrao")
         filtros.addWidget(self.conv_filter_id)
         filtros.addWidget(self.conv_filter_desc)
@@ -1319,17 +1336,21 @@ class MainWindow(QMainWindow):
         self.mov_filter_id.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
         self.mov_filter_id.setMinimumWidth(250)
         self.mov_filter_id.lineEdit().setPlaceholderText("Filtrar id_agrupado")
+        self.mov_filter_id.lineEdit().setClearButtonEnabled(True)
 
         self.mov_filter_desc = QLineEdit()
+        self.mov_filter_desc.setClearButtonEnabled(True)
         self.mov_filter_desc.setPlaceholderText("Filtrar descriCAo")
 
         self.mov_filter_ncm = QLineEdit()
+        self.mov_filter_ncm.setClearButtonEnabled(True)
         self.mov_filter_ncm.setPlaceholderText("Filtrar NCM")
 
         self.mov_filter_tipo = QComboBox()
         self.mov_filter_tipo.addItems(["Todos", "Entradas", "Saidas"])
 
         self.mov_filter_texto = QLineEdit()
+        self.mov_filter_texto.setClearButtonEnabled(True)
         self.mov_filter_texto.setPlaceholderText("Busca geral...")
 
         for widget in [
@@ -1369,8 +1390,10 @@ class MainWindow(QMainWindow):
             ]
         )
         self.mov_filter_num_min = QLineEdit()
+        self.mov_filter_num_min.setClearButtonEnabled(True)
         self.mov_filter_num_min.setPlaceholderText("Min numerico")
         self.mov_filter_num_max = QLineEdit()
+        self.mov_filter_num_max.setClearButtonEnabled(True)
         self.mov_filter_num_max.setPlaceholderText("Max numerico")
         self.mov_profile = QComboBox()
         self.mov_profile.addItems(
@@ -1564,7 +1587,9 @@ class MainWindow(QMainWindow):
         self.produtos_sel_filter_id.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
         self.produtos_sel_filter_id.setMinimumWidth(220)
         self.produtos_sel_filter_id.lineEdit().setPlaceholderText("Filtrar id_agregado")
+        self.produtos_sel_filter_id.lineEdit().setClearButtonEnabled(True)
         self.produtos_sel_filter_desc = QLineEdit()
+        self.produtos_sel_filter_desc.setClearButtonEnabled(True)
         self.produtos_sel_filter_desc.setPlaceholderText("Filtrar descricao")
         self.produtos_sel_filter_ano_ini = QComboBox()
         self.produtos_sel_filter_ano_ini.addItem("Todos")
@@ -1587,6 +1612,7 @@ class MainWindow(QMainWindow):
             self.produtos_sel_filter_data_fim.minimumDate()
         )
         self.produtos_sel_filter_texto = QLineEdit()
+        self.produtos_sel_filter_texto.setClearButtonEnabled(True)
         self.produtos_sel_filter_texto.setPlaceholderText("Busca ampla...")
         for widget in [
             self.produtos_sel_filter_id,
@@ -1688,7 +1714,9 @@ class MainWindow(QMainWindow):
         self.id_agrupados_filter_id.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
         self.id_agrupados_filter_id.setMinimumWidth(240)
         self.id_agrupados_filter_id.lineEdit().setPlaceholderText("Filtrar id_agrupado")
+        self.id_agrupados_filter_id.lineEdit().setClearButtonEnabled(True)
         self.id_agrupados_filter_texto = QLineEdit()
+        self.id_agrupados_filter_texto.setClearButtonEnabled(True)
         self.id_agrupados_filter_texto.setPlaceholderText("Busca ampla...")
         filtros.addWidget(self.id_agrupados_filter_id)
         filtros.addWidget(self.id_agrupados_filter_texto)
@@ -1771,13 +1799,18 @@ class MainWindow(QMainWindow):
         self.nfe_entrada_filter_id.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
         self.nfe_entrada_filter_id.setMinimumWidth(220)
         self.nfe_entrada_filter_id.lineEdit().setPlaceholderText("Filtrar id_agrupado")
+        self.nfe_entrada_filter_id.lineEdit().setClearButtonEnabled(True)
         self.nfe_entrada_filter_desc = QLineEdit()
+        self.nfe_entrada_filter_desc.setClearButtonEnabled(True)
         self.nfe_entrada_filter_desc.setPlaceholderText("Filtrar descricao")
         self.nfe_entrada_filter_ncm = QLineEdit()
+        self.nfe_entrada_filter_ncm.setClearButtonEnabled(True)
         self.nfe_entrada_filter_ncm.setPlaceholderText("Filtrar NCM")
         self.nfe_entrada_filter_sefin = QLineEdit()
+        self.nfe_entrada_filter_sefin.setClearButtonEnabled(True)
         self.nfe_entrada_filter_sefin.setPlaceholderText("Filtrar co_sefin")
         self.nfe_entrada_filter_texto = QLineEdit()
+        self.nfe_entrada_filter_texto.setClearButtonEnabled(True)
         self.nfe_entrada_filter_texto.setPlaceholderText("Busca ampla...")
         for widget in [
             self.nfe_entrada_filter_id,
@@ -1942,12 +1975,15 @@ class MainWindow(QMainWindow):
         self.anual_filter_id.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
         self.anual_filter_id.setMinimumWidth(220)
         self.anual_filter_id.lineEdit().setPlaceholderText("Filtrar id_agregado")
+        self.anual_filter_id.lineEdit().setClearButtonEnabled(True)
         self.anual_filter_desc = QLineEdit()
+        self.anual_filter_desc.setClearButtonEnabled(True)
         self.anual_filter_desc.setPlaceholderText("Filtrar descriCAo")
         self.anual_filter_ano = QComboBox()
         self.anual_filter_ano.addItem("Todos")
         self.anual_filter_ano.setMinimumWidth(100)
         self.anual_filter_texto = QLineEdit()
+        self.anual_filter_texto.setClearButtonEnabled(True)
         self.anual_filter_texto.setPlaceholderText("Busca ampla...")
 
         for widget in [
@@ -1971,8 +2007,10 @@ class MainWindow(QMainWindow):
             ]
         )
         self.anual_filter_num_min = QLineEdit()
+        self.anual_filter_num_min.setClearButtonEnabled(True)
         self.anual_filter_num_min.setPlaceholderText("Min numerico")
         self.anual_filter_num_max = QLineEdit()
+        self.anual_filter_num_max.setClearButtonEnabled(True)
         self.anual_filter_num_max.setPlaceholderText("Max numerico")
         self.anual_profile = QComboBox()
         self.anual_profile.addItems(["Padrao", "Auditoria", "Estoque", "Custos"])
@@ -2067,9 +2105,12 @@ class MainWindow(QMainWindow):
         self.periodo_filter_id.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
         self.periodo_filter_id.setMinimumWidth(220)
         self.periodo_filter_id.lineEdit().setPlaceholderText("Filtrar id_agregado")
+        self.periodo_filter_id.lineEdit().setClearButtonEnabled(True)
         self.periodo_filter_desc = QLineEdit()
+        self.periodo_filter_desc.setClearButtonEnabled(True)
         self.periodo_filter_desc.setPlaceholderText("Filtrar descriCAo")
         self.periodo_filter_texto = QLineEdit()
+        self.periodo_filter_texto.setClearButtonEnabled(True)
         self.periodo_filter_texto.setPlaceholderText("Busca ampla...")
 
         for widget in [
@@ -2092,8 +2133,10 @@ class MainWindow(QMainWindow):
             ]
         )
         self.periodo_filter_num_min = QLineEdit()
+        self.periodo_filter_num_min.setClearButtonEnabled(True)
         self.periodo_filter_num_min.setPlaceholderText("Min numerico")
         self.periodo_filter_num_max = QLineEdit()
+        self.periodo_filter_num_max.setClearButtonEnabled(True)
         self.periodo_filter_num_max.setPlaceholderText("Max numerico")
         self.periodo_profile = QComboBox()
         self.periodo_profile.addItems(["Padrao", "Auditoria", "Estoque", "Custos"])
@@ -2489,7 +2532,9 @@ class MainWindow(QMainWindow):
         self.mensal_filter_id.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
         self.mensal_filter_id.setMinimumWidth(220)
         self.mensal_filter_id.lineEdit().setPlaceholderText("Filtrar id_agregado")
+        self.mensal_filter_id.lineEdit().setClearButtonEnabled(True)
         self.mensal_filter_desc = QLineEdit()
+        self.mensal_filter_desc.setClearButtonEnabled(True)
         self.mensal_filter_desc.setPlaceholderText("Filtrar descricao")
         self.mensal_filter_ano = QComboBox()
         self.mensal_filter_ano.addItem("Todos")
@@ -2500,6 +2545,7 @@ class MainWindow(QMainWindow):
         self.mensal_filter_mes.setMinimumWidth(100)
         self.mensal_filter_mes.setToolTip("Filtrar por mes")
         self.mensal_filter_texto = QLineEdit()
+        self.mensal_filter_texto.setClearButtonEnabled(True)
         self.mensal_filter_texto.setPlaceholderText("Busca ampla...")
         for widget in [
             self.mensal_filter_id,
@@ -2531,8 +2577,10 @@ class MainWindow(QMainWindow):
             ]
         )
         self.mensal_filter_num_min = QLineEdit()
+        self.mensal_filter_num_min.setClearButtonEnabled(True)
         self.mensal_filter_num_min.setPlaceholderText("Min numerico")
         self.mensal_filter_num_max = QLineEdit()
+        self.mensal_filter_num_max.setClearButtonEnabled(True)
         self.mensal_filter_num_max.setPlaceholderText("Max numerico")
         self.mensal_profile = QComboBox()
         self.mensal_profile.addItems(["Padrao", "Auditoria", "Estoque", "Custos"])
@@ -3187,7 +3235,7 @@ class MainWindow(QMainWindow):
             self.left_panel_widget.show()
             self.btn_toggle_panel.setText("<< Ocultar Painel Lateral")
 
-    
+
 
     def atualizar_aba_mov_estoque(self) -> None:
         cnpj = self.state.current_cnpj

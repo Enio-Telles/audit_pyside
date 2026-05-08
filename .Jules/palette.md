@@ -1,3 +1,6 @@
 ## 2026-04-15 - Add ARIA Labels to Interactive Elements
 **Learning:** Icon-only buttons and buttons relying solely on `title` attributes often fail to provide sufficient context to screen reader users, especially in complex components like data tables and layout panels where context isn't immediately obvious.
 **Action:** Always ensure that any button without visible, descriptive text (such as those using icons like '+', '-', '↑', '↓', '⚙') or whose primary purpose is to toggle/manage state is explicitly equipped with an `aria-label` describing its action and the specific item it affects (e.g., `Gerenciar dados do CNPJ ${r.cnpj}`).
+## 2024-05-07 - Add Clear Buttons to Filter Inputs
+**Learning:** PySide6 QLineEdits have a built-in `setClearButtonEnabled(True)` method that instantly provides a clear UX improvement for users trying to clear long search queries or filters. However, applying it to generated GUI files via regex replace can be fragile and break AST/syntax if the script splits multiline arguments.
+**Action:** When adding small properties to PySide objects in generated or large UI files, use careful line-by-line checks tied directly to the assignment `self.var = QLineEdit()` rather than regex matching method calls that might span multiple lines.
