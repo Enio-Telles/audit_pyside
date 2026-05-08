@@ -11,10 +11,18 @@ from interface_grafica.controllers.consulta_controller import ConsultaController
 from interface_grafica.controllers.conversao_controller import ConversaoControllerMixin
 from interface_grafica.controllers.id_agrupados_controller import IdAgrupadosControllerMixin
 from interface_grafica.controllers.importacao_controller import ImportacaoControllerMixin
-from interface_grafica.controllers.relatorios_codigo_original_controller import RelatoriosCodigoOriginalControllerMixin
-from interface_grafica.controllers.relatorios_periodos_controller import RelatoriosPeriodosControllerMixin
-from interface_grafica.controllers.relatorios_produtos_controller import RelatoriosProdutosControllerMixin
-from interface_grafica.controllers.relatorios_resumo_controller import RelatoriosResumoControllerMixin
+from interface_grafica.controllers.relatorios_codigo_original_controller import (
+    RelatoriosCodigoOriginalControllerMixin,
+)
+from interface_grafica.controllers.relatorios_periodos_controller import (
+    RelatoriosPeriodosControllerMixin,
+)
+from interface_grafica.controllers.relatorios_produtos_controller import (
+    RelatoriosProdutosControllerMixin,
+)
+from interface_grafica.controllers.relatorios_resumo_controller import (
+    RelatoriosResumoControllerMixin,
+)
 from interface_grafica.controllers.relatorios_style_controller import RelatoriosStyleControllerMixin
 from interface_grafica.controllers.paginacao_tabs_mixin import PaginacaoTabsMixin
 from interface_grafica.controllers.shared_state import ViewState
@@ -31,6 +39,8 @@ from interface_grafica.services.query_worker import QueryWorker
 from interface_grafica.services.registry_service import RegistryService
 from interface_grafica.services.selection_persistence_service import SelectionPersistenceService
 from interface_grafica.services.sql_service import SqlService
+from interface_grafica.services.update_service import UpdateService, UpdateWorker, ReleaseInfo
+from interface_grafica.ui.update_dialog import UpdateDialog
 from interface_grafica.widgets.detached_table_window import DetachedTableWindow
 from interface_grafica.windows.aba_agregacao import AgregacaoWindowMixin
 from interface_grafica.windows.aba_auditoria import AuditoriaWindowMixin
@@ -42,10 +52,23 @@ from interface_grafica.windows.main_window_navigation import MainWindowNavigatio
 from interface_grafica.windows.main_window_preferences import MainWindowPreferencesMixin
 from interface_grafica.windows.main_window_profile_presets import MainWindowProfilePresetsMixin
 from interface_grafica.windows.main_window_signal_wiring_core import MainWindowSignalWiringCoreMixin
-from interface_grafica.windows.main_window_signal_wiring_relatorios import MainWindowSignalWiringRelatoriosMixin
+from interface_grafica.windows.main_window_signal_wiring_relatorios import (
+    MainWindowSignalWiringRelatoriosMixin,
+)
 from interface_grafica.windows.main_window_support import MainWindowSupportMixin
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QMainWindow, QPushButton, QSplitter, QStatusBar, QTabWidget, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QHBoxLayout,
+    QLabel,
+    QMainWindow,
+    QMessageBox,
+    QPushButton,
+    QSplitter,
+    QStatusBar,
+    QTabWidget,
+    QVBoxLayout,
+    QWidget,
+)
 
 
 class MainWindow(
@@ -95,6 +118,7 @@ class MainWindow(
         self.export_service = ExportService()
         self.servico_agregacao = ServicoAgregacao()
         self.sql_service = SqlService()
+        self.update_service = UpdateService()
 
         self.state = ViewState(filters=[])
         self.current_page_df_all = pl.DataFrame()
@@ -187,6 +211,67 @@ class MainWindow(
         self.refresh_cnpjs()
         self.refresh_logs()
         self._populate_sql_combo()
+
+        QTimer.singleShot(2000, self._check_for_updates)
+
+    def _check_for_updates(self):
+        self._update_worker = UpdateWorker()
+        self._update_worker.finished.connect(self._on_update_check_finished)
+        self._update_worker.start()
+
+    def _on_update_check_finished(self, release_info: ReleaseInfo | None):
+        if release_info:
+            # Separate consent dialog
+            reply = QMessageBox.question(
+                self,
+                "Atualização Disponível",
+                f"Uma nova versão ({release_info.tag_name}) está disponível.\n\n"
+                f"Notas de release:\n{release_info.body}\n\n"
+                "Deseja baixar e aplicar a atualização agora?",
+                QMessageBox.Yes | QMessageBox.No,
+            )
+
+            if reply == QMessageBox.Yes:
+                self._update_dialog = UpdateDialog(release_info, self)
+                self._update_dialog.set_downloading()
+
+                # Use queued connections to ensure dialog remains responsive
+                self.update_service.download_progress.connect(self._update_dialog.set_progress)
+                self.update_service.update_error.connect(self._update_dialog.set_error)
+                self.update_service.download_finished.connect(
+                    lambda zip_path: self._on_update_downloaded(zip_path, release_info)
+                )
+
+                self.update_service.start_update_download(release_info)
+                self._update_dialog.show()
+
+    def _on_update_downloaded(self, zip_path: str, release_info: ReleaseInfo):
+        if hasattr(self, "_update_dialog"):
+            self._update_dialog.accept()
+
+        try:
+            bat_path = self.update_service.prepare_swap_script(zip_path)
+            from PySide6.QtWidgets import QMessageBox
+
+            QMessageBox.information(
+                self,
+                "Atualização Pronta",
+                "A atualização foi baixada. O aplicativo será fechado para concluir a instalação.",
+            )
+
+            if sys.platform == "win32":
+                import subprocess
+
+                subprocess.Popen(
+                    ["cmd.exe", "/c", bat_path], creationflags=subprocess.CREATE_NEW_CONSOLE
+                )
+                self.close()
+            else:
+                logger.warning("Auto-update swap script is only supported on Windows.")
+        except Exception as e:
+            from PySide6.QtWidgets import QMessageBox
+
+            QMessageBox.critical(self, "Erro na Atualização", f"Falha ao preparar atualização: {e}")
 
     def _build_ui(self) -> None:
         central = QWidget()
