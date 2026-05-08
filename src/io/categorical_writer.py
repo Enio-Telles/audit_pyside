@@ -151,7 +151,9 @@ def rewrite_parquet_typed(
 
     logger.info(
         "rewrite_parquet_typed: %s -> %s (strict_cast=%s)",
-        input_p.name, output_p, strict_cast,
+        input_p.name,
+        output_p,
+        strict_cast,
     )
 
     # 1. Ler v1 com scan nativo (sem cast ainda — o cast_dataframe_typed
@@ -189,9 +191,9 @@ def rewrite_parquet_typed(
 
     # Contar colunas que receberam cast (dtype != String)
     n_cols_typed = sum(
-        1 for col, dtype in df_v2.schema.items()
-        if isinstance(dtype, (pl.Enum, pl.Categorical))
-        or dtype == pl.Boolean
+        1
+        for col, dtype in df_v2.schema.items()
+        if isinstance(dtype, (pl.Enum, pl.Categorical)) or dtype == pl.Boolean
     )
 
     result: dict[str, Any] = {
@@ -206,7 +208,9 @@ def rewrite_parquet_typed(
 
     logger.info(
         "rewrite_parquet_typed: concluido — %d linhas, %d/%d colunas tipadas",
-        n_rows, n_cols_typed, n_cols,
+        n_rows,
+        n_cols_typed,
+        n_cols,
     )
 
     if schema_diff:
@@ -222,6 +226,7 @@ def batch_rewrite_parquets(
     input_root: str | Path,
     output_root: str | Path,
     *,
+    file_list: list[Path] | None = None,
     codes_path: Path | None = None,
     strict_cast: bool = True,
     min_size_mb: float = 0,
@@ -235,17 +240,22 @@ def batch_rewrite_parquets(
     """
     Reescreve em lote todos os Parquets de ``input_root`` para ``output_root``.
 
-    Descobre recursivamente arquivos ``*.parquet`` em ``input_root``,
-    filtra por tamanho minimo (``min_size_mb``), e reescreve cada um
-    side-by-side em ``output_root`` preservando a estrutura de pastas.
+    Quando ``file_list`` e fornecido, usa exatamente essa lista de arquivos
+    (ignorando ``min_size_mb`` e ``max_files``). Quando ``None`` (default),
+    descobre recursivamente arquivos ``*.parquet`` em ``input_root`` e
+    aplica os filtros ``min_size_mb`` e ``max_files``.
 
     Args:
         input_root: Diretorio raiz com Parquets v1.
         output_root: Diretorio raiz para Parquets v2 (criado se nao existir).
+        file_list: Lista opcional de paths de Parquet para processar.
+            Quando fornecido, ``min_size_mb`` e ``max_files`` sao ignorados.
         codes_path: Caminho do JSON de codigos fiscais.
         strict_cast: Se ``True`` (default), valores fora do Enum levantam erro.
         min_size_mb: Tamanho minimo do arquivo em MB para incluir no lote.
+            Ignorado quando ``file_list`` e fornecido.
         max_files: Numero maximo de arquivos a processar (default: None = todos).
+            Ignorado quando ``file_list`` e fornecido.
         compression: Codec de compressao (default: ``"zstd"``).
         compression_level: Nivel de compressao.
         statistics: Gravar estatisticas de coluna (default: ``True``).
@@ -265,28 +275,34 @@ def batch_rewrite_parquets(
     if not input_root_p.exists():
         raise FileNotFoundError(f"Diretorio de entrada nao encontrado: {input_root_p}")
 
-    # Descobrir Parquets
-    parquet_files = sorted(input_root_p.rglob("*.parquet"))
+    # Usar file_list externo ou descobrir internamente
+    if file_list is not None:
+        parquet_files = list(file_list)
+    else:
+        # Descobrir Parquets
+        parquet_files = sorted(input_root_p.rglob("*.parquet"))
 
-    # Filtrar por tamanho minimo
-    if min_size_mb > 0:
-        min_bytes = min_size_mb * 1024 * 1024
-        parquet_files = [p for p in parquet_files if p.stat().st_size >= min_bytes]
+        # Filtrar por tamanho minimo
+        if min_size_mb > 0:
+            min_bytes = min_size_mb * 1024 * 1024
+            parquet_files = [p for p in parquet_files if p.stat().st_size >= min_bytes]
 
-    # Limitar numero de arquivos
-    if max_files is not None and max_files > 0:
-        parquet_files = parquet_files[:max_files]
+        # Limitar numero de arquivos
+        if max_files is not None and max_files > 0:
+            parquet_files = parquet_files[:max_files]
 
     if not parquet_files:
         logger.warning(
-            "batch_rewrite_parquets: nenhum Parquet encontrado em %s "
-            "(min_size_mb=%s)", input_root_p, min_size_mb,
+            "batch_rewrite_parquets: nenhum Parquet encontrado em %s (min_size_mb=%s)",
+            input_root_p,
+            min_size_mb,
         )
         return []
 
     logger.info(
         "batch_rewrite_parquets: %d Parquets encontrados em %s",
-        len(parquet_files), input_root_p,
+        len(parquet_files),
+        input_root_p,
     )
 
     results: list[dict[str, Any]] = []
@@ -312,15 +328,21 @@ def batch_rewrite_parquets(
             results.append(result)
             logger.info(
                 "[%d/%d] OK %s -> %s (%d linhas, %d colunas tipadas)",
-                i, len(parquet_files),
-                parquet_path.name, output_path.name,
-                result["n_rows"], result["n_cols_typed"],
+                i,
+                len(parquet_files),
+                parquet_path.name,
+                output_path.name,
+                result["n_rows"],
+                result["n_cols_typed"],
             )
         except Exception as exc:
             errors.append((parquet_path, str(exc)))
             logger.error(
                 "[%d/%d] ERRO %s: %s",
-                i, len(parquet_files), parquet_path.name, exc,
+                i,
+                len(parquet_files),
+                parquet_path.name,
+                exc,
             )
 
     # Resumo final
@@ -329,7 +351,9 @@ def batch_rewrite_parquets(
     n_total = n_ok + n_err
     logger.info(
         "batch_rewrite_parquets: concluido — %d/%d OK, %d erro(s)",
-        n_ok, n_total, n_err,
+        n_ok,
+        n_total,
+        n_err,
     )
 
     if errors:
